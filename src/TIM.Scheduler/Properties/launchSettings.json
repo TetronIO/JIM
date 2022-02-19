@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "TIM.Scheduler": {
+      "commandName": "Project"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}

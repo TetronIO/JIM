@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "TIM.Service": {
+      "commandName": "Project"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}
