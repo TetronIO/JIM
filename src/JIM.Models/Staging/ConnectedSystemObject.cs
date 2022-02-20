@@ -10,12 +10,9 @@
         public ConnectedSystemAttribute UniqueIdentifierAttribute { get; set; }
         public List<ConnectedSystemAttributeValue> AttributeValues { get; set; }
 
-        public ConnectedSystemObject(ConnectedSystem connectedSystem, ConnectedSystemObjectType type, ConnectedSystemAttribute uniqueIdentifierAttribute)
+        public ConnectedSystemObject()
         {
-            ConnectedSystem = connectedSystem;
-            Type = type;
             Created = DateTime.Now;
-            UniqueIdentifierAttribute = uniqueIdentifierAttribute;
             AttributeValues = new List<ConnectedSystemAttributeValue>();
         }
     }

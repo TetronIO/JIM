@@ -15,9 +15,8 @@ namespace JIM.Models.Logic
         public DateTime DateTimeValue { get; set; }
         public double DoubleValue { get; set; }
 
-        public SyncRuleMappingSourceParamValue(FunctionParameter functionParameter)
+        public SyncRuleMappingSourceParamValue()
         {
-            FunctionParameter = functionParameter;
         }
     }
 }

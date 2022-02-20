@@ -9,9 +9,8 @@
         public DateTime LastUpdated { get; set; }
         public List<ConnectedSystemRunProfile> RunProfiles { get; set; }
 
-        public ConnectedSystem(string name)
+        public ConnectedSystem()
         {
-            Name = name;
             RunProfiles = new List<ConnectedSystemRunProfile>();
         }
     }

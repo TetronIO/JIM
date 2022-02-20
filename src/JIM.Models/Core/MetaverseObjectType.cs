@@ -7,9 +7,8 @@
         public DateTime Created { get; set; }
         public List<MetaverseAttribute> Attributes { get; set; }
 
-        public MetaverseObjectType(string name)
+        public MetaverseObjectType()
         {
-            Name = name;
             Attributes = new List<MetaverseAttribute>();
         }
     }

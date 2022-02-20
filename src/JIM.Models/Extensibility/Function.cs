@@ -8,10 +8,8 @@
         public string? Description { get; set; }
         public FunctionOutputType OutputType { get; set; }
 
-        public Function(FunctionLibrary functionLibrary, string name)
+        public Function()
         {
-            FunctionLibrary = functionLibrary;
-            Name = name;
         }
     }
 }

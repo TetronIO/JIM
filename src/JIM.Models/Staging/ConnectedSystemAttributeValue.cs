@@ -4,7 +4,7 @@ namespace JIM.Models.Staging
 {
     public class ConnectedSystemAttributeValue : BaseAttributeValue
     {
-        public ConnectedSystemAttributeValue(ConnectedSystemAttribute attribute) : base(attribute)
+        public ConnectedSystemAttributeValue()
         {
         }
     }

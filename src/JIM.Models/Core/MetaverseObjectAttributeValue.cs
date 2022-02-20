@@ -13,9 +13,8 @@ namespace JIM.Models.Core
 
         public MetaverseObject MetaverseObject { get; set; }
 
-        public MetaverseObjectAttributeValue(MetaverseObject metaverseObject, MetaverseAttribute attribute) : base(attribute)
+        public MetaverseObjectAttributeValue() : base()
         {
-            MetaverseObject = metaverseObject;
         }
     }
 }

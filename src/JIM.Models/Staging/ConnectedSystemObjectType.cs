@@ -7,10 +7,8 @@
         public DateTime Created { get; set; }
         public ConnectedSystem ConnectedSystem { get; set; }
 
-        public ConnectedSystemObjectType(ConnectedSystem connectedSystem, string name)
+        public ConnectedSystemObjectType()
         {
-            ConnectedSystem = connectedSystem;
-            Name = name;
             Created = DateTime.Now;
         }
     }

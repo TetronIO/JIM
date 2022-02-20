@@ -13,11 +13,8 @@
 
         // todo: signing info?
 
-        public FunctionLibrary(string filename, string version)
+        public FunctionLibrary()
         {
-            Filename = filename;
-            Version = version;
-
         }
     }
 }

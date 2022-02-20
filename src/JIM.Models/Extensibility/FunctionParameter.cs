@@ -8,10 +8,8 @@
         public int Position { get; set; }
         public FunctionParameterType Type { get; set; }
 
-        public FunctionParameter(Function function, string name)
+        public FunctionParameter()
         {
-            Function = function;
-            Name = name;
         }
     }
 }

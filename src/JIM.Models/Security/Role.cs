@@ -17,10 +17,9 @@ namespace JIM.Models.Security
         // todo: permissions
         // todo: dynamic membership
 
-        public Role(string name)
+        public Role()
         {
-            Name = name;
-            StaticMembers = new List<MetaverseObject>();
+            //StaticMembers = new List<MetaverseObject>();
         }
     }
 }

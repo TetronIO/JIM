@@ -4,18 +4,15 @@ namespace JIM.Data
 {
     public interface IMetaverseRepository
     {
+        #region object types
         public IList<MetaverseObjectType> GetMetaverseObjectTypes();
 
         public MetaverseObjectType? GetMetaverseObjectType(Guid id);
 
         public MetaverseObjectType? GetMetaverseObjectType(string name);
+        #endregion
 
-        public IList<MetaverseAttribute>? GetMetaverseAttributes();
-
-        public MetaverseAttribute? GetMetaverseAttribute(Guid id);
-
-        public MetaverseAttribute? GetMetaverseAttribute(string name);
-
+        #region objects
         public MetaverseObject? GetMetaverseObject(Guid id);
 
         public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
@@ -35,5 +32,16 @@ namespace JIM.Data
             int maxResults,
             QuerySortBy querySortBy = QuerySortBy.DateCreated,
             QueryRange queryRange = QueryRange.Forever);
+
+        #endregion
+
+        #region attributes
+        public IList<MetaverseAttribute>? GetMetaverseAttributes();
+
+        public MetaverseAttribute? GetMetaverseAttribute(Guid id);
+
+        public MetaverseAttribute? GetMetaverseAttribute(string name);
+        #endregion
     }
+
 }

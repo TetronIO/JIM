@@ -1,5 +1,4 @@
 ﻿using JIM.Models.Core;
-using JIM.Models.Staging;
 
 namespace JIM.Models.Transactional
 {
@@ -7,7 +6,7 @@ namespace JIM.Models.Transactional
     {
         public PendingExportAttributeChangeType ChangeType { get; set; }
 
-        public PendingExportAttributeValueChange(ConnectedSystemAttribute attribute) : base(attribute)
+        public PendingExportAttributeValueChange()
         {
         }
     }

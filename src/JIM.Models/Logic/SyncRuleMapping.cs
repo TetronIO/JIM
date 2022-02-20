@@ -14,10 +14,8 @@ namespace JIM.Models.Logic
         public List<SyncRuleMappingSource> Sources { get; set; }
         public BaseAttribute Target { get; set; }
 
-        public SyncRuleMapping(SyncRule synchronisationRule, BaseAttribute target)
+        public SyncRuleMapping()
         {
-            SynchronisationRule = synchronisationRule;
-            Target = target;
             Sources = new List<SyncRuleMappingSource>();
         }
     }

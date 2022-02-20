@@ -9,73 +9,63 @@ namespace JIM.Application
     {
         public ConnectedSystemServer ConnectedSystems { get; }
         public MetaverseServer Metaverse { get; }
+        public SecurityServer Security { get; }
         internal IRepository Repository { get; }
 
         public JimApplication(IRepository dataRepository)
         {
             ConnectedSystems = new ConnectedSystemServer(this);
             Metaverse = new MetaverseServer(this);
+            Security = new SecurityServer(this);
             Repository = dataRepository;
             Log.Information("The JIM Application has started.");
         }
 
         // stores SSO information in the database so the user can view it in the interface
         // also ensures there is always a user with the admin role assignment
-        public async Task InitialiseSSOAsync(string nameIdAttribute, string initialAdminNameId)
+        public async Task InitialiseSSOAsync(string nameIdAttribute, string initialAdminNameIdValue)
         {
-            Log.Information($"InitialiseSSOAsync: nameId: {nameIdAttribute}, initialAdminNameId: {initialAdminNameId}");
+            Log.Information($"InitialiseSSOAsync: nameId: {nameIdAttribute}, initialAdminNameId: {initialAdminNameIdValue}");
 
-            var metaverseAttribute = Repository.Metaverse.GetMetaverseAttribute(nameIdAttribute);
-            if (metaverseAttribute == null)
+            var nameIdMetaverseAttribute = Repository.Metaverse.GetMetaverseAttribute(nameIdAttribute);
+            if (nameIdMetaverseAttribute == null)
                 throw new Exception("Unsupported SSO NameID attribute. Please specify one that exists.");
 
             var serviceSettings = Repository.ServiceSettings.GetServiceSettings();
-            if (serviceSettings.SSONameIDAttribute.Id != metaverseAttribute.Id)
+            if (serviceSettings.SSONameIDAttribute.Id != nameIdMetaverseAttribute.Id)
             {
-                serviceSettings.SSONameIDAttribute = metaverseAttribute;
+                serviceSettings.SSONameIDAttribute = nameIdMetaverseAttribute;
                 await Repository.ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
                 Log.Verbose($"InitialiseSSOAsync: Updated ServiceSettings SSONameIDAttribute to: {nameIdAttribute}");
             }
 
             // check for a matching user, if not create, and check admin role assignment
             // get user by attribute = get metaverse object by attribute value
-
-            var objectType = Repository.Metaverse.GetMetaverseObjectType(BuiltInObjectTypeNames.User.ToString());
+            var objectType = Metaverse.GetMetaverseObjectType(BuiltInObjectTypeNames.User.ToString());
             if (objectType == null)
                 throw new Exception($"{BuiltInObjectTypeNames.User} object type could not be found. Something went wrong with db seeding.");
 
-            var user = Repository.Metaverse.GetMetaverseObjectByTypeAndAttribute(objectType, metaverseAttribute, initialAdminNameId);
+            var user = Repository.Metaverse.GetMetaverseObjectByTypeAndAttribute(objectType, nameIdMetaverseAttribute, initialAdminNameIdValue);
             if (user != null)
             {
                 // we have a matching user, do they have the Administrators role?
-                if (!user.Roles.Exists(r => r.Name == BuiltInRoleNames.Administrators.ToString()))
-                {
-                    // user does not have the role, add it and update the user
-                    var role = Repository.Security.GetRole(BuiltInRoleNames.Administrators.ToString());
-                    if (role == null)
-                        throw new Exception($"{BuiltInRoleNames.Administrators} built-in role could not be found. Something went wrong with db seeding.");
-
-                    user.Roles.Add(role);
-                    await Repository.Metaverse.UpdateMetaverseObjectAsync(user);
-                    Log.Verbose($"InitialiseSSOAsync: Added {BuiltInRoleNames.Administrators} role to {initialAdminNameId}.");
-                }
-                else
-                {
-                    Log.Verbose($"InitialiseSSOAsync: {initialAdminNameId} already had the {BuiltInRoleNames.Administrators} role.");
-                }
+                if (!Security.DoesUserHaveRole(user, BuiltInRoleNames.Administrators.ToString()))
+                    await Security.AddUserToRoleAsync(user, BuiltInRoleNames.Administrators.ToString());
             }
             else
             {
-                // no matching user found, create them.
-                var role = Repository.Security.GetRole(BuiltInRoleNames.Administrators.ToString());
-                if (role == null)
-                    throw new Exception($"{BuiltInRoleNames.Administrators} built-in role could not be found. Something went wrong with db seeding.");
+                // no matching user found, create them
+                user = new MetaverseObject { Type = objectType };
+                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    MetaverseObject = user,
+                    Attribute = nameIdMetaverseAttribute,
+                    StringValue = initialAdminNameIdValue
+                });
 
-                user = new MetaverseObject(objectType);
-                user.AttributeValues.Add(new MetaverseObjectAttributeValue(user, metaverseAttribute) { StringValue = initialAdminNameId });
-                user.Roles.Add(role);
-                await Repository.Metaverse.CreateMetaverseObjectAsync(user);
-                Log.Verbose($"InitialiseSSOAsync: Created {initialAdminNameId} metaverse object user with the {BuiltInRoleNames.Administrators} role.");
+                await Metaverse.CreateMetaverseObjectAsync(user);
+                await Security.AddUserToRoleAsync(user, BuiltInRoleNames.Administrators.ToString());
+                Log.Verbose($"InitialiseSSOAsync: Created {initialAdminNameIdValue} metaverse object user with the {BuiltInRoleNames.Administrators} role.");
             }
         }
     }

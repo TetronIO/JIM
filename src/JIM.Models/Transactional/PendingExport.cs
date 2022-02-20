@@ -24,9 +24,8 @@ namespace JIM.Models.Transactional
         public PendingExportChangeType ChangeType { get; set; }
         public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; }
 
-        public PendingExport(ConnectedSystemObject connectedSystemObject)
+        public PendingExport()
         {
-            ConnectedSystemObject = connectedSystemObject;
             AttributeValueChanges = new List<PendingExportAttributeValueChange>();
         }
     }

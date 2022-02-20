@@ -12,9 +12,8 @@ namespace JIM.Models.Transactional
         public string? ConnectedSystemErrorMessage { get; set; }
         public string? ConnectedSystemStackTrace { get; set; }
 
-        public SyncRunObject(SyncRun synchronisationRun)
+        public SyncRunObject()
         {
-            SynchronisationRun = synchronisationRun;
         }
     }
 }

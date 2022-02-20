@@ -9,9 +9,8 @@
         public AttributePlurality AttributePlurality { get; set; }
         public bool BuiltIn { get; set; }
 
-        public BaseAttribute(string name)
+        public BaseAttribute()
         {
-            Name = name;
             Created = DateTime.Now;
         }
     }

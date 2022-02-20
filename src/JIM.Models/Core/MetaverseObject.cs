@@ -14,13 +14,12 @@ namespace JIM.Models.Core
         /// In the future, more object types may be able to have roles assigned to them.
         /// Roles grant entitlements within JIM.
         /// </summary>
-        public List<Role> Roles { get; set; }
+        //public List<Role> Roles { get; set; }
 
-        public MetaverseObject(MetaverseObjectType type)
+        public MetaverseObject()
         {
-            Type = type;
             AttributeValues = new List<MetaverseObjectAttributeValue>();
-            Roles = new List<Role>();
+            //Roles = new List<Role>();
         }
     }
 }

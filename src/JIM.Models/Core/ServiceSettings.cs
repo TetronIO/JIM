@@ -9,10 +9,9 @@ namespace JIM.Models.Core
         public MetaverseAttribute SSONameIDAttribute { get; set; }
         public bool SSOEnableLogOut { get; set; }
 
-        public ServiceSettings(MetaverseAttribute ssoNameIDAttribute)
+        public ServiceSettings()
         {
             SSOEnableLogOut = true;
-            SSONameIDAttribute = ssoNameIDAttribute;
         }
     }
 }

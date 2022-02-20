@@ -28,7 +28,7 @@ namespace JIM.PostgresData
         public MetaverseObjectType? GetMetaverseObjectType(string name)
         {
             using var db = new JimDbContext();
-            return db.MetaverseObjectTypes.SingleOrDefault(q => q.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase));
+            return db.MetaverseObjectTypes.SingleOrDefault(q => q.Name == name);
         }
 
         public IList<MetaverseAttribute> GetMetaverseAttributes()
@@ -46,7 +46,7 @@ namespace JIM.PostgresData
         public MetaverseAttribute? GetMetaverseAttribute(string name)
         {
             using var db = new JimDbContext();
-            return db.MetaverseAttributes.SingleOrDefault(x => x.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase));
+            return db.MetaverseAttributes.SingleOrDefault(x => x.Name ==name);
         }
 
         public MetaverseObject? GetMetaverseObject(Guid id)
@@ -71,7 +71,6 @@ namespace JIM.PostgresData
 
         public async Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
-            // todo: re-write this to use a dbMetaverseObject
             using var db = new JimDbContext();
             db.MetaverseObjects.Add(metaverseObject);
             await db.SaveChangesAsync();
@@ -82,7 +81,7 @@ namespace JIM.PostgresData
             using var db = new JimDbContext();
             var av = db.MetaverseObjectAttributeValues.SingleOrDefault(av =>
                av.Attribute.Id == metaverseAttribute.Id &&
-               av.StringValue != null && av.StringValue.Equals(attributeValue, StringComparison.InvariantCultureIgnoreCase) &&
+               av.StringValue != null && av.StringValue == attributeValue &&
                av.MetaverseObject.Type.Id == metaverseObjectType.Id);
 
             if (av != null)

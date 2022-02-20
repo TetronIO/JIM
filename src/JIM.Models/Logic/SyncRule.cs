@@ -21,16 +21,8 @@ namespace JIM.Models.Logic
         // what happens when an object is in scope, then falls out of scope?
         // should/can we provide an option to cause deprovisioning?
 
-        public SyncRule(
-            string name,
-            ConnectedSystem connectedSystem,
-            ConnectedSystemObjectType connectedSystemObjectType,
-            MetaverseObjectType metaverseObjectType)
+        public SyncRule()
         {
-            Name = name;
-            ConnectedSystem = connectedSystem;
-            ConnectedSystemObjectType = connectedSystemObjectType;
-            MetaverseObjectType = metaverseObjectType;
             Mappings = new List<SyncRuleMapping>();
         }
     }

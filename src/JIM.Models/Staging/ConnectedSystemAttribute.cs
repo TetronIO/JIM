@@ -6,9 +6,8 @@ namespace JIM.Models.Staging
     {
         public ConnectedSystem ConnectedSystem { get; set; }
 
-        public ConnectedSystemAttribute(ConnectedSystem connectedSystem, string name) : base(name)
+        public ConnectedSystemAttribute()
         {
-            ConnectedSystem = connectedSystem;
         }
     }
 }

@@ -9,9 +9,8 @@
         public int IntValue { get; set; }
         public byte[] ByteValue { get; set; }
 
-        protected BaseAttributeValue(BaseAttribute attribute)
+        protected BaseAttributeValue()
         {
-            Attribute = attribute;
             ByteValue = Array.Empty<byte>();
         }
     }
