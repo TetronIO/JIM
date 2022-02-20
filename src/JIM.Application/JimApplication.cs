@@ -23,7 +23,7 @@ namespace JIM.Application
         // also ensures there is always a user with the admin role assignment
         public async Task InitialiseSSOAsync(string nameIdAttribute, string initialAdminNameId)
         {
-            Log.Information($"InitialiseSSOAsync: nameId: {nameIdAttribute} initialAdminNameId: {initialAdminNameId}");
+            Log.Information($"InitialiseSSOAsync: nameId: {nameIdAttribute}, initialAdminNameId: {initialAdminNameId}");
 
             var metaverseAttribute = Repository.Metaverse.GetMetaverseAttribute(nameIdAttribute);
             if (metaverseAttribute == null)
@@ -34,7 +34,7 @@ namespace JIM.Application
             {
                 serviceSettings.SSONameIDAttribute = metaverseAttribute;
                 await Repository.ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
-                Log.Verbose($"InitialiseSSOAsync: Updated ServiceSettings SSONameIDAttribute to {nameIdAttribute}");
+                Log.Verbose($"InitialiseSSOAsync: Updated ServiceSettings SSONameIDAttribute to: {nameIdAttribute}");
             }
 
             // check for a matching user, if not create, and check admin role assignment
