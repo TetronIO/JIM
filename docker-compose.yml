@@ -2,17 +2,17 @@ version: '3.4'
 
 services:
 
-  tim.api:
-    container_name: TIM.Api
-    image: ${DOCKER_REGISTRY-}tim.api
+  jim.api:
+    container_name: JIM.Api
+    image: ${DOCKER_REGISTRY-}jim.api
     restart: always
     environment:
      - LOGGING_LEVEL=Verbose
-     - LOGGING_PATH=/var/log/tim
+     - LOGGING_PATH=/var/log/jim
      - ENABLE_REQUEST_LOGGING=true
-     - DB_HOSTNAME=tim.database
-     - DB_NAME=tim_db
-     - DB_USERNAME=tim
+     - DB_HOSTNAME=jim.database
+     - DB_NAME=jim_db
+     - DB_USERNAME=jim
      - DB_PASSWORD=password
      - SSO_AUTHORITY=1
      - SSO_CLIENT_ID=2
@@ -20,81 +20,81 @@ services:
      - SSO_NAMEID_ATTRIBUTE=EmployeeID
      - SSO_INITIAL_ADMIN_NAMEID=1
     volumes:
-      - logsvolume:/var/log/tim
+      - logsvolume:/var/log/jim
     build:
       context: .
-      dockerfile: src/TIM.Api/Dockerfile
+      dockerfile: src/JIM.Api/Dockerfile
     depends_on:
-      - TIM.Database
+      - JIM.Database
     networks:
-      - tim-network
+      - jim-network
 
-  tim.service:
-    container_name: TIM.Service
-    image: ${DOCKER_REGISTRY-}tim.service
+  jim.service:
+    container_name: JIM.Service
+    image: ${DOCKER_REGISTRY-}jim.service
     restart: always
     environment:
      - LOGGING_LEVEL=Verbose
-     - LOGGING_PATH=/var/log/tim
-     - DB_HOSTNAME=tim.database
+     - LOGGING_PATH=/var/log/jim
+     - DB_HOSTNAME=jim.database
      - DB_NAME=x
      - DB_USERNAME=y
      - DB_PASSWORD=z
     volumes:
-      - logsvolume:/var/log/tim
+      - logsvolume:/var/log/jim
     build:
       context: .
-      dockerfile: src/TIM.Service/Dockerfile
+      dockerfile: src/JIM.Service/Dockerfile
     depends_on:
-      - TIM.Database
+      - JIM.Database
     networks:
-      - tim-network
+      - jim-network
 
-  tim.scheduler:
-    container_name: TIM.Scheduler
-    image: ${DOCKER_REGISTRY-}tim.scheduler
+  jim.scheduler:
+    container_name: JIM.Scheduler
+    image: ${DOCKER_REGISTRY-}jim.scheduler
     restart: always
     environment:
      - LOGGING_LEVEL=Verbose
-     - LOGGING_PATH=/var/log/tim
+     - LOGGING_PATH=/var/log/jim
      - DB_HOSTNAME=x
-     - DB_NAME=tim_db
+     - DB_NAME=jim_db
      - DB_USERNAME=y
      - DB_PASSWORD=z
     volumes:
-      - logsvolume:/var/log/tim
+      - logsvolume:/var/log/jim
     build:
       context: .
-      dockerfile: src/TIM.Scheduler/Dockerfile
+      dockerfile: src/JIM.Scheduler/Dockerfile
     depends_on:
-      - TIM.Database
+      - JIM.Database
     networks:
-      - tim-network
+      - jim-network
   
   adminer:
-    container_name: TIM.Adminer
+    container_name: JIM.Adminer
     image: adminer
     restart: always
     ports:
       - 8080:8080
     depends_on:
-      - TIM.Database
+      - JIM.Database
     networks:
-      - tim-network
+      - jim-network
 
-  tim.database:
-    container_name: TIM.Database
+  jim.database:
+    container_name: JIM.Database
     image: postgres
     restart: always
     environment:
-      - POSTGRES_USER=tim
+      - POSTGRES_USER=jim
       - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=tim_db
+      - POSTGRES_DB=jim_db
     networks: 
-      - tim-network
+      - jim-network
 
 networks:
-  tim-network:
+  jim-network:
     driver: bridge
 
 volumes:

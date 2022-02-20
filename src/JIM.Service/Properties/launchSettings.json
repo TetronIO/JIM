@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "JIM.Service": {
+      "commandName": "Project"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}
