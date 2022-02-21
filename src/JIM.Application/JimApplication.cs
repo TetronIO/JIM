@@ -49,7 +49,7 @@ namespace JIM.Application
             if (user != null)
             {
                 // we have a matching user, do they have the Administrators role?
-                if (!Security.DoesUserHaveRole(user, BuiltInRoleNames.Administrators.ToString()))
+                if (!Security.IsUserInRole(user, BuiltInRoleNames.Administrators.ToString()))
                     await Security.AddUserToRoleAsync(user, BuiltInRoleNames.Administrators.ToString());
             }
             else

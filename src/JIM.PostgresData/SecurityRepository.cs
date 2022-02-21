@@ -30,7 +30,7 @@ namespace JIM.PostgresData
             return db.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToList();
         }
 
-        public bool DoesUserHaveRole(Guid userId, string roleName)
+        public bool IsUserInRole(Guid userId, string roleName)
         {
             using var db = new JimDbContext();
             return db.Roles.Any(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));

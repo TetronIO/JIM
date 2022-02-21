@@ -8,7 +8,7 @@ namespace JIM.Data
 
         public Role? GetRole(string roleName);
 
-        public bool DoesUserHaveRole(Guid userId, string roleName);
+        public bool IsUserInRole(Guid userId, string roleName);
 
         public List<Role> GetMetaverseObjectRoles(Guid metaverseObjectId);
 

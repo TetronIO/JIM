@@ -27,9 +27,9 @@ namespace JIM.Application.Servers
             return Application.Repository.Security.GetMetaverseObjectRoles(metaverseObject.Id);
         }
 
-        public bool DoesUserHaveRole(MetaverseObject user, string roleName)
+        public bool IsUserInRole(MetaverseObject user, string roleName)
         { 
-            return Application.Repository.Security.DoesUserHaveRole(user.Id, roleName);
+            return Application.Repository.Security.IsUserInRole(user.Id, roleName);
         }
         public async Task AddUserToRoleAsync(MetaverseObject user, string roleName)
         {
