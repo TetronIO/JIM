@@ -10,23 +10,19 @@ services:
       - 8080:8080
     depends_on:
       - JIM.Database
-    networks:
-      - jim-network
 
   jim.database:
     container_name: JIM.Database
     image: postgres
     restart: always
+    volumes:
+      - jim-db-volume:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=jim
       - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=jim_db
-    networks: 
-      - jim-network
-
-networks:
-  jim-network:
-    driver: bridge
+      - POSTGRES_DB=jim
+    ports:
+      - '5432:5432'
 
 volumes:
-  logsvolume: {}
+  jim-db-volume:

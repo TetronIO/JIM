@@ -10,8 +10,8 @@ services:
      - LOGGING_LEVEL=Verbose
      - LOGGING_PATH=/var/log/jim
      - ENABLE_REQUEST_LOGGING=true
-     - DB_HOSTNAME=jim.database
-     - DB_NAME=jim_db
+     - DB_HOSTNAME=JIM.Database
+     - DB_NAME=jim
      - DB_USERNAME=jim
      - DB_PASSWORD=password
      - SSO_AUTHORITY=1
@@ -20,7 +20,7 @@ services:
      - SSO_NAMEID_ATTRIBUTE=EmployeeID
      - SSO_INITIAL_ADMIN_NAMEID=1
     volumes:
-      - logsvolume:/var/log/jim
+      - jim-logs-volume:/var/log/jim
     build:
       context: .
       dockerfile: src/JIM.Api/Dockerfile
@@ -36,12 +36,12 @@ services:
     environment:
      - LOGGING_LEVEL=Verbose
      - LOGGING_PATH=/var/log/jim
-     - DB_HOSTNAME=jim.database
-     - DB_NAME=x
-     - DB_USERNAME=y
-     - DB_PASSWORD=z
+     - DB_HOSTNAME=JIM.Database
+     - DB_NAME=jim
+     - DB_USERNAME=jim
+     - DB_PASSWORD=password
     volumes:
-      - logsvolume:/var/log/jim
+      - jim-logs-volume:/var/log/jim
     build:
       context: .
       dockerfile: src/JIM.Service/Dockerfile
@@ -57,12 +57,12 @@ services:
     environment:
      - LOGGING_LEVEL=Verbose
      - LOGGING_PATH=/var/log/jim
-     - DB_HOSTNAME=x
-     - DB_NAME=jim_db
-     - DB_USERNAME=y
-     - DB_PASSWORD=z
+     - DB_HOSTNAME=JIM.Database
+     - DB_NAME=jim
+     - DB_USERNAME=jim
+     - DB_PASSWORD=password
     volumes:
-      - logsvolume:/var/log/jim
+      - jim-logs-volume:/var/log/jim
     build:
       context: .
       dockerfile: src/JIM.Scheduler/Dockerfile
@@ -86,10 +86,12 @@ services:
     container_name: JIM.Database
     image: postgres
     restart: always
+    volumes:
+      - jim-db-volume:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=jim
       - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=jim_db
+      - POSTGRES_DB=jim
     networks: 
       - jim-network
 
@@ -98,4 +100,5 @@ networks:
     driver: bridge
 
 volumes:
-  logsvolume: {}
+  jim-db-volume:
+  jim-logs-volume:
