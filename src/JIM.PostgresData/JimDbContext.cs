@@ -9,18 +9,18 @@ namespace JIM.PostgresData
 {
     internal class JimDbContext : DbContext
     {
-        internal DbSet<MetaverseObjectType>? MetaverseObjectTypes { get; set; }
-        internal DbSet<MetaverseAttribute>? MetaverseAttributes { get; set; }
-        internal DbSet<MetaverseObjectAttributeValue>? MetaverseObjectAttributeValues { get; set; }
-        internal DbSet<MetaverseObject>? MetaverseObjects { get; set; }
-        internal DbSet<SyncRule>? SyncRules { get; set; }
-        internal DbSet<ConnectedSystem>? ConnectedSystems { get; set; }
-        internal DbSet<ConnectedSystemObject>? ConnectedSystemObjects { get; set; }
-        internal DbSet<ConnectedSystemObjectType>? ConnectedSystemObjectTypes { get; set; }
-        internal DbSet<ConnectedSystemAttribute>? ConnectedSystemAttributes { get; set; }
-        internal DbSet<SyncRun>? SynchronisationRuns { get; set; }
-        internal DbSet<ServiceSettings>? ServiceSettings { get; set; }
-        internal DbSet<Role>? Roles { get; set; }
+        internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
+        internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
+        internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }
+        internal DbSet<MetaverseObject> MetaverseObjects { get; set; }
+        internal DbSet<SyncRule> SyncRules { get; set; }
+        internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
+        internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
+        internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
+        internal DbSet<ConnectedSystemAttribute> ConnectedSystemAttributes { get; set; }
+        internal DbSet<SyncRun> SynchronisationRuns { get; set; }
+        internal DbSet<ServiceSettings> ServiceSettings { get; set; }
+        internal DbSet<Role> Roles { get; set; }
 
         private readonly string _connectionString;
 

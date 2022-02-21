@@ -1,0 +1,32 @@
+version: '3.4'
+
+services:
+
+  adminer:
+    container_name: JIM.Adminer
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+    depends_on:
+      - JIM.Database
+    networks:
+      - jim-network
+
+  jim.database:
+    container_name: JIM.Database
+    image: postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=jim
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=jim_db
+    networks: 
+      - jim-network
+
+networks:
+  jim-network:
+    driver: bridge
+
+volumes:
+  logsvolume: {}

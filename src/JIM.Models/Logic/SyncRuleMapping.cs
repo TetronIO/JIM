@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Staging;
 
 namespace JIM.Models.Logic
 {
@@ -12,7 +13,8 @@ namespace JIM.Models.Logic
         /// </summary>
         public int Priority { get; set; }
         public List<SyncRuleMappingSource> Sources { get; set; }
-        public BaseAttribute Target { get; set; }
+        public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
+        public ConnectedSystemAttribute? TargetConnectedSystemAttribute { get; set; }
 
         public SyncRuleMapping()
         {

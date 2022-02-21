@@ -1,6 +1,5 @@
 ﻿using JIM.Data;
 using JIM.Models.Core;
-using Serilog;
 
 namespace JIM.PostgresData
 {
@@ -46,7 +45,7 @@ namespace JIM.PostgresData
         public MetaverseAttribute? GetMetaverseAttribute(string name)
         {
             using var db = new JimDbContext();
-            return db.MetaverseAttributes.SingleOrDefault(x => x.Name ==name);
+            return db.MetaverseAttributes.SingleOrDefault(x => x.Name == name);
         }
 
         public MetaverseObject? GetMetaverseObject(Guid id)
@@ -60,10 +59,7 @@ namespace JIM.PostgresData
             using var db = new JimDbContext();
             var dbMetaverseObject = db.MetaverseObjects.SingleOrDefault(q => q.Id == metaverseObject.Id);
             if (dbMetaverseObject == null)
-            {
-                Log.Error($"UpdateMetaverseObjectAsync: Couldn't find object in db to update: {metaverseObject.Id}");
-                return;
-            }
+                throw new ArgumentException($"Couldn't find object in db to update: {metaverseObject.Id}");
 
             db.Entry(dbMetaverseObject).CurrentValues.SetValues(metaverseObject);
             await db.SaveChangesAsync();

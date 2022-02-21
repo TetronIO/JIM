@@ -2,12 +2,19 @@
 
 namespace JIM.Models.Staging
 {
-    public class ConnectedSystemAttribute : BaseAttribute
+    public class ConnectedSystemAttribute
     {
+        public Guid Id { get; set; }
+        public DateTime Created { set; get; }
+        public string Name { get; set; }
+        public AttributeDataType Type { get; set; }
+        public AttributePlurality AttributePlurality { get; set; }
+
         public ConnectedSystem ConnectedSystem { get; set; }
 
         public ConnectedSystemAttribute()
         {
+            Created = DateTime.Now;
         }
     }
 }
