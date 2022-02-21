@@ -13,16 +13,24 @@ namespace JIM.Models.Logic
     {
         public Guid Id { get; set; }
         public int Order { get; set; }
-
         public MetaverseAttribute? MetaverseAttribute { get; set; }
         public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }
-
         public Function? Function { get; set; }
         public List<SyncRuleMappingSourceParamValue> ParameterValues { get; set; }
 
         public SyncRuleMappingSource()
         {
             ParameterValues = new List<SyncRuleMappingSourceParamValue>();
+        }
+
+        public bool IsValid()
+        {
+            // if we have no function, we require either a metaverse or connected system attribute value
+            if (Function == null)
+                return MetaverseAttribute != null || ConnectedSystemAttribute != null;
+
+            // if we do have a function, we don't want either attribute values
+            return MetaverseAttribute == null && ConnectedSystemAttribute == null;
         }
     }
 }
