@@ -26,3 +26,4 @@ services:
 
 volumes:
   jim-db-volume:
+    name: jim-db-volume

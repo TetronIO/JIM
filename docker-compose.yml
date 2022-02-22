@@ -101,4 +101,6 @@ networks:
 
 volumes:
   jim-db-volume:
+    name: jim-db-volume
   jim-logs-volume:
+    name: jim-logs-volume
