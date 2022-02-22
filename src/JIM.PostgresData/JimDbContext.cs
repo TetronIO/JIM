@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData
 {
-    internal class JimDbContext : DbContext
+    public class JimDbContext : DbContext
     {
         internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
         internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
@@ -24,7 +24,7 @@ namespace JIM.PostgresData
 
         private readonly string _connectionString;
 
-        internal JimDbContext()
+        public JimDbContext()
         {
             var dbHostName = Environment.GetEnvironmentVariable(Constants.CONFIG_DB_HOSTNAME);
             var dbName = Environment.GetEnvironmentVariable(Constants.CONFIG_DB_NAME);
