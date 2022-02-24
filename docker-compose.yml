@@ -26,6 +26,7 @@ services:
       dockerfile: src/JIM.Api/Dockerfile
     depends_on:
       - JIM.Database
+      - JIM.Service
     networks:
       - jim-network
 
@@ -68,6 +69,7 @@ services:
       dockerfile: src/JIM.Scheduler/Dockerfile
     depends_on:
       - JIM.Database
+      - JIM.Service
     networks:
       - jim-network
   
