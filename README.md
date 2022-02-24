@@ -7,7 +7,7 @@ A modern Identity Manager for organisations. Features:
 - Extensible with custom functions
 - Extensible with custom JIM connectors (fully unit-testable)
 - Also supports Microsoft Identity Manager 2016 ECMA 2.x management agents
-- A modern Web Portal and Rest API
+- A modern Web Portal and API
 - Single Sign-On (SSO) using OpenID Connect
 
 ## Scenarios
