@@ -6,5 +6,7 @@
         public IMetaverseRepository Metaverse { get; }
         public IServiceSettingsRepository ServiceSettings { get; }
         public ISecurityRepository Security { get; }
+
+        public Task SeedDatabaseAsync();
     }
 }

@@ -19,10 +19,21 @@ namespace JIM.Application
             Security = new SecurityServer(this);
             Repository = dataRepository;
             Log.Information("The JIM Application has started.");
+            
+        }
+
+        /// <summary>
+        /// Ensures that JIM is initialised, i.e. all seed data has been created.
+        /// Only one client of JIM should call this; the first one.
+        /// </summary>
+        public async Task Initialise()
+        {
+            await Repository.SeedDatabaseAsync();
         }
 
         // stores SSO information in the database so the user can view it in the interface
         // also ensures there is always a user with the admin role assignment
+        // todo: work out if there's any consideration needed wrt sequencing... api & web, or just one?
         public async Task InitialiseSSOAsync(string nameIdAttribute, string initialAdminNameIdValue)
         {
             Log.Information($"InitialiseSSOAsync: nameId: {nameIdAttribute}, initialAdminNameId: {initialAdminNameIdValue}");

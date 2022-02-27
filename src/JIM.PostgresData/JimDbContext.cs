@@ -26,23 +26,34 @@ namespace JIM.PostgresData
 
         public JimDbContext()
         {
-            var dbHostName = Environment.GetEnvironmentVariable(Constants.CONFIG_DB_HOSTNAME);
-            var dbName = Environment.GetEnvironmentVariable(Constants.CONFIG_DB_NAME);
-            var dbUsername = Environment.GetEnvironmentVariable(Constants.CONFIG_DB_USERNAME);
-            var dbPassword = Environment.GetEnvironmentVariable(Constants.CONFIG_DB_PASSWORD);
+            var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
+            var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
+            var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
+            var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
 
             if (string.IsNullOrEmpty(dbHostName))
-                throw new Exception($"{Constants.CONFIG_DB_HOSTNAME} environment variable missing");
+                throw new Exception($"{Constants.Config.DatabaseHostname} environment variable missing");
             if (string.IsNullOrEmpty(dbName))
-                throw new Exception($"{Constants.CONFIG_DB_NAME} environment variable missing");
+                throw new Exception($"{Constants.Config.DatabaseName} environment variable missing");
             if (string.IsNullOrEmpty(dbUsername))
-                throw new Exception($"{Constants.CONFIG_DB_USERNAME} environment variable missing");
+                throw new Exception($"{Constants.Config.DatabaseUsername} environment variable missing");
             if (string.IsNullOrEmpty(dbPassword))
-                throw new Exception($"{Constants.CONFIG_DB_PASSWORD} environment variable missing");
+                throw new Exception($"{Constants.Config.DatabasePassword} environment variable missing");
 
             _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}";
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.UseNpgsql(_connectionString);
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<MetaverseObjectAttributeValue>()
+                .HasOne(moav => moav.MetaverseObject)
+                .WithMany(mo => mo.AttributeValues);
+
+            modelBuilder.Entity<MetaverseObjectAttributeValue>()
+                .HasOne(moav => moav.ReferenceValue)
+                .WithMany();
+        }
     }
 }

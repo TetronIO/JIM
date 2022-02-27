@@ -1,6 +1,4 @@
-﻿using JIM.Models.Security;
-
-namespace JIM.Models.Core
+﻿namespace JIM.Models.Core
 {
     public class MetaverseObject
     {
