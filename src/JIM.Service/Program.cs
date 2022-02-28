@@ -16,21 +16,31 @@
 // - Export data to connected systems via connectors
 //
 // Required environment variables:
-// - LOGGING_LEVEL
-// - LOGGING_PATH
+// -------------------------------
+// LOGGING_LEVEL
+// LOGGING_PATH
+// DB_HOSTNAME - validated by data layer
+// DB_NAME - validated by data layer
+// DB_USERNAME - validated by data layer
+// DB_PASSWORD - validated by data layer
 //
 // **************************************************************************************
 
+using JIM.Application;
+using JIM.PostgresData;
 using Serilog;
 InitialiseLogging();
 Log.Information("JIM.Service - Hello World!");
 
 try
 {
+    var application = new JimApplication(new PostgresDataRepository());
+    await application.InitialiseAsync();
+
     while (true)
     {
         Log.Information("JIM.Service - Doing some work!");
-        Thread.Sleep(2000);
+        Thread.Sleep(4000);
     }
 }
 catch (Exception ex)

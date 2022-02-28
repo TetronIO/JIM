@@ -26,7 +26,7 @@ namespace JIM.Application
         /// Ensures that JIM is initialised, i.e. all seed data has been created.
         /// Only one client of JIM should call this; the first one.
         /// </summary>
-        public async Task Initialise()
+        public async Task InitialiseAsync()
         {
             await Repository.SeedDatabaseAsync();
         }

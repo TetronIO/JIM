@@ -10,6 +10,7 @@
 
         public MetaverseObject()
         {
+            Created = DateTime.Now;
             AttributeValues = new List<MetaverseObjectAttributeValue>();
         }
     }

@@ -1,5 +1,6 @@
 ﻿using JIM.Data;
 using JIM.Models.Core;
+using Serilog;
 
 namespace JIM.PostgresData
 {
@@ -12,6 +13,7 @@ namespace JIM.PostgresData
 
         public PostgresDataRepository()
         {
+            AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
             ConnectedSystems = new ConnectedSystemRepository(this);
             Metaverse = new MetaverseRepository(this);
             ServiceSettings = new ServiceSettingsRepository(this);
@@ -27,7 +29,10 @@ namespace JIM.PostgresData
 
             using var db = new JimDbContext();
             if (!db.ServiceSettings.Any())
-                db.ServiceSettings.Add(new ServiceSettings());
+            {
+                await db.ServiceSettings.AddAsync(new ServiceSettings());
+                Log.Information("SeedDatabaseAsync: Created ServiceSettings");
+            }
 
             // HOW ARE WE GOING TO ENFORCE FIXED LIST VALUES?
             // This will be important even in the sync-delivery phase where we need to provide simple config values that map to directory attributes, i.e. grouptype/scope
@@ -35,93 +40,94 @@ namespace JIM.PostgresData
             // Maybe attributes can register helpers that have UI and API aspects?
 
             // generic attributes
-            var accountNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.AccountName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var descriptionAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Description, AttributePlurality.SingleValued, AttributeDataType.String);
-            var displayNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.DisplayName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var distinguishedNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.DistinguishedName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var emailAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Email, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute1 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute1, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute10 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute10, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute11 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute11, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute12 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute12, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute13 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute13, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute14 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute14, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute15 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute15, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute2 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute2, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute3 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute3, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute4 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute4, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute5 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute5, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute6 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute6, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute7 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute7, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute8 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute8, AttributePlurality.SingleValued, AttributeDataType.String);
-            var extensionAttribute1Attribute9 = SeedAttribute(db, Constants.BuiltInAttributes.ExtensionAttribute9, AttributePlurality.SingleValued, AttributeDataType.String);
-            var hideFromAddressListsAttribute = SeedAttribute(db, Constants.BuiltInAttributes.HideFromAddressLists, AttributePlurality.SingleValued, AttributeDataType.Bool);
-            var infoAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Info, AttributePlurality.SingleValued, AttributeDataType.String);
-            var mailNicknameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.MailNickname, AttributePlurality.SingleValued, AttributeDataType.String);
-            var objectGuidAttribute = SeedAttribute(db, Constants.BuiltInAttributes.ObjectGUID, AttributePlurality.SingleValued, AttributeDataType.Guid);
-            var objectSidAttribute = SeedAttribute(db, Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary);
+            var accountNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.AccountName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var descriptionAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Description, AttributePlurality.SingleValued, AttributeDataType.String);
+            var displayNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.DisplayName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var distinguishedNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.DistinguishedName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var emailAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Email, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute1 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute1, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute10 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute10, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute11 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute11, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute12 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute12, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute13 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute13, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute14 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute14, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute15 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute15, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute2 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute2, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute3 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute3, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute4 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute4, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute5 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute5, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute6 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute6, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute7 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute7, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute8 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute8, AttributePlurality.SingleValued, AttributeDataType.String);
+            var extensionAttribute1Attribute9 = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ExtensionAttribute9, AttributePlurality.SingleValued, AttributeDataType.String);
+            var hideFromAddressListsAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.HideFromAddressLists, AttributePlurality.SingleValued, AttributeDataType.Bool);
+            var infoAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Info, AttributePlurality.SingleValued, AttributeDataType.String);
+            var mailNicknameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.MailNickname, AttributePlurality.SingleValued, AttributeDataType.String);
+            var objectGuidAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ObjectGUID, AttributePlurality.SingleValued, AttributeDataType.Guid);
+            var objectSidAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary);
 
             // user-specific attributes
-            var accountExpiresAttribute = SeedAttribute(db, Constants.BuiltInAttributes.AccountExpires, AttributePlurality.SingleValued, AttributeDataType.DateTime);
-            var altSecurityIdentitiesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.AltSecurityIdentities, AttributePlurality.MultiValued, AttributeDataType.String);
-            var commonNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.CommonName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var companyAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Company, AttributePlurality.SingleValued, AttributeDataType.String);
-            var countryAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Country, AttributePlurality.SingleValued, AttributeDataType.String);
-            var countryCodeAttribute = SeedAttribute(db, Constants.BuiltInAttributes.CountryCode, AttributePlurality.SingleValued, AttributeDataType.String);
-            var departmentAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Department, AttributePlurality.SingleValued, AttributeDataType.String);
-            var employeeIdAttribute = SeedAttribute(db, Constants.BuiltInAttributes.EmployeeID, AttributePlurality.SingleValued, AttributeDataType.String);
-            var employeeTypeAttribute = SeedAttribute(db, Constants.BuiltInAttributes.EmployeeType, AttributePlurality.SingleValued, AttributeDataType.String);
-            var facsimileTelephoneNumberAttribute = SeedAttribute(db, Constants.BuiltInAttributes.FacsimileTelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.String);
-            var firstNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.FirstName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var homeDirectoryAttribute = SeedAttribute(db, Constants.BuiltInAttributes.HomeDirectory, AttributePlurality.SingleValued, AttributeDataType.String);
-            var homeDriveAttribute = SeedAttribute(db, Constants.BuiltInAttributes.HomeDrive, AttributePlurality.SingleValued, AttributeDataType.String);
-            var homePhoneAttribute = SeedAttribute(db, Constants.BuiltInAttributes.HomePhone, AttributePlurality.SingleValued, AttributeDataType.String);
-            var ipPhoneAttribute = SeedAttribute(db, Constants.BuiltInAttributes.IpPhone, AttributePlurality.SingleValued, AttributeDataType.String);
-            var jobTitleAttribute = SeedAttribute(db, Constants.BuiltInAttributes.JobTitle, AttributePlurality.SingleValued, AttributeDataType.String);
-            var lastNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.LastName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var localityAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Locality, AttributePlurality.SingleValued, AttributeDataType.String);
-            var managerAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Manager, AttributePlurality.SingleValued, AttributeDataType.Reference);
-            var mobileNumberAttribute = SeedAttribute(db, Constants.BuiltInAttributes.MobileNumber, AttributePlurality.SingleValued, AttributeDataType.String);
-            var officeAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Office, AttributePlurality.SingleValued, AttributeDataType.String);
-            var organisationAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Organisation, AttributePlurality.SingleValued, AttributeDataType.String);
-            var otherFacsimileTelephoneNumbersAttribute = SeedAttribute(db, Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.String);
-            var otherIpPhonesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.OtherIpPhones, AttributePlurality.MultiValued, AttributeDataType.String);
-            var otherMobilesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.OtherMobiles, AttributePlurality.MultiValued, AttributeDataType.String);
-            var otherPagersAttribute = SeedAttribute(db, Constants.BuiltInAttributes.OtherPagers, AttributePlurality.MultiValued, AttributeDataType.String);
-            var otherTelephonesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.OtherTelephones, AttributePlurality.MultiValued, AttributeDataType.String);
-            var pagerAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Pager, AttributePlurality.SingleValued, AttributeDataType.String);
-            var physicalDeliveryOfficeNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var postalAddressesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.PostalAddresses, AttributePlurality.MultiValued, AttributeDataType.String);
-            var postalCodeAttribute = SeedAttribute(db, Constants.BuiltInAttributes.PostalCode, AttributePlurality.SingleValued, AttributeDataType.String);
-            var postOFficeBoxesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.PostOfficeBoxes, AttributePlurality.MultiValued, AttributeDataType.String);
-            var pronounsAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Pronouns, AttributePlurality.SingleValued, AttributeDataType.String);
-            var proxyAddressesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.ProxyAddresses, AttributePlurality.MultiValued, AttributeDataType.String);
-            var scriptPathAttribute = SeedAttribute(db, Constants.BuiltInAttributes.ScriptPath, AttributePlurality.SingleValued, AttributeDataType.String);
-            var sidHistoryAttribute = SeedAttribute(db, Constants.BuiltInAttributes.SidHistory, AttributePlurality.MultiValued, AttributeDataType.Binary);
-            var stateOrProvinceAttribute = SeedAttribute(db, Constants.BuiltInAttributes.StateOrProvince, AttributePlurality.SingleValued, AttributeDataType.String);
-            var statusAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Status, AttributePlurality.SingleValued, AttributeDataType.String);
-            var streetAddressAttribute = SeedAttribute(db, Constants.BuiltInAttributes.StreetAddress, AttributePlurality.SingleValued, AttributeDataType.String);
-            var teamAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Team, AttributePlurality.SingleValued, AttributeDataType.String);
-            var telephoneNumberAttribute = SeedAttribute(db, Constants.BuiltInAttributes.TelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.String);
-            var urlsAttribute = SeedAttribute(db, Constants.BuiltInAttributes.Urls, AttributePlurality.MultiValued, AttributeDataType.String);
-            var userAccountControlAttribute = SeedAttribute(db, Constants.BuiltInAttributes.UserAccountControl, AttributePlurality.SingleValued, AttributeDataType.Number);
-            var userCertificatesAttribute = SeedAttribute(db, Constants.BuiltInAttributes.UserCertificates, AttributePlurality.MultiValued, AttributeDataType.Binary);
-            var userPrincipalNameAttribute = SeedAttribute(db, Constants.BuiltInAttributes.UserPrincipalName, AttributePlurality.SingleValued, AttributeDataType.String);
-            var userSharedFolderAttribute = SeedAttribute(db, Constants.BuiltInAttributes.UserSharedFolder, AttributePlurality.SingleValued, AttributeDataType.String);
-            var webPageAttribute = SeedAttribute(db, Constants.BuiltInAttributes.WebPage, AttributePlurality.SingleValued, AttributeDataType.String);
+            var accountExpiresAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.AccountExpires, AttributePlurality.SingleValued, AttributeDataType.DateTime);
+            var altSecurityIdentitiesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.AltSecurityIdentities, AttributePlurality.MultiValued, AttributeDataType.String);
+            var commonNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.CommonName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var companyAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Company, AttributePlurality.SingleValued, AttributeDataType.String);
+            var countryAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Country, AttributePlurality.SingleValued, AttributeDataType.String);
+            var countryCodeAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.CountryCode, AttributePlurality.SingleValued, AttributeDataType.String);
+            var departmentAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Department, AttributePlurality.SingleValued, AttributeDataType.String);
+            var employeeIdAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.EmployeeID, AttributePlurality.SingleValued, AttributeDataType.String);
+            var employeeTypeAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.EmployeeType, AttributePlurality.SingleValued, AttributeDataType.String);
+            var facsimileTelephoneNumberAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.FacsimileTelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.String);
+            var firstNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.FirstName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var homeDirectoryAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.HomeDirectory, AttributePlurality.SingleValued, AttributeDataType.String);
+            var homeDriveAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.HomeDrive, AttributePlurality.SingleValued, AttributeDataType.String);
+            var homePhoneAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.HomePhone, AttributePlurality.SingleValued, AttributeDataType.String);
+            var ipPhoneAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.IpPhone, AttributePlurality.SingleValued, AttributeDataType.String);
+            var jobTitleAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.JobTitle, AttributePlurality.SingleValued, AttributeDataType.String);
+            var lastNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.LastName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var localityAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Locality, AttributePlurality.SingleValued, AttributeDataType.String);
+            var managerAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Manager, AttributePlurality.SingleValued, AttributeDataType.Reference);
+            var mobileNumberAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.MobileNumber, AttributePlurality.SingleValued, AttributeDataType.String);
+            var officeAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Office, AttributePlurality.SingleValued, AttributeDataType.String);
+            var organisationAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Organisation, AttributePlurality.SingleValued, AttributeDataType.String);
+            var otherFacsimileTelephoneNumbersAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.String);
+            var otherIpPhonesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.OtherIpPhones, AttributePlurality.MultiValued, AttributeDataType.String);
+            var otherMobilesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.OtherMobiles, AttributePlurality.MultiValued, AttributeDataType.String);
+            var otherPagersAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.OtherPagers, AttributePlurality.MultiValued, AttributeDataType.String);
+            var otherTelephonesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.OtherTelephones, AttributePlurality.MultiValued, AttributeDataType.String);
+            var pagerAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Pager, AttributePlurality.SingleValued, AttributeDataType.String);
+            var physicalDeliveryOfficeNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var postalAddressesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.PostalAddresses, AttributePlurality.MultiValued, AttributeDataType.String);
+            var postalCodeAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.PostalCode, AttributePlurality.SingleValued, AttributeDataType.String);
+            var postOFficeBoxesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.PostOfficeBoxes, AttributePlurality.MultiValued, AttributeDataType.String);
+            var pronounsAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Pronouns, AttributePlurality.SingleValued, AttributeDataType.String);
+            var proxyAddressesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ProxyAddresses, AttributePlurality.MultiValued, AttributeDataType.String);
+            var scriptPathAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ScriptPath, AttributePlurality.SingleValued, AttributeDataType.String);
+            var sidHistoryAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.SidHistory, AttributePlurality.MultiValued, AttributeDataType.Binary);
+            var stateOrProvinceAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.StateOrProvince, AttributePlurality.SingleValued, AttributeDataType.String);
+            var statusAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Status, AttributePlurality.SingleValued, AttributeDataType.String);
+            var streetAddressAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.StreetAddress, AttributePlurality.SingleValued, AttributeDataType.String);
+            var teamAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Team, AttributePlurality.SingleValued, AttributeDataType.String);
+            var telephoneNumberAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.TelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.String);
+            var urlsAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.Urls, AttributePlurality.MultiValued, AttributeDataType.String);
+            var userAccountControlAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.UserAccountControl, AttributePlurality.SingleValued, AttributeDataType.Number);
+            var userCertificatesAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.UserCertificates, AttributePlurality.MultiValued, AttributeDataType.Binary);
+            var userPrincipalNameAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.UserPrincipalName, AttributePlurality.SingleValued, AttributeDataType.String);
+            var userSharedFolderAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.UserSharedFolder, AttributePlurality.SingleValued, AttributeDataType.String);
+            var webPageAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.WebPage, AttributePlurality.SingleValued, AttributeDataType.String);
 
             // group-specific attributes
-            var groupScopeAttribute = SeedAttribute(db, Constants.BuiltInAttributes.GroupScope, AttributePlurality.SingleValued, AttributeDataType.String);
-            var groupTypeAttribute = SeedAttribute(db, Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.String);
-            var managedByAttribute = SeedAttribute(db, Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference);
-            var staticMembersAttribute = SeedAttribute(db, Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference);
+            var groupScopeAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.GroupScope, AttributePlurality.SingleValued, AttributeDataType.String);
+            var groupTypeAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.String);
+            var managedByAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference);
+            var staticMembersAttribute = await SeedAttributeAsync(db, Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference);
 
             // create the user object type and attribute mappings
             var userObjectType = db.MetaverseObjectTypes.SingleOrDefault(q => q.Name == Constants.BuiltInObjectTypes.User);
             if (userObjectType == null)
             {
                 userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, BuiltIn = true };
-                db.MetaverseObjectTypes.Add(userObjectType);
+                await db.MetaverseObjectTypes.AddAsync(userObjectType);
+                Log.Information("SeedDatabaseAsync: MetaverseObjectType User");
             }
 
             AddAttributeToObjectType(userObjectType, accountExpiresAttribute);
@@ -200,7 +206,8 @@ namespace JIM.PostgresData
             if (groupObjectType == null)
             {
                 groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, BuiltIn = true };
-                db.MetaverseObjectTypes.Add(groupObjectType);
+                await db.MetaverseObjectTypes.AddAsync(groupObjectType);
+                Log.Information("SeedDatabaseAsync: MetaverseObjectType Group");
             }
 
             AddAttributeToObjectType(groupObjectType, accountNameAttribute);
@@ -237,7 +244,7 @@ namespace JIM.PostgresData
             await db.SaveChangesAsync();
         }
 
-        private static MetaverseAttribute SeedAttribute(JimDbContext jimDbContext, string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType)
+        private static async Task<MetaverseAttribute> SeedAttributeAsync(JimDbContext jimDbContext, string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType)
         {
             var attribute = jimDbContext.MetaverseAttributes.SingleOrDefault(q => q.Name == name);
             if (attribute == null)
@@ -249,7 +256,8 @@ namespace JIM.PostgresData
                     Type = attributeDataType,
                     BuiltIn = true
                 };
-                jimDbContext.MetaverseAttributes.Add(attribute);
+                await jimDbContext.MetaverseAttributes.AddAsync(attribute);
+                Log.Verbose($"SeedAttributeAsync: Created {name}");
             }
             return attribute;
         }
@@ -257,7 +265,10 @@ namespace JIM.PostgresData
         private static void AddAttributeToObjectType(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute)
         {
             if (!metaverseObjectType.Attributes.Any(q => q.Name == metaverseAttribute.Name))
+            {
                 metaverseObjectType.Attributes.Add(metaverseAttribute);
+                Log.Verbose($"AddAttributeToObjectType: {metaverseObjectType.Name} - Added {metaverseAttribute.Name}");
+            }
         }
     }
 }

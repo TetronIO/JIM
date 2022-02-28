@@ -429,3 +429,5 @@ bundles/
 vendor/pkg/
 pyenv
 Vagrantfile
+
+*.exe
