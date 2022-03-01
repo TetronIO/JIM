@@ -1,5 +1,6 @@
 ﻿using JIM.Data;
 using JIM.Models.Core;
+using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData
 {
@@ -15,19 +16,19 @@ namespace JIM.PostgresData
         public IList<MetaverseObjectType> GetMetaverseObjectTypes()
         {
             using var db = new JimDbContext();
-            return db.MetaverseObjectTypes.OrderBy(x => x.Name).ToList();
+            return db.MetaverseObjectTypes.Include(q => q.Attributes).OrderBy(x => x.Name).ToList();
         }
 
         public MetaverseObjectType? GetMetaverseObjectType(int id)
         {
             using var db = new JimDbContext();
-            return db.MetaverseObjectTypes.SingleOrDefault(x => x.Id == id);
+            return db.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(x => x.Id == id);
         }
 
         public MetaverseObjectType? GetMetaverseObjectType(string name)
         {
             using var db = new JimDbContext();
-            return db.MetaverseObjectTypes.SingleOrDefault(q => q.Name == name);
+            return db.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(q => q.Name == name);
         }
 
         public IList<MetaverseAttribute> GetMetaverseAttributes()
@@ -51,7 +52,7 @@ namespace JIM.PostgresData
         public MetaverseObject? GetMetaverseObject(int id)
         {
             using var db = new JimDbContext();
-            return db.MetaverseObjects.SingleOrDefault(x => x.Id == id);
+            return db.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefault(x => x.Id == id);
         }
 
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
@@ -61,7 +62,13 @@ namespace JIM.PostgresData
             if (dbMetaverseObject == null)
                 throw new ArgumentException($"Couldn't find object in db to update: {metaverseObject.Id}");
 
+            // map scalar value updates to the db version of the object
             db.Entry(dbMetaverseObject).CurrentValues.SetValues(metaverseObject);
+
+            // now map reference types
+            dbMetaverseObject.AttributeValues = metaverseObject.AttributeValues;
+            dbMetaverseObject.Type = metaverseObject.Type;
+
             await db.SaveChangesAsync();
         }
 

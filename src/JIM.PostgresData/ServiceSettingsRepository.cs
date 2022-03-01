@@ -20,7 +20,7 @@ namespace JIM.PostgresData
 
             try
             {
-                return db.ServiceSettings.FirstOrDefault();
+                return db.ServiceSettings.Include(q => q.SSONameIDAttribute).FirstOrDefault();
             }
             catch (Npgsql.PostgresException ex)
             {
