@@ -166,6 +166,7 @@ namespace JIM.PostgresData
             AddAttributeToObjectType(userObjectType, accountNameAttribute);
             AddAttributeToObjectType(userObjectType, altSecurityIdentitiesAttribute);
             AddAttributeToObjectType(userObjectType, commonNameAttribute);
+            AddAttributeToObjectType(userObjectType, companyAttribute);
             AddAttributeToObjectType(userObjectType, countryAttribute);
             AddAttributeToObjectType(userObjectType, countryCodeAttribute);
             AddAttributeToObjectType(userObjectType, departmentAttribute);
@@ -200,6 +201,7 @@ namespace JIM.PostgresData
             AddAttributeToObjectType(userObjectType, ipPhoneAttribute);
             AddAttributeToObjectType(userObjectType, jobTitleAttribute);
             AddAttributeToObjectType(userObjectType, lastNameAttribute);
+            AddAttributeToObjectType(userObjectType, localityAttribute);
             AddAttributeToObjectType(userObjectType, mailNicknameAttribute);
             AddAttributeToObjectType(userObjectType, managerAttribute);
             AddAttributeToObjectType(userObjectType, mobileNumberAttribute);
