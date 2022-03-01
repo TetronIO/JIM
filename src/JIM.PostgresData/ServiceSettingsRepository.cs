@@ -21,7 +21,6 @@ namespace JIM.PostgresData
             try
             {
                 return db.ServiceSettings.FirstOrDefault();
-                //return db.ServiceSettings.Include(ss => ss.SSONameIDAttribute).FirstOrDefault();
             }
             catch (Npgsql.PostgresException ex)
             {
@@ -45,7 +44,12 @@ namespace JIM.PostgresData
                 return;
             }
 
+            // map scalar value updates to the db version of the object
             db.Entry(dbServiceSettings).CurrentValues.SetValues(serviceSettings);
+
+            // manually update reference properties
+            dbServiceSettings.SSONameIDAttribute = serviceSettings.SSONameIDAttribute;
+
             await db.SaveChangesAsync();
         }
     }
