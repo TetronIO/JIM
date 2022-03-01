@@ -1,5 +1,6 @@
 ﻿using JIM.Data;
 using JIM.Models.Core;
+using JIM.Models.Security;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Diagnostics;
@@ -59,6 +60,7 @@ namespace JIM.PostgresData
             // - service settings
             // - metaverse attributes
             // - object types, with attributes
+            // - roles
 
             if (!databaseContext.ServiceSettings.Any())
             {
@@ -274,6 +276,12 @@ namespace JIM.PostgresData
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute7);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute8);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
+
+            // create the built-in roles
+            databaseContext.Roles.Add(new Role { 
+                BuiltIn = true,
+                Name = "Administrators"
+            });
 
             await databaseContext.SaveChangesAsync();
         }
