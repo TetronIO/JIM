@@ -4,7 +4,7 @@ namespace JIM.Data
 {
     public interface IServiceSettingsRepository
     {
-        public ServiceSettings GetServiceSettings();
+        public ServiceSettings? GetServiceSettings();
         public Task UpdateServiceSettingsAsync(ServiceSettings serviceSettings);
     }
 }

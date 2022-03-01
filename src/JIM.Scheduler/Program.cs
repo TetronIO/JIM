@@ -15,14 +15,14 @@
 
 using Serilog;
 InitialiseLogging();
-Log.Information("JIM.Scheduler - Hello World!");
+Log.Information("Starting JIM.Scheduler");
 
 try
 {
     while (true)
     {
         Log.Information("JIM.Scheduler - Doing some work!");
-        Thread.Sleep(2000);
+        Thread.Sleep(4000);
     }
 }
 catch (Exception ex)

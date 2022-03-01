@@ -7,6 +7,6 @@
         public IServiceSettingsRepository ServiceSettings { get; }
         public ISecurityRepository Security { get; }
 
-        public Task SeedDatabaseAsync();
+        public Task InitialiseDatabaseAsync();
     }
 }

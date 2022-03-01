@@ -26,7 +26,7 @@ InitialiseLogging(new LoggerConfiguration(), true);
 
 try
 {
-    Log.Information("Starting JIM API host");
+    Log.Information("Starting JIM.Api");
     var builder = WebApplication.CreateBuilder(args);
 
     // Add services to the container.
@@ -45,6 +45,12 @@ try
     // setup the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
     // then ensure SSO and Initial admin are setup.
     var jimApplication = new JimApplication(new PostgresDataRepository());
+    while (!jimApplication.IsApplicationReady())
+    {
+        Log.Information("Application is not ready yet. Sleeping...");
+        Thread.Sleep(1000);
+    }
+
     await jimApplication.InitialiseSSOAsync(ssoNameIdAttribute, ssoInitialAdminNameId);
     builder.Services.AddSingleton<JimApplication>(a => jimApplication);
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);

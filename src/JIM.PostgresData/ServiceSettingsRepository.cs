@@ -13,10 +13,24 @@ namespace JIM.PostgresData
             Repository = dataRepository;
         }
 
-        public ServiceSettings GetServiceSettings()
+        public ServiceSettings? GetServiceSettings()
         {
             using var db = new JimDbContext();
-            return db.ServiceSettings.First();
+
+            try
+            {
+                return db.ServiceSettings.FirstOrDefault();
+            }
+            catch (Npgsql.PostgresException ex)
+            {
+                if (ex.Message.StartsWith("42P01: relation \"ServiceSettings\" does not exist"))
+                {
+                    Log.Verbose("GetServiceSettings: Service Settings does not exist. We expect this in a new-db scenario where the app isn't ready yet.");
+                    return null;
+                }
+
+                throw;
+            }
         }
 
         public async Task UpdateServiceSettingsAsync(ServiceSettings serviceSettings)

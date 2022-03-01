@@ -17,7 +17,7 @@ services:
      - SSO_AUTHORITY=1
      - SSO_CLIENT_ID=2
      - SSO_SECRET=3
-     - SSO_NAMEID_ATTRIBUTE=EmployeeID
+     - SSO_NAMEID_ATTRIBUTE=Employee ID
      - SSO_INITIAL_ADMIN_NAMEID=1
     volumes:
       - jim-logs-volume:/var/log/jim
