@@ -7,14 +7,14 @@ namespace JIM.Data
     public interface IConnectedSystemRepository
     {
         public IList<ConnectedSystem> GetConnectedSystems();
-        public ConnectedSystem? GetConnectedSystem(Guid id);
-        public IList<SyncRun>? GetSynchronisationRuns(Guid id);
-        public IList<ConnectedSystemAttribute>? GetAttributes(Guid id);
-        public IList<ConnectedSystemObjectType>? GetObjectTypes(Guid id);
-        public ConnectedSystemObject? GetConnectedSystemObject(Guid connectedSystemId, Guid id);
+        public ConnectedSystem? GetConnectedSystem(int id);
+        public IList<SyncRun>? GetSynchronisationRuns(int id);
+        public IList<ConnectedSystemAttribute>? GetAttributes(int id);
+        public IList<ConnectedSystemObjectType>? GetObjectTypes(int id);
+        public ConnectedSystemObject? GetConnectedSystemObject(int connectedSystemId, int id);
         public int GetConnectedSystemObjectCount();
-        public int GetConnectedSystemObjectOfTypeCount(Guid connectedSystemObjectTypeId);
+        public int GetConnectedSystemObjectOfTypeCount(int connectedSystemObjectTypeId);
         public IList<SyncRule>? GetSyncRules();
-        public SyncRule? GetSyncRule(Guid id);
+        public SyncRule? GetSyncRule(int id);
     }
 }

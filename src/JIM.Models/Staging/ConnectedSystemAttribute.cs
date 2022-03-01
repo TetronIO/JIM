@@ -4,7 +4,7 @@ namespace JIM.Models.Staging
 {
     public class ConnectedSystemAttribute
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public DateTime Created { set; get; }
         public string Name { get; set; }
         public AttributeDataType Type { get; set; }

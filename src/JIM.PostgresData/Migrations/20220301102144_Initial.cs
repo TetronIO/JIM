@@ -1,11 +1,12 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
 namespace JIM.PostgresData.Migrations
 {
-    public partial class InitialCreate : Migration
+    public partial class Initial : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -13,7 +14,8 @@ namespace JIM.PostgresData.Migrations
                 name: "ConnectedSystems",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: true),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -28,7 +30,8 @@ namespace JIM.PostgresData.Migrations
                 name: "FunctionLibrary",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Filename = table.Column<string>(type: "text", nullable: false),
                     Version = table.Column<string>(type: "text", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -43,9 +46,11 @@ namespace JIM.PostgresData.Migrations
                 name: "MetaverseObjectTypes",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    BuiltIn = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -56,12 +61,13 @@ namespace JIM.PostgresData.Migrations
                 name: "ConnectedSystemAttributes",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Type = table.Column<int>(type: "integer", nullable: false),
                     AttributePlurality = table.Column<int>(type: "integer", nullable: false),
-                    ConnectedSystemId = table.Column<Guid>(type: "uuid", nullable: false)
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -78,10 +84,11 @@ namespace JIM.PostgresData.Migrations
                 name: "ConnectedSystemObjectTypes",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ConnectedSystemId = table.Column<Guid>(type: "uuid", nullable: false)
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -98,8 +105,9 @@ namespace JIM.PostgresData.Migrations
                 name: "ConnectedSystemRunProfile",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ConnectedSystemId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
                     RunType = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
@@ -117,8 +125,9 @@ namespace JIM.PostgresData.Migrations
                 name: "SynchronisationRuns",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ConnectedSystemId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     RunType = table.Column<int>(type: "integer", nullable: false),
                     ConnectedSystemErrorMessage = table.Column<string>(type: "text", nullable: true),
@@ -139,8 +148,9 @@ namespace JIM.PostgresData.Migrations
                 name: "Function",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FunctionLibraryId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    FunctionLibraryId = table.Column<int>(type: "integer", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: true),
                     OutputType = table.Column<int>(type: "integer", nullable: false)
@@ -160,13 +170,14 @@ namespace JIM.PostgresData.Migrations
                 name: "MetaverseAttributes",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Type = table.Column<int>(type: "integer", nullable: false),
                     AttributePlurality = table.Column<int>(type: "integer", nullable: false),
                     BuiltIn = table.Column<bool>(type: "boolean", nullable: false),
-                    MetaverseObjectTypeId = table.Column<Guid>(type: "uuid", nullable: true)
+                    MetaverseObjectTypeId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -182,12 +193,13 @@ namespace JIM.PostgresData.Migrations
                 name: "ConnectedSystemObjects",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    TypeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ConnectedSystemId = table.Column<Guid>(type: "uuid", nullable: false),
-                    UniqueIdentifierAttributeId = table.Column<Guid>(type: "uuid", nullable: false)
+                    TypeId = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
+                    UniqueIdentifierAttributeId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -216,13 +228,14 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRules",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    ConnectedSystemId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ConnectedSystemObjectTypeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    MetaverseObjectTypeId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemObjectTypeId = table.Column<int>(type: "integer", nullable: false),
+                    MetaverseObjectTypeId = table.Column<int>(type: "integer", nullable: false),
                     Direction = table.Column<int>(type: "integer", nullable: false),
                     ProvisionToConnectedSystem = table.Column<bool>(type: "boolean", nullable: true),
                     ProjectToMetaverse = table.Column<bool>(type: "boolean", nullable: true)
@@ -254,8 +267,9 @@ namespace JIM.PostgresData.Migrations
                 name: "FunctionParameter",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FunctionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    FunctionId = table.Column<int>(type: "integer", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Position = table.Column<int>(type: "integer", nullable: false),
                     Type = table.Column<int>(type: "integer", nullable: false)
@@ -275,12 +289,15 @@ namespace JIM.PostgresData.Migrations
                 name: "ServiceSettings",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     SSOAuthority = table.Column<string>(type: "text", nullable: true),
                     SSOClientId = table.Column<string>(type: "text", nullable: true),
                     SSOSecret = table.Column<string>(type: "text", nullable: true),
-                    SSONameIDAttributeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    SSOEnableLogOut = table.Column<bool>(type: "boolean", nullable: false)
+                    SSONameIDAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    SSOEnableLogOut = table.Column<bool>(type: "boolean", nullable: false),
+                    IsServiceInMaintenanceMode = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -289,21 +306,21 @@ namespace JIM.PostgresData.Migrations
                         name: "FK_ServiceSettings_MetaverseAttributes_SSONameIDAttributeId",
                         column: x => x.SSONameIDAttributeId,
                         principalTable: "MetaverseAttributes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
                 name: "ConnectedSystemAttributeValue",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    AttributeId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AttributeId = table.Column<int>(type: "integer", nullable: false),
                     StringValue = table.Column<string>(type: "text", nullable: true),
                     DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     IntValue = table.Column<int>(type: "integer", nullable: false),
                     ByteValue = table.Column<byte[]>(type: "bytea", nullable: false),
-                    ConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: true)
+                    ConnectedSystemObjectId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -325,10 +342,11 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRunObject",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    SynchronisationRunId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    SynchronisationRunId = table.Column<int>(type: "integer", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ConnectedSystemObjectId = table.Column<int>(type: "integer", nullable: true),
                     Result = table.Column<int>(type: "integer", nullable: false),
                     ConnectedSystemErrorMessage = table.Column<string>(type: "text", nullable: true),
                     ConnectedSystemStackTrace = table.Column<string>(type: "text", nullable: true)
@@ -353,11 +371,12 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRuleMapping",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    SynchronisationRuleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    SynchronisationRuleId = table.Column<int>(type: "integer", nullable: false),
                     Priority = table.Column<int>(type: "integer", nullable: false),
-                    TargetMetaverseAttributeId = table.Column<Guid>(type: "uuid", nullable: true),
-                    TargetConnectedSystemAttributeId = table.Column<Guid>(type: "uuid", nullable: true)
+                    TargetMetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    TargetConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -384,12 +403,13 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRuleMappingSource",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Order = table.Column<int>(type: "integer", nullable: false),
-                    MetaverseAttributeId = table.Column<Guid>(type: "uuid", nullable: true),
-                    ConnectedSystemAttributeId = table.Column<Guid>(type: "uuid", nullable: true),
-                    FunctionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    SyncRuleMappingId = table.Column<Guid>(type: "uuid", nullable: true)
+                    MetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    ConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    FunctionId = table.Column<int>(type: "integer", nullable: true),
+                    SyncRuleMappingId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -420,14 +440,15 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRuleMappingSourceParamValue",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FunctionParameterId = table.Column<Guid>(type: "uuid", nullable: false),
-                    MetaverseAttributeId = table.Column<Guid>(type: "uuid", nullable: true),
-                    ConnectedSystemAttributeId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    FunctionParameterId = table.Column<int>(type: "integer", nullable: false),
+                    MetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    ConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true),
                     StringValue = table.Column<string>(type: "text", nullable: true),
                     DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     DoubleValue = table.Column<double>(type: "double precision", nullable: false),
-                    SyncRuleMappingSourceId = table.Column<Guid>(type: "uuid", nullable: true)
+                    SyncRuleMappingSourceId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -459,14 +480,18 @@ namespace JIM.PostgresData.Migrations
                 name: "MetaverseObjectAttributeValues",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    AttributeId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AttributeId = table.Column<int>(type: "integer", nullable: false),
+                    MetaverseObjectId = table.Column<int>(type: "integer", nullable: false),
                     StringValue = table.Column<string>(type: "text", nullable: true),
-                    DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    IntValue = table.Column<int>(type: "integer", nullable: false),
-                    ByteValue = table.Column<byte[]>(type: "bytea", nullable: false),
-                    ContributedBySystemId = table.Column<Guid>(type: "uuid", nullable: true),
-                    MetaverseObjectId = table.Column<Guid>(type: "uuid", nullable: false)
+                    DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IntValue = table.Column<int>(type: "integer", nullable: true),
+                    ByteValue = table.Column<byte[]>(type: "bytea", nullable: true),
+                    ReferenceValueId = table.Column<int>(type: "integer", nullable: true),
+                    GuidValue = table.Column<Guid>(type: "uuid", nullable: true),
+                    BoolValue = table.Column<bool>(type: "boolean", nullable: true),
+                    ContributedBySystemId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -488,11 +513,12 @@ namespace JIM.PostgresData.Migrations
                 name: "MetaverseObjects",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    TypeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RoleId = table.Column<Guid>(type: "uuid", nullable: true)
+                    TypeId = table.Column<int>(type: "integer", nullable: false),
+                    RoleId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -509,11 +535,12 @@ namespace JIM.PostgresData.Migrations
                 name: "Roles",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
                     BuiltIn = table.Column<bool>(type: "boolean", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    CreatedById = table.Column<Guid>(type: "uuid", nullable: true)
+                    CreatedById = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -596,9 +623,29 @@ namespace JIM.PostgresData.Migrations
                 column: "ContributedBySystemId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_MetaverseObjectAttributeValues_DateTimeValue",
+                table: "MetaverseObjectAttributeValues",
+                column: "DateTimeValue");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MetaverseObjectAttributeValues_GuidValue",
+                table: "MetaverseObjectAttributeValues",
+                column: "GuidValue");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MetaverseObjectAttributeValues_IntValue",
+                table: "MetaverseObjectAttributeValues",
+                column: "IntValue");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_MetaverseObjectAttributeValues_MetaverseObjectId",
                 table: "MetaverseObjectAttributeValues",
                 column: "MetaverseObjectId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MetaverseObjectAttributeValues_ReferenceValueId",
+                table: "MetaverseObjectAttributeValues",
+                column: "ReferenceValueId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_MetaverseObjectAttributeValues_StringValue",
@@ -722,6 +769,13 @@ namespace JIM.PostgresData.Migrations
                 principalTable: "MetaverseObjects",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_MetaverseObjectAttributeValues_MetaverseObjects_ReferenceVa~",
+                table: "MetaverseObjectAttributeValues",
+                column: "ReferenceValueId",
+                principalTable: "MetaverseObjects",
+                principalColumn: "Id");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_MetaverseObjects_Roles_RoleId",

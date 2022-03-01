@@ -6,7 +6,7 @@ namespace JIM.Models.Security
     [Index(nameof(Name))]
     public class Role
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public string Name { get; set; }
         public bool BuiltIn { get; set; }
         public DateTime Created { get; set; }
@@ -19,7 +19,8 @@ namespace JIM.Models.Security
 
         public Role()
         {
-            //StaticMembers = new List<MetaverseObject>();
+            StaticMembers = new List<MetaverseObject>();
+            Created = DateTime.Now;
         }
     }
 }

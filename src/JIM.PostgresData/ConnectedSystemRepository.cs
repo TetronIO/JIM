@@ -20,31 +20,31 @@ namespace JIM.PostgresData
             return db.ConnectedSystems.OrderBy(x => x.Name).ToList();
         }
 
-        public ConnectedSystem? GetConnectedSystem(Guid id)
+        public ConnectedSystem? GetConnectedSystem(int id)
         {
             using var db = new JimDbContext();
             return db.ConnectedSystems.SingleOrDefault(x => x.Id == id);
         }
 
-        public IList<SyncRun>? GetSynchronisationRuns(Guid id)
+        public IList<SyncRun>? GetSynchronisationRuns(int id)
         {
             using var db = new JimDbContext();
             return db.SynchronisationRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToList();
         }
 
-        public IList<ConnectedSystemAttribute>? GetAttributes(Guid id)
+        public IList<ConnectedSystemAttribute>? GetAttributes(int id)
         {
             using var db = new JimDbContext();
             return db.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
         }
 
-        public IList<ConnectedSystemObjectType>? GetObjectTypes(Guid id)
+        public IList<ConnectedSystemObjectType>? GetObjectTypes(int id)
         {
             using var db = new JimDbContext();
             return db.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
         }
 
-        public ConnectedSystemObject? GetConnectedSystemObject(Guid connectedSystemId, Guid id)
+        public ConnectedSystemObject? GetConnectedSystemObject(int connectedSystemId, int id)
         {
             using var db = new JimDbContext();
             return db.ConnectedSystemObjects.SingleOrDefault(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
@@ -56,7 +56,7 @@ namespace JIM.PostgresData
             return db.SyncRules.OrderBy(x => x.Name).ToList();
         }
 
-        public SyncRule? GetSyncRule(Guid id)
+        public SyncRule? GetSyncRule(int id)
         {
             using var db = new JimDbContext();
             return db.SyncRules.SingleOrDefault(x => x.Id == id);
@@ -68,7 +68,7 @@ namespace JIM.PostgresData
             return db.ConnectedSystemObjects.Count();
         }
 
-        public int GetConnectedSystemObjectOfTypeCount(Guid connectedSystemObjectTypeId)
+        public int GetConnectedSystemObjectOfTypeCount(int connectedSystemObjectTypeId)
         {
             using var db = new JimDbContext();
             return db.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).Count();

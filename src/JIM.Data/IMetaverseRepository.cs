@@ -7,13 +7,13 @@ namespace JIM.Data
         #region object types
         public IList<MetaverseObjectType> GetMetaverseObjectTypes();
 
-        public MetaverseObjectType? GetMetaverseObjectType(Guid id);
+        public MetaverseObjectType? GetMetaverseObjectType(int id);
 
         public MetaverseObjectType? GetMetaverseObjectType(string name);
         #endregion
 
         #region objects
-        public MetaverseObject? GetMetaverseObject(Guid id);
+        public MetaverseObject? GetMetaverseObject(int id);
 
         public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
@@ -23,10 +23,10 @@ namespace JIM.Data
 
         public int GetMetaverseObjectCount();
 
-        public int GetMetaverseObjectOfTypeCount(Guid metaverseObjectTypeId);
+        public int GetMetaverseObjectOfTypeCount(int metaverseObjectTypeId);
 
         public PagedResultSet<MetaverseObject> GetMetaverseObjectsOfType(
-            Guid metaverseObjectTypeId,
+            int metaverseObjectTypeId,
             int page,
             int pageSize,
             int maxResults,
@@ -38,7 +38,7 @@ namespace JIM.Data
         #region attributes
         public IList<MetaverseAttribute>? GetMetaverseAttributes();
 
-        public MetaverseAttribute? GetMetaverseAttribute(Guid id);
+        public MetaverseAttribute? GetMetaverseAttribute(int id);
 
         public MetaverseAttribute? GetMetaverseAttribute(string name);
         #endregion

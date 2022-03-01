@@ -18,27 +18,27 @@ namespace JIM.Application.Servers
             return Application.Repository.ConnectedSystems.GetConnectedSystems();
         }
 
-        public ConnectedSystem? GetConnectedSystem(Guid id)
+        public ConnectedSystem? GetConnectedSystem(int id)
         {
             return Application.Repository.ConnectedSystems.GetConnectedSystem(id);
         }
 
-        public IList<SyncRun>? GetSynchronisationRuns(Guid id)
+        public IList<SyncRun>? GetSynchronisationRuns(int id)
         {
             return Application.Repository.ConnectedSystems.GetSynchronisationRuns(id);
         }
 
-        public IList<ConnectedSystemAttribute>? GetAttributes(Guid id)
+        public IList<ConnectedSystemAttribute>? GetAttributes(int id)
         {
             return Application.Repository.ConnectedSystems.GetAttributes(id);
         }
 
-        public IList<ConnectedSystemObjectType>? GetObjectTypes(Guid id)
+        public IList<ConnectedSystemObjectType>? GetObjectTypes(int id)
         {
             return Application.Repository.ConnectedSystems.GetObjectTypes(id);
         }
 
-        public ConnectedSystemObject? GetConnectedSystemObject(Guid connectedSystemId, Guid id)
+        public ConnectedSystemObject? GetConnectedSystemObject(int connectedSystemId, int id)
         {
             return Application.Repository.ConnectedSystems.GetConnectedSystemObject(connectedSystemId, id);
         }
@@ -58,7 +58,7 @@ namespace JIM.Application.Servers
             return Application.Repository.ConnectedSystems.GetSyncRules();
         }
 
-        public SyncRule? GetSyncRule(Guid id)
+        public SyncRule? GetSyncRule(int id)
         {
             return Application.Repository.ConnectedSystems.GetSyncRule(id);
         }

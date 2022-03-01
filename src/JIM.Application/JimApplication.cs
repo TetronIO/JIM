@@ -73,10 +73,9 @@ namespace JIM.Application
             else
             {
                 // no matching user found, create them in stub form; just enough to sign-in and then token claim values will suppliment, i.e. display name
-                user = new MetaverseObject { Id = Guid.NewGuid(), Type = objectType };
+                user = new MetaverseObject { Type = objectType };
                 user.AttributeValues.Add(new MetaverseObjectAttributeValue
                 {
-                    Id = Guid.NewGuid(),
                     MetaverseObject = user,
                     Attribute = nameIdMetaverseAttribute,
                     StringValue = initialAdminNameIdValue

@@ -18,7 +18,7 @@ namespace JIM.Models.Transactional
         // - delete object: success or fail
         // - update attribute: atomic, some can succeed, some can fail
 
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public ConnectedSystemObject ConnectedSystemObject { get; set; }
 
         public PendingExportChangeType ChangeType { get; set; }

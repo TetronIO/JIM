@@ -24,19 +24,19 @@ namespace JIM.PostgresData
             return db.Roles.SingleOrDefault(q => q.Name == roleName);
         }
 
-        public List<Role> GetMetaverseObjectRoles(Guid metaverseObjectId)
+        public List<Role> GetMetaverseObjectRoles(int metaverseObjectId)
         {
             using var db = new JimDbContext();
             return db.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToList();
         }
 
-        public bool IsUserInRole(Guid userId, string roleName)
+        public bool IsUserInRole(int userId, string roleName)
         {
             using var db = new JimDbContext();
             return db.Roles.Any(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));
         }
 
-        public async Task AddUserToRoleAsync(Guid userId, string roleName)
+        public async Task AddUserToRoleAsync(int userId, string roleName)
         {
             using var db = new JimDbContext();
             var dbRole = db.Roles.SingleOrDefault(r => r.Name == roleName);

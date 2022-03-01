@@ -1,5 +1,6 @@
 ﻿using JIM.Data;
 using JIM.Models.Core;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace JIM.PostgresData
@@ -20,6 +21,7 @@ namespace JIM.PostgresData
             try
             {
                 return db.ServiceSettings.FirstOrDefault();
+                //return db.ServiceSettings.Include(ss => ss.SSONameIDAttribute).FirstOrDefault();
             }
             catch (Npgsql.PostgresException ex)
             {

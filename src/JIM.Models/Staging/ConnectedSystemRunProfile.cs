@@ -4,8 +4,8 @@ namespace JIM.Models.Staging
 {
     public class ConnectedSystemRunProfile
     {
-        public Guid Id { get; set; }
-        public Guid ConnectedSystemId { get; set; }
+        public int Id { get; set; }
+        public ConnectedSystem ConnectedSystem { get; set; }
         public SyncRunType RunType { get; set; }
     }
 }

@@ -1,8 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace JIM.Models.Core
 {
     public class ServiceSettings
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public DateTime Created { get; set; }
         public string? SSOAuthority { get; set; }
         public string? SSOClientId { get; set; }

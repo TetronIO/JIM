@@ -2,7 +2,7 @@
 {
     public class ConnectedSystemAttributeValue
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public ConnectedSystemAttribute Attribute { get; set; }
         public string? StringValue { get; set; }
         public DateTime DateTimeValue { get; set; }

@@ -5,7 +5,7 @@
     /// </summary>
     public class FunctionLibrary
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public string Filename { get; set; }
         public string Version { get; set; }
         public DateTime Created { get; set; }

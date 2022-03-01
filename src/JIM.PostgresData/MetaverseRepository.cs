@@ -18,7 +18,7 @@ namespace JIM.PostgresData
             return db.MetaverseObjectTypes.OrderBy(x => x.Name).ToList();
         }
 
-        public MetaverseObjectType? GetMetaverseObjectType(Guid id)
+        public MetaverseObjectType? GetMetaverseObjectType(int id)
         {
             using var db = new JimDbContext();
             return db.MetaverseObjectTypes.SingleOrDefault(x => x.Id == id);
@@ -36,7 +36,7 @@ namespace JIM.PostgresData
             return db.MetaverseAttributes.OrderBy(x => x.Name).ToList();
         }
 
-        public MetaverseAttribute? GetMetaverseAttribute(Guid id)
+        public MetaverseAttribute? GetMetaverseAttribute(int id)
         {
             using var db = new JimDbContext();
             return db.MetaverseAttributes.SingleOrDefault(x => x.Id == id);
@@ -48,7 +48,7 @@ namespace JIM.PostgresData
             return db.MetaverseAttributes.SingleOrDefault(x => x.Name == name);
         }
 
-        public MetaverseObject? GetMetaverseObject(Guid id)
+        public MetaverseObject? GetMetaverseObject(int id)
         {
             using var db = new JimDbContext();
             return db.MetaverseObjects.SingleOrDefault(x => x.Id == id);
@@ -92,14 +92,14 @@ namespace JIM.PostgresData
             return db.MetaverseObjects.Count();
         }
 
-        public int GetMetaverseObjectOfTypeCount(Guid metaverseObjectTypeId)
+        public int GetMetaverseObjectOfTypeCount(int metaverseObjectTypeId)
         {
             using var db = new JimDbContext();
             return db.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).Count();
         }
 
         public PagedResultSet<MetaverseObject> GetMetaverseObjectsOfType(
-            Guid metaverseObjectTypeId,
+            int metaverseObjectTypeId,
             int page = 1,
             int pageSize = 20,
             int maxResults = 500,

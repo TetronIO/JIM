@@ -11,7 +11,7 @@ namespace JIM.Models.Logic
     /// </summary>
     public class SyncRuleMappingSource
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public int Order { get; set; }
         public MetaverseAttribute? MetaverseAttribute { get; set; }
         public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }

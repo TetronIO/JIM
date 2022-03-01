@@ -2,7 +2,7 @@
 {
     public class MetaverseObject
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public DateTime Created { get; set; }
         public DateTime? LastUpdated { get; set; }
         public MetaverseObjectType Type { get; set; }

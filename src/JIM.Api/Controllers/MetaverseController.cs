@@ -25,7 +25,7 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/metaverse/object_types/{id}")]
-        public MetaverseObjectType? GetObjectType(Guid id)
+        public MetaverseObjectType? GetObjectType(int id)
         {
             _logger.LogTrace($"Someone requested an object type: {id}");
             return _application.Metaverse.GetMetaverseObjectType(id);
@@ -39,14 +39,14 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/metaverse/attributes/{id}")]
-        public MetaverseAttribute? GetAttribute(Guid id)
+        public MetaverseAttribute? GetAttribute(int id)
         {
             _logger.LogTrace($"Someone requested an attribute: {id}");
             return _application.Metaverse.GetMetaverseAttribute(id);
         }
 
         [HttpGet("/metaverse/objects/{id}")]
-        public MetaverseObject? GetObject(Guid id)
+        public MetaverseObject? GetObject(int id)
         {
             _logger.LogTrace($"Someone requested a metaverse object: {id}");
             return _application.Metaverse.GetMetaverseObject(id);

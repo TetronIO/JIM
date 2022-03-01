@@ -4,7 +4,7 @@ namespace JIM.Models.Transactional
 {
     public class SyncRunObject
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public SyncRun SynchronisationRun { get; set; }
         public DateTime Created { get; set; }
         public ConnectedSystemObject? ConnectedSystemObject { get; set; }

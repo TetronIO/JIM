@@ -5,7 +5,7 @@ namespace JIM.Models.Logic
 {
     public class SyncRuleMapping
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public SyncRule SynchronisationRule { get; set; }
         /// <summary>
         /// When this is not the only sync rule mapping for the attribute, a priority helps us make decisions on system authority.

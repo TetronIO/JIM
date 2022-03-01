@@ -16,7 +16,7 @@ namespace JIM.Application.Servers
             return Application.Repository.Metaverse.GetMetaverseObjectTypes();
         }
 
-        public MetaverseObjectType? GetMetaverseObjectType(Guid id)
+        public MetaverseObjectType? GetMetaverseObjectType(int id)
         {
             return Application.Repository.Metaverse.GetMetaverseObjectType(id);
         }
@@ -31,12 +31,12 @@ namespace JIM.Application.Servers
             return Application.Repository.Metaverse.GetMetaverseAttributes();
         }
 
-        public MetaverseAttribute? GetMetaverseAttribute(Guid id)
+        public MetaverseAttribute? GetMetaverseAttribute(int id)
         {
             return Application.Repository.Metaverse.GetMetaverseAttribute(id);
         }
 
-        public MetaverseObject? GetMetaverseObject(Guid id)
+        public MetaverseObject? GetMetaverseObject(int id)
         {
             return Application.Repository.Metaverse.GetMetaverseObject(id);
         }

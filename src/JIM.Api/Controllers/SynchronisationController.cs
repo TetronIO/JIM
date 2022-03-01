@@ -27,35 +27,35 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}")]
-        public ConnectedSystem? GetConnectedSystem(Guid csid)
+        public ConnectedSystem? GetConnectedSystem(int csid)
         {
             _logger.LogTrace($"Someone requested a connected system: {csid}");
             return _application.ConnectedSystems.GetConnectedSystem(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/run_history")]
-        public IEnumerable<SyncRun>? GetConnectedSystemRunHistories(Guid csid)
+        public IEnumerable<SyncRun>? GetConnectedSystemRunHistories(int csid)
         {
             _logger.LogTrace($"Someone requested synchronisation runs for system: {csid}");
             return _application.ConnectedSystems.GetSynchronisationRuns(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/attributes")]
-        public IEnumerable<ConnectedSystemAttribute>? GetConnectedSystemAttributes(Guid csid)
+        public IEnumerable<ConnectedSystemAttribute>? GetConnectedSystemAttributes(int csid)
         {
             _logger.LogTrace($"Someone requested attributes for connected system: {csid}");
             return _application.ConnectedSystems.GetAttributes(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/object_types")]
-        public IEnumerable<ConnectedSystemObjectType>? GetConnectedSystemObjectTypes(Guid csid)
+        public IEnumerable<ConnectedSystemObjectType>? GetConnectedSystemObjectTypes(int csid)
         {
             _logger.LogTrace($"Someone requested object types for connected system: {csid}");
             return _application.ConnectedSystems.GetObjectTypes(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/objects/{id}")]
-        public ConnectedSystemObject? GetConnectedSystemObject(Guid csid, Guid id)
+        public ConnectedSystemObject? GetConnectedSystemObject(int csid, int id)
         {
             _logger.LogTrace($"Someone requested an object ({id}) connected system: {csid}");
             return _application.ConnectedSystems.GetConnectedSystemObject(csid, id);
@@ -69,7 +69,7 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/synchronisation/sync_rules/{id}")]
-        public SyncRule? GetSyncRule(Guid id)
+        public SyncRule? GetSyncRule(int id)
         {
             _logger.LogTrace($"Someone requested a specific sync rule: {id}");
             return _application.ConnectedSystems.GetSyncRule(id);
