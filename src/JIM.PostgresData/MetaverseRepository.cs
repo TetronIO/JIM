@@ -55,6 +55,17 @@ namespace JIM.PostgresData
             return db.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefault(x => x.Id == id);
         }
 
+        //public async Task<MetaverseObject> AddAttributeValueToMetaverseObject(MetaverseObject metaverseObject, MetaverseObjectAttributeValue metaverseObjectAttributeValue)
+        //{
+        //    using var db = new JimDbContext();
+        //    var dbMetaverseObject = db.MetaverseObjects.SingleOrDefault(q => q.Id == metaverseObject.Id);
+        //    if (dbMetaverseObject == null)
+        //        throw new ArgumentException($"Couldn't find object in db to update: {metaverseObject.Id}");
+
+        //    if (metaverseObject.AttributeValues.Any(q => q.Id == metaverseObjectAttributeValue.Id || q.Attribute.Id == metaverseObjectAttributeValue.Attribute.Id))
+        //        throw new ArgumentException("That attribute value object, or the attribute it references has already been added.");
+        //}
+
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
             using var db = new JimDbContext();
@@ -69,12 +80,26 @@ namespace JIM.PostgresData
             dbMetaverseObject.AttributeValues = metaverseObject.AttributeValues;
             dbMetaverseObject.Type = metaverseObject.Type;
 
+            // now ensure we swap out the attribute value reference property values with ones from this db context, to avoid issues
+            foreach (var attributeValue in dbMetaverseObject.AttributeValues.Where(q=>q.Attribute.Id == 0))
+            {
+                db.MetaverseAttributes.Local
+
+                .
+            }
+
             await db.SaveChangesAsync();
         }
 
         public async Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
             using var db = new JimDbContext();
+
+            // I think we need to go through the reference properties and re-map them from db versions, to avoid EF wanting
+            // to insert when the references are for existing objects.
+
+            // this sounds crazy, it would impact performance. Why is EF trying to insert when the objects exist?
+
             db.MetaverseObjects.Add(metaverseObject);
             await db.SaveChangesAsync();
         }
