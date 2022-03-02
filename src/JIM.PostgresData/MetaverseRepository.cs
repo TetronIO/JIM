@@ -81,12 +81,12 @@ namespace JIM.PostgresData
             dbMetaverseObject.Type = metaverseObject.Type;
 
             // now ensure we swap out the attribute value reference property values with ones from this db context, to avoid issues
-            foreach (var attributeValue in dbMetaverseObject.AttributeValues.Where(q=>q.Attribute.Id == 0))
-            {
-                db.MetaverseAttributes.Local
+            //foreach (var attributeValue in dbMetaverseObject.AttributeValues)
+            //{
 
-                .
-            }
+            //}
+
+            // think we need to move to a per-request dbcontext approach? DI it in from web-api?
 
             await db.SaveChangesAsync();
         }
@@ -95,10 +95,14 @@ namespace JIM.PostgresData
         {
             using var db = new JimDbContext();
 
-            // I think we need to go through the reference properties and re-map them from db versions, to avoid EF wanting
-            // to insert when the references are for existing objects.
+            // swap out references to other existing objects from those from this db context.
+            // if we don't, EF will think they're new and want to INSERT them into the db.
 
-            // this sounds crazy, it would impact performance. Why is EF trying to insert when the objects exist?
+            db.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+            foreach (var attributeValue in metaverseObject.AttributeValues)
+            {
+                attributeValue.Attribute = await db.MetaverseAttributes.SingleAsync(q => q.Id == attributeValue.Attribute.Id);
+            }
 
             db.MetaverseObjects.Add(metaverseObject);
             await db.SaveChangesAsync();

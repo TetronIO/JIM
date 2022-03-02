@@ -42,6 +42,11 @@ try
     if (string.IsNullOrEmpty(ssoInitialAdminNameId))
         throw new Exception("SSO_INITIAL_ADMIN_NAMEID environment variable missing");
 
+
+    // change the JimApplication so it is scoped
+    // it should create a data layer and db context per instance of jim application
+
+
     // setup the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
     // then ensure SSO and Initial admin are setup.
     var jimApplication = new JimApplication(new PostgresDataRepository());
@@ -52,8 +57,17 @@ try
     }
 
     await jimApplication.InitialiseSSOAsync(ssoNameIdAttribute, ssoInitialAdminNameId);
+
+
+
+
+
+
     builder.Services.AddSingleton<JimApplication>(a => jimApplication);
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
+
+
+    
 
     // now setup logging with the web framework
     builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
