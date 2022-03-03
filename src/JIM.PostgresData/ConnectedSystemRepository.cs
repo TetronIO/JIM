@@ -16,62 +16,52 @@ namespace JIM.PostgresData
 
         public IList<ConnectedSystem> GetConnectedSystems()
         {
-            using var db = new JimDbContext();
-            return db.ConnectedSystems.OrderBy(x => x.Name).ToList();
+            return Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToList();
         }
 
         public ConnectedSystem? GetConnectedSystem(int id)
         {
-            using var db = new JimDbContext();
-            return db.ConnectedSystems.SingleOrDefault(x => x.Id == id);
+            return Repository.Database.ConnectedSystems.SingleOrDefault(x => x.Id == id);
         }
 
         public IList<SyncRun>? GetSynchronisationRuns(int id)
         {
-            using var db = new JimDbContext();
-            return db.SynchronisationRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToList();
+            return Repository.Database.SynchronisationRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToList();
         }
 
         public IList<ConnectedSystemAttribute>? GetAttributes(int id)
         {
-            using var db = new JimDbContext();
-            return db.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
+            return Repository.Database.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
         }
 
         public IList<ConnectedSystemObjectType>? GetObjectTypes(int id)
         {
-            using var db = new JimDbContext();
-            return db.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
+            return Repository.Database.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
         }
 
         public ConnectedSystemObject? GetConnectedSystemObject(int connectedSystemId, int id)
         {
-            using var db = new JimDbContext();
-            return db.ConnectedSystemObjects.SingleOrDefault(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+            return Repository.Database.ConnectedSystemObjects.SingleOrDefault(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
         public IList<SyncRule>? GetSyncRules()
         {
-            using var db = new JimDbContext();
-            return db.SyncRules.OrderBy(x => x.Name).ToList();
+            return Repository.Database.SyncRules.OrderBy(x => x.Name).ToList();
         }
 
         public SyncRule? GetSyncRule(int id)
         {
-            using var db = new JimDbContext();
-            return db.SyncRules.SingleOrDefault(x => x.Id == id);
+            return Repository.Database.SyncRules.SingleOrDefault(x => x.Id == id);
         }
 
         public int GetConnectedSystemObjectCount()
         {
-            using var db = new JimDbContext();
-            return db.ConnectedSystemObjects.Count();
+            return Repository.Database.ConnectedSystemObjects.Count();
         }
 
         public int GetConnectedSystemObjectOfTypeCount(int connectedSystemObjectTypeId)
         {
-            using var db = new JimDbContext();
-            return db.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).Count();
+            return Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).Count();
         }
     }
 }

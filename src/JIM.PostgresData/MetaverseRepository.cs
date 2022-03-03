@@ -15,99 +15,64 @@ namespace JIM.PostgresData
 
         public IList<MetaverseObjectType> GetMetaverseObjectTypes()
         {
-            using var db = new JimDbContext();
-            return db.MetaverseObjectTypes.Include(q => q.Attributes).OrderBy(x => x.Name).ToList();
+            return Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).OrderBy(x => x.Name).ToList();
         }
 
         public MetaverseObjectType? GetMetaverseObjectType(int id)
         {
-            using var db = new JimDbContext();
-            return db.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(x => x.Id == id);
+            return Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(x => x.Id == id);
         }
 
         public MetaverseObjectType? GetMetaverseObjectType(string name)
         {
-            using var db = new JimDbContext();
-            return db.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(q => q.Name == name);
+            return Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(q => q.Name == name);
         }
 
         public IList<MetaverseAttribute> GetMetaverseAttributes()
         {
-            using var db = new JimDbContext();
-            return db.MetaverseAttributes.OrderBy(x => x.Name).ToList();
+            return Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToList();
         }
 
         public MetaverseAttribute? GetMetaverseAttribute(int id)
         {
-            using var db = new JimDbContext();
-            return db.MetaverseAttributes.SingleOrDefault(x => x.Id == id);
+            return Repository.Database.MetaverseAttributes.SingleOrDefault(x => x.Id == id);
         }
 
         public MetaverseAttribute? GetMetaverseAttribute(string name)
         {
-            using var db = new JimDbContext();
-            return db.MetaverseAttributes.SingleOrDefault(x => x.Name == name);
+            return Repository.Database.MetaverseAttributes.SingleOrDefault(x => x.Name == name);
         }
 
         public MetaverseObject? GetMetaverseObject(int id)
         {
-            using var db = new JimDbContext();
-            return db.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefault(x => x.Id == id);
+            return Repository.Database.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefault(x => x.Id == id);
         }
-
-        //public async Task<MetaverseObject> AddAttributeValueToMetaverseObject(MetaverseObject metaverseObject, MetaverseObjectAttributeValue metaverseObjectAttributeValue)
-        //{
-        //    using var db = new JimDbContext();
-        //    var dbMetaverseObject = db.MetaverseObjects.SingleOrDefault(q => q.Id == metaverseObject.Id);
-        //    if (dbMetaverseObject == null)
-        //        throw new ArgumentException($"Couldn't find object in db to update: {metaverseObject.Id}");
-
-        //    if (metaverseObject.AttributeValues.Any(q => q.Id == metaverseObjectAttributeValue.Id || q.Attribute.Id == metaverseObjectAttributeValue.Attribute.Id))
-        //        throw new ArgumentException("That attribute value object, or the attribute it references has already been added.");
-        //}
 
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
-            using var db = new JimDbContext();
-            var dbMetaverseObject = db.MetaverseObjects.SingleOrDefault(q => q.Id == metaverseObject.Id);
+            var dbMetaverseObject = Repository.Database.MetaverseObjects.SingleOrDefault(q => q.Id == metaverseObject.Id);
             if (dbMetaverseObject == null)
                 throw new ArgumentException($"Couldn't find object in db to update: {metaverseObject.Id}");
 
-            // map scalar value updates to the db version of the object
-            db.Entry(dbMetaverseObject).CurrentValues.SetValues(metaverseObject);
+            //// map scalar value updates to the db version of the object
+            //db.Entry(dbMetaverseObject).CurrentValues.SetValues(metaverseObject);
 
-            // now map reference types
-            dbMetaverseObject.AttributeValues = metaverseObject.AttributeValues;
-            dbMetaverseObject.Type = metaverseObject.Type;
+            //// now map reference types
+            //dbMetaverseObject.AttributeValues = metaverseObject.AttributeValues;
+            //dbMetaverseObject.Type = metaverseObject.Type;
 
-            // now ensure we swap out the attribute value reference property values with ones from this db context, to avoid issues
-            foreach (var attributeValue in dbMetaverseObject.AttributeValues.Where(q=>q.Attribute.Id == 0))
-            {
-                db.MetaverseAttributes.Local
-
-                .
-            }
-
-            await db.SaveChangesAsync();
+            await Repository.Database.SaveChangesAsync();
         }
 
         public async Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
-            using var db = new JimDbContext();
-
-            // I think we need to go through the reference properties and re-map them from db versions, to avoid EF wanting
-            // to insert when the references are for existing objects.
-
-            // this sounds crazy, it would impact performance. Why is EF trying to insert when the objects exist?
-
-            db.MetaverseObjects.Add(metaverseObject);
-            await db.SaveChangesAsync();
+            Repository.Database.MetaverseObjects.Add(metaverseObject);
+            await Repository.Database.SaveChangesAsync();
         }
 
         public MetaverseObject? GetMetaverseObjectByTypeAndAttribute(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
         {
-            using var db = new JimDbContext();
-            var av = db.MetaverseObjectAttributeValues.SingleOrDefault(av =>
+            var av = Repository.Database.MetaverseObjectAttributeValues.SingleOrDefault(av =>
                av.Attribute.Id == metaverseAttribute.Id &&
                av.StringValue != null && av.StringValue == attributeValue &&
                av.MetaverseObject.Type.Id == metaverseObjectType.Id);
@@ -120,14 +85,12 @@ namespace JIM.PostgresData
 
         public int GetMetaverseObjectCount()
         {
-            using var db = new JimDbContext();
-            return db.MetaverseObjects.Count();
+            return Repository.Database.MetaverseObjects.Count();
         }
 
         public int GetMetaverseObjectOfTypeCount(int metaverseObjectTypeId)
         {
-            using var db = new JimDbContext();
-            return db.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).Count();
+            return Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).Count();
         }
 
         public PagedResultSet<MetaverseObject> GetMetaverseObjectsOfType(
@@ -152,8 +115,8 @@ namespace JIM.PostgresData
             if (maxResults > 500)
                 maxResults = 500;
 
-            using var db = new JimDbContext();
-            var objects = from o in db.MetaverseObjects.Where(q => q.Type.Id == metaverseObjectTypeId)
+
+            var objects = from o in Repository.Database.MetaverseObjects.Where(q => q.Type.Id == metaverseObjectTypeId)
                           select o;
 
             if (queryRange != QueryRange.Forever)

@@ -34,10 +34,10 @@ Log.Information("Starting JIM.Service");
 
 try
 {
-    var application = new JimApplication(new PostgresDataRepository());
-
     // as JIM.Service is the primary JimApplication client, it's responsible for seeing the database is intialised.
     // other JimAppication clients will need to check if the app is ready before completing their initialisation.
+    // JimApplication instances are ephemeral and should be disposed as soon as a unit of work is complete (for database tracking reasons).
+    using var application = new JimApplication(new PostgresDataRepository());
     await application.InitialiseDatabaseAsync();
 
     while (true)
