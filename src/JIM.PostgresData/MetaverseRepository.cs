@@ -54,13 +54,6 @@ namespace JIM.PostgresData
             if (dbMetaverseObject == null)
                 throw new ArgumentException($"Couldn't find object in db to update: {metaverseObject.Id}");
 
-            //// map scalar value updates to the db version of the object
-            //db.Entry(dbMetaverseObject).CurrentValues.SetValues(metaverseObject);
-
-            //// now map reference types
-            //dbMetaverseObject.AttributeValues = metaverseObject.AttributeValues;
-            //dbMetaverseObject.Type = metaverseObject.Type;
-
             await Repository.Database.SaveChangesAsync();
         }
 

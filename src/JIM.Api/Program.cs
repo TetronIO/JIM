@@ -37,6 +37,7 @@ try
     // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
+
     builder.Services.AddScoped<IRepository, PostgresDataRepository>();
     builder.Services.AddScoped<JimApplication>();
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);    
