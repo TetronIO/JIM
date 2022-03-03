@@ -16,11 +16,9 @@ namespace JIM.PostgresData
 
         public ServiceSettings? GetServiceSettings()
         {
-            using var db = new JimDbContext();
-
             try
             {
-                return db.ServiceSettings.Include(q => q.SSONameIDAttribute).FirstOrDefault();
+                return Repository.Database.ServiceSettings.Include(q => q.SSONameIDAttribute).FirstOrDefault();
             }
             catch (Npgsql.PostgresException ex)
             {
@@ -36,8 +34,7 @@ namespace JIM.PostgresData
 
         public async Task UpdateServiceSettingsAsync(ServiceSettings serviceSettings)
         {
-            using var db = new JimDbContext();
-            var dbServiceSettings = db.ServiceSettings.FirstOrDefault();
+            var dbServiceSettings = Repository.Database.ServiceSettings.FirstOrDefault();
             if (dbServiceSettings == null)
             {
                 Log.Error("UpdateServiceSettingsAsync: Could not retrieve a ServiceSettings object to update.");
@@ -45,12 +42,12 @@ namespace JIM.PostgresData
             }
 
             // map scalar value updates to the db version of the object
-            db.Entry(dbServiceSettings).CurrentValues.SetValues(serviceSettings);
+            Repository.Database.Entry(dbServiceSettings).CurrentValues.SetValues(serviceSettings);
 
             // manually update reference properties
             dbServiceSettings.SSONameIDAttribute = serviceSettings.SSONameIDAttribute;
 
-            await db.SaveChangesAsync();
+            await Repository.Database.SaveChangesAsync();
         }
     }
 }

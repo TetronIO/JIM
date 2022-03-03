@@ -14,36 +14,31 @@ namespace JIM.PostgresData
 
         public List<Role> GetRoles()
         {
-            using var db = new JimDbContext();
-            return db.Roles.OrderBy(q => q.Name).ToList();
+            return Repository.Database.Roles.OrderBy(q => q.Name).ToList();
         }
 
         public Role? GetRole(string roleName)
         {
-            using var db = new JimDbContext();
-            return db.Roles.SingleOrDefault(q => q.Name == roleName);
+            return Repository.Database.Roles.SingleOrDefault(q => q.Name == roleName);
         }
 
         public List<Role> GetMetaverseObjectRoles(int metaverseObjectId)
         {
-            using var db = new JimDbContext();
-            return db.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToList();
+            return Repository.Database.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToList();
         }
 
         public bool IsUserInRole(int userId, string roleName)
         {
-            using var db = new JimDbContext();
-            return db.Roles.Any(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));
+            return Repository.Database.Roles.Any(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));
         }
 
         public async Task AddUserToRoleAsync(int userId, string roleName)
         {
-            using var db = new JimDbContext();
-            var dbRole = db.Roles.SingleOrDefault(r => r.Name == roleName);
+            var dbRole = Repository.Database.Roles.SingleOrDefault(r => r.Name == roleName);
             if (dbRole == null)
                 throw new ArgumentException($"No such role found: {roleName}");
 
-            var dbUser = db.MetaverseObjects.SingleOrDefault(mo => mo.Id == userId);
+            var dbUser = Repository.Database.MetaverseObjects.SingleOrDefault(mo => mo.Id == userId);
             if (dbUser == null)
                 throw new ArgumentException($"No such user found: {userId}");
 
@@ -51,7 +46,7 @@ namespace JIM.PostgresData
                 throw new ArgumentException($"User is already in that role");
 
             dbRole.StaticMembers.Add(dbUser);
-            await db.SaveChangesAsync();
+            await Repository.Database.SaveChangesAsync();
         }
     }
 }

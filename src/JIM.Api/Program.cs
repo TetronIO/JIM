@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Data;
 using JIM.PostgresData;
 using Serilog;
 using Serilog.Events;
@@ -27,6 +28,8 @@ InitialiseLogging(new LoggerConfiguration(), true);
 try
 {
     Log.Information("Starting JIM.Api");
+    await InitialiseJimApplicationAsync();
+
     var builder = WebApplication.CreateBuilder(args);
 
     // Add services to the container.
@@ -35,39 +38,9 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
 
-    var ssoNameIdAttribute = Environment.GetEnvironmentVariable("SSO_NAMEID_ATTRIBUTE");
-    if (string.IsNullOrEmpty(ssoNameIdAttribute))
-        throw new Exception("SSO_NAMEID_ATTRIBUTE environment variable missing");
-    var ssoInitialAdminNameId = Environment.GetEnvironmentVariable("SSO_INITIAL_ADMIN_NAMEID");
-    if (string.IsNullOrEmpty(ssoInitialAdminNameId))
-        throw new Exception("SSO_INITIAL_ADMIN_NAMEID environment variable missing");
-
-
-    // change the JimApplication so it is scoped
-    // it should create a data layer and db context per instance of jim application
-
-
-    // setup the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
-    // then ensure SSO and Initial admin are setup.
-    var jimApplication = new JimApplication(new PostgresDataRepository());
-    while (!jimApplication.IsApplicationReady())
-    {
-        Log.Information("Application is not ready yet. Sleeping...");
-        Thread.Sleep(1000);
-    }
-
-    await jimApplication.InitialiseSSOAsync(ssoNameIdAttribute, ssoInitialAdminNameId);
-
-
-
-
-
-
-    builder.Services.AddSingleton<JimApplication>(a => jimApplication);
-    builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
-
-
-    
+    builder.Services.AddScoped<IRepository, PostgresDataRepository>();
+    builder.Services.AddScoped<JimApplication>();
+    builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);    
 
     // now setup logging with the web framework
     builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
@@ -149,4 +122,27 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 
     if (assignLogLogger)
         Log.Logger = loggerConfiguration.CreateLogger();
+}
+
+/// <summary>
+/// Sets up the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
+/// then ensure SSO and Initial admin are setup.
+/// </summary>
+static async Task InitialiseJimApplicationAsync()
+{
+    var ssoNameIdAttribute = Environment.GetEnvironmentVariable("SSO_NAMEID_ATTRIBUTE");
+    if (string.IsNullOrEmpty(ssoNameIdAttribute))
+        throw new Exception("SSO_NAMEID_ATTRIBUTE environment variable missing");
+    var ssoInitialAdminNameId = Environment.GetEnvironmentVariable("SSO_INITIAL_ADMIN_NAMEID");
+    if (string.IsNullOrEmpty(ssoInitialAdminNameId))
+        throw new Exception("SSO_INITIAL_ADMIN_NAMEID environment variable missing");
+
+    using var jimApplication = new JimApplication(new PostgresDataRepository());
+    while (!jimApplication.IsApplicationReady())
+    {
+        Log.Information("Application is not ready yet. Sleeping...");
+        Thread.Sleep(1000);
+    }
+
+    await jimApplication.InitialiseSSOAsync(ssoNameIdAttribute, ssoInitialAdminNameId);
 }

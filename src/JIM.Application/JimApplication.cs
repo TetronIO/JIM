@@ -5,7 +5,7 @@ using Serilog;
 
 namespace JIM.Application
 {
-    public class JimApplication
+    public class JimApplication : IDisposable
     {
         public ConnectedSystemServer ConnectedSystems { get; }
         public MetaverseServer Metaverse { get; }
@@ -20,7 +20,7 @@ namespace JIM.Application
             Security = new SecurityServer(this);
             ServiceSettings = new ServiceSettingsServer(this);
             Repository = dataRepository;
-            Log.Information("The JIM Application has started.");
+            Log.Verbose("The JIM Application has started.");
         }
 
         /// <summary>
@@ -98,6 +98,12 @@ namespace JIM.Application
                 return false;
 
             return true;
+        }
+
+        public void Dispose()
+        {
+            if (Repository != null)
+                Repository.Dispose();
         }
     }
 }

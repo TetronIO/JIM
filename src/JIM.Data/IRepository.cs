@@ -1,6 +1,6 @@
 ﻿namespace JIM.Data
 {
-    public interface IRepository
+    public interface IRepository: IDisposable
     {
         public IConnectedSystemRepository ConnectedSystems { get; }
         public IMetaverseRepository Metaverse { get; }
