@@ -65,10 +65,10 @@ namespace JIM.PostgresData.Repositories
 
         public MetaverseObject? GetMetaverseObjectByTypeAndAttribute(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
         {
-            var av = Repository.Database.MetaverseObjectAttributeValues.SingleOrDefault(av =>
-               av.Attribute.Id == metaverseAttribute.Id &&
-               av.StringValue != null && av.StringValue == attributeValue &&
-               av.MetaverseObject.Type.Id == metaverseObjectType.Id);
+            var av = Repository.Database.MetaverseObjectAttributeValues.Include(q => q.MetaverseObject).SingleOrDefault(av =>
+                 av.Attribute.Id == metaverseAttribute.Id &&
+                 av.StringValue != null && av.StringValue == attributeValue &&
+                 av.MetaverseObject.Type.Id == metaverseObjectType.Id);
 
             if (av != null)
                 return av.MetaverseObject;
