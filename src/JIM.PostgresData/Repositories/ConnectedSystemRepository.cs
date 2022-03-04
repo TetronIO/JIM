@@ -3,7 +3,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
-namespace JIM.PostgresData
+namespace JIM.PostgresData.Repositories
 {
     public class ConnectedSystemRepository : IConnectedSystemRepository
     {

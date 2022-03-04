@@ -3,7 +3,7 @@ using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
-namespace JIM.PostgresData
+namespace JIM.PostgresData.Repositories
 {
     public class ServiceSettingsRepository : IServiceSettingsRepository
     {

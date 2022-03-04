@@ -1,7 +1,7 @@
 ﻿using JIM.Data;
 using JIM.Models.Security;
 
-namespace JIM.PostgresData
+namespace JIM.PostgresData.Repositories
 {
     public class SecurityRepository : ISecurityRepository
     {

@@ -2,7 +2,7 @@
 using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
 
-namespace JIM.PostgresData
+namespace JIM.PostgresData.Repositories
 {
     public class MetaverseRepository : IMetaverseRepository
     {
