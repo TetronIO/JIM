@@ -1,6 +1,7 @@
 ﻿using JIM.Data;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Diagnostics;
