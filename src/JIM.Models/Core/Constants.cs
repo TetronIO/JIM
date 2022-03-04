@@ -109,5 +109,10 @@
             public static string Info => "Info";
             public static string ManagedBy => "Managed By";
         }
+
+        public static class BuiltInRoles
+        {
+            public static string Administrators => "Administrators";
+        }
     }
 }

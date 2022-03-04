@@ -281,10 +281,16 @@ namespace JIM.PostgresData
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
 
             // create the built-in roles
-            Database.Roles.Add(new Role { 
-                BuiltIn = true,
-                Name = "Administrators"
-            });
+            var administratorsRole = await Database.Roles.SingleOrDefaultAsync(q => q.Name == Constants.BuiltInRoles.Administrators);
+            if (administratorsRole == null)
+            {
+                Database.Roles.Add(new Role
+                {
+                    BuiltIn = true,
+                    Name = Constants.BuiltInRoles.Administrators
+                });
+                Log.Information($"SeedDatabaseAsync: Role: {Constants.BuiltInRoles.Administrators}");
+            }
 
             await Database.SaveChangesAsync();
         }
