@@ -8,10 +8,10 @@ namespace JIM.Data
 
         public Role? GetRole(string roleName);
 
-        public bool IsUserInRole(int userId, string roleName);
+        public bool IsObjectInRole(int userId, string roleName);
 
         public List<Role> GetMetaverseObjectRoles(int metaverseObjectId);
 
-        public Task AddUserToRoleAsync(int userId, string roleName);
+        public Task AddObjectToRole(int userId, string roleName);
     }
 }

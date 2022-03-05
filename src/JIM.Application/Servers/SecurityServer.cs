@@ -27,13 +27,13 @@ namespace JIM.Application.Servers
             return Application.Repository.Security.GetMetaverseObjectRoles(metaverseObject.Id);
         }
 
-        public bool IsUserInRole(MetaverseObject user, string roleName)
+        public bool IsObjectInRole(MetaverseObject @object, string roleName)
         { 
-            return Application.Repository.Security.IsUserInRole(user.Id, roleName);
+            return Application.Repository.Security.IsObjectInRole(@object.Id, roleName);
         }
-        public async Task AddUserToRoleAsync(MetaverseObject user, string roleName)
+        public async Task AddObjectToRole(MetaverseObject @object, string roleName)
         {
-            await Application.Repository.Security.AddUserToRoleAsync(user.Id, roleName);
+            await Application.Repository.Security.AddObjectToRole(@object.Id, roleName);
         }
     }
 }

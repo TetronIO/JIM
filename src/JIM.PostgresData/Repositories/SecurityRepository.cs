@@ -27,25 +27,25 @@ namespace JIM.PostgresData.Repositories
             return Repository.Database.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToList();
         }
 
-        public bool IsUserInRole(int userId, string roleName)
+        public bool IsObjectInRole(int userId, string roleName)
         {
             return Repository.Database.Roles.Any(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));
         }
 
-        public async Task AddUserToRoleAsync(int userId, string roleName)
+        public async Task AddObjectToRole(int objectId, string roleName)
         {
             var dbRole = Repository.Database.Roles.SingleOrDefault(r => r.Name == roleName);
             if (dbRole == null)
                 throw new ArgumentException($"No such role found: {roleName}");
 
-            var dbUser = Repository.Database.MetaverseObjects.SingleOrDefault(mo => mo.Id == userId);
-            if (dbUser == null)
-                throw new ArgumentException($"No such user found: {userId}");
+            var dbObject = Repository.Database.MetaverseObjects.SingleOrDefault(mo => mo.Id == objectId);
+            if (dbObject == null)
+                throw new ArgumentException($"No such object found: {objectId}");
 
-            if (dbRole.StaticMembers.Any(sm => sm.Id == userId))
-                throw new ArgumentException($"User is already in that role");
+            if (dbRole.StaticMembers.Any(sm => sm.Id == dbObject.Id))
+                throw new ArgumentException($"Object is already in that role");
 
-            dbRole.StaticMembers.Add(dbUser);
+            dbRole.StaticMembers.Add(dbObject);
             await Repository.Database.SaveChangesAsync();
         }
     }

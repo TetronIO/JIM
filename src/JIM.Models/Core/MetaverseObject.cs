@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Core
+﻿using JIM.Models.Security;
+
+namespace JIM.Models.Core
 {
     public class MetaverseObject
     {
@@ -7,6 +9,7 @@
         public DateTime? LastUpdated { get; set; }
         public MetaverseObjectType Type { get; set; }
         public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
+        public List<Role> Roles { get; set; }
 
         public MetaverseObject()
         {

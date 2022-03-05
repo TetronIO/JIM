@@ -36,9 +36,4 @@
         User,
         Group
     }
-
-    public enum BuiltInRoleNames
-    {
-        Administrators
-    }
 }

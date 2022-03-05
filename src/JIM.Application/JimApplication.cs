@@ -67,8 +67,8 @@ namespace JIM.Application
             if (user != null)
             {
                 // we have a matching user, do they have the Administrators role?
-                if (!Security.IsUserInRole(user, BuiltInRoleNames.Administrators.ToString()))
-                    await Security.AddUserToRoleAsync(user, BuiltInRoleNames.Administrators.ToString());
+                if (!Security.IsObjectInRole(user, Constants.BuiltInRoles.Administrators))
+                    await Security.AddObjectToRole(user, Constants.BuiltInRoles.Administrators);
             }
             else
             {
@@ -82,8 +82,8 @@ namespace JIM.Application
                 });
 
                 await Metaverse.CreateMetaverseObjectAsync(user);
-                await Security.AddUserToRoleAsync(user, BuiltInRoleNames.Administrators.ToString());
-                Log.Verbose($"InitialiseSSOAsync: Created {initialAdminNameIdValue} metaverse object user with the {BuiltInRoleNames.Administrators} role.");
+                await Security.AddObjectToRole(user, Constants.BuiltInRoles.Administrators);
+                Log.Verbose($"InitialiseSSOAsync: Created {initialAdminNameIdValue} metaverse object user with the {Constants.BuiltInRoles.Administrators} role.");
             }
         }
 

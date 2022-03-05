@@ -54,6 +54,10 @@ namespace JIM.PostgresData
             modelBuilder.Entity<MetaverseObjectAttributeValue>()
                 .HasOne(moav => moav.ReferenceValue)
                 .WithMany();
+
+            modelBuilder.Entity<MetaverseObject>()
+                .HasMany(mo => mo.Roles)
+                .WithMany(r => r.StaticMembers);
         }
     }
 }
