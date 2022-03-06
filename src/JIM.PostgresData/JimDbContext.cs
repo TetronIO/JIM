@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.DataGeneration;
 using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Staging;
@@ -21,6 +22,11 @@ namespace JIM.PostgresData
         internal DbSet<SyncRun> SynchronisationRuns { get; set; }
         internal DbSet<ServiceSettings> ServiceSettings { get; set; }
         internal DbSet<Role> Roles { get; set; }
+        internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
+        internal DbSet<ExampleDataValue> ExampleDataValues { get; set; }
+        internal DbSet<DataGeneratorTemplate> DataGeneratorTemplates { get; set; }
+        internal DbSet<DataGeneratorObjectType> DataGeneratorObjectTypes { get; set; }
+        internal DbSet<DataGeneratorTemplateAttribute> DataGeneratorTemplateAttributes { get; set; }
 
         private readonly string _connectionString;
 
