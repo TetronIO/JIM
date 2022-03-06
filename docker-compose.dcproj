@@ -6,7 +6,7 @@
     <ProjectGuid>aad33768-51e5-4689-a365-c3b292162318</ProjectGuid>
     <DockerLaunchAction>LaunchBrowser</DockerLaunchAction>
     <DockerServiceUrl>{Scheme}://localhost:{ServicePort}/swagger</DockerServiceUrl>
-    <DockerServiceName>tim.api</DockerServiceName>
+    <DockerServiceName>jim.api</DockerServiceName>
   </PropertyGroup>
   <ItemGroup>
     <None Include="db.yml" />
