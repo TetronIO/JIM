@@ -3,7 +3,7 @@ using JIM.Models.Staging;
 
 namespace JIM.Models.DataGeneration
 {
-    public class DataGeneratorTemplateAttribute
+    public class DataGenerationTemplateAttribute
     {
         public int Id { get; set; }
         public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }

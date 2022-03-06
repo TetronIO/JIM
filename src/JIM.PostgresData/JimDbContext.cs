@@ -24,9 +24,9 @@ namespace JIM.PostgresData
         internal DbSet<Role> Roles { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
         internal DbSet<ExampleDataValue> ExampleDataValues { get; set; }
-        internal DbSet<DataGeneratorTemplate> DataGeneratorTemplates { get; set; }
-        internal DbSet<DataGeneratorObjectType> DataGeneratorObjectTypes { get; set; }
-        internal DbSet<DataGeneratorTemplateAttribute> DataGeneratorTemplateAttributes { get; set; }
+        internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
+        internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
+        internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
 
         private readonly string _connectionString;
 

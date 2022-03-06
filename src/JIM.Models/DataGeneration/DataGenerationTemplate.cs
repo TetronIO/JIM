@@ -1,16 +1,16 @@
 ﻿namespace JIM.Models.DataGeneration
 {
-    public class DataGeneratorTemplate
+    public class DataGenerationTemplate
     {
         public int Id { get; set; }
         public string Name { get; set; }
         public DateTime Created { set; get; }
-        public List<DataGeneratorObjectType> ObjectTypes { get; set; }
+        public List<DataGenerationObjectType> ObjectTypes { get; set; }
 
-        public DataGeneratorTemplate()
+        public DataGenerationTemplate()
         {
             Created = DateTime.Now;
-            ObjectTypes = new List<DataGeneratorObjectType>();
+            ObjectTypes = new List<DataGenerationObjectType>();
         }
     }
 }

@@ -16,7 +16,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidAttributeFail()
         {
-            var subject = new DataGeneratorTemplateAttribute
+            var subject = new DataGenerationTemplateAttribute
             {
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
@@ -27,7 +27,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidPopulatedValuesPercentageTooLowFail()
         {
-            var subject = new DataGeneratorTemplateAttribute
+            var subject = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 0,
@@ -39,7 +39,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidPopulatedValuesPercentageTooHighFail()
         {
-            var subject = new DataGeneratorTemplateAttribute
+            var subject = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 101,
@@ -51,7 +51,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidNumberTypeFail()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -60,7 +60,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -73,7 +73,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidDateTimeFail()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -82,7 +82,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -95,7 +95,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidStringFail()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -105,7 +105,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -117,7 +117,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidNumberMismatchFail()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -125,7 +125,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -133,7 +133,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -142,7 +142,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject3.IsValid());
 
-            var subject4 = new DataGeneratorTemplateAttribute
+            var subject4 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -154,7 +154,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidBoolMismatchFail()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -162,7 +162,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -170,7 +170,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -179,7 +179,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject3.IsValid());
 
-            var subject4 = new DataGeneratorTemplateAttribute
+            var subject4 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -191,7 +191,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidDateTimeMismatchFail()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -199,7 +199,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -207,7 +207,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -216,7 +216,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject3.IsValid());
 
-            var subject4 = new DataGeneratorTemplateAttribute
+            var subject4 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -228,7 +228,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidStringMismatchFail()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -236,7 +236,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -244,7 +244,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,

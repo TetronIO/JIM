@@ -2,7 +2,7 @@
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
-namespace JIM.Data
+namespace JIM.Data.Repositories
 {
     public interface IConnectedSystemRepository
     {

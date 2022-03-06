@@ -2,16 +2,16 @@
 
 namespace JIM.Models.DataGeneration
 {
-    public class DataGeneratorObjectType
+    public class DataGenerationObjectType
     {
         public int Id { get; set; }
         public MetaverseObjectType MetaverseObjectType { get; set; }
-        public List<DataGeneratorTemplateAttribute> TemplateAttributes { get; set; }
+        public List<DataGenerationTemplateAttribute> TemplateAttributes { get; set; }
         public int ObjectsToCreate { get; set; }
 
-        public DataGeneratorObjectType()
+        public DataGenerationObjectType()
         {
-            TemplateAttributes = new List<DataGeneratorTemplateAttribute>();
+            TemplateAttributes = new List<DataGenerationTemplateAttribute>();
         }
     }
 }

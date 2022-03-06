@@ -8,10 +8,10 @@ namespace JIM.Api.Controllers
     [ApiController]
     public class SecurityController : ControllerBase
     {
-        private readonly ILogger<SynchronisationController> _logger;
+        private readonly ILogger<SecurityController> _logger;
         private readonly JimApplication _application;
 
-        public SecurityController(ILogger<SynchronisationController> logger, JimApplication application)
+        public SecurityController(ILogger<SecurityController> logger, JimApplication application)
         {
             _logger = logger;
             _application = application;

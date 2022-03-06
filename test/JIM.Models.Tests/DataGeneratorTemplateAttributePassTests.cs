@@ -16,7 +16,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidMVAttributePass()
         {
-            var subject = new DataGeneratorTemplateAttribute
+            var subject = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -28,7 +28,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidCSAttributePass()
         {
-            var subject = new DataGeneratorTemplateAttribute
+            var subject = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -40,7 +40,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidPopulatedValuesPercentagePass()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 1,
@@ -48,7 +48,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 50,
@@ -56,7 +56,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -68,7 +68,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidNumberTypePass()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -76,7 +76,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -84,7 +84,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -92,7 +92,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject3.IsValid());
 
-            var subject4 = new DataGeneratorTemplateAttribute
+            var subject4 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -100,7 +100,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject4.IsValid());
 
-            var subject5 = new DataGeneratorTemplateAttribute
+            var subject5 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -109,7 +109,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject5.IsValid());
 
-            var subject6 = new DataGeneratorTemplateAttribute
+            var subject6 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
@@ -123,7 +123,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidBoolPass()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -131,7 +131,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -139,7 +139,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -147,7 +147,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject3.IsValid());
 
-            var subject4 = new DataGeneratorTemplateAttribute
+            var subject4 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -155,7 +155,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject4.IsValid());
 
-            var subject5 = new DataGeneratorTemplateAttribute
+            var subject5 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -163,7 +163,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject5.IsValid());
 
-            var subject6 = new DataGeneratorTemplateAttribute
+            var subject6 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
@@ -176,14 +176,14 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidDateTimePass()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100
             };
             Assert.IsTrue(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -191,7 +191,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject2.IsValid());
 
-            var subject3 = new DataGeneratorTemplateAttribute
+            var subject3 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -199,7 +199,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject3.IsValid());
 
-            var subject4 = new DataGeneratorTemplateAttribute
+            var subject4 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
@@ -212,7 +212,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidStringPass()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -220,7 +220,7 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject1.IsValid());
 
-            var subject2 = new DataGeneratorTemplateAttribute
+            var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
@@ -233,7 +233,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidGuidPass()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Guid },
                 PopulatedValuesPercentage = 100
@@ -244,7 +244,7 @@ namespace JIM.Models.Tests
         [Test]
         public void TestIsValidReferencePass()
         {
-            var subject1 = new DataGeneratorTemplateAttribute
+            var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
                 PopulatedValuesPercentage = 100

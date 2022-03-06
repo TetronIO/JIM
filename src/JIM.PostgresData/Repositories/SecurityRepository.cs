@@ -1,4 +1,4 @@
-﻿using JIM.Data;
+﻿using JIM.Data.Repositories;
 using JIM.Models.Security;
 
 namespace JIM.PostgresData.Repositories

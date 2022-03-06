@@ -1,6 +1,6 @@
 ﻿using JIM.Models.Core;
 
-namespace JIM.Data
+namespace JIM.Data.Repositories
 {
     public interface IServiceSettingsRepository
     {

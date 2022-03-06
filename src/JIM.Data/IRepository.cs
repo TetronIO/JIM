@@ -1,4 +1,6 @@
-﻿namespace JIM.Data
+﻿using JIM.Data.Repositories;
+
+namespace JIM.Data
 {
     public interface IRepository: IDisposable
     {
@@ -6,6 +8,7 @@
         public IMetaverseRepository Metaverse { get; }
         public IServiceSettingsRepository ServiceSettings { get; }
         public ISecurityRepository Security { get; }
+        public IDataGenerationRepository DataGeneration { get; }
 
         public Task InitialiseDatabaseAsync();
     }

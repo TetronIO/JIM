@@ -11,6 +11,7 @@ namespace JIM.Application
         public MetaverseServer Metaverse { get; }
         public SecurityServer Security { get; }
         public ServiceSettingsServer ServiceSettings { get; }
+        public DataGenerationServer DataGeneration { get; }
         internal IRepository Repository { get; }
 
         public JimApplication(IRepository dataRepository)
@@ -19,6 +20,7 @@ namespace JIM.Application
             Metaverse = new MetaverseServer(this);
             Security = new SecurityServer(this);
             ServiceSettings = new ServiceSettingsServer(this);
+            DataGeneration = new DataGenerationServer(this);
             Repository = dataRepository;
             Log.Verbose("The JIM Application has started.");
         }

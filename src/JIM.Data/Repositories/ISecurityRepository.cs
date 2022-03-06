@@ -1,6 +1,6 @@
 ﻿using JIM.Models.Security;
 
-namespace JIM.Data
+namespace JIM.Data.Repositories
 {
     public interface ISecurityRepository
     {

@@ -1,4 +1,5 @@
 ﻿using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.PostgresData.Repositories;
@@ -14,6 +15,7 @@ namespace JIM.PostgresData
         public IMetaverseRepository Metaverse { get; }
         public IServiceSettingsRepository ServiceSettings { get; }
         public ISecurityRepository Security { get; }
+        public IDataGenerationRepository DataGeneration { get; }
 
         internal JimDbContext Database { get; }
 
@@ -27,6 +29,7 @@ namespace JIM.PostgresData
             Metaverse = new MetaverseRepository(this);
             ServiceSettings = new ServiceSettingsRepository(this);
             Security = new SecurityRepository(this);
+            DataGeneration = new DataGenerationRepository(this);
             Database = new JimDbContext();
         }
 

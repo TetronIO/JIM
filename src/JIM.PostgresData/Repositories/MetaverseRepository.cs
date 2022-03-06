@@ -1,4 +1,4 @@
-﻿using JIM.Data;
+﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,10 +50,6 @@ namespace JIM.PostgresData.Repositories
 
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
-            var dbMetaverseObject = Repository.Database.MetaverseObjects.SingleOrDefault(q => q.Id == metaverseObject.Id);
-            if (dbMetaverseObject == null)
-                throw new ArgumentException($"Couldn't find object in db to update: {metaverseObject.Id}");
-
             await Repository.Database.SaveChangesAsync();
         }
 

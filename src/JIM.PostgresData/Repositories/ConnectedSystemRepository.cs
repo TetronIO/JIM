@@ -1,4 +1,4 @@
-﻿using JIM.Data;
+﻿using JIM.Data.Repositories;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
