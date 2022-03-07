@@ -11,6 +11,7 @@ namespace JIM.Models.Core
         public AttributeDataType Type { get; set; }
         public AttributePlurality AttributePlurality { get; set; }
         public bool BuiltIn { get; set; }
+        public List<MetaverseObjectType> MetaverseObjectTypes { get; set; }
 
         public MetaverseAttribute()
         {
