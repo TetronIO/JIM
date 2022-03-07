@@ -12,28 +12,28 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        public List<Role> GetRoles()
+        public async Task<List<Role>> GetRolesAsync()
         {
-            return Application.Repository.Security.GetRoles();
+            return await Application.Repository.Security.GetRolesAsync();
         }
 
-        public Role? GetRole(string roleName)
+        public async Task<Role?> GetRoleAsync(string roleName)
         {
-            return Application.Repository.Security.GetRole(roleName);
+            return await Application.Repository.Security.GetRoleAsync(roleName);
         }
 
-        public List<Role> GetMetaverseObjectRoles(MetaverseObject metaverseObject)
+        public async Task<List<Role>> GetMetaverseObjectRolesAsync(MetaverseObject metaverseObject)
         {
-            return Application.Repository.Security.GetMetaverseObjectRoles(metaverseObject.Id);
+            return await Application.Repository.Security.GetMetaverseObjectRolesAsync(metaverseObject.Id);
         }
 
-        public bool IsObjectInRole(MetaverseObject @object, string roleName)
+        public async Task<bool> IsObjectInRoleAsync(MetaverseObject @object, string roleName)
         { 
-            return Application.Repository.Security.IsObjectInRole(@object.Id, roleName);
+            return await Application.Repository.Security.IsObjectInRoleAsync(@object.Id, roleName);
         }
-        public async Task AddObjectToRole(MetaverseObject @object, string roleName)
+        public async Task AddObjectToRoleAsync(MetaverseObject @object, string roleName)
         {
-            await Application.Repository.Security.AddObjectToRole(@object.Id, roleName);
+            await Application.Repository.Security.AddObjectToRoleAsync(@object.Id, roleName);
         }
     }
 }

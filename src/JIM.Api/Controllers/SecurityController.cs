@@ -18,10 +18,10 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/security/roles")]
-        public IEnumerable<Role> GetRoles()
+        public async Task<IEnumerable<Role>> GetRolesAsync()
         {
             _logger.LogTrace($"Someone requested the roles");
-            return _application.Security.GetRoles();
+            return await _application.Security.GetRolesAsync();
         }
     }
 }

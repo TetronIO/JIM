@@ -4,14 +4,14 @@ namespace JIM.Data.Repositories
 {
     public interface ISecurityRepository
     {
-        public List<Role> GetRoles();
+        public Task<List<Role>> GetRolesAsync();
 
-        public Role? GetRole(string roleName);
+        public Task<Role?> GetRoleAsync(string roleName);
 
-        public bool IsObjectInRole(int userId, string roleName);
+        public Task<bool> IsObjectInRoleAsync(int userId, string roleName);
 
-        public List<Role> GetMetaverseObjectRoles(int metaverseObjectId);
+        public Task<List<Role>> GetMetaverseObjectRolesAsync(int metaverseObjectId);
 
-        public Task AddObjectToRole(int userId, string roleName);
+        public Task AddObjectToRoleAsync(int userId, string roleName);
     }
 }

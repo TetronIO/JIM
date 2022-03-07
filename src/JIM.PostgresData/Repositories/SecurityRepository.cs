@@ -1,5 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Security;
+using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories
 {
@@ -12,33 +13,33 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
-        public List<Role> GetRoles()
+        public async Task<List<Role>> GetRolesAsync()
         {
-            return Repository.Database.Roles.OrderBy(q => q.Name).ToList();
+            return await Repository.Database.Roles.OrderBy(q => q.Name).ToListAsync();
         }
 
-        public Role? GetRole(string roleName)
+        public async Task<Role?> GetRoleAsync(string roleName)
         {
-            return Repository.Database.Roles.SingleOrDefault(q => q.Name == roleName);
+            return await Repository.Database.Roles.SingleOrDefaultAsync(q => q.Name == roleName);
         }
 
-        public List<Role> GetMetaverseObjectRoles(int metaverseObjectId)
+        public async Task<List<Role>> GetMetaverseObjectRolesAsync(int metaverseObjectId)
         {
-            return Repository.Database.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToList();
+            return await Repository.Database.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToListAsync();
         }
 
-        public bool IsObjectInRole(int userId, string roleName)
+        public async Task<bool> IsObjectInRoleAsync(int userId, string roleName)
         {
-            return Repository.Database.Roles.Any(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));
+            return await Repository.Database.Roles.AnyAsync(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));
         }
 
-        public async Task AddObjectToRole(int objectId, string roleName)
+        public async Task AddObjectToRoleAsync(int objectId, string roleName)
         {
-            var dbRole = Repository.Database.Roles.SingleOrDefault(r => r.Name == roleName);
+            var dbRole = await Repository.Database.Roles.SingleOrDefaultAsync(r => r.Name == roleName);
             if (dbRole == null)
                 throw new ArgumentException($"No such role found: {roleName}");
 
-            var dbObject = Repository.Database.MetaverseObjects.SingleOrDefault(mo => mo.Id == objectId);
+            var dbObject = await Repository.Database.MetaverseObjects.SingleOrDefaultAsync(mo => mo.Id == objectId);
             if (dbObject == null)
                 throw new ArgumentException($"No such object found: {objectId}");
 

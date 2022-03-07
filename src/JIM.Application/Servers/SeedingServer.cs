@@ -238,7 +238,7 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
 
             // create the built-in roles
-            var administratorsRole = Application.Security.GetRole(Constants.BuiltInRoles.Administrators);
+            var administratorsRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrators);
             if (administratorsRole == null)
             {
                 administratorsRole = new Role
