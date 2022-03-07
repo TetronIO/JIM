@@ -9,7 +9,7 @@ namespace JIM.Data.Repositories
 
         public MetaverseObjectType? GetMetaverseObjectType(int id);
 
-        public MetaverseObjectType? GetMetaverseObjectType(string name);
+        public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name);
         #endregion
 
         #region objects
@@ -32,7 +32,6 @@ namespace JIM.Data.Repositories
             int maxResults,
             QuerySortBy querySortBy = QuerySortBy.DateCreated,
             QueryRange queryRange = QueryRange.Forever);
-
         #endregion
 
         #region attributes
@@ -40,7 +39,7 @@ namespace JIM.Data.Repositories
 
         public MetaverseAttribute? GetMetaverseAttribute(int id);
 
-        public MetaverseAttribute? GetMetaverseAttribute(string name);
+        public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);
         #endregion
     }
 

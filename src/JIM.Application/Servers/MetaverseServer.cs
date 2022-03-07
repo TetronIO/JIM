@@ -21,9 +21,9 @@ namespace JIM.Application.Servers
             return Application.Repository.Metaverse.GetMetaverseObjectType(id);
         }
 
-        public MetaverseObjectType? GetMetaverseObjectType(string objectTypeName)
+        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName)
         {
-            return Application.Repository.Metaverse.GetMetaverseObjectType(objectTypeName);
+            return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName);
         }
 
         public IList<MetaverseAttribute>? GetMetaverseAttributes()
@@ -34,6 +34,11 @@ namespace JIM.Application.Servers
         public MetaverseAttribute? GetMetaverseAttribute(int id)
         {
             return Application.Repository.Metaverse.GetMetaverseAttribute(id);
+        }
+
+        public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
+        {
+            return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(name);
         }
 
         public MetaverseObject? GetMetaverseObject(int id)

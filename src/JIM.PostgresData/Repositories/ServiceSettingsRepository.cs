@@ -49,5 +49,16 @@ namespace JIM.PostgresData.Repositories
 
             await Repository.Database.SaveChangesAsync();
         }
+
+        public async Task CreateServiceSettingsAsync(ServiceSettings serviceSettings)
+        {
+            Repository.Database.ServiceSettings.Add(serviceSettings);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task<bool> ServiceSettingsExistAsync()
+        {
+            return await Repository.Database.ServiceSettings.AnyAsync();
+        }
     }
 }

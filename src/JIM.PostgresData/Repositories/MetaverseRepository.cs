@@ -23,9 +23,9 @@ namespace JIM.PostgresData.Repositories
             return Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(x => x.Id == id);
         }
 
-        public MetaverseObjectType? GetMetaverseObjectType(string name)
+        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name)
         {
-            return Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(q => q.Name == name);
+            return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(q => q.Name == name);
         }
 
         public IList<MetaverseAttribute> GetMetaverseAttributes()
@@ -38,9 +38,9 @@ namespace JIM.PostgresData.Repositories
             return Repository.Database.MetaverseAttributes.SingleOrDefault(x => x.Id == id);
         }
 
-        public MetaverseAttribute? GetMetaverseAttribute(string name)
+        public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
         {
-            return Repository.Database.MetaverseAttributes.SingleOrDefault(x => x.Name == name);
+            return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);
         }
 
         public MetaverseObject? GetMetaverseObject(int id)

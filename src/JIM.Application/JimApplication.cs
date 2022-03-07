@@ -12,6 +12,7 @@ namespace JIM.Application
         public SecurityServer Security { get; }
         public ServiceSettingsServer ServiceSettings { get; }
         public DataGenerationServer DataGeneration { get; }
+        internal SeedingServer Seeding { get; }
         internal IRepository Repository { get; }
 
         public JimApplication(IRepository dataRepository)
@@ -21,6 +22,7 @@ namespace JIM.Application
             Security = new SecurityServer(this);
             ServiceSettings = new ServiceSettingsServer(this);
             DataGeneration = new DataGenerationServer(this);
+            Seeding = new SeedingServer(this);
             Repository = dataRepository;
             Log.Verbose("The JIM Application has started.");
         }
@@ -34,6 +36,8 @@ namespace JIM.Application
         public async Task InitialiseDatabaseAsync()
         {
             await Repository.InitialiseDatabaseAsync();
+            await Seeding.SeedAsync();
+            await Repository.InitialisationCompleteAsync();
         }
 
         /// <summary>
@@ -44,7 +48,7 @@ namespace JIM.Application
         {
             Log.Information($"InitialiseSSOAsync: nameId: {nameIdAttribute}, initialAdminNameId: {initialAdminNameIdValue}");
 
-            var nameIdMetaverseAttribute = Repository.Metaverse.GetMetaverseAttribute(nameIdAttribute);
+            var nameIdMetaverseAttribute = await Repository.Metaverse.GetMetaverseAttributeAsync(nameIdAttribute);
             if (nameIdMetaverseAttribute == null)
                 throw new Exception("Unsupported SSO NameID attribute. Please specify one that exists.");
 
@@ -61,7 +65,7 @@ namespace JIM.Application
 
             // check for a matching user, if not create, and check admin role assignment
             // get user by attribute = get metaverse object by attribute value
-            var objectType = Metaverse.GetMetaverseObjectType(BuiltInObjectTypeNames.User.ToString());
+            var objectType = await Metaverse.GetMetaverseObjectTypeAsync(BuiltInObjectTypeNames.User.ToString());
             if (objectType == null)
                 throw new Exception($"{BuiltInObjectTypeNames.User} object type could not be found. Something went wrong with db seeding.");
 

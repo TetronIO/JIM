@@ -37,7 +37,6 @@ try
     // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
-
     builder.Services.AddScoped<IRepository, PostgresDataRepository>();
     builder.Services.AddScoped<JimApplication>();
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);    
@@ -65,10 +64,6 @@ try
         app.UseSerilogRequestLogging();
 
     app.Logger.LogInformation("The JIM API has started");
-    app.Logger.LogInformation($"Application Name: {builder.Environment.ApplicationName}");
-    app.Logger.LogInformation($"Environment Name: {builder.Environment.EnvironmentName}");
-    app.Logger.LogInformation($"ContentRoot Path: {builder.Environment.ContentRootPath}");
-
     app.Run();
     return 0;
 }
