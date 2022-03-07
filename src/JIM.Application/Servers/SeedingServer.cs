@@ -341,12 +341,7 @@ namespace JIM.Application.Servers
             {
                 if (!exampleDataSet.Values.Any(q => q.StringValue == rawValue))
                 {
-                    exampleDataSet.Values.Add(new ExampleDataSetValue
-                    {
-                        StringValue = rawValue,
-                        ExampleDataSet = exampleDataSet
-                    });
-
+                    exampleDataSet.Values.Add(new ExampleDataSetValue { StringValue = rawValue });
                     if (!changesRequired)
                         changesRequired = true;
                 }
