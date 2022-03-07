@@ -13,54 +13,54 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        public IList<ConnectedSystem> GetConnectedSystems()
+        public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
         {
-            return Application.Repository.ConnectedSystems.GetConnectedSystems();
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync();
         }
 
-        public ConnectedSystem? GetConnectedSystem(int id)
+        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
         {
-            return Application.Repository.ConnectedSystems.GetConnectedSystem(id);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id);
         }
 
-        public IList<SyncRun>? GetSynchronisationRuns(int id)
+        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
         {
-            return Application.Repository.ConnectedSystems.GetSynchronisationRuns(id);
+            return await Application.Repository.ConnectedSystems.GetSynchronisationRunsAsync(id);
         }
 
-        public IList<ConnectedSystemAttribute>? GetAttributes(int id)
+        public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
         {
-            return Application.Repository.ConnectedSystems.GetAttributes(id);
+            return await Application.Repository.ConnectedSystems.GetAttributesAsync(id);
         }
 
-        public IList<ConnectedSystemObjectType>? GetObjectTypes(int id)
+        public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
         {
-            return Application.Repository.ConnectedSystems.GetObjectTypes(id);
+            return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(id);
         }
 
-        public ConnectedSystemObject? GetConnectedSystemObject(int connectedSystemId, int id)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
         {
-            return Application.Repository.ConnectedSystems.GetConnectedSystemObject(connectedSystemId, id);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
         }
 
-        public int GetConnectedSystemObjectCount()
+        public async Task<int> GetConnectedSystemObjectCountAsync()
         {
-            return Application.Repository.ConnectedSystems.GetConnectedSystemObjectCount();
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync();
         }
 
-        public int GetConnectedSystemObjectOfTypeCount(ConnectedSystemObjectType connectedSystemObjectType)
+        public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(ConnectedSystemObjectType connectedSystemObjectType)
         {
-            return Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCount(connectedSystemObjectType.Id);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
         }
 
-        public IList<SyncRule>? GetSyncRules()
+        public async Task<IList<SyncRule>?> GetSyncRulesAsync()
         {
-            return Application.Repository.ConnectedSystems.GetSyncRules();
+            return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
         }
 
-        public SyncRule? GetSyncRule(int id)
+        public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
-            return Application.Repository.ConnectedSystems.GetSyncRule(id);
+            return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
         }
     }
 }

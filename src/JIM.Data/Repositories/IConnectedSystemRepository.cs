@@ -6,15 +6,15 @@ namespace JIM.Data.Repositories
 {
     public interface IConnectedSystemRepository
     {
-        public IList<ConnectedSystem> GetConnectedSystems();
-        public ConnectedSystem? GetConnectedSystem(int id);
-        public IList<SyncRun>? GetSynchronisationRuns(int id);
-        public IList<ConnectedSystemAttribute>? GetAttributes(int id);
-        public IList<ConnectedSystemObjectType>? GetObjectTypes(int id);
-        public ConnectedSystemObject? GetConnectedSystemObject(int connectedSystemId, int id);
-        public int GetConnectedSystemObjectCount();
-        public int GetConnectedSystemObjectOfTypeCount(int connectedSystemObjectTypeId);
-        public IList<SyncRule>? GetSyncRules();
-        public SyncRule? GetSyncRule(int id);
+        public Task<IList<ConnectedSystem>> GetConnectedSystemsAsync();
+        public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
+        public Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id);
+        public Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id);
+        public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id);
+        public Task<int> GetConnectedSystemObjectCountAsync();
+        public Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId);
+        public Task<IList<SyncRule>?> GetSyncRulesAsync();
+        public Task<SyncRule?> GetSyncRuleAsync(int id);
     }
 }

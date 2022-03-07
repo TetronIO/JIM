@@ -20,59 +20,59 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/synchronisation/connected_systems")]
-        public IEnumerable<ConnectedSystem> GetConnectedSystems()
+        public async Task<IEnumerable<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             _logger.LogTrace($"Someone requested the connected systems");
-            return _application.ConnectedSystems.GetConnectedSystems();
+            return await _application.ConnectedSystems.GetConnectedSystemsAsync();
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}")]
-        public ConnectedSystem? GetConnectedSystem(int csid)
+        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int csid)
         {
             _logger.LogTrace($"Someone requested a connected system: {csid}");
-            return _application.ConnectedSystems.GetConnectedSystem(csid);
+            return await _application.ConnectedSystems.GetConnectedSystemAsync(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/run_history")]
-        public IEnumerable<SyncRun>? GetConnectedSystemRunHistories(int csid)
+        public async Task<IEnumerable<SyncRun>?> GetConnectedSystemRunHistoriesAsync(int csid)
         {
             _logger.LogTrace($"Someone requested synchronisation runs for system: {csid}");
-            return _application.ConnectedSystems.GetSynchronisationRuns(csid);
+            return await _application.ConnectedSystems.GetSynchronisationRunsAsync(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/attributes")]
-        public IEnumerable<ConnectedSystemAttribute>? GetConnectedSystemAttributes(int csid)
+        public async Task<IEnumerable<ConnectedSystemAttribute>?> GetConnectedSystemAttributesAsync(int csid)
         {
             _logger.LogTrace($"Someone requested attributes for connected system: {csid}");
-            return _application.ConnectedSystems.GetAttributes(csid);
+            return await _application.ConnectedSystems.GetAttributesAsync(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/object_types")]
-        public IEnumerable<ConnectedSystemObjectType>? GetConnectedSystemObjectTypes(int csid)
+        public async Task<IEnumerable<ConnectedSystemObjectType>?> GetConnectedSystemObjectTypesAsync(int csid)
         {
             _logger.LogTrace($"Someone requested object types for connected system: {csid}");
-            return _application.ConnectedSystems.GetObjectTypes(csid);
+            return await _application.ConnectedSystems.GetObjectTypesAsync(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/objects/{id}")]
-        public ConnectedSystemObject? GetConnectedSystemObject(int csid, int id)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int csid, int id)
         {
             _logger.LogTrace($"Someone requested an object ({id}) connected system: {csid}");
-            return _application.ConnectedSystems.GetConnectedSystemObject(csid, id);
+            return await _application.ConnectedSystems.GetConnectedSystemObjectAsync(csid, id);
         }
 
         [HttpGet("/synchronisation/sync_rules")]
-        public IEnumerable<SyncRule>? GetSyncRules()
+        public async Task<IEnumerable<SyncRule>?> GetSyncRulesAsync()
         {
             _logger.LogTrace("Someone requested the synchronisation rules");
-            return _application.ConnectedSystems.GetSyncRules();
+            return await _application.ConnectedSystems.GetSyncRulesAsync();
         }
 
         [HttpGet("/synchronisation/sync_rules/{id}")]
-        public SyncRule? GetSyncRule(int id)
+        public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
             _logger.LogTrace($"Someone requested a specific sync rule: {id}");
-            return _application.ConnectedSystems.GetSyncRule(id);
+            return await _application.ConnectedSystems.GetSyncRuleAsync(id);
         }
     }
 }

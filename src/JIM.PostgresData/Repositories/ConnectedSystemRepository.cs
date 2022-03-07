@@ -2,6 +2,7 @@
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories
 {
@@ -14,54 +15,54 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
-        public IList<ConnectedSystem> GetConnectedSystems()
+        public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
         {
-            return Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToList();
+            return await Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToListAsync();
         }
 
-        public ConnectedSystem? GetConnectedSystem(int id)
+        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
         {
-            return Repository.Database.ConnectedSystems.SingleOrDefault(x => x.Id == id);
+            return await Repository.Database.ConnectedSystems.SingleOrDefaultAsync(x => x.Id == id);
         }
 
-        public IList<SyncRun>? GetSynchronisationRuns(int id)
+        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
         {
-            return Repository.Database.SynchronisationRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToList();
+            return await Repository.Database.SynchronisationRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToListAsync();
         }
 
-        public IList<ConnectedSystemAttribute>? GetAttributes(int id)
+        public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
         {
-            return Repository.Database.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
+            return await Repository.Database.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
         }
 
-        public IList<ConnectedSystemObjectType>? GetObjectTypes(int id)
+        public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
         {
-            return Repository.Database.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToList();
+            return await Repository.Database.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
         }
 
-        public ConnectedSystemObject? GetConnectedSystemObject(int connectedSystemId, int id)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
         {
-            return Repository.Database.ConnectedSystemObjects.SingleOrDefault(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
-        public IList<SyncRule>? GetSyncRules()
+        public async Task <IList<SyncRule>?> GetSyncRulesAsync()
         {
-            return Repository.Database.SyncRules.OrderBy(x => x.Name).ToList();
+            return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
         }
 
-        public SyncRule? GetSyncRule(int id)
+        public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
-            return Repository.Database.SyncRules.SingleOrDefault(x => x.Id == id);
+            return await Repository.Database.SyncRules.SingleOrDefaultAsync(x => x.Id == id);
         }
 
-        public int GetConnectedSystemObjectCount()
+        public async Task<int> GetConnectedSystemObjectCountAsync()
         {
-            return Repository.Database.ConnectedSystemObjects.Count();
+            return await Repository.Database.ConnectedSystemObjects.CountAsync();
         }
 
-        public int GetConnectedSystemObjectOfTypeCount(int connectedSystemObjectTypeId)
+        public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId)
         {
-            return Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).Count();
+            return await Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).CountAsync();
         }
     }
 }
