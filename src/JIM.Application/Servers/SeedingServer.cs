@@ -1,7 +1,9 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.DataGeneration;
 using JIM.Models.Security;
 using Serilog;
 using System.Diagnostics;
+using System.Resources;
 
 namespace JIM.Application.Servers
 {
@@ -29,6 +31,7 @@ namespace JIM.Application.Servers
             var attributesToCreate = new List<MetaverseAttribute>();
             var objectTypesToCreate = new List<MetaverseObjectType>();
             var rolesToCreate = new List<Role>();
+            var exampleDataSets = new List<ExampleDataSet>();
 
             // generic attributes
             var accountNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountName, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
@@ -247,13 +250,48 @@ namespace JIM.Application.Servers
                 Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrators}");
             }
 
-            // submit all the preparations to the repository for creation
-            await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypesToCreate, rolesToCreate);
+            // create data-generation templates
+            // what needs creating:
+            // - example data sets
+            // - example data set values
+            // - data generation templates
+            // - data generation template attributes
 
+            var companiesEnDataSet = await PrepareExampleDataSetAsync("Companies", "en", Properties.Resources.Companies_en);
+            if (companiesEnDataSet != null)
+                exampleDataSets.Add(companiesEnDataSet);
+
+            var departmentsEnDataSet = await PrepareExampleDataSetAsync("Departments", "en", Properties.Resources.Departments_en);
+            if (departmentsEnDataSet != null)
+                exampleDataSets.Add(departmentsEnDataSet);
+
+            var teamsEnDataSet = await PrepareExampleDataSetAsync("Teams", "en", Properties.Resources.Teams_en);
+            if (teamsEnDataSet != null)
+                exampleDataSets.Add(teamsEnDataSet);
+
+            var jobTitlesEnDataSet = await PrepareExampleDataSetAsync("Job Titles", "en", Properties.Resources.JobTitles_en);
+            if (jobTitlesEnDataSet != null)
+                exampleDataSets.Add(jobTitlesEnDataSet);
+
+            var firstnamesMaleEnDataSet = await PrepareExampleDataSetAsync("Firstnames Male", "en", Properties.Resources.FirstnamesMale_en);
+            if (firstnamesMaleEnDataSet != null)
+                exampleDataSets.Add(firstnamesMaleEnDataSet);
+
+            var firstnamesFemaleEnDataSet = await PrepareExampleDataSetAsync("Firstnames Female", "en", Properties.Resources.FirstnamesFemale_en);
+            if (firstnamesFemaleEnDataSet != null)
+                exampleDataSets.Add(firstnamesFemaleEnDataSet);
+
+            var lastnamesEnDataSet = await PrepareExampleDataSetAsync("Lastnames", "en", Properties.Resources.Lastnames_en);
+            if (lastnamesEnDataSet != null)
+                exampleDataSets.Add(lastnamesEnDataSet);
+
+            // submit all the preparations to the repository for creation
+            await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypesToCreate, rolesToCreate, exampleDataSets);
             stopwatch.Stop();
             Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
         }
 
+        #region private methods
         private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> attributeList)
         {
             var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name);
@@ -281,5 +319,44 @@ namespace JIM.Application.Servers
                 Log.Verbose($"AddAttributeToObjectType: {metaverseObjectType.Name} - Added {metaverseAttribute.Name}");
             }
         }
+
+        private async Task<ExampleDataSet?> PrepareExampleDataSetAsync(string name, string culture, string resourceValues)
+        {
+            var changesRequired = false;
+            var exampleDataSet = await Application.Repository.DataGeneration.GetExampleDataSetAsync(name, culture);
+            if (exampleDataSet == null)
+            {
+                exampleDataSet = new ExampleDataSet()
+                {
+                    Name = name,
+                    Culture = culture,
+                    BuiltIn = true
+                };
+                changesRequired = true;
+            }
+
+            // check if the dataset has all the necesary values
+            var rawValues = resourceValues.Split(Environment.NewLine).ToList();
+            foreach (var rawValue in rawValues)
+            {
+                if (!exampleDataSet.Values.Any(q => q.StringValue == rawValue))
+                {
+                    exampleDataSet.Values.Add(new ExampleDataSetValue
+                    {
+                        StringValue = rawValue,
+                        ExampleDataSet = exampleDataSet
+                    });
+
+                    if (!changesRequired)
+                        changesRequired = true;
+                }
+            }
+
+            if (changesRequired)
+                return exampleDataSet;
+            else
+                return null;
+        }
+        #endregion
     }
 }

@@ -11,9 +11,32 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        public List<DataGenerationTemplate> GetTemplates()
+        #region ExampleDataSets
+        public async Task<List<ExampleDataSet>> GetExampleDataSetsAsync()
         {
-            return Application.Repository.DataGeneration.GetTemplates();
+            return await Application.Repository.DataGeneration.GetExampleDataSetsAsync();
+        }
+
+        public async Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet)
+        {
+            await Application.Repository.DataGeneration.CreateExampleDataSetAsync(exampleDataSet);
+        }
+
+        public async Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet)
+        {
+            await Application.Repository.DataGeneration.UpdateExampleDataSetAsync(exampleDataSet);
+        }
+
+        public async Task DeleteExampleDataSetAsync(int exampleDataSetId)
+        {
+            await Application.Repository.DataGeneration.DeleteExampleDataSetAsync(exampleDataSetId);
+        }
+        #endregion
+
+        #region DataGenerationTemplates
+        public async Task<List<DataGenerationTemplate>> GetTemplatesAsync()
+        {
+            return await Application.Repository.DataGeneration.GetTemplatesAsync();
         }
 
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
@@ -30,5 +53,6 @@ namespace JIM.Application.Servers
         {
             await Application.Repository.DataGeneration.DeleteTemplateAsync(templateId);
         }
+        #endregion
     }
 }

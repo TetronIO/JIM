@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Serilog" Version="2.10.0" />
+    <PackageReference Include="System.Resources.ResourceManager" Version="4.3.0" />
   </ItemGroup>
 
   <ItemGroup>

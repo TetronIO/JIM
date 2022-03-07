@@ -17,11 +17,18 @@ namespace JIM.Api.Controllers
             _application = application;
         }
 
-        [HttpGet("/data-generation/templates")]
-        public IEnumerable<DataGenerationTemplate> GetTemplates()
+        [HttpGet("/data-generation/example-data-sets")]
+        public async Task<IEnumerable<ExampleDataSet>> GetExampleDataSetsAsync()
         {
-            _logger.LogTrace($"Someone requested the roles");
-            return _application.DataGeneration.GetTemplates();
+            _logger.LogTrace($"Someone requested the example data set");
+            return await _application.DataGeneration.GetExampleDataSetsAsync();
+        }
+
+        [HttpGet("/data-generation/templates")]
+        public async Task<IEnumerable<DataGenerationTemplate>> GetTemplatesAsync()
+        {
+            _logger.LogTrace($"Someone requested the data generation templates");
+            return await _application.DataGeneration.GetTemplatesAsync();
         }
     }
 }

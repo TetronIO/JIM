@@ -61,26 +61,6 @@ namespace JIM.Application.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Marketing
-        ///Operations
-        ///Finance
-        ///Sales
-        ///Human Resources
-        ///Procurement
-        ///Information Technology
-        ///Research &amp; Development
-        ///Executive
-        ///Legal
-        ///Facilities
-        ///Catering.
-        /// </summary>
-        internal static string Departments_en {
-            get {
-                return ResourceManager.GetString("Departments-en", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to CHOAM
         ///Acme Corp
         ///Sirius Cybernetics Corp
@@ -107,9 +87,29 @@ namespace JIM.Application.Properties {
         ///Nakatomi Trading Corp
         ///Spacely Space Sprockets.
         /// </summary>
-        internal static string FictionalCompanies_en {
+        internal static string Companies_en {
             get {
-                return ResourceManager.GetString("FictionalCompanies-en", resourceCulture);
+                return ResourceManager.GetString("Companies_en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Marketing
+        ///Operations
+        ///Finance
+        ///Sales
+        ///Human Resources
+        ///Procurement
+        ///Information Technology
+        ///Research &amp; Development
+        ///Executive
+        ///Legal
+        ///Facilities
+        ///Catering.
+        /// </summary>
+        internal static string Departments_en {
+            get {
+                return ResourceManager.GetString("Departments_en", resourceCulture);
             }
         }
         
@@ -197,9 +197,9 @@ namespace JIM.Application.Properties {
         ///Olive
         ///Ol [rest of string was truncated]&quot;;.
         /// </summary>
-        internal static string Firstnames_female_en_gb {
+        internal static string FirstnamesFemale_en {
             get {
-                return ResourceManager.GetString("Firstnames-female-en_gb", resourceCulture);
+                return ResourceManager.GetString("FirstnamesFemale_en", resourceCulture);
             }
         }
         
@@ -282,9 +282,9 @@ namespace JIM.Application.Properties {
         ///Oliver
         ///Ollie [rest of string was truncated]&quot;;.
         /// </summary>
-        internal static string Firstnames_male_en_gb {
+        internal static string FirstnamesMale_en {
             get {
-                return ResourceManager.GetString("Firstnames-male-en_gb", resourceCulture);
+                return ResourceManager.GetString("FirstnamesMale_en", resourceCulture);
             }
         }
         
@@ -317,7 +317,7 @@ namespace JIM.Application.Properties {
         /// </summary>
         internal static string JobTitles_en {
             get {
-                return ResourceManager.GetString("JobTitles-en", resourceCulture);
+                return ResourceManager.GetString("JobTitles_en", resourceCulture);
             }
         }
         
@@ -388,9 +388,9 @@ namespace JIM.Application.Properties {
         ///Griffiths
         ///Gra [rest of string was truncated]&quot;;.
         /// </summary>
-        internal static string Lastnames_en_gb {
+        internal static string Lastnames_en {
             get {
-                return ResourceManager.GetString("Lastnames-en_gb", resourceCulture);
+                return ResourceManager.GetString("Lastnames_en", resourceCulture);
             }
         }
         
@@ -428,7 +428,7 @@ namespace JIM.Application.Properties {
         /// </summary>
         internal static string Teams_en {
             get {
-                return ResourceManager.GetString("Teams-en", resourceCulture);
+                return ResourceManager.GetString("Teams_en", resourceCulture);
             }
         }
     }

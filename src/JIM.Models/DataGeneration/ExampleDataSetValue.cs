@@ -1,6 +1,6 @@
 ﻿namespace JIM.Models.DataGeneration
 {
-    public class ExampleDataValue
+    public class ExampleDataSetValue
     {
         public int Id { get; set; }
         public ExampleDataSet ExampleDataSet { get; set; }

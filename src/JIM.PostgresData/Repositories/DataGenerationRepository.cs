@@ -14,9 +14,47 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
-        public List<DataGenerationTemplate> GetTemplates()
+        #region ExampleDataSets
+        public async Task<List<ExampleDataSet>> GetExampleDataSetsAsync()
         {
-            return Repository.Database.DataGenerationTemplates.Include(q => q.ObjectTypes).OrderBy(q => q.Name).ToList();
+            return await Repository.Database.ExampleDataSets.Include(q => q.Values).OrderBy(q => q.Name).ToListAsync();
+        }
+
+        public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture)
+        {
+            return await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Name == name && q.Culture == culture);
+        }
+
+        public async Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet)
+        {
+            Repository.Database.ExampleDataSets.Add(exampleDataSet);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet)
+        {
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task DeleteExampleDataSetAsync(int exampleDataSetId)
+        {
+            var exampleDataSet = await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Id == exampleDataSetId);
+            if (exampleDataSet == null)
+            {
+                Log.Warning("DeleteExampleDataSetAsync: No such ExampleDetaSet found to delete.");
+                return;
+            }
+
+            Repository.Database.ExampleDataSetValues.RemoveRange(exampleDataSet.Values);
+            Repository.Database.ExampleDataSets.Remove(exampleDataSet);
+            await Repository.Database.SaveChangesAsync();
+        }
+        #endregion
+
+        #region DataGenerationTemplates
+        public async Task<List<DataGenerationTemplate>> GetTemplatesAsync()
+        {
+            return await Repository.Database.DataGenerationTemplates.Include(q => q.ObjectTypes).OrderBy(q => q.Name).ToListAsync();
         }
 
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
@@ -32,21 +70,26 @@ namespace JIM.PostgresData.Repositories
 
         public async Task DeleteTemplateAsync(int templateId)
         {
-            var template = await Repository.Database.DataGenerationTemplates.SingleOrDefaultAsync(q => q.Id == templateId);
+            var template = await Repository.Database.DataGenerationTemplates.
+                Include(t => t.ObjectTypes).
+                ThenInclude(ot => ot.TemplateAttributes).
+                SingleOrDefaultAsync(t => t.Id == templateId);
             if (template == null)
             {
                 Log.Warning("DeleteTemplateAsync: No such template found to delete.");
                 return;
             }
-            
+
             // go through the template tree and remove all descendant template objects
             // cascade delete not used here due to references to non-template objects we definately don't want to delete
             foreach (var objectType in template.ObjectTypes)
                 Repository.Database.DataGenerationTemplateAttributes.RemoveRange(objectType.TemplateAttributes);
-            
+
             Repository.Database.DataGenerationObjectTypes.RemoveRange(template.ObjectTypes);
             Repository.Database.DataGenerationTemplates.Remove(template);
             await Repository.Database.SaveChangesAsync();
         }
+        #endregion
+
     }
 }

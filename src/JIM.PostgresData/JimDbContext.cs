@@ -23,7 +23,7 @@ namespace JIM.PostgresData
         internal DbSet<ServiceSettings> ServiceSettings { get; set; }
         internal DbSet<Role> Roles { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
-        internal DbSet<ExampleDataValue> ExampleDataValues { get; set; }
+        internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
@@ -64,6 +64,7 @@ namespace JIM.PostgresData
             modelBuilder.Entity<MetaverseObject>()
                 .HasMany(mo => mo.Roles)
                 .WithMany(r => r.StaticMembers);
+           
         }
     }
 }

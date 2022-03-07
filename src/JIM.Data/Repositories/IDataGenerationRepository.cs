@@ -4,7 +4,14 @@ namespace JIM.Data.Repositories
 {
     public interface IDataGenerationRepository
     {
-        public List<DataGenerationTemplate> GetTemplates();
+        public Task<List<ExampleDataSet>> GetExampleDataSetsAsync();
+        public Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture);
+        public Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet);
+        public Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet);
+        public Task DeleteExampleDataSetAsync(int exampleDataSetId);
+
+
+        public Task<List<DataGenerationTemplate>> GetTemplatesAsync();
 
         public Task CreateTemplateAsync(DataGenerationTemplate template);
 

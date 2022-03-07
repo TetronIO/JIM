@@ -1,5 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.DataGeneration;
 using JIM.Models.Security;
 using Serilog;
 
@@ -18,15 +19,39 @@ namespace JIM.PostgresData.Repositories
         /// Creates data needed by the application to run.
         /// Does not perform existence checks, you need to do this before calling this method.
         /// </summary>
-        public async Task SeedDataAsync(List<MetaverseAttribute> metaverseAttributes, List<MetaverseObjectType> metaverseObjectTypes, List<Role> roles)
+        public async Task SeedDataAsync(List<MetaverseAttribute> metaverseAttributes, List<MetaverseObjectType> metaverseObjectTypes, List<Role> roles, List<ExampleDataSet> exampleDataSets)
         {
-            Repository.Database.MetaverseAttributes.AddRange(metaverseAttributes);
-            Repository.Database.MetaverseObjectTypes.AddRange(metaverseObjectTypes);
-            Repository.Database.Roles.AddRange(roles);
-            await Repository.Database.SaveChangesAsync();
-            Log.Information($"SeedDataAsync: Created {metaverseAttributes.Count} MetaverseAttributes");
-            Log.Information($"SeedDataAsync: Created {metaverseObjectTypes.Count} MetaverseObjectTypes");
-            Log.Information($"SeedDataAsync: Created {roles.Count} Roles");
+            var changes = false;
+            if (metaverseAttributes != null)
+            {
+                Repository.Database.MetaverseAttributes.AddRange(metaverseAttributes);
+                Log.Information($"SeedDataAsync: Created {metaverseAttributes.Count} MetaverseAttributes");
+                changes = true;
+            }
+
+            if (metaverseObjectTypes != null)
+            {
+                Repository.Database.MetaverseObjectTypes.AddRange(metaverseObjectTypes);
+                Log.Information($"SeedDataAsync: Created {metaverseObjectTypes.Count} MetaverseObjectTypes");
+                changes = true;
+            }
+
+            if (roles != null)
+            {
+                Repository.Database.Roles.AddRange(roles);
+                Log.Information($"SeedDataAsync: Created {roles.Count} Roles");
+                changes = true;
+            }
+
+            if (exampleDataSets != null)
+            {
+                Repository.Database.ExampleDataSets.AddRange(exampleDataSets);
+                Log.Information($"SeedDataAsync: Created {exampleDataSets.Count} ExampleDataSets");
+                changes = true;
+            }
+
+            if (changes)
+                await Repository.Database.SaveChangesAsync();         
         }
     }
 }
