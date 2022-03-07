@@ -61,6 +61,26 @@ namespace JIM.Application.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Marketing
+        ///Operations
+        ///Finance
+        ///Sales
+        ///Human Resources
+        ///Procurement
+        ///Information Technology
+        ///Research &amp; Development
+        ///Executive
+        ///Legal
+        ///Facilities
+        ///Catering.
+        /// </summary>
+        internal static string Departments_en {
+            get {
+                return ResourceManager.GetString("Departments-en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to CHOAM
         ///Acme Corp
         ///Sirius Cybernetics Corp
@@ -269,6 +289,39 @@ namespace JIM.Application.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Marketing Specialist
+        ///Marketing Manager
+        ///Marketing Director
+        ///Graphic Designer
+        ///Marketing Research Analyst
+        ///Marketing Communications Manager
+        ///Marketing Consultant
+        ///Product Manager
+        ///Public Relations
+        ///Social Media Assistant
+        ///Brand Manager
+        ///SEO Manager
+        ///Content Marketing Manager
+        ///Copywriter
+        ///Media Buyer
+        ///Digital Marketing Manager
+        ///eCommerce Marketing Specialist
+        ///Brand Strategist
+        ///Vice President of Marketing
+        ///Media Relations Coordinator
+        ///Administrative Assistant
+        ///Receptionist
+        ///Office Manager
+        ///Auditing Clerk
+        ///Boo [rest of string was truncated]&quot;;.
+        /// </summary>
+        internal static string JobTitles_en {
+            get {
+                return ResourceManager.GetString("JobTitles-en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Smith
         ///Jones
         ///Brown
@@ -338,6 +391,44 @@ namespace JIM.Application.Properties {
         internal static string Lastnames_en_gb {
             get {
                 return ResourceManager.GetString("Lastnames-en_gb", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The Water Coolers
+        ///The Scanners
+        ///Boss Mode
+        ///Lunch Room Bandits
+        ///Never Overtime
+        ///We Break for No-one
+        ///Desk Champions
+        ///Office Heroes
+        ///Not Your Ordinary Desk Jockeys
+        ///Better Nine Than Five
+        ///All Play and No Work
+        ///Whiz Holics
+        ///Logistic Zealots
+        ///Mind Mantra
+        ///Smash Audit
+        ///Market Moghuls
+        ///Greed Breed
+        ///Brain Acumen
+        ///Mind Messiahs
+        ///Buzz Logic
+        ///Spartan Policies
+        ///Dream Crushers
+        ///The Credit Crunchers
+        ///The Rockin Edits
+        ///The Mind Bogglers
+        ///Member Support
+        ///Business Ties
+        ///Labor Force of Nature
+        ///Legal Eagles
+        ///Cubicle Comics        /// [rest of string was truncated]&quot;;.
+        /// </summary>
+        internal static string Teams_en {
+            get {
+                return ResourceManager.GetString("Teams-en", resourceCulture);
             }
         }
     }

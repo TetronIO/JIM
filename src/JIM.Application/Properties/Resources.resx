@@ -118,6 +118,9 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <assembly alias="System.Windows.Forms" name="System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
+  <data name="Departments-en" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Departments-en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+  </data>
   <data name="FictionalCompanies-en" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\FictionalCompanies-en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
   </data>
@@ -127,7 +130,13 @@
   <data name="Firstnames-male-en_gb" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\resources\firstnames-male-en_gb.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
   </data>
+  <data name="JobTitles-en" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\JobTitles-en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+  </data>
   <data name="Lastnames-en_gb" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\Lastnames-en_gb.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+  </data>
+  <data name="Teams-en" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Teams-en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
   </data>
 </root>
