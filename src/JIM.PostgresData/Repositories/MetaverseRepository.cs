@@ -13,14 +13,14 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
-        public IList<MetaverseObjectType> GetMetaverseObjectTypes()
+        public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync()
         {
-            return Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).OrderBy(x => x.Name).ToList();
+            return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).OrderBy(x => x.Name).ToListAsync();
         }
 
-        public MetaverseObjectType? GetMetaverseObjectType(int id)
+        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id)
         {
-            return Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefault(x => x.Id == id);
+            return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name)
@@ -28,14 +28,14 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(q => q.Name == name);
         }
 
-        public IList<MetaverseAttribute> GetMetaverseAttributes()
+        public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
         {
-            return Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToList();
+            return await Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToListAsync();
         }
 
-        public MetaverseAttribute? GetMetaverseAttribute(int id)
+        public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id)
         {
-            return Repository.Database.MetaverseAttributes.SingleOrDefault(x => x.Id == id);
+            return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
@@ -43,9 +43,9 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);
         }
 
-        public MetaverseObject? GetMetaverseObject(int id)
+        public async Task<MetaverseObject?> GetMetaverseObjectAsync(int id)
         {
-            return Repository.Database.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefault(x => x.Id == id);
+            return await Repository.Database.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
@@ -59,9 +59,9 @@ namespace JIM.PostgresData.Repositories
             await Repository.Database.SaveChangesAsync();
         }
 
-        public MetaverseObject? GetMetaverseObjectByTypeAndAttribute(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
+        public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
         {
-            var av = Repository.Database.MetaverseObjectAttributeValues.Include(q => q.MetaverseObject).SingleOrDefault(av =>
+            var av = await Repository.Database.MetaverseObjectAttributeValues.Include(q => q.MetaverseObject).SingleOrDefaultAsync(av =>
                  av.Attribute.Id == metaverseAttribute.Id &&
                  av.StringValue != null && av.StringValue == attributeValue &&
                  av.MetaverseObject.Type.Id == metaverseObjectType.Id);
@@ -72,17 +72,17 @@ namespace JIM.PostgresData.Repositories
             return null;
         }
 
-        public int GetMetaverseObjectCount()
+        public async Task<int> GetMetaverseObjectCountAsync()
         {
-            return Repository.Database.MetaverseObjects.Count();
+            return await Repository.Database.MetaverseObjects.CountAsync();
         }
 
-        public int GetMetaverseObjectOfTypeCount(int metaverseObjectTypeId)
+        public async Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId)
         {
-            return Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).Count();
+            return await Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).CountAsync();
         }
 
-        public PagedResultSet<MetaverseObject> GetMetaverseObjectsOfType(
+        public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
             int metaverseObjectTypeId,
             int page = 1,
             int pageSize = 20,
@@ -103,7 +103,6 @@ namespace JIM.PostgresData.Repositories
             // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
             if (maxResults > 500)
                 maxResults = 500;
-
 
             var objects = from o in Repository.Database.MetaverseObjects.Where(q => q.Type.Id == metaverseObjectTypeId)
                           select o;
@@ -134,10 +133,10 @@ namespace JIM.PostgresData.Repositories
             }
 
             // now just retrieve a page's worth of images from the results
-            var grossCount = objects.Count();
+            var grossCount = await objects.CountAsync();
             var offset = (page - 1) * pageSize;
             var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-            objects = objects.Skip(offset).Take(itemsToGet);
+            var results = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
 
             // now with all the ids we know how many total results there are and so can populate paging info
             var pagedResultSet = new PagedResultSet<MetaverseObject>
@@ -146,7 +145,8 @@ namespace JIM.PostgresData.Repositories
                 TotalResults = grossCount,
                 CurrentPage = page,
                 QuerySortBy = querySortBy,
-                QueryRange = queryRange
+                QueryRange = queryRange,
+                Results = results
             };
 
             if (page == 1 && pagedResultSet.TotalPages == 0)

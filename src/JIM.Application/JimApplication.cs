@@ -69,7 +69,7 @@ namespace JIM.Application
             if (objectType == null)
                 throw new Exception($"{BuiltInObjectTypeNames.User} object type could not be found. Something went wrong with db seeding.");
 
-            var user = Repository.Metaverse.GetMetaverseObjectByTypeAndAttribute(objectType, nameIdMetaverseAttribute, initialAdminNameIdValue);
+            var user = await Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(objectType, nameIdMetaverseAttribute, initialAdminNameIdValue);
             if (user != null)
             {
                 // we have a matching user, do they have the Administrators role?

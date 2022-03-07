@@ -5,27 +5,27 @@ namespace JIM.Data.Repositories
     public interface IMetaverseRepository
     {
         #region object types
-        public IList<MetaverseObjectType> GetMetaverseObjectTypes();
+        public Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync();
 
-        public MetaverseObjectType? GetMetaverseObjectType(int id);
+        public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id);
 
         public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name);
         #endregion
 
         #region objects
-        public MetaverseObject? GetMetaverseObject(int id);
+        public Task<MetaverseObject?> GetMetaverseObjectAsync(int id);
 
         public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
         public Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
-        public MetaverseObject? GetMetaverseObjectByTypeAndAttribute(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue);
+        public Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue);
 
-        public int GetMetaverseObjectCount();
+        public Task<int> GetMetaverseObjectCountAsync();
 
-        public int GetMetaverseObjectOfTypeCount(int metaverseObjectTypeId);
+        public Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId);
 
-        public PagedResultSet<MetaverseObject> GetMetaverseObjectsOfType(
+        public Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
             int metaverseObjectTypeId,
             int page,
             int pageSize,
@@ -35,9 +35,9 @@ namespace JIM.Data.Repositories
         #endregion
 
         #region attributes
-        public IList<MetaverseAttribute>? GetMetaverseAttributes();
+        public Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync();
 
-        public MetaverseAttribute? GetMetaverseAttribute(int id);
+        public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id);
 
         public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);
         #endregion

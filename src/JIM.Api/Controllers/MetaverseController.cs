@@ -18,38 +18,38 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/metaverse/object_types")]
-        public IEnumerable<MetaverseObjectType> GetObjectTypes()
+        public async Task<IEnumerable<MetaverseObjectType>> GetObjectTypesAsync()
         {
             _logger.LogTrace($"Someone requested the metaverse object types");
-            return _application.Metaverse.GetMetaverseObjectTypes();
+            return await _application.Metaverse.GetMetaverseObjectTypesAsync();
         }
 
         [HttpGet("/metaverse/object_types/{id}")]
-        public MetaverseObjectType? GetObjectType(int id)
+        public async Task<MetaverseObjectType?> GetObjectTypeAsync(int id)
         {
             _logger.LogTrace($"Someone requested an object type: {id}");
-            return _application.Metaverse.GetMetaverseObjectType(id);
+            return await _application.Metaverse.GetMetaverseObjectTypeAsync(id);
         }
 
         [HttpGet("/metaverse/attributes")]
-        public IEnumerable<MetaverseAttribute>? GetAttributes()
+        public async Task<IEnumerable<MetaverseAttribute>?> GetAttributesAsync()
         {
             _logger.LogTrace($"Someone requested the metaverse attributes");
-            return _application.Metaverse.GetMetaverseAttributes();
+            return await _application.Metaverse.GetMetaverseAttributesAsync();
         }
 
         [HttpGet("/metaverse/attributes/{id}")]
-        public MetaverseAttribute? GetAttribute(int id)
+        public async Task<MetaverseAttribute?> GetAttributeAsync(int id)
         {
             _logger.LogTrace($"Someone requested an attribute: {id}");
-            return _application.Metaverse.GetMetaverseAttribute(id);
+            return await _application.Metaverse.GetMetaverseAttributeAsync(id);
         }
 
         [HttpGet("/metaverse/objects/{id}")]
-        public MetaverseObject? GetObject(int id)
+        public async Task<MetaverseObject?> GetObjectAsync(int id)
         {
             _logger.LogTrace($"Someone requested a metaverse object: {id}");
-            return _application.Metaverse.GetMetaverseObject(id);
+            return await _application.Metaverse.GetMetaverseObjectAsync(id);
         }
     }
 }
