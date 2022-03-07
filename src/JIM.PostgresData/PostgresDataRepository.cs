@@ -47,7 +47,7 @@ namespace JIM.PostgresData
         {
             // when the database is created, it's done so in maintenance mode
             // now we're all done, take it out of maintenance mode to open the app up to requests
-            var serviceSettings = ServiceSettings.GetServiceSettings();
+            var serviceSettings = await ServiceSettings.GetServiceSettingsAsync();
             if (serviceSettings == null)
                 throw new Exception("ServiceSettings is null. Something has gone wrong with seeding.");
 

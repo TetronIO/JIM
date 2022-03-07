@@ -16,9 +16,9 @@ namespace JIM.Application.Servers
             return await Application.Repository.ServiceSettings.ServiceSettingsExistAsync();
         }
 
-        public ServiceSettings? GetServiceSettings()
+        public async Task<ServiceSettings?> GetServiceSettingsAsync()
         {
-            return Application.Repository.ServiceSettings.GetServiceSettings();
+            return await Application.Repository.ServiceSettings.GetServiceSettingsAsync();
         }
 
         internal async Task CreateServiceSettingsAsync(ServiceSettings serviceSettings)

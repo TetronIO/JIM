@@ -52,7 +52,7 @@ namespace JIM.Application
             if (nameIdMetaverseAttribute == null)
                 throw new Exception("Unsupported SSO NameID attribute. Please specify one that exists.");
 
-            var serviceSettings = ServiceSettings.GetServiceSettings();
+            var serviceSettings = await ServiceSettings.GetServiceSettingsAsync();
             if (serviceSettings == null)
                 throw new Exception("ServiceSettings do not exist. Application is not properly initialised. Are you sure the application is ready?");
 
@@ -97,9 +97,9 @@ namespace JIM.Application
         /// Indicates to secondary JimApplication clients (i.e. not the master) if the application is ready to be used.
         /// Do not progress with client initialisation if JimApplication is not ready.
         /// </summary>
-        public bool IsApplicationReady()
+        public async Task<bool> IsApplicationReadyAsync()
         {
-            var serviceSettings = ServiceSettings.GetServiceSettings();
+            var serviceSettings = await ServiceSettings.GetServiceSettingsAsync();
             if (serviceSettings == null || serviceSettings.IsServiceInMaintenanceMode)
                 return false;
 

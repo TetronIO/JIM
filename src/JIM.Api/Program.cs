@@ -132,12 +132,18 @@ static async Task InitialiseJimApplicationAsync()
     if (string.IsNullOrEmpty(ssoInitialAdminNameId))
         throw new Exception("SSO_INITIAL_ADMIN_NAMEID environment variable missing");
 
-    using var jimApplication = new JimApplication(new PostgresDataRepository());
-    while (!jimApplication.IsApplicationReady())
+    while (true)
     {
+        using (var jimApplication = new JimApplication(new PostgresDataRepository()))
+        {
+            if (await jimApplication.IsApplicationReadyAsync())
+            {
+                await jimApplication.InitialiseSSOAsync(ssoNameIdAttribute, ssoInitialAdminNameId);
+                break;
+            }
+        }
+
         Log.Information("Application is not ready yet. Sleeping...");
         Thread.Sleep(1000);
     }
-
-    await jimApplication.InitialiseSSOAsync(ssoNameIdAttribute, ssoInitialAdminNameId);
 }

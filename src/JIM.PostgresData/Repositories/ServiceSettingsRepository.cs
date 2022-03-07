@@ -14,11 +14,11 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
-        public ServiceSettings? GetServiceSettings()
+        public async Task<ServiceSettings?> GetServiceSettingsAsync()
         {
             try
             {
-                return Repository.Database.ServiceSettings.Include(q => q.SSONameIDAttribute).FirstOrDefault();
+                return await Repository.Database.ServiceSettings.Include(q => q.SSONameIDAttribute).FirstOrDefaultAsync();
             }
             catch (Npgsql.PostgresException ex)
             {
