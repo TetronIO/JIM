@@ -1,6 +1,7 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Security;
 using Serilog;
+using System.Diagnostics;
 
 namespace JIM.Application.Servers
 {
@@ -15,6 +16,9 @@ namespace JIM.Application.Servers
 
         internal async Task SeedAsync()
         {
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+
             if (!await Application.ServiceSettings.ServiceSettingsExistAsync())
                 await Application.ServiceSettings.CreateServiceSettingsAsync(new ServiceSettings());
 
@@ -245,6 +249,9 @@ namespace JIM.Application.Servers
 
             // submit all the preparations to the repository for creation
             await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypesToCreate, rolesToCreate);
+
+            stopwatch.Stop();
+            Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
         }
 
         private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> attributeList)
