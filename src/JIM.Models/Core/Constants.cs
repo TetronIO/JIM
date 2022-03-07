@@ -87,7 +87,7 @@
             public static string StreetAddress => "StreetAddress";
             public static string Team => "Team";
             public static string TelephoneNumber => "Telephone Number";
-            public static string Urls => "urls";
+            public static string Urls => "Urls";
             public static string UserAccountControl => "User Account Control";
             public static string UserCertificates => "User Certificates";
             public static string UserPrincipalName => "User Principal Name";
