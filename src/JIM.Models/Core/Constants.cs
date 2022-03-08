@@ -114,5 +114,21 @@
         {
             public static string Administrators => "Administrators";
         }
+
+        public static class BuiltInExampleDataSets
+        {
+            public static string Companies => "Companies";
+            public static string Departments => "Departments";
+            public static string Teams => "Teams";
+            public static string JobTitles => "Job Titles";
+            public static string FirstnamesMale => "Firstnames Male";
+            public static string FirstnamesFemale => "Firstnames Female";
+            public static string Lastnames => "Lastnames";
+        }
+
+        public static class BuiltInDataGenerationTemplates
+        {
+            public static string UsersEn => "Users En";
+        }
     }
 }

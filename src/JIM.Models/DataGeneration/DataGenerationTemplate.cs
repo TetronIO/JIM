@@ -1,5 +1,8 @@
-﻿namespace JIM.Models.DataGeneration
+﻿using Microsoft.EntityFrameworkCore;
+
+namespace JIM.Models.DataGeneration
 {
+    [Index(nameof(Name))]
     public class DataGenerationTemplate
     {
         public int Id { get; set; }

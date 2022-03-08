@@ -38,21 +38,21 @@ namespace JIM.Models.DataGeneration
         public string? Pattern { get; set; }
 
         /// <summary>
-        /// The id for the example data set to use to populate the object value.
+        /// The example data sets to use to populate the object value.
+        /// Multiple can be supplied and an even distribution will be used from both sets, i.e. male/female firstname data sets.
         /// Shouldn't be supplied if you're using a pattern.
         /// </summary>
-        public int? ExampleDataSetId { get; set; }
+        public List<ExampleDataSet> ExampleDataSets { get; set; }
 
-        /// <summary>
-        /// The id for the example data value to use to populate the object value.
-        /// Shouldn't be supplied if you're using a pattern.
-        /// </summary>
-        public int? ExampleDataValueId { get; set; }
+        public DataGenerationTemplateAttribute()
+        {
+            ExampleDataSets = new List<ExampleDataSet>();
+        }
 
         public bool IsValid()
         {
             var usingPattern = !string.IsNullOrEmpty(Pattern);
-            var usingExampleData = ExampleDataSetId != null && ExampleDataValueId != null;
+            var usingExampleData = ExampleDataSets.Count > 0;
 
             // need either a cs or mv attribute reference
             if (ConnectedSystemAttribute == null && MetaverseAttribute == null)

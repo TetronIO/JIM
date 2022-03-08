@@ -12,11 +12,9 @@ namespace JIM.Data.Repositories
 
 
         public Task<List<DataGenerationTemplate>> GetTemplatesAsync();
-
+        public Task<DataGenerationTemplate?> GetTemplateAsync(string name);
         public Task CreateTemplateAsync(DataGenerationTemplate template);
-
         public Task UpdateTemplateAsync(DataGenerationTemplate template);
-
         public Task DeleteTemplateAsync(int templateId);
     }
 }

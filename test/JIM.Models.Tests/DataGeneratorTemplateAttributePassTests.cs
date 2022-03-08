@@ -224,8 +224,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSetId = 2,
-                ExampleDataValueId = 5
+                ExampleDataSets = { new ExampleDataSet() }
             };
             Assert.IsTrue(subject2.IsValid());
         }

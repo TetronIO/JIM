@@ -12,6 +12,7 @@
         /// </summary>
         public string Culture { get; set; }
         public List<ExampleDataSetValue> Values { get; set; }
+        public List<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
 
         public ExampleDataSet()
         {

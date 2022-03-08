@@ -1,5 +1,8 @@
-﻿namespace JIM.Models.Core
+﻿using Microsoft.EntityFrameworkCore;
+
+namespace JIM.Models.Core
 {
+    [Index(nameof(Name))]
     public class MetaverseObjectType
     {
         public int Id { get; set; }

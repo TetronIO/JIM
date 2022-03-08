@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.DataGeneration
+﻿using Microsoft.EntityFrameworkCore;
+
+namespace JIM.Models.DataGeneration
 {
     public class ExampleDataSetValue
     {

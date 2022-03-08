@@ -3,7 +3,6 @@ using JIM.Models.DataGeneration;
 using JIM.Models.Security;
 using Serilog;
 using System.Diagnostics;
-using System.Resources;
 
 namespace JIM.Application.Servers
 {
@@ -31,8 +30,10 @@ namespace JIM.Application.Servers
             var attributesToCreate = new List<MetaverseAttribute>();
             var objectTypesToCreate = new List<MetaverseObjectType>();
             var rolesToCreate = new List<Role>();
-            var exampleDataSets = new List<ExampleDataSet>();
+            var exampleDataSetsToCreate = new List<ExampleDataSet>();
+            var dataGenerationTemplatesToCreate = new List<DataGenerationTemplate>();
 
+            #region MetaverseAttributes
             // generic attributes
             var accountNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountName, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var descriptionAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Description, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
@@ -114,7 +115,9 @@ namespace JIM.Application.Servers
             var groupTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var managedByAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
             var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
+            #endregion
 
+            #region MetaverseObjectTypes
             // prepare the user object type and attribute mappings
             var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User);
             if (userObjectType == null)
@@ -236,7 +239,9 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute7);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute8);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
+            #endregion
 
+            #region Roles
             // create the built-in roles
             var administratorsRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrators);
             if (administratorsRole == null)
@@ -249,44 +254,46 @@ namespace JIM.Application.Servers
                 rolesToCreate.Add(administratorsRole);
                 Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrators}");
             }
+            #endregion
 
-            // create data-generation templates
-            // what needs creating:
-            // - example data sets
-            // - example data set values
-            // - data generation templates
-            // - data generation template attributes
-
-            var companiesEnDataSet = await PrepareExampleDataSetAsync("Companies", "en", Properties.Resources.Companies_en);
+            #region ExampleDataSets
+            var companiesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Companies, "en", Properties.Resources.Companies_en);
             if (companiesEnDataSet != null)
-                exampleDataSets.Add(companiesEnDataSet);
+                exampleDataSetsToCreate.Add(companiesEnDataSet);
 
-            var departmentsEnDataSet = await PrepareExampleDataSetAsync("Departments", "en", Properties.Resources.Departments_en);
+            var departmentsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Departments, "en", Properties.Resources.Departments_en);
             if (departmentsEnDataSet != null)
-                exampleDataSets.Add(departmentsEnDataSet);
+                exampleDataSetsToCreate.Add(departmentsEnDataSet);
 
-            var teamsEnDataSet = await PrepareExampleDataSetAsync("Teams", "en", Properties.Resources.Teams_en);
+            var teamsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Teams, "en", Properties.Resources.Teams_en);
             if (teamsEnDataSet != null)
-                exampleDataSets.Add(teamsEnDataSet);
+                exampleDataSetsToCreate.Add(teamsEnDataSet);
 
-            var jobTitlesEnDataSet = await PrepareExampleDataSetAsync("Job Titles", "en", Properties.Resources.JobTitles_en);
+            var jobTitlesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.JobTitles, "en", Properties.Resources.JobTitles_en);
             if (jobTitlesEnDataSet != null)
-                exampleDataSets.Add(jobTitlesEnDataSet);
+                exampleDataSetsToCreate.Add(jobTitlesEnDataSet);
 
-            var firstnamesMaleEnDataSet = await PrepareExampleDataSetAsync("Firstnames Male", "en", Properties.Resources.FirstnamesMale_en);
+            var firstnamesMaleEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.FirstnamesMale, "en", Properties.Resources.FirstnamesMale_en);
             if (firstnamesMaleEnDataSet != null)
-                exampleDataSets.Add(firstnamesMaleEnDataSet);
+                exampleDataSetsToCreate.Add(firstnamesMaleEnDataSet);
 
-            var firstnamesFemaleEnDataSet = await PrepareExampleDataSetAsync("Firstnames Female", "en", Properties.Resources.FirstnamesFemale_en);
+            var firstnamesFemaleEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.FirstnamesFemale, "en", Properties.Resources.FirstnamesFemale_en);
             if (firstnamesFemaleEnDataSet != null)
-                exampleDataSets.Add(firstnamesFemaleEnDataSet);
+                exampleDataSetsToCreate.Add(firstnamesFemaleEnDataSet);
 
-            var lastnamesEnDataSet = await PrepareExampleDataSetAsync("Lastnames", "en", Properties.Resources.Lastnames_en);
+            var lastnamesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Lastnames, "en", Properties.Resources.Lastnames_en);
             if (lastnamesEnDataSet != null)
-                exampleDataSets.Add(lastnamesEnDataSet);
+                exampleDataSetsToCreate.Add(lastnamesEnDataSet);
+            #endregion
+
+            #region DataGenerationTemplates
+            var userDataGenerationTemplate = await PrepareUserDataGenerationTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
+            if (userDataGenerationTemplate != null)
+                dataGenerationTemplatesToCreate.Add(userDataGenerationTemplate);
+            #endregion
 
             // submit all the preparations to the repository for creation
-            await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypesToCreate, rolesToCreate, exampleDataSets);
+            await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypesToCreate, rolesToCreate, exampleDataSetsToCreate, dataGenerationTemplatesToCreate);
             stopwatch.Stop();
             Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
         }
@@ -322,7 +329,7 @@ namespace JIM.Application.Servers
 
         private async Task<ExampleDataSet?> PrepareExampleDataSetAsync(string name, string culture, string resourceValues)
         {
-            var changesRequired = false;
+            var changes = false;
             var exampleDataSet = await Application.Repository.DataGeneration.GetExampleDataSetAsync(name, culture);
             if (exampleDataSet == null)
             {
@@ -332,7 +339,7 @@ namespace JIM.Application.Servers
                     Culture = culture,
                     BuiltIn = true
                 };
-                changesRequired = true;
+                changes = true;
             }
 
             // check if the dataset has all the necesary values
@@ -342,13 +349,136 @@ namespace JIM.Application.Servers
                 if (!exampleDataSet.Values.Any(q => q.StringValue == rawValue))
                 {
                     exampleDataSet.Values.Add(new ExampleDataSetValue { StringValue = rawValue.Trim() });
-                    if (!changesRequired)
-                        changesRequired = true;
+                    if (!changes)
+                        changes = true;
                 }
             }
 
-            if (changesRequired)
+            if (changes)
                 return exampleDataSet;
+            else
+                return null;
+        }
+
+        private async Task<DataGenerationTemplate?> PrepareUserDataGenerationTemplateAsync(MetaverseObjectType userType, MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+        {
+            var changes = false;
+            var dgt = await Application.Repository.DataGeneration.GetTemplateAsync(Constants.BuiltInDataGenerationTemplates.UsersEn);
+            if (dgt == null)
+            {
+                dgt = new DataGenerationTemplate { Name = Constants.BuiltInDataGenerationTemplates.UsersEn };
+                changes = true;
+            }
+
+            // do we have the user data generation object type?
+            var userDataGenerationObjectType = dgt.ObjectTypes.SingleOrDefault(q => q.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User);
+            if (userDataGenerationObjectType == null)
+            {
+                userDataGenerationObjectType = new DataGenerationObjectType
+                {
+                    MetaverseObjectType = userType,
+                    ObjectsToCreate = 10000
+                };
+                dgt.ObjectTypes.Add(userDataGenerationObjectType);
+            }
+
+            // do we have all the attribute definitions?
+            var firstnamesMaleDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.FirstnamesMale);
+            var firstnamesFemaleDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.FirstnamesFemale);
+            var lastnamesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Lastnames);
+            var companiesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Companies);
+            var departmentsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Departments);
+            var teamsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Teams);
+            var jobTitlesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.JobTitles);
+
+            var firstnameAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.FirstName);
+            if (firstnameAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.FirstName),
+                    ExampleDataSets = { firstnamesMaleDataSet, firstnamesFemaleDataSet },
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var lastnameAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.LastName);
+            if (lastnameAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.LastName),
+                    ExampleDataSets = { lastnamesDataSet },
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var displayNameAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName);
+            if (displayNameAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.DisplayName),
+                    PopulatedValuesPercentage = 100,
+                    Pattern = "{FirstName} {LastName}"
+                });
+            }
+
+            var emailAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Email);
+            if (emailAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
+                    PopulatedValuesPercentage = 100,
+                    Pattern = "{FirstName}.{LastName}@demo.tetron.io"
+                });
+            }
+
+            var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeID);
+            if (employeeIdAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeID),
+                    PopulatedValuesPercentage = 100,
+                    MinNumber = 100001,
+                    SequentialNumbers = true
+                });
+            }
+
+            var companyAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Company);
+            if (companyAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Company),
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var departmentAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Department);
+            if (departmentAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Department),
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var teamAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Team);
+            if (teamAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Team),
+                    PopulatedValuesPercentage = 76
+                });
+            }
+
+            if (changes)
+                return dgt;
             else
                 return null;
         }

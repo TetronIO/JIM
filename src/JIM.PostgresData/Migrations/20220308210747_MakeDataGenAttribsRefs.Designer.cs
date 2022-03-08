@@ -3,6 +3,7 @@ using System;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20220308210747_MakeDataGenAttribsRefs")]
+    partial class MakeDataGenAttribsRefs
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,21 +23,6 @@ namespace JIM.PostgresData.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("DataGenerationTemplateAttributeExampleDataSet", b =>
-                {
-                    b.Property<int>("DataGenerationTemplateAttributesId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ExampleDataSetsId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("DataGenerationTemplateAttributesId", "ExampleDataSetsId");
-
-                    b.HasIndex("ExampleDataSetsId");
-
-                    b.ToTable("DataGenerationTemplateAttributeExampleDataSet");
-                });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
                 {
@@ -336,11 +323,16 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("DataGenerationTemplateAttributeId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DataGenerationTemplateAttributeId");
 
                     b.ToTable("ExampleDataSets");
                 });
@@ -899,21 +891,6 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("MetaverseObjectRole");
                 });
 
-            modelBuilder.Entity("DataGenerationTemplateAttributeExampleDataSet", b =>
-                {
-                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", null)
-                        .WithMany()
-                        .HasForeignKey("DataGenerationTemplateAttributesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("JIM.Models.DataGeneration.ExampleDataSet", null)
-                        .WithMany()
-                        .HasForeignKey("ExampleDataSetsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
                 {
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "Type")
@@ -997,6 +974,13 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemAttribute");
 
                     b.Navigation("MetaverseAttribute");
+                });
+
+            modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSet", b =>
+                {
+                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", null)
+                        .WithMany("ExampleDataSets")
+                        .HasForeignKey("DataGenerationTemplateAttributeId");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSetValue", b =>
@@ -1276,6 +1260,11 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplate", b =>
                 {
                     b.Navigation("ObjectTypes");
+                });
+
+            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", b =>
+                {
+                    b.Navigation("ExampleDataSets");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSet", b =>

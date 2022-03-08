@@ -17,6 +17,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.DataGeneration.GetExampleDataSetsAsync();
         }
 
+        public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture)
+        {
+            return await Application.Repository.DataGeneration.GetExampleDataSetAsync(name, culture);
+        }
+
         public async Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet)
         {
             await Application.Repository.DataGeneration.CreateExampleDataSetAsync(exampleDataSet);
