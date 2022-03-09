@@ -62,6 +62,11 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.DataGenerationTemplates.Include(t => t.ObjectTypes).ThenInclude(o => o.TemplateAttributes).SingleOrDefaultAsync(t => t.Name == name);
         }
 
+        public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
+        {
+            return await Repository.Database.DataGenerationTemplates.Include(t => t.ObjectTypes).ThenInclude(o => o.TemplateAttributes).SingleOrDefaultAsync(t => t.Id == id);
+        }
+
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
         {
             Repository.Database.DataGenerationTemplates.Add(template);
