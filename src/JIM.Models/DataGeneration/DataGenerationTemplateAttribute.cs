@@ -113,6 +113,9 @@ namespace JIM.Models.DataGeneration
 
                 if (SequentialNumbers == true && RandomNumbers == true)
                     return false;
+
+                if (SequentialNumbers == true && MaxNumber.HasValue)
+                    return false;
             }
 
             if (attributeDataType == AttributeDataType.DateTime)

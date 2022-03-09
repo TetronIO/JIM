@@ -15,5 +15,20 @@ namespace JIM.Models.DataGeneration
             Created = DateTime.Now;
             ObjectTypes = new List<DataGenerationObjectType>();
         }
+
+        public bool IsValid()
+        {
+            if (string.IsNullOrEmpty(Name))
+                return false;
+
+            if (ObjectTypes == null || ObjectTypes.Count == 0)
+                return false;
+
+            foreach (var type in ObjectTypes)
+                if (type.TemplateAttributes.Any(q => q.IsValid() == false))
+                    return false;
+
+            return true;
+        }
     }
 }
