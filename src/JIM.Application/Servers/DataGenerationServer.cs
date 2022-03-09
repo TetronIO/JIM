@@ -79,8 +79,30 @@ namespace JIM.Application.Servers
             var t = await GetTemplateAsync(templateId);
             if (t == null)
                 throw new ArgumentException("No template found with that id");
+            
+            // object type dependency graph needs considering
+            // for now we should probably just advise people to create template object types in reverse order to how they're referenced
 
-
+            var metaverseObjectsToCreate = new List<MetaverseObject>();
+            foreach (var ot in t.ObjectTypes)
+            {
+                for (var i = 0; i < ot.ObjectsToCreate; i++)
+                {
+                    var mo = new MetaverseObject();
+                    mo.Type = ot.MetaverseObjectType;
+                    
+                    foreach (var ta in ot.TemplateAttributes)
+                    {
+                        // handle each attribute type in dedicated functions
+                        switch (ta.MetaverseAttribute.type)
+                        {
+                                
+                        }
+                    }
+                }
+            }
+            
+            // submit metaverse objects to data layer for creation
         }
         #endregion
     }
