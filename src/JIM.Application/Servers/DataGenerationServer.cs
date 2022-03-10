@@ -1,7 +1,9 @@
-﻿using JIM.Models.Core;
+using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using Serilog;
+using System;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace JIM.Application.Servers
 {
@@ -156,6 +158,7 @@ namespace JIM.Application.Servers
             {
                 // example-data based:
                 // if there are multiple data set references, use an equal amount from them over the entire object range
+                // todo: this branch!
             } 
             else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
             {
@@ -165,7 +168,7 @@ namespace JIM.Application.Servers
                 // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
                 // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
                 output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                output = ReplaceSystemVariables(metaverseObjects, metaverseObject, output);
+                output = ReplaceSystemVariables(metaverseObjects, metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output);
             }
 
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -308,32 +311,32 @@ namespace JIM.Application.Servers
             // match attribute variables
             // enumerate, find their value and replace
             var regex = new Regex("({.*?})", RegexOptions.Compiled);
-            foreach (var attributeVar in regex.Matches())
+            foreach (Match match in regex.Matches(textToProcess))
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
-                var attributeName = attributeVar.SubString(1, attributeVar.Length -1);
+                var attributeName = match.Value.Substring(1, match.Value.Length -1);
                 
                 // find the attribute value on the Metaverse Object:
                 var attribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Name == attributeName);
                 if (attribute == null)
                     throw new InvalidDataException($"AttributeValue not found for Attribute:  {attributeName}. Check your pattern. Check that you have added the DataGenerationTemplateAttribute before the pattern is defined.");
                 
-                textToProcess = textToProcess.Replace(attributeVar, attribute.StringValue);
+                textToProcess = textToProcess.Replace(match.Value, attribute.StringValue);
             }
-            
-            return textToProcess
+
+            return textToProcess;
         }
         
-        private static string ReplaceSystemVariables(List<MetaverseObject> metaverseObjects, MetaverseAttribute metaverseAttribute, string textToProcess)
+        private static string ReplaceSystemVariables(List<MetaverseObject> metaverseObjects, MetaverseObject metaverseObject, MetaverseAttribute metaverseAttribute, string textToProcess)
         {
             // match system variables
             // enumerate, process
-            var regex = new Regex("(\[.*?\])", RegexOptions.Compiled);
-            var systemVars = regex.Matches();            
-            foreach (var systemVar in systemVars)
+            var regex = new Regex(@"(\[.*?\])", RegexOptions.Compiled);
+            var systemVars = regex.Matches(textToProcess);            
+            foreach (Match match in systemVars)
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
-                var variableName = systemVar.SubString(1, attributeVar.Length -1);
+                var variableName = match.Value.Substring(1, match.Value.Length -1);
                 
                 // keeping these as strings for now. They will need evolving into part of the Functions feature at some point
                 if (variableName == "UniqueInt")
@@ -343,25 +346,27 @@ namespace JIM.Application.Servers
                     // if not, add a uniqueness in in place of the system variable
                     
                     var alreadyAssignedStringValues = metaverseObjects.Where(mo => mo.Type == metaverseObject.Type).
-                        SelectMany(q => q.AttributeValues.Where(av => av.Attribute == metaverseAttribute)).
-                            SelectMany(q => q.StringValue);
+                        SelectMany(mo => mo.AttributeValues.Where(av => av.Attribute == metaverseAttribute && av.StringValue.HasValue)).
+                            SelectMany(av => av.StringValue.Value);
                     
-                    var textWithoutSystemVar = textToReplace(attributeVar, string.Empty);
-                    if (alreadyAssignedStringValues.Contains(q => q == textWithoutSystemVar))
+                    var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
+                    if (alreadyAssignedStringValues.Any(q => q == textWithoutSystemVar))
                     {
                         // this value has already been generated. it needs making unique with a unique int in place of the system var
                         // work out what the current highest value unique int is and replace it with one higher
                         // ??? 
+                        // don't think we can do it by inspecting the generated string values.
+                        // think we need to keep a separate track of generated values and the highest number assigned and reference that
                     }
                     else
                     {
                         // this value is unique among metaverse objects of the same type
-                        textToReplace = textWithoutSystemVar;
+                        textToProcess = textWithoutSystemVar;
                     }
                 }
             }
             
-            return textToReplace;
+            return textToProcess;
         }
         #endregion
     }
