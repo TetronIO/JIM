@@ -109,7 +109,7 @@ namespace JIM.Application.Servers
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.String:
-                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute);
+                                    GenerateMetaverseStringValue(metaverseObjectsToCreate, metaverseObject, templateAttribute);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
@@ -146,20 +146,32 @@ namespace JIM.Application.Servers
             Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
         }
 
-        private static void GenerateMetaverseStringValue(MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute)
+        private static void GenerateMetaverseStringValue(List<MetaverseObject> metaverseObjects, MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute)
         {
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
+            string output;
             if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 0)
             {
-                // example-data based
-                // if there are multiple 
+                // example-data based:
+                // if there are multiple data set references, use an equal amount from them over the entire object range
             } 
-            else
+            else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
             {
-                // pattern generation
+                // pattern generation:
+                // parse out the attribute variables {var} and system variables [var]
+                // use regex to do this. keep it simple for now, just replace what you find
+                // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
+                // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
+                var attributeInsertedString = ReplaceAttributeVariables(dataGenerationTemplateAttribute.Pattern);
             }
+
+            metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+                StringValue = output
+            });
         }
 
         private static void GenerateMetaverseGuidValue(MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute)
@@ -286,6 +298,13 @@ namespace JIM.Application.Servers
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
                 BoolValue = value
             });
+        }
+        #endregion
+
+        #region String Generation
+        private static string ReplaceAttributeVariables(string textToProcess)
+        {
+
         }
         #endregion
     }
