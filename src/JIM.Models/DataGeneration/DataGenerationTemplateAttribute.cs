@@ -33,7 +33,7 @@ namespace JIM.Models.DataGeneration
 
         /// <summary>
         /// Use a variable replacement approach to constructing string values, i.e.
-        /// "{Firstname}.{Lastname}[uniqueid]@contoso.com" to construct an email address.
+        /// "{Firstname}.{Lastname}[UniqueInt]@contoso.com" to construct an email address.
         /// </summary>
         public string? Pattern { get; set; }
 
