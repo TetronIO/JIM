@@ -1,7 +1,6 @@
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using Serilog;
-using System;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -82,8 +81,8 @@ namespace JIM.Application.Servers
             // submit in bulk to data layer << probably fine up to a point, then EF might blow a gasket
 
             var totalTimeStopwatch = new Stopwatch();
-            totalTimeStopwatch.Start();
             var objectPreparationStopwatch = new Stopwatch();
+            totalTimeStopwatch.Start();
             objectPreparationStopwatch.Start();
             var totalObjectsCreated = 0;
             var t = await GetTemplateAsync(templateId);
@@ -98,6 +97,8 @@ namespace JIM.Application.Servers
 
             var random = new Random();
             var metaverseObjectsToCreate = new List<MetaverseObject>();
+            var dataGenerationValueTrackers = new List<DataGenerationValueTracker>();
+
             foreach (var objectType in t.ObjectTypes)
             {
                 for (var i = 0; i < objectType.ObjectsToCreate; i++)
@@ -111,13 +112,13 @@ namespace JIM.Application.Servers
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.String:
-                                    GenerateMetaverseStringValue(metaverseObjectsToCreate, metaverseObject, templateAttribute);
+                                    GenerateMetaverseStringValue(metaverseObjectsToCreate, metaverseObject, templateAttribute, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
                                     break;
                                 case AttributeDataType.Number:
-                                    GenerateMetaverseNumberValue(metaverseObjectsToCreate, metaverseObject, templateAttribute, random);
+                                    GenerateMetaverseNumberValue(metaverseObjectsToCreate, metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.DateTime:
                                     GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
@@ -135,20 +136,23 @@ namespace JIM.Application.Servers
                     totalObjectsCreated++;
                 }
             }
-
             objectPreparationStopwatch.Stop();
 
+            // submit metaverse objects to data layer for creation
             var persistenceStopwatch = new Stopwatch();
             persistenceStopwatch.Start();
-
-            // submit metaverse objects to data layer for creation
+            // todo: persist!
             persistenceStopwatch.Stop();
 
             totalTimeStopwatch.Stop();
             Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
         }
 
-        private static void GenerateMetaverseStringValue(List<MetaverseObject> metaverseObjects, MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute)
+        private static void GenerateMetaverseStringValue(
+            List<MetaverseObject> metaverseObjects, 
+            MetaverseObject metaverseObject, 
+            DataGenerationTemplateAttribute dataGenerationTemplateAttribute, 
+            List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
@@ -168,7 +172,7 @@ namespace JIM.Application.Servers
                 // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
                 // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
                 output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                output = ReplaceSystemVariables(metaverseObjects, metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output);
+                output = ReplaceSystemVariables(metaverseObjects, metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output, dataGenerationValueTrackers);
             }
 
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -190,7 +194,12 @@ namespace JIM.Application.Servers
             });
         }
 
-        private static void GenerateMetaverseNumberValue(List<MetaverseObject> metaverseObjects, MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute, Random random)
+        private static void GenerateMetaverseNumberValue(
+            List<MetaverseObject> metaverseObjects, 
+            MetaverseObject metaverseObject, 
+            DataGenerationTemplateAttribute dataGenerationTemplateAttribute, 
+            Random random,
+            List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
@@ -327,7 +336,12 @@ namespace JIM.Application.Servers
             return textToProcess;
         }
         
-        private static string ReplaceSystemVariables(List<MetaverseObject> metaverseObjects, MetaverseObject metaverseObject, MetaverseAttribute metaverseAttribute, string textToProcess)
+        private static string ReplaceSystemVariables(
+            List<MetaverseObject> metaverseObjects, 
+            MetaverseObject metaverseObject, 
+            MetaverseAttribute metaverseAttribute, 
+            string textToProcess,
+            List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
             // match system variables
             // enumerate, process
@@ -336,7 +350,7 @@ namespace JIM.Application.Servers
             foreach (Match match in systemVars)
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
-                var variableName = match.Value.Substring(1, match.Value.Length -1);
+                var variableName = match.Value[1..^1];
                 
                 // keeping these as strings for now. They will need evolving into part of the Functions feature at some point
                 if (variableName == "UniqueInt")
@@ -345,23 +359,25 @@ namespace JIM.Application.Servers
                     // if so, replace the system variable with an empty string
                     // if not, add a uniqueness in in place of the system variable
                     
-                    var alreadyAssignedStringValues = metaverseObjects.Where(mo => mo.Type == metaverseObject.Type).
-                        SelectMany(mo => mo.AttributeValues.Where(av => av.Attribute == metaverseAttribute && av.StringValue.HasValue)).
-                            SelectMany(av => av.StringValue.Value);
-                    
+                    // get the text value without any unique int added, i.e. "joe.bloggs@demo.tetron.io"
                     var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
-                    if (alreadyAssignedStringValues.Any(q => q == textWithoutSystemVar))
+
+                    // have we already generated this value, and therefore need to add a unique int to it?
+                    var uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
+                    if (uniqueIntTracker == null)
                     {
-                        // this value has already been generated. it needs making unique with a unique int in place of the system var
-                        // work out what the current highest value unique int is and replace it with one higher
-                        // ??? 
-                        // don't think we can do it by inspecting the generated string values.
-                        // think we need to keep a separate track of generated values and the highest number assigned and reference that
+                        // this is a unique value, not previously assigned. it does not need a unique int added.
+                        textToProcess = textWithoutSystemVar;
+
+                        // add it to the tracker
+                        dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
                     }
                     else
                     {
-                        // this value is unique among metaverse objects of the same type
-                        textToProcess = textWithoutSystemVar;
+                        // this is not a unique value, we've generated it before. we need a unique int added.
+                        // increase the tracker last int assigned value by one as well for next time we generate the same value again
+                        uniqueIntTracker.LastIntAssigned += 1;
+                        textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
                     }
                 }
             }
