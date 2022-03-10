@@ -346,16 +346,22 @@ namespace JIM.Application.Servers
                         SelectMany(q => q.AttributeValues.Where(av => av.Attribute == metaverseAttribute)).
                             SelectMany(q => q.StringValue);
                     
-                    if (alreadyAssignedStringValues.Contains(q => q == string_without_system_var))
+                    var textWithoutSystemVar = textToReplace(attributeVar, string.Empty);
+                    if (alreadyAssignedStringValues.Contains(q => q == textWithoutSystemVar))
                     {
                         // this value has already been generated. it needs making unique with a unique int in place of the system var
+                        // work out what the current highest value unique int is and replace it with one higher
+                        // ??? 
                     }
                     else
                     {
                         // this value is unique among metaverse objects of the same type
+                        textToReplace = textWithoutSystemVar;
                     }
                 }
             }
+            
+            return textToReplace;
         }
         #endregion
     }
