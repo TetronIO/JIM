@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Staging;
+using Serilog;
 
 namespace JIM.Models.DataGeneration
 {
@@ -56,66 +57,96 @@ namespace JIM.Models.DataGeneration
 
             // need either a cs or mv attribute reference
             if (ConnectedSystemAttribute == null && MetaverseAttribute == null)
+            {
+                Log.Error("DataGenerationTemplateAttribute.IsValid: ConnectedSystemAttribute and MetaverseAttribute are null");
                 return false;
+            }
 
             // needs to be within a 1-100 range
             if (PopulatedValuesPercentage < 1 || PopulatedValuesPercentage > 100)
+            {
+                Log.Error("DataGenerationTemplateAttribute.IsValid: PopulatedValuesPercentage is less than 1 or greater than 100");
                 return false;
+            }
 
             // check for invalid use of type-specific properties
             var attributeDataType = ConnectedSystemAttribute != null ? ConnectedSystemAttribute.Type : MetaverseAttribute.Type;
-            if (attributeDataType != AttributeDataType.Bool)
+            if (attributeDataType != AttributeDataType.Bool && (BoolTrueDistribution != null || BoolShouldBeRandom != null))
             {
-                if (BoolTrueDistribution != null || BoolShouldBeRandom != null)
-                    return false;
+                Log.Error("DataGenerationTemplateAttribute.IsValid: Not Bool and BoolTrueDistribution is not null or BoolShouldBeRandom is not null");
+                return false;
             }
 
-            if (attributeDataType != AttributeDataType.DateTime)
+            if (attributeDataType != AttributeDataType.DateTime && (MinDate != null || MaxDate != null))
             {
-                if (MinDate != null || MaxDate != null)
-                    return false;
+                Log.Error("DataGenerationTemplateAttribute.IsValid: Not DateTime and MinDate is not null or MaxDate is not null");
+                return false;
             }
 
-            if (attributeDataType != AttributeDataType.Number)
+            if (attributeDataType != AttributeDataType.Number && (MinNumber != null || MaxNumber != null || SequentialNumbers != null || RandomNumbers != null))
             {
-                if (MinNumber != null || MaxNumber != null || SequentialNumbers != null || RandomNumbers != null)
-                    return false;
+                Log.Error("DataGenerationTemplateAttribute.IsValid: Not DateTime and MinDate is not null or MaxDate is not null");
+                return false;
             }
 
             if (attributeDataType != AttributeDataType.String)
             {
                 // pattern can only be used with string attributes
                 if (usingPattern)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Not string but using pattern");
                     return false;
+                }
 
                 // Example Data can only be used with string attributes
                 if (usingExampleData)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Not string but using example data");
                     return false;
+                }
             }
-            
+
             if (attributeDataType == AttributeDataType.String)
             {
                 // either example data or a pattern needs to be used to populate string attribute values, and not both
                 if (usingPattern && usingExampleData)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: String but using pattern and example data");
                     return false;
+                }
 
                 if (!usingPattern && !usingExampleData)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: String but not using pattern and not using example data");
                     return false;
+                }
             }
 
             if (attributeDataType == AttributeDataType.Number)
             {
                 if (MaxNumber <= MinNumber)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Number and max number is less than or equal to min number");
                     return false;
+                }
 
                 if (MinNumber >= MaxNumber)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Number and min number is equal or greater than max number");
                     return false;
+                }
 
                 if (SequentialNumbers == true && RandomNumbers == true)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Number and sequential nubmers and random numbers");
                     return false;
+                }
 
                 if (SequentialNumbers == true && MaxNumber.HasValue)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Number and sequantial numbers and max number has value");
                     return false;
+                }
             }
 
             if (attributeDataType == AttributeDataType.DateTime)
@@ -123,10 +154,16 @@ namespace JIM.Models.DataGeneration
                 if (MinDate != null && MaxDate != null)
                 {
                     if (MinDate >= MaxDate)
+                    {
+                        Log.Error("DataGenerationTemplateAttribute.IsValid: DateTime and min date is equal or greater than max date");
                         return false;
+                    }
 
                     if (MaxDate <= MinDate)
+                    {
+                        Log.Error("DataGenerationTemplateAttribute.IsValid: DateTime and max date is less than or equal to min date");
                         return false;
+                    }
                 }
             }
 
