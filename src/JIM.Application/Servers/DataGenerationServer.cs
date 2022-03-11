@@ -112,7 +112,7 @@ namespace JIM.Application.Servers
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.String:
-                                    GenerateMetaverseStringValue(metaverseObjectsToCreate, metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
+                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
@@ -152,7 +152,6 @@ namespace JIM.Application.Servers
         }
 
         private static void GenerateMetaverseStringValue(
-            List<MetaverseObject> metaverseObjects, 
             MetaverseObject metaverseObject, 
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
             Random random,
