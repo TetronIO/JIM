@@ -30,5 +30,11 @@ namespace JIM.Api.Controllers
             _logger.LogTrace($"Someone requested the data generation templates");
             return await _application.DataGeneration.GetTemplatesAsync();
         }
+
+        [HttpPost("/data_generation/templates/{id}/execute")]
+        public async Task ExecuteTemplateAsync(int id)
+        {
+            await _application.DataGeneration.ExecuteTemplateAsync(id);
+        }
     }
 }

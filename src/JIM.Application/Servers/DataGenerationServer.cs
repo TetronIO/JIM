@@ -80,6 +80,7 @@ namespace JIM.Application.Servers
             // build the objects << probably fine up to a point, then it might consume too much ram
             // submit in bulk to data layer << probably fine up to a point, then EF might blow a gasket
 
+            Log.Information($"ExecuteTemplateAsync: Generating data...");
             var totalTimeStopwatch = new Stopwatch();
             var objectPreparationStopwatch = new Stopwatch();
             totalTimeStopwatch.Start();
@@ -140,6 +141,7 @@ namespace JIM.Application.Servers
             // ensure that attribute population percentage values are respected
             // do this by assigning all attributes with values (done), then go and randomly delete the required amount
             RemoveUnecessaryAttributeValues(t, metaverseObjectsToCreate, random);
+            Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count} objects");
             objectPreparationStopwatch.Stop();
 
             // submit metaverse objects to data layer for creation
