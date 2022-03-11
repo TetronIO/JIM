@@ -137,8 +137,9 @@ namespace JIM.Application.Servers
                 }
             }
 
-            // todo: ensure that attribute population percentage values are respected
-
+            // ensure that attribute population percentage values are respected
+            // do this by assigning all attributes with values (done), then go and randomly delete the required amount
+            RemoveUnecessaryAttributeValues(t, metaverseObjectsToCreate, random);
             objectPreparationStopwatch.Stop();
 
             // submit metaverse objects to data layer for creation
@@ -152,7 +153,7 @@ namespace JIM.Application.Servers
         }
 
         private static void GenerateMetaverseStringValue(
-            MetaverseObject metaverseObject, 
+            MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
             Random random,
             List<DataGenerationValueTracker> dataGenerationValueTrackers)
@@ -211,9 +212,9 @@ namespace JIM.Application.Servers
         }
 
         private static void GenerateMetaverseNumberValue(
-            List<MetaverseObject> metaverseObjects, 
-            MetaverseObject metaverseObject, 
-            DataGenerationTemplateAttribute dataGenerationTemplateAttribute, 
+            List<MetaverseObject> metaverseObjects,
+            MetaverseObject metaverseObject,
+            DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
             Random random,
             List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
@@ -239,7 +240,7 @@ namespace JIM.Application.Servers
                 {
                     // min and max values
                     value = random.Next(dataGenerationTemplateAttribute.MinNumber.Value, dataGenerationTemplateAttribute.MaxNumber.Value);
-                } 
+                }
             }
             else
             {
@@ -269,7 +270,7 @@ namespace JIM.Application.Servers
                 IntValue = value
             });
         }
-        
+
         private static void GenerateMetaverseDateTimeValue(MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute, Random random)
         {
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
@@ -305,7 +306,7 @@ namespace JIM.Application.Servers
                 DateTimeValue = date
             });
         }
-        
+
         private static void GenerateMetaverseBooleanValue(MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute, Random random)
         {
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
@@ -314,13 +315,13 @@ namespace JIM.Application.Servers
             bool value;
             //if (dataGenerationTemplateAttribute.BoolTrueDistribution.HasValue)
             //{
-                // a certain number of true values are required over the total number of objects created
-                // todo: this, because, it's tired and I can't work this out atm
+            // a certain number of true values are required over the total number of objects created
+            // todo: this, because, it's tired and I can't work this out atm
             //}
             //else
             //{
-                // bool should be random
-                value = Convert.ToBoolean(random.Next(0, 1));
+            // bool should be random
+            value = Convert.ToBoolean(random.Next(0, 1));
             //}
 
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -328,6 +329,30 @@ namespace JIM.Application.Servers
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
                 BoolValue = value
             });
+        }
+
+        private static void RemoveUnecessaryAttributeValues(DataGenerationTemplate dataGenerationTemplate, List<MetaverseObject> metaverseObjects, Random random)
+        {
+            foreach (var dataGenerationObjectType in dataGenerationTemplate.ObjectTypes)
+            {
+                // find all data generation template attributes that have a population percentage less than 100%
+                // that we need to reduce the number of assignments down for
+
+                var metaverseObjectsOfType = metaverseObjects.Where(m => m.Type == dataGenerationObjectType.MetaverseObjectType).ToList();
+                foreach (var dataGenAttributeToReduce in dataGenerationObjectType.TemplateAttributes.Where(q => q.PopulatedValuesPercentage < 100))
+                {
+                    // determine how many attributes we have
+                    // determine how many we need to eliminate
+                    // randomly clear that many from the metaverse objects
+
+                    var needToRemove = metaverseObjectsOfType.Count / 100 * dataGenAttributeToReduce.PopulatedValuesPercentage;
+                    for (int i = 0; i < needToRemove; i++)
+                    {
+                        var indexToRemove = random.Next(0, metaverseObjectsOfType.Count);
+                        metaverseObjectsOfType[indexToRemove].AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
+                    }
+                }
+            }
         }
         #endregion
 
@@ -340,41 +365,41 @@ namespace JIM.Application.Servers
             foreach (Match match in regex.Matches(textToProcess))
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
-                var attributeName = match.Value.Substring(1, match.Value.Length -1);
-                
+                var attributeName = match.Value.Substring(1, match.Value.Length - 1);
+
                 // find the attribute value on the Metaverse Object:
                 var attribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Name == attributeName);
                 if (attribute == null)
                     throw new InvalidDataException($"AttributeValue not found for Attribute:  {attributeName}. Check your pattern. Check that you have added the DataGenerationTemplateAttribute before the pattern is defined.");
-                
+
                 textToProcess = textToProcess.Replace(match.Value, attribute.StringValue);
             }
 
             return textToProcess;
         }
-        
+
         private static string ReplaceSystemVariables(
-            MetaverseObject metaverseObject, 
-            MetaverseAttribute metaverseAttribute, 
+            MetaverseObject metaverseObject,
+            MetaverseAttribute metaverseAttribute,
             string textToProcess,
             List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
             // match system variables
             // enumerate, process
             var regex = new Regex(@"(\[.*?\])", RegexOptions.Compiled);
-            var systemVars = regex.Matches(textToProcess);            
+            var systemVars = regex.Matches(textToProcess);
             foreach (Match match in systemVars)
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
                 var variableName = match.Value[1..^1];
-                
+
                 // keeping these as strings for now. They will need evolving into part of the Functions feature at some point
                 if (variableName == "UniqueInt")
                 {
                     // is the string value unique amongst all MetaverseObjects of the same type?
                     // if so, replace the system variable with an empty string
                     // if not, add a uniqueness in in place of the system variable
-                    
+
                     // get the text value without any unique int added, i.e. "joe.bloggs@demo.tetron.io"
                     var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
 
@@ -397,7 +422,7 @@ namespace JIM.Application.Servers
                     }
                 }
             }
-            
+
             return textToProcess;
         }
         #endregion
