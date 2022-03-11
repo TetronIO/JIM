@@ -112,7 +112,7 @@ namespace JIM.Application.Servers
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.String:
-                                    GenerateMetaverseStringValue(metaverseObjectsToCreate, metaverseObject, templateAttribute, dataGenerationValueTrackers);
+                                    GenerateMetaverseStringValue(metaverseObjectsToCreate, metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
@@ -136,6 +136,9 @@ namespace JIM.Application.Servers
                     totalObjectsCreated++;
                 }
             }
+
+            // todo: ensure that attribute population percentage values are respected
+
             objectPreparationStopwatch.Stop();
 
             // submit metaverse objects to data layer for creation
@@ -151,19 +154,34 @@ namespace JIM.Application.Servers
         private static void GenerateMetaverseStringValue(
             List<MetaverseObject> metaverseObjects, 
             MetaverseObject metaverseObject, 
-            DataGenerationTemplateAttribute dataGenerationTemplateAttribute, 
+            DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
+            Random random,
             List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
             string output;
-            if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 0)
+            if (dataGenerationTemplateAttribute.ExampleDataSets.Count == 1)
             {
-                // example-data based:
+                // single example-data set based
+                var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[0].Values.Count);
+                output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
+            }
+            if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
+            {
+                // multiple example-data set based:
                 // if there are multiple data set references, use an equal amount from them over the entire object range
-                // todo: this branch!
-            } 
+
+                // options:
+                // up-front gen; generate all values up front from each set by dividing the total object count and attribute assignment percentage by the number of datasets, then randomly assign to objects.
+                // round-robin; use an ordered list, keep track of last assigned and keep loop around the list. then after generation randomise the assignment of values to objects
+                // random; just choose randomly a value from across the datasets. simplest for now
+
+                var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets.Count - 1);
+                var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[dataSetIndex].Values.Count - 1);
+                output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
+            }
             else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
             {
                 // pattern generation:
@@ -172,7 +190,11 @@ namespace JIM.Application.Servers
                 // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
                 // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
                 output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                output = ReplaceSystemVariables(metaverseObjects, metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output, dataGenerationValueTrackers);
+                output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output, dataGenerationValueTrackers);
+            }
+            else
+            {
+                throw new InvalidDataException("DataGenerationTemplateAttribute configuration not as expected");
             }
 
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -201,6 +223,7 @@ namespace JIM.Application.Servers
             Random random,
             List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
+            // todo: make use of data gen value trackers to get next highest value
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
@@ -337,7 +360,6 @@ namespace JIM.Application.Servers
         }
         
         private static string ReplaceSystemVariables(
-            List<MetaverseObject> metaverseObjects, 
             MetaverseObject metaverseObject, 
             MetaverseAttribute metaverseAttribute, 
             string textToProcess,
