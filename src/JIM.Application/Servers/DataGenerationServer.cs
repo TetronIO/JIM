@@ -168,16 +168,11 @@ namespace JIM.Application.Servers
                 var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[0].Values.Count);
                 output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
             }
-            if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
+            else if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
             {
                 // multiple example-data set based:
-                // if there are multiple data set references, use an equal amount from them over the entire object range
-
-                // options:
-                // up-front gen; generate all values up front from each set by dividing the total object count and attribute assignment percentage by the number of datasets, then randomly assign to objects.
-                // round-robin; use an ordered list, keep track of last assigned and keep loop around the list. then after generation randomise the assignment of values to objects
-                // random; just choose randomly a value from across the datasets. simplest for now
-
+                // just choose randomly a value from across the datasets. simplest for now
+                // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"
                 var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets.Count - 1);
                 var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[dataSetIndex].Values.Count - 1);
                 output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
