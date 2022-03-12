@@ -8,7 +8,9 @@ namespace JIM.Application.Servers
 {
     public class DataGenerationServer
     {
+        #region accessors
         private JimApplication Application { get; }
+        #endregion
 
         internal DataGenerationServer(JimApplication application)
         {
@@ -86,7 +88,13 @@ namespace JIM.Application.Servers
             totalTimeStopwatch.Start();
             objectPreparationStopwatch.Start();
             var totalObjectsCreated = 0;
+
+
+            var getTemplateStopwatch = Stopwatch.StartNew();
             var t = await GetTemplateAsync(templateId);
+            getTemplateStopwatch.Stop();
+            Log.Verbose($"ExecuteTemplateAsync: get template took: {getTemplateStopwatch.Elapsed}");
+
             if (t == null)
                 throw new ArgumentException("No template found with that id");
 
@@ -141,7 +149,7 @@ namespace JIM.Application.Servers
             // ensure that attribute population percentage values are respected
             // do this by assigning all attributes with values (done), then go and randomly delete the required amount
             RemoveUnecessaryAttributeValues(t, metaverseObjectsToCreate, random);
-            Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count} objects");
+            Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count.ToString("N0")} objects");
             objectPreparationStopwatch.Stop();
 
             // submit metaverse objects to data layer for creation
@@ -151,7 +159,7 @@ namespace JIM.Application.Servers
             persistenceStopwatch.Stop();
 
             totalTimeStopwatch.Stop();
-            Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
+            Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated.ToString("N0")} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
         }
 
         private static void GenerateMetaverseStringValue(
@@ -175,8 +183,10 @@ namespace JIM.Application.Servers
                 // multiple example-data set based:
                 // just choose randomly a value from across the datasets. simplest for now
                 // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"
-                var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets.Count - 1);
-                var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[dataSetIndex].Values.Count - 1);
+                var dataSetMaxValue = dataGenerationTemplateAttribute.ExampleDataSets.Count - 1;
+                var dataSetIndex = random.Next(0, dataSetMaxValue);
+                var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSets[dataSetIndex].Values.Count - 1;
+                var valueIndex = random.Next(0, valueIndexMaxValue);
                 output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
             }
             else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
@@ -335,6 +345,7 @@ namespace JIM.Application.Servers
 
         private static void RemoveUnecessaryAttributeValues(DataGenerationTemplate dataGenerationTemplate, List<MetaverseObject> metaverseObjects, Random random)
         {
+            var stopwatch = Stopwatch.StartNew();
             foreach (var dataGenerationObjectType in dataGenerationTemplate.ObjectTypes)
             {
                 // find all data generation template attributes that have a population percentage less than 100%
@@ -355,6 +366,8 @@ namespace JIM.Application.Servers
                     }
                 }
             }
+            stopwatch.Stop();
+            Log.Verbose($"RemoveUnecessaryAttributeValues: Took {stopwatch.Elapsed} to complete");
         }
         #endregion
 
@@ -367,12 +380,12 @@ namespace JIM.Application.Servers
             foreach (Match match in regex.Matches(textToProcess))
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
-                var attributeName = match.Value.Substring(1, match.Value.Length - 1);
+                var attributeName = match.Value[1..^1];
 
                 // find the attribute value on the Metaverse Object:
                 var attribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Name == attributeName);
                 if (attribute == null)
-                    throw new InvalidDataException($"AttributeValue not found for Attribute:  {attributeName}. Check your pattern. Check that you have added the DataGenerationTemplateAttribute before the pattern is defined.");
+                    throw new InvalidDataException($"AttributeValue not found for Attribute: {attributeName}. Check your pattern. Check that you have added the DataGenerationTemplateAttribute before the pattern is defined.");
 
                 textToProcess = textToProcess.Replace(match.Value, attribute.StringValue);
             }

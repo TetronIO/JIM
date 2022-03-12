@@ -66,6 +66,7 @@ namespace JIM.PostgresData.Repositories
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSets).
+                ThenInclude(eds => eds.Values).
                 OrderBy(t => t.Name).ToListAsync();
         }
 
@@ -76,13 +77,14 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ot => ot.MetaverseObjectType).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.MetaverseAttribute). 
+                ThenInclude(ta => ta.MetaverseAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ConnectedSystemAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSets).
+                ThenInclude(eds => eds.Values).
                 SingleOrDefaultAsync(t => t.Name == name);
         }
 
@@ -99,7 +101,8 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ConnectedSystemAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.ExampleDataSets).                
+                ThenInclude(ta => ta.ExampleDataSets).
+                ThenInclude(eds => eds.Values).
                 SingleOrDefaultAsync(t => t.Id == id);
         }
 

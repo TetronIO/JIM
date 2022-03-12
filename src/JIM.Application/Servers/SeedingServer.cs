@@ -420,7 +420,7 @@ namespace JIM.Application.Servers
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.DisplayName),
                     PopulatedValuesPercentage = 100,
-                    Pattern = "{FirstName} {LastName}"
+                    Pattern = "{First Name} {Last Name}"
                 });
             }
 
@@ -431,21 +431,22 @@ namespace JIM.Application.Servers
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
                     PopulatedValuesPercentage = 100,
-                    Pattern = "{FirstName}.{LastName}@demo.tetron.io"
+                    Pattern = "{First Name}.{Last Name}@demo.tetron.io"
                 });
             }
 
-            var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeID);
-            if (employeeIdAttribute == null)
-            {
-                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
-                {
-                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeID),
-                    PopulatedValuesPercentage = 100,
-                    MinNumber = 100001,
-                    SequentialNumbers = true
-                });
-            }
+            // todo: need to refactor data gen so you can assign ints to string attributes
+            //var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeID);
+            //if (employeeIdAttribute == null)
+            //{
+            //    userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            //    {
+            //        MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeID),
+            //        PopulatedValuesPercentage = 100,
+            //        MinNumber = 100001,
+            //        SequentialNumbers = true
+            //    });
+            //}
 
             var companyAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Company);
             if (companyAttribute == null)
