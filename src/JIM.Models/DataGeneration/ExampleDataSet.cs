@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.DataGeneration
+﻿using System.Text.Json.Serialization;
+
+namespace JIM.Models.DataGeneration
 {
     public class ExampleDataSet
     {
@@ -12,6 +14,8 @@
         /// </summary>
         public string Culture { get; set; }
         public List<ExampleDataSetValue> Values { get; set; }
+
+        [JsonIgnore]
         public List<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
 
         public ExampleDataSet()

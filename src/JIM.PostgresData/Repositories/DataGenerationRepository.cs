@@ -54,17 +54,53 @@ namespace JIM.PostgresData.Repositories
         #region DataGenerationTemplates
         public async Task<List<DataGenerationTemplate>> GetTemplatesAsync()
         {
-            return await Repository.Database.DataGenerationTemplates.Include(q => q.ObjectTypes).ThenInclude(o => o.TemplateAttributes).OrderBy(q => q.Name).ToListAsync();
+            return await Repository.Database.DataGenerationTemplates.
+                Include(t => t.ObjectTypes).
+                ThenInclude(ot => ot.MetaverseObjectType).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.MetaverseAttribute).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.ConnectedSystemAttribute).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.ExampleDataSets).
+                OrderBy(t => t.Name).ToListAsync();
         }
 
         public async Task<DataGenerationTemplate?> GetTemplateAsync(string name)
         {
-            return await Repository.Database.DataGenerationTemplates.Include(t => t.ObjectTypes).ThenInclude(o => o.TemplateAttributes).SingleOrDefaultAsync(t => t.Name == name);
+            return await Repository.Database.DataGenerationTemplates.
+                Include(t => t.ObjectTypes).
+                ThenInclude(ot => ot.MetaverseObjectType).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.MetaverseAttribute). 
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.ConnectedSystemAttribute).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.ExampleDataSets).
+                SingleOrDefaultAsync(t => t.Name == name);
         }
 
         public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
         {
-            return await Repository.Database.DataGenerationTemplates.Include(t => t.ObjectTypes).ThenInclude(o => o.TemplateAttributes).SingleOrDefaultAsync(t => t.Id == id);
+            return await Repository.Database.DataGenerationTemplates.
+                Include(t => t.ObjectTypes).
+                ThenInclude(ot => ot.MetaverseObjectType).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.MetaverseAttribute).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.ConnectedSystemAttribute).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.ExampleDataSets).                
+                SingleOrDefaultAsync(t => t.Id == id);
         }
 
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
