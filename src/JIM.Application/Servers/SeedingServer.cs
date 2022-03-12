@@ -473,6 +473,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Team),
+                    ExampleDataSets = { teamsDataSet },
                     PopulatedValuesPercentage = 76
                 });
             }
