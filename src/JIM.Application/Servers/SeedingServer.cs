@@ -453,6 +453,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Company),
+                    ExampleDataSets = { companiesDataSet },
                     PopulatedValuesPercentage = 100
                 });
             }
@@ -463,6 +464,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Department),
+                    ExampleDataSets = { departmentsDataSet },
                     PopulatedValuesPercentage = 100
                 });
             }
