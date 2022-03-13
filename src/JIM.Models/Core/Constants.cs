@@ -50,6 +50,8 @@
             public static string Company => "Company";
             public static string Country => "Country";
             public static string CountryCode => "Country Code";
+            public static string StartDate => "Start Date";
+            public static string EndDate => "End Date";
             public static string Department => "Department";
             public static string Description => "Description";
             public static string DistinguishedName => "Distinguished Name";

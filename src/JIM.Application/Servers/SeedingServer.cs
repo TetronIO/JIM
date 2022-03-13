@@ -60,6 +60,8 @@ namespace JIM.Application.Servers
             var mailNicknameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MailNickname, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var objectGuidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectGUID, AttributePlurality.SingleValued, AttributeDataType.Guid, attributesToCreate);
             var objectSidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
+            var startDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
+            var endDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
 
             // user-specific attributes
             var accountExpiresAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountExpires, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
@@ -199,6 +201,8 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(userObjectType, userPrincipalNameAttribute);
             AddAttributeToObjectType(userObjectType, userSharedFolderAttribute);
             AddAttributeToObjectType(userObjectType, webPageAttribute);
+            AddAttributeToObjectType(userObjectType, startDateAttribute);
+            AddAttributeToObjectType(userObjectType, endDateAttribute);
 
             // create the group object type and attribute mappings
             var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group);
@@ -478,6 +482,51 @@ namespace JIM.Application.Servers
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Team),
                     ExampleDataSets = { teamsDataSet },
                     PopulatedValuesPercentage = 76
+                });
+            }
+
+            var jobTitleAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.JobTitle);
+            if (jobTitleAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.JobTitle),
+                    ExampleDataSets = { jobTitlesDataSet },
+                    PopulatedValuesPercentage = 90
+                });
+            }
+
+            var startDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.StartDate);
+            if (startDateAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.StartDate),
+                    MinDate = DateTime.Now.AddYears(-20),
+                    MaxDate = DateTime.Now.AddMonths(3),
+                    PopulatedValuesPercentage = 75
+                });
+            }
+
+            var endDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EndDate);
+            if (endDateAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EndDate),
+                    MinDate = DateTime.Now.AddMonths(-11),
+                    MaxDate = DateTime.Now.AddYears(1),
+                    PopulatedValuesPercentage = 10
+                });
+            }
+
+            var objectGuidAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ObjectGUID);
+            if (objectGuidAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ObjectGUID),
+                    PopulatedValuesPercentage = 100
                 });
             }
 
