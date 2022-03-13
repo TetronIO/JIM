@@ -436,7 +436,9 @@ namespace JIM.Application.Servers
                     {
                         // this is not a unique value, we've generated it before. we need a unique int added.
                         // increase the tracker last int assigned value by one as well for next time we generate the same value again
-                        uniqueIntTracker.LastIntAssigned += 1;
+                        lock (uniqueIntTracker)
+                            uniqueIntTracker.LastIntAssigned += 1;
+
                         textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
                     }
                 }
