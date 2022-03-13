@@ -1,4 +1,5 @@
 ﻿using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -140,5 +141,15 @@ namespace JIM.PostgresData.Repositories
         }
         #endregion
 
+        public async Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects)
+        {
+            Log.Verbose("CreateMetaverseObjectsAsync: Starting to persist MetaverseObjects...");
+            if (metsaverseObjects == null || metsaverseObjects.Count == 0)
+                throw new ArgumentNullException(nameof(metsaverseObjects));
+
+            Repository.Database.MetaverseObjects.AddRange(metsaverseObjects);
+            await Repository.Database.SaveChangesAsync();
+            Log.Verbose("CreateMetaverseObjectsAsync: Done");
+        }
     }
 }

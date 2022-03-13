@@ -88,8 +88,6 @@ namespace JIM.Application.Servers
             totalTimeStopwatch.Start();
             objectPreparationStopwatch.Start();
             var totalObjectsCreated = 0;
-
-
             var getTemplateStopwatch = Stopwatch.StartNew();
             var t = await GetTemplateAsync(templateId);
             getTemplateStopwatch.Stop();
@@ -108,6 +106,7 @@ namespace JIM.Application.Servers
             var metaverseObjectsToCreate = new List<MetaverseObject>();
             var dataGenerationValueTrackers = new List<DataGenerationValueTracker>();
 
+            // TODO: investigate potential use of parallelisation
             foreach (var objectType in t.ObjectTypes)
             {
                 for (var i = 0; i < objectType.ObjectsToCreate; i++)
@@ -155,7 +154,7 @@ namespace JIM.Application.Servers
             // submit metaverse objects to data layer for creation
             var persistenceStopwatch = new Stopwatch();
             persistenceStopwatch.Start();
-            // todo: persist!
+            await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate);
             persistenceStopwatch.Stop();
 
             totalTimeStopwatch.Stop();

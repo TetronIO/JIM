@@ -1,4 +1,5 @@
-﻿using JIM.Models.DataGeneration;
+﻿using JIM.Models.Core;
+using JIM.Models.DataGeneration;
 
 namespace JIM.Data.Repositories
 {
@@ -17,5 +18,8 @@ namespace JIM.Data.Repositories
         public Task CreateTemplateAsync(DataGenerationTemplate template);
         public Task UpdateTemplateAsync(DataGenerationTemplate template);
         public Task DeleteTemplateAsync(int templateId);
+
+
+        public Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects);
     }
 }
