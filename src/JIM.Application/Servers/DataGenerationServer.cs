@@ -106,7 +106,6 @@ namespace JIM.Application.Servers
             var metaverseObjectsToCreate = new List<MetaverseObject>();
             var dataGenerationValueTrackers = new List<DataGenerationValueTracker>();
 
-            // TODO: investigate potential use of parallelisation
             foreach (var objectType in t.ObjectTypes)
             {
                 Parallel.For(0, objectType.ObjectsToCreate,
@@ -159,7 +158,6 @@ namespace JIM.Application.Servers
             persistenceStopwatch.Start();
             await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate);
             persistenceStopwatch.Stop();
-
             totalTimeStopwatch.Stop();
             Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated.ToString("N0")} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
         }
@@ -421,14 +419,18 @@ namespace JIM.Application.Servers
                     var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
 
                     // have we already generated this value, and therefore need to add a unique int to it?
-                    var uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
+                    DataGenerationValueTracker? uniqueIntTracker = null;
+                    lock (dataGenerationValueTrackers)
+                        uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
+
                     if (uniqueIntTracker == null)
                     {
                         // this is a unique value, not previously assigned. it does not need a unique int added.
                         textToProcess = textWithoutSystemVar;
 
                         // add it to the tracker
-                        dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
+                        lock (dataGenerationValueTrackers)
+                            dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
                     }
                     else
                     {

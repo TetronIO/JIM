@@ -435,7 +435,7 @@ namespace JIM.Application.Servers
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
                     PopulatedValuesPercentage = 100,
-                    Pattern = "{First Name}.{Last Name}@demo.tetron.io"
+                    Pattern = "{First Name}.{Last Name}[UniqueInt]@demo.tetron.io"
                 });
             }
 
