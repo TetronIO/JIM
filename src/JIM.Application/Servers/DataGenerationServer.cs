@@ -109,8 +109,9 @@ namespace JIM.Application.Servers
             // TODO: investigate potential use of parallelisation
             foreach (var objectType in t.ObjectTypes)
             {
-                for (var i = 0; i < objectType.ObjectsToCreate; i++)
-                {
+                Parallel.For(0, objectType.ObjectsToCreate,
+                index => {
+
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
                     foreach (var templateAttribute in objectType.TemplateAttributes)
                     {
@@ -140,9 +141,11 @@ namespace JIM.Application.Servers
                         // todo: support Connector Space data generation
                     }
 
-                    metaverseObjectsToCreate.Add(metaverseObject);
-                    totalObjectsCreated++;
-                }
+                    lock (metaverseObjectsToCreate)
+                        metaverseObjectsToCreate.Add(metaverseObject);
+
+                    Interlocked.Add(ref totalObjectsCreated, 1);
+                });
             }
 
             // ensure that attribute population percentage values are respected
