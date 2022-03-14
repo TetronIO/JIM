@@ -439,18 +439,17 @@ namespace JIM.Application.Servers
                 });
             }
 
-            // todo: need to refactor data gen so you can assign ints to string attributes
-            //var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeID);
-            //if (employeeIdAttribute == null)
-            //{
-            //    userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
-            //    {
-            //        MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeID),
-            //        PopulatedValuesPercentage = 100,
-            //        MinNumber = 100001,
-            //        SequentialNumbers = true
-            //    });
-            //}
+            var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeID);
+            if (employeeIdAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeID),
+                    PopulatedValuesPercentage = 100,
+                    MinNumber = 100001,
+                    SequentialNumbers = true
+                });
+            }
 
             var companyAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Company);
             if (companyAttribute == null)

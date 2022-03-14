@@ -50,12 +50,27 @@ namespace JIM.Models.DataGeneration
             ExampleDataSets = new List<ExampleDataSet>();
         }
 
+        public bool IsUsingNumbers()
+        {
+            return (SequentialNumbers.HasValue && SequentialNumbers.Value) || (RandomNumbers.HasValue && RandomNumbers.Value) || MinNumber.HasValue || MaxNumber.HasValue;
+        }
+
+        public bool IsUsingDates()
+        {
+            return MinDate.HasValue || MaxDate.HasValue;
+        }
+
+        public bool IsUsingStrings()
+        {
+            return !string.IsNullOrEmpty(Pattern) || (ExampleDataSets != null && ExampleDataSets.Count > 0);
+        }
+
+
+
         public bool IsValid()
         {
             var usingPattern = !string.IsNullOrEmpty(Pattern);
             var usingExampleData = ExampleDataSets != null && ExampleDataSets.Count > 0;
-            var usingNumbers = (SequentialNumbers.HasValue && SequentialNumbers.Value) || (RandomNumbers.HasValue && RandomNumbers.Value) || MinNumber.HasValue || MaxNumber.HasValue;
-            var usingDates = MinDate.HasValue || MaxDate.HasValue;
 
             // need either a cs or mv attribute reference
             if (ConnectedSystemAttribute == null && MetaverseAttribute == null)
@@ -87,7 +102,7 @@ namespace JIM.Models.DataGeneration
                 return false;
             }
 
-            if (attributeDataType != AttributeDataType.DateTime && usingDates)
+            if (attributeDataType != AttributeDataType.DateTime && IsUsingDates())
             {
                 Log.Error("DataGenerationTemplateAttribute.IsValid: Not DateTime and MinDate is not null or MaxDate is not null");
                 return false;
@@ -119,7 +134,7 @@ namespace JIM.Models.DataGeneration
                     return false;
                 }
 
-                if (!usingPattern && !usingExampleData && !usingNumbers)
+                if (!usingPattern && !usingExampleData && !IsUsingNumbers())
                 {
                     Log.Error("DataGenerationTemplateAttribute.IsValid: String but not using pattern, example data or numbers");
                     return false;
@@ -128,7 +143,7 @@ namespace JIM.Models.DataGeneration
 
             if (attributeDataType == AttributeDataType.Bool)
             {
-                if (usingNumbers)
+                if (IsUsingNumbers())
                 {
                     Log.Error("DataGenerationTemplateAttribute.IsValid: Bool but using number properties. This is not supported");
                     return false;
@@ -147,7 +162,7 @@ namespace JIM.Models.DataGeneration
                 }
             }
 
-            if (usingNumbers)
+            if (IsUsingNumbers())
             {
                 if (MaxNumber <= MinNumber)
                 {
@@ -185,7 +200,7 @@ namespace JIM.Models.DataGeneration
                     }
                 }
 
-                if (usingPattern || usingExampleData || usingNumbers)
+                if (usingPattern || usingExampleData || IsUsingNumbers())
                 {
                     Log.Error("DataGenerationTemplateAttribute.IsValid: DateTime and non-DateTime properties used. This is not supported");
                     return false;

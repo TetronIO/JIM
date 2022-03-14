@@ -126,7 +126,7 @@ namespace JIM.Application.Servers
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
                                     break;
                                 case AttributeDataType.Number:
-                                    GenerateMetaverseNumberValue(metaverseObjectsToCreate, metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
+                                    GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.DateTime:
                                     GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
@@ -171,44 +171,61 @@ namespace JIM.Application.Servers
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-            string output;
-            if (dataGenerationTemplateAttribute.ExampleDataSets.Count == 1)
+            // a string attribute can have a string or number type value assigned
+            if (dataGenerationTemplateAttribute.IsUsingStrings())
             {
-                // single example-data set based
-                var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[0].Values.Count);
-                output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
+                string output;
+                if (dataGenerationTemplateAttribute.ExampleDataSets.Count == 1)
+                {
+                    // single example-data set based
+                    var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[0].Values.Count);
+                    output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
+                }
+                else if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
+                {
+                    // multiple example-data set based:
+                    // just choose randomly a value from across the datasets. simplest for now
+                    // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"
+                    var dataSetMaxValue = dataGenerationTemplateAttribute.ExampleDataSets.Count - 1;
+                    var dataSetIndex = random.Next(0, dataSetMaxValue);
+                    var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSets[dataSetIndex].Values.Count - 1;
+                    var valueIndex = random.Next(0, valueIndexMaxValue);
+                    output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
+                }
+                else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
+                {
+                    // pattern generation:
+                    // parse out the attribute variables {var} and system variables [var]
+                    // use regex to do this. keep it simple for now, just replace what you find
+                    // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
+                    // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
+                    output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
+                    output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output, dataGenerationValueTrackers);
+                }
+                else
+                {
+                    throw new InvalidDataException("DataGenerationTemplateAttribute configuration not as expected");
+                }
+
+                metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+                    StringValue = output
+                });
             }
-            else if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
+            else if (dataGenerationTemplateAttribute.IsUsingNumbers())
             {
-                // multiple example-data set based:
-                // just choose randomly a value from across the datasets. simplest for now
-                // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"
-                var dataSetMaxValue = dataGenerationTemplateAttribute.ExampleDataSets.Count - 1;
-                var dataSetIndex = random.Next(0, dataSetMaxValue);
-                var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSets[dataSetIndex].Values.Count - 1;
-                var valueIndex = random.Next(0, valueIndexMaxValue);
-                output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
-            }
-            else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
-            {
-                // pattern generation:
-                // parse out the attribute variables {var} and system variables [var]
-                // use regex to do this. keep it simple for now, just replace what you find
-                // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
-                // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
-                output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output, dataGenerationValueTrackers);
+                var numberValue = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+                metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+                    StringValue = numberValue.ToString()
+                });
             }
             else
             {
-                throw new InvalidDataException("DataGenerationTemplateAttribute configuration not as expected");
+                throw new ArgumentException("dataGenerationTemplateAttribute isn't using strings or numbers on a string attribute type");
             }
-
-            metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
-            {
-                Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
-                StringValue = output
-            });
         }
 
         private static void GenerateMetaverseGuidValue(MetaverseObject metaverseObject, DataGenerationTemplateAttribute dataGenerationTemplateAttribute)
@@ -224,7 +241,6 @@ namespace JIM.Application.Servers
         }
 
         private static void GenerateMetaverseNumberValue(
-            List<MetaverseObject> metaverseObjects,
             MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
             Random random,
@@ -234,48 +250,7 @@ namespace JIM.Application.Servers
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-            int value = 1;
-            if (dataGenerationTemplateAttribute.RandomNumbers.HasValue && dataGenerationTemplateAttribute.RandomNumbers.Value)
-            {
-                // random numbers
-                if (dataGenerationTemplateAttribute.MinNumber.HasValue && !dataGenerationTemplateAttribute.MaxNumber.HasValue)
-                {
-                    // min value only
-                    value = random.Next(dataGenerationTemplateAttribute.MinNumber.Value, int.MaxValue);
-                }
-                else if (!dataGenerationTemplateAttribute.MinNumber.HasValue && dataGenerationTemplateAttribute.MaxNumber.HasValue)
-                {
-                    // max value only
-                    value = random.Next(dataGenerationTemplateAttribute.MaxNumber.Value);
-                }
-                else if (dataGenerationTemplateAttribute.MinNumber.HasValue && dataGenerationTemplateAttribute.MaxNumber.HasValue)
-                {
-                    // min and max values
-                    value = random.Next(dataGenerationTemplateAttribute.MinNumber.Value, dataGenerationTemplateAttribute.MaxNumber.Value);
-                }
-            }
-            else
-            {
-                // sequential numbers
-                // query last value used for this object type and attribute. totally inefficient, but let's see what the performance is like first
-                var highestCurrentValue = metaverseObjects.Where(mo => mo.Type == metaverseObject.Type).
-                    SelectMany(q => q.AttributeValues.Where(av => av.Attribute == dataGenerationTemplateAttribute.MetaverseAttribute)).
-                        Select(q => q.IntValue).Max();
-
-                if (highestCurrentValue.HasValue)
-                {
-                    // we've already assigned a value, so just add one more to that
-                    value += 1;
-                }
-                else
-                {
-                    // this is the first attribute we need to assign a sequential value too.
-                    // if there's a minimum value we need to start from, use that, otherwise leave it at our starting point of 1.
-                    if (dataGenerationTemplateAttribute.MinNumber.HasValue)
-                        value = dataGenerationTemplateAttribute.MinNumber.Value;
-                }
-            }
-
+            var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -346,6 +321,7 @@ namespace JIM.Application.Servers
         private static void RemoveUnecessaryAttributeValues(DataGenerationTemplate dataGenerationTemplate, List<MetaverseObject> metaverseObjects, Random random)
         {
             var stopwatch = Stopwatch.StartNew();
+            var attributeValuesRemoved = 0;
             foreach (var dataGenerationObjectType in dataGenerationTemplate.ObjectTypes)
             {
                 // find all data generation template attributes that have a population percentage less than 100%
@@ -363,15 +339,16 @@ namespace JIM.Application.Servers
                     {
                         var indexToRemove = random.Next(0, metaverseObjectsOfType.Count);
                         metaverseObjectsOfType[indexToRemove].AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
+                        attributeValuesRemoved++;
                     }
                 }
             }
             stopwatch.Stop();
-            Log.Verbose($"RemoveUnecessaryAttributeValues: Took {stopwatch.Elapsed} to complete");
+            Log.Verbose($"RemoveUnecessaryAttributeValues: Removed {attributeValuesRemoved.ToString("N0")} attribute values. Took {stopwatch.Elapsed} to complete");
         }
         #endregion
 
-        #region String Generation
+        #region Raw Value Generation
         private static string ReplaceAttributeVariables(MetaverseObject metaverseObject, string textToProcess)
         {
             // match attribute variables
@@ -445,6 +422,66 @@ namespace JIM.Application.Servers
             }
 
             return textToProcess;
+        }
+
+        private static int GenerateNumberValue(MetaverseObjectType metaverseObjectType, DataGenerationTemplateAttribute dataGenTemplateAttribute, Random random, List<DataGenerationValueTracker> trackers)
+        {
+            int value = 1;
+            int attributeId;
+            if (dataGenTemplateAttribute.MetaverseAttribute != null)
+                attributeId = dataGenTemplateAttribute.MetaverseAttribute.Id;
+            else
+                throw new InvalidDataException("Only supporting MetaverseObjects for now");
+
+            if (dataGenTemplateAttribute.RandomNumbers.HasValue && dataGenTemplateAttribute.RandomNumbers.Value)
+            {
+                // random numbers
+                if (dataGenTemplateAttribute.MinNumber.HasValue && !dataGenTemplateAttribute.MaxNumber.HasValue)
+                {
+                    // min value only
+                    value = random.Next(dataGenTemplateAttribute.MinNumber.Value, int.MaxValue);
+                }
+                else if (!dataGenTemplateAttribute.MinNumber.HasValue && dataGenTemplateAttribute.MaxNumber.HasValue)
+                {
+                    // max value only
+                    value = random.Next(dataGenTemplateAttribute.MaxNumber.Value);
+                }
+                else if (dataGenTemplateAttribute.MinNumber.HasValue && dataGenTemplateAttribute.MaxNumber.HasValue)
+                {
+                    // min and max values
+                    value = random.Next(dataGenTemplateAttribute.MinNumber.Value, dataGenTemplateAttribute.MaxNumber.Value);
+                }
+            }
+            else
+            {
+                lock (trackers)
+                {
+                    // sequential numbers
+                    // query last value used for this object type and attribute. totally inefficient, but let's see what the performance is like first
+                    var tracker = trackers.SingleOrDefault(t => t.ObjectTypeId == metaverseObjectType.Id && dataGenTemplateAttribute.MetaverseAttribute != null && t.AttributeId == dataGenTemplateAttribute.MetaverseAttribute.Id);
+                    if (tracker != null && tracker.LastIntAssigned.HasValue)
+                    {
+                        // we've assigned a value for this attribute already. increment the value and use it
+                        tracker.LastIntAssigned += 1;
+                        value = tracker.LastIntAssigned.Value;
+                    }
+                    else
+                    {
+                        // we've not assigned a value to this attribute yet
+                        if (dataGenTemplateAttribute.MinNumber.HasValue)
+                            value = dataGenTemplateAttribute.MinNumber.Value;
+
+                        trackers.Add(new DataGenerationValueTracker
+                        {
+                            ObjectTypeId = metaverseObjectType.Id,
+                            AttributeId = attributeId,
+                            LastIntAssigned = value
+                        });
+                    }
+                }
+            }
+
+            return value;
         }
         #endregion
     }
