@@ -65,8 +65,6 @@ namespace JIM.Models.DataGeneration
             return !string.IsNullOrEmpty(Pattern) || (ExampleDataSets != null && ExampleDataSets.Count > 0);
         }
 
-
-
         public bool IsValid()
         {
             var usingPattern = !string.IsNullOrEmpty(Pattern);
