@@ -175,6 +175,14 @@ namespace JIM.Models.Tests
                 RandomNumbers = true
             };
             Assert.IsFalse(subject4.IsValid());
+
+            var subject5 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Bool },
+                PopulatedValuesPercentage = 100,
+                SequentialNumbers = true
+            };
+            Assert.IsFalse(subject5.IsValid());
         }
 
         [Test]
@@ -228,17 +236,9 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
-                RandomNumbers = true
-            };
-            Assert.IsFalse(subject2.IsValid());
-
-            var subject3 = new DataGenerationTemplateAttribute
-            {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
-                PopulatedValuesPercentage = 100,
                 MinDate = DateTime.Now
             };
-            Assert.IsFalse(subject3.IsValid());
+            Assert.IsFalse(subject2.IsValid());
         }
     }
 }

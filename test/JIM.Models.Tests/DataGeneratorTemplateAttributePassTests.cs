@@ -66,8 +66,9 @@ namespace JIM.Models.Tests
         }
 
         [Test]
-        public void TestIsValidNumberTypePass()
+        public void TestIsValidNumberTypeSequentialPass()
         {
+            // numbers can be assigned to attributes of type number AND string
             var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
@@ -114,8 +115,101 @@ namespace JIM.Models.Tests
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true,
-                MinNumber = 1,
-                MaxNumber = 1000
+                MinNumber = 1
+            };
+            Assert.IsTrue(subject6.IsValid());
+        }
+
+        [Test]
+        public void TestIsValidNumberTypeRandomPass()
+        {
+            // numbers can be assigned to attributes of type number AND string
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                PopulatedValuesPercentage = 100,
+                RandomNumbers = true,
+                MinNumber = 1
+            };
+            Assert.IsTrue(subject1.IsValid());
+
+            var subject2 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                PopulatedValuesPercentage = 100,
+                RandomNumbers = true,
+                MaxNumber = 50
+            };
+            Assert.IsTrue(subject2.IsValid());
+
+            var subject3 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                PopulatedValuesPercentage = 100,
+                RandomNumbers = true,
+                MinNumber = 0,
+                MaxNumber = 100
+            };
+            Assert.IsTrue(subject3.IsValid());
+        }
+
+        [Test]
+        public void TestIsValidNumberTypeOnStringPass()
+        {
+            // numbers can be assigned to attributes of type number AND string
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                RandomNumbers = true,
+                MinNumber = 1
+            };
+            Assert.IsTrue(subject1.IsValid());
+
+            var subject2 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                RandomNumbers = true,
+                MaxNumber = 50
+            };
+            Assert.IsTrue(subject2.IsValid());
+
+            var subject3 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                RandomNumbers = true,
+                MinNumber = 0,
+                MaxNumber = 100
+            };
+            Assert.IsTrue(subject3.IsValid());
+
+            var subject4 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                SequentialNumbers = true,
+                MinNumber = 1
+            };
+            Assert.IsTrue(subject4.IsValid());
+
+            var subject5 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                SequentialNumbers = true,
+                MaxNumber = 50
+            };
+            Assert.IsTrue(subject5.IsValid());
+
+            var subject6 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                SequentialNumbers = true,
+                MinNumber = 0,
+                MaxNumber = 100
             };
             Assert.IsTrue(subject6.IsValid());
         }

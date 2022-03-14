@@ -53,7 +53,9 @@ namespace JIM.Models.DataGeneration
         public bool IsValid()
         {
             var usingPattern = !string.IsNullOrEmpty(Pattern);
-            var usingExampleData = ExampleDataSets.Count > 0;
+            var usingExampleData = ExampleDataSets != null && ExampleDataSets.Count > 0;
+            var usingNumbers = (SequentialNumbers.HasValue && SequentialNumbers.Value) || (RandomNumbers.HasValue && RandomNumbers.Value) || MinNumber.HasValue || MaxNumber.HasValue;
+            var usingDates = MinDate.HasValue || MaxDate.HasValue;
 
             // need either a cs or mv attribute reference
             if (ConnectedSystemAttribute == null && MetaverseAttribute == null)
@@ -70,20 +72,22 @@ namespace JIM.Models.DataGeneration
             }
 
             // check for invalid use of type-specific properties
-            var attributeDataType = ConnectedSystemAttribute != null ? ConnectedSystemAttribute.Type : MetaverseAttribute.Type;
+            AttributeDataType attributeDataType;
+            if (ConnectedSystemAttribute != null)
+                attributeDataType = ConnectedSystemAttribute.Type;
+            else if (MetaverseAttribute != null)
+                attributeDataType = MetaverseAttribute.Type;
+            else
+                throw new InvalidDataException("Either a MetaverseAttribute OR a ConnectedSystemAttribute reference is required. None was present.");
+
+
             if (attributeDataType != AttributeDataType.Bool && (BoolTrueDistribution != null || BoolShouldBeRandom != null))
             {
                 Log.Error("DataGenerationTemplateAttribute.IsValid: Not Bool and BoolTrueDistribution is not null or BoolShouldBeRandom is not null");
                 return false;
             }
 
-            if (attributeDataType != AttributeDataType.DateTime && (MinDate != null || MaxDate != null))
-            {
-                Log.Error("DataGenerationTemplateAttribute.IsValid: Not DateTime and MinDate is not null or MaxDate is not null");
-                return false;
-            }
-
-            if (attributeDataType != AttributeDataType.Number && (MinNumber != null || MaxNumber != null || SequentialNumbers != null || RandomNumbers != null))
+            if (attributeDataType != AttributeDataType.DateTime && usingDates)
             {
                 Log.Error("DataGenerationTemplateAttribute.IsValid: Not DateTime and MinDate is not null or MaxDate is not null");
                 return false;
@@ -115,14 +119,35 @@ namespace JIM.Models.DataGeneration
                     return false;
                 }
 
-                if (!usingPattern && !usingExampleData)
+                if (!usingPattern && !usingExampleData && !usingNumbers)
                 {
-                    Log.Error("DataGenerationTemplateAttribute.IsValid: String but not using pattern and not using example data");
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: String but not using pattern, example data or numbers");
                     return false;
                 }
             }
 
-            if (attributeDataType == AttributeDataType.Number)
+            if (attributeDataType == AttributeDataType.Bool)
+            {
+                if (usingNumbers)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Bool but using number properties. This is not supported");
+                    return false;
+                }
+
+                if (usingExampleData)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Bool but using number example data. This is not supported");
+                    return false;
+                }
+
+                if (usingPattern)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: Bool but using a pattern. This is not supported");
+                    return false;
+                }
+            }
+
+            if (usingNumbers)
             {
                 if (MaxNumber <= MinNumber)
                 {
@@ -139,12 +164,6 @@ namespace JIM.Models.DataGeneration
                 if (SequentialNumbers == true && RandomNumbers == true)
                 {
                     Log.Error("DataGenerationTemplateAttribute.IsValid: Number and sequential nubmers and random numbers");
-                    return false;
-                }
-
-                if (SequentialNumbers == true && MaxNumber.HasValue)
-                {
-                    Log.Error("DataGenerationTemplateAttribute.IsValid: Number and sequantial numbers and max number has value");
                     return false;
                 }
             }
@@ -164,6 +183,12 @@ namespace JIM.Models.DataGeneration
                         Log.Error("DataGenerationTemplateAttribute.IsValid: DateTime and max date is less than or equal to min date");
                         return false;
                     }
+                }
+
+                if (usingPattern || usingExampleData || usingNumbers)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: DateTime and non-DateTime properties used. This is not supported");
+                    return false;
                 }
             }
 
