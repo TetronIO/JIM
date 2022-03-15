@@ -6,6 +6,7 @@ namespace JIM.Models.DataGeneration
 {
     public class DataGenerationTemplateAttribute
     {
+        #region accessors
         public int Id { get; set; }
         public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }
         public MetaverseAttribute? MetaverseAttribute { get; set; }
@@ -44,12 +45,16 @@ namespace JIM.Models.DataGeneration
         /// Shouldn't be supplied if you're using a pattern.
         /// </summary>
         public List<ExampleDataSet> ExampleDataSets { get; set; }
+        #endregion
 
+        #region constructors
         public DataGenerationTemplateAttribute()
         {
             ExampleDataSets = new List<ExampleDataSet>();
         }
+        #endregion
 
+        #region public methods
         public bool IsUsingNumbers()
         {
             return (SequentialNumbers.HasValue && SequentialNumbers.Value) || (RandomNumbers.HasValue && RandomNumbers.Value) || MinNumber.HasValue || MaxNumber.HasValue;
@@ -207,5 +212,6 @@ namespace JIM.Models.DataGeneration
 
             return true;
         }
+        #endregion
     }
 }
