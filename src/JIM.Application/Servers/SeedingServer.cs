@@ -529,6 +529,16 @@ namespace JIM.Application.Servers
                 });
             }
 
+            var managerAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
+            if (managerAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Manager),
+                    ManagerDepthPercentage = 75
+                });
+            }
+
             if (changes)
                 return dgt;
             else

@@ -13,8 +13,9 @@ namespace JIM.Models.DataGeneration
 
         /// <summary>
         /// How many values should be generated? 100% would mean every object has a value for this attribute.
+        /// Not compatible with ManagerDepthPercentage.
         /// </summary>
-        public int PopulatedValuesPercentage { get; set; }
+        public int? PopulatedValuesPercentage { get; set; }
 
         /// <summary>
         /// Percentage of how many boolean values should be true
@@ -45,6 +46,13 @@ namespace JIM.Models.DataGeneration
         /// Shouldn't be supplied if you're using a pattern.
         /// </summary>
         public List<ExampleDataSet> ExampleDataSets { get; set; }
+
+        /// <summary>
+        /// If you want Manager attributes to be assigned, specify how far into the organisational hierarchy managers should be present.
+        /// i.e. if you want a heavy labour force, then you might specify 50%. If you want a heavily organised hierarchy then you might specify 95%.
+        /// Leave as null if you don't want to assign Manager attribute values.
+        /// </summary>
+        public int? ManagerDepthPercentage { get; set; }
         #endregion
 
         #region constructors
@@ -128,6 +136,12 @@ namespace JIM.Models.DataGeneration
                 }
             }
 
+            if (attributeDataType != AttributeDataType.Reference && ManagerDepthPercentage.HasValue)
+            {
+                Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage can only be used with reference attribute data types");
+                return false;
+            }
+
             if (attributeDataType == AttributeDataType.String)
             {
                 // either example data or a pattern needs to be used to populate string attribute values, and not both
@@ -206,6 +220,21 @@ namespace JIM.Models.DataGeneration
                 if (usingPattern || usingExampleData || IsUsingNumbers())
                 {
                     Log.Error("DataGenerationTemplateAttribute.IsValid: DateTime and non-DateTime properties used. This is not supported");
+                    return false;
+                }
+            }
+
+            if (attributeDataType == AttributeDataType.Reference && ManagerDepthPercentage.HasValue)
+            {
+                if (PopulatedValuesPercentage.HasValue)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage cannot be used with PopulatedValuesPercentage. Ensure it's set to null");
+                    return false;
+                }
+
+                if (ManagerDepthPercentage < 1 || ManagerDepthPercentage > 99)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage must be between 1-99(%)");
                     return false;
                 }
             }

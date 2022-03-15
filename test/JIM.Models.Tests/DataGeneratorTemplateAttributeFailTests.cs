@@ -240,5 +240,58 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject2.IsValid());
         }
+
+        [Test]
+        public void TestIsValidManagerFail()
+        {
+            // cannot use PopulatedValuesPercentage and ManagerDepthPercentage together
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                PopulatedValuesPercentage = 100,
+                ManagerDepthPercentage = 50
+            };
+            Assert.IsFalse(subject1.IsValid());
+
+            // ManagerDepthPercentage cannot be zero. If you don't want to use ManagerDepthPercentage, then set it to null
+            var subject2 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ManagerDepthPercentage = 0
+            };
+            Assert.IsFalse(subject2.IsValid());
+
+            // not everyone can be a manager
+            var subject3 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ManagerDepthPercentage = 100
+            };
+            Assert.IsFalse(subject3.IsValid());
+
+            // outside of bounds
+            var subject4 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ManagerDepthPercentage = 120
+            };
+            Assert.IsFalse(subject4.IsValid());
+
+            // outside of bounds
+            var subject5 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ManagerDepthPercentage = -10
+            };
+            Assert.IsFalse(subject5.IsValid());
+
+            // ManagerDepthPercentage can only be used on reference attribute types
+            var subject6 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ManagerDepthPercentage = 50
+            };
+            Assert.IsFalse(subject6.IsValid());
+        }
     }
 }

@@ -344,5 +344,23 @@ namespace JIM.Models.Tests
             };
             Assert.IsTrue(subject1.IsValid());
         }
+
+        [Test]
+        public void TestIsValidManagerPass()
+        {
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ManagerDepthPercentage = 50
+            };
+            Assert.IsTrue(subject1.IsValid());
+
+            var subject2 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ManagerDepthPercentage = 95
+            };
+            Assert.IsTrue(subject2.IsValid());
+        }
     }
 }
