@@ -109,7 +109,8 @@ namespace JIM.Application.Servers
             foreach (var objectType in t.ObjectTypes)
             {
                 Parallel.For(0, objectType.ObjectsToCreate,
-                index => {
+                index =>
+                {
 
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
                     foreach (var templateAttribute in objectType.TemplateAttributes)
@@ -145,6 +146,17 @@ namespace JIM.Application.Servers
 
                     Interlocked.Add(ref totalObjectsCreated, 1);
                 });
+
+                // user manager attributes need assigning after all users have been prepared
+                var templateManagerAttribute = objectType.TemplateAttributes.SingleOrDefault(ta => 
+                    ta.MetaverseAttribute != null && 
+                    ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
+
+                if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User && templateManagerAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
+                {
+                    var userCount = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType).Count();
+                    var managersNeeded = userCount / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
+                }
             }
 
             // ensure that attribute population percentage values are respected
