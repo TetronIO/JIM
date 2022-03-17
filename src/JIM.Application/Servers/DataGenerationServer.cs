@@ -152,10 +152,14 @@ namespace JIM.Application.Servers
                     ta.MetaverseAttribute != null && 
                     ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
 
+                var users = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType);
+                var userCount = users.Count();
                 if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User && templateManagerAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
                 {
-                    var userCount = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType).Count();
+                    var managerAttribute = templateManagerAttribute.MetaverseAttribute;
                     var managersNeeded = userCount / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
+                    var firstManager = users[random.Next(0, userCount - 1)];
+                    RecursivelyAssignManagers(firstManager, users, managersRequired, random, new List<MetaverseObject> { firstManager }, managerAttribute);
                 }
             }
 
@@ -496,5 +500,41 @@ namespace JIM.Application.Servers
             return value;
         }
         #endregion
+            
+        private void RecursivelyAssignManagers(MetaverseObject manager, IEnumerable<MetaverseObject> users, int managersToAssign, Random random, List<MetaverseObject> assignedManagers, MetaverseAttribute managerAttribute)
+        {
+            // get a list of users who are not managers that we can assign as subordinate managers to our manager
+            var eligibleSubordinates = users.Where(u => !assignedManagers.Any(am.Id == u.Id));
+            
+            // pick two users who are not already managers to be our subordinate managers and update our eligible list
+            // so we don't end up accidentlaly picking the same user twice
+            var subordinateUser1 = eligibleSubordinates[random(0, eligibleSubordinates.Count() - 1)];
+            eligibleSubordinates = eligibleSubordinates.Where(u => u.Id != subordinateManager1.Id));
+            var subordinateUser2 = eligibleSubordinates[random(0, eligibleSubordinates.Count() - 1)];
+            
+            // make the users subordinate to our manager
+            subordinateManager1.AttributeValues.Add(new MetaverseObjectAttributeValue {
+                Attribute = managerAttribute
+                ReferenceValue = manager
+            });
+            subordinateManager2.AttributeValues.Add(new MetaverseObjectAttributeValue {
+                Attribute = managerAttribute
+                ReferenceValue = manager
+            });
+            
+            // add these subordinates to our assigned managers list so we know when to stop assigning managers when we recurse
+            // also, check if we've assigned enough managers
+            assignedManagers.Add(subordinateManager1);
+            if (assignedManagers.Count => managersToAssign / 2)
+                return;
+           
+            assignedManagers.Add(subordinateManager2);
+            if (assignedManagers.Count => managersToAssign / 2)
+                return;
+        
+            // now recurse, causing these subordinates to become managers
+            RecursivelyAssignManagers(subordinateManager1, users, managersToAssign, random, assignedManagers, managerAttribute);
+            RecursivelyAssignManagers(subordinateManager1, users, managersToAssign, random, assignedManagers, managerAttribute);
+        }
     }
 }
