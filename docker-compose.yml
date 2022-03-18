@@ -3,7 +3,7 @@ version: '3.4'
 services:
 
   jim.api:
-    container_name: JIM.Api
+    container_name: jim.api
     image: ${DOCKER_REGISTRY-}jim.api
     restart: always
     environment:
@@ -25,13 +25,13 @@ services:
       context: .
       dockerfile: src/JIM.Api/Dockerfile
     depends_on:
-      - JIM.Database
-      - JIM.Service
+      - jim.database
+      - jim.service
     networks:
       - jim-network
 
   jim.service:
-    container_name: JIM.Service
+    container_name: jim.service
     image: ${DOCKER_REGISTRY-}jim.service
     restart: always
     environment:
@@ -47,12 +47,12 @@ services:
       context: .
       dockerfile: src/JIM.Service/Dockerfile
     depends_on:
-      - JIM.Database
+      - jim.database
     networks:
       - jim-network
 
   jim.scheduler:
-    container_name: JIM.Scheduler
+    container_name: jim.scheduler
     image: ${DOCKER_REGISTRY-}jim.scheduler
     restart: always
     environment:
@@ -68,24 +68,24 @@ services:
       context: .
       dockerfile: src/JIM.Scheduler/Dockerfile
     depends_on:
-      - JIM.Database
-      - JIM.Service
+      - jim.database
+      - jim.service
     networks:
       - jim-network
   
   adminer:
-    container_name: JIM.Adminer
+    container_name: jim.adminer
     image: adminer
     restart: always
     ports:
       - 8080:8080
     depends_on:
-      - JIM.Database
+      - jim.database
     networks:
       - jim-network
 
   jim.database:
-    container_name: JIM.Database
+    container_name: jim.database
     image: postgres
     restart: always
     volumes:
