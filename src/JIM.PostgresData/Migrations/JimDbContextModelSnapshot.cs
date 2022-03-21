@@ -280,6 +280,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("DataGenerationObjectTypeId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ManagerDepthPercentage")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("MaxDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -298,7 +301,7 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Pattern")
                         .HasColumnType("text");
 
-                    b.Property<int>("PopulatedValuesPercentage")
+                    b.Property<int?>("PopulatedValuesPercentage")
                         .HasColumnType("integer");
 
                     b.Property<bool?>("RandomNumbers")

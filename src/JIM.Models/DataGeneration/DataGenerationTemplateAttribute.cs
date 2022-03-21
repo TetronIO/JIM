@@ -6,14 +6,16 @@ namespace JIM.Models.DataGeneration
 {
     public class DataGenerationTemplateAttribute
     {
+        #region accessors
         public int Id { get; set; }
         public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }
         public MetaverseAttribute? MetaverseAttribute { get; set; }
 
         /// <summary>
         /// How many values should be generated? 100% would mean every object has a value for this attribute.
+        /// Not compatible with ManagerDepthPercentage.
         /// </summary>
-        public int PopulatedValuesPercentage { get; set; }
+        public int? PopulatedValuesPercentage { get; set; }
 
         /// <summary>
         /// Percentage of how many boolean values should be true
@@ -45,11 +47,22 @@ namespace JIM.Models.DataGeneration
         /// </summary>
         public List<ExampleDataSet> ExampleDataSets { get; set; }
 
+        /// <summary>
+        /// If you want Manager attributes to be assigned, specify how far into the organisational hierarchy managers should be present.
+        /// i.e. if you want a heavy labour force, then you might specify 50%. If you want a heavily organised hierarchy then you might specify 95%.
+        /// Leave as null if you don't want to assign Manager attribute values.
+        /// </summary>
+        public int? ManagerDepthPercentage { get; set; }
+        #endregion
+
+        #region constructors
         public DataGenerationTemplateAttribute()
         {
             ExampleDataSets = new List<ExampleDataSet>();
         }
+        #endregion
 
+        #region public methods
         public bool IsUsingNumbers()
         {
             return (SequentialNumbers.HasValue && SequentialNumbers.Value) || (RandomNumbers.HasValue && RandomNumbers.Value) || MinNumber.HasValue || MaxNumber.HasValue;
@@ -121,6 +134,12 @@ namespace JIM.Models.DataGeneration
                     Log.Error("DataGenerationTemplateAttribute.IsValid: Not string but using example data");
                     return false;
                 }
+            }
+
+            if (attributeDataType != AttributeDataType.Reference && ManagerDepthPercentage.HasValue)
+            {
+                Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage can only be used with reference attribute data types");
+                return false;
             }
 
             if (attributeDataType == AttributeDataType.String)
@@ -205,7 +224,23 @@ namespace JIM.Models.DataGeneration
                 }
             }
 
+            if (attributeDataType == AttributeDataType.Reference && ManagerDepthPercentage.HasValue)
+            {
+                if (PopulatedValuesPercentage.HasValue)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage cannot be used with PopulatedValuesPercentage. Ensure it's set to null");
+                    return false;
+                }
+
+                if (ManagerDepthPercentage < 1 || ManagerDepthPercentage > 99)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage must be between 1-99(%)");
+                    return false;
+                }
+            }
+
             return true;
         }
+        #endregion
     }
 }
