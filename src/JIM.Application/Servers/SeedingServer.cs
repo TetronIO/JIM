@@ -535,7 +535,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Manager),
-                    ManagerDepthPercentage = 75
+                    ManagerDepthPercentage = 25
                 });
             }
 
