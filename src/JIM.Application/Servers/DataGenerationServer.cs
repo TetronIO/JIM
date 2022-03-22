@@ -193,7 +193,7 @@ namespace JIM.Application.Servers
             // ensure that attribute population percentage values are respected
             // do this by assigning all attributes with values (done), then go and randomly delete the required amount
             RemoveUnecessaryAttributeValues(t, metaverseObjectsToCreate, random);
-            Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count.ToString("N0")} objects");
+            Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count:N0} objects");
             objectPreparationStopwatch.Stop();
 
             // submit metaverse objects to data layer for creation
@@ -202,7 +202,7 @@ namespace JIM.Application.Servers
             await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate);
             persistenceStopwatch.Stop();
             totalTimeStopwatch.Stop();
-            Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated.ToString("N0")} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
+            Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated:N0} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
 
             // trying to help garbage collection along. data generation results in a lot of ram usage.
             metaverseObjectsToCreate = null;
