@@ -154,40 +154,7 @@ namespace JIM.Application.Servers
                     ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
 
                 if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User && templateManagerAttribute != null && templateManagerAttribute .MetaverseAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
-                {
-                    // binary tree approach
-                    // - project users to new list
-                    // - create manager list and remove manager from user list
-                    // - create binary tree using managers
-                    // - navigate binary tree and assign manager attributes to user objects
-                    // - then work out how to gradually assign more subordinates from the non-managers list as you go deeper into the tree
-
-                    var users = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType).ToList();
-                    var managerTreePrepStopwatch = Stopwatch.StartNew();
-                    var managerAttribute = templateManagerAttribute.MetaverseAttribute;                    
-                    var managersNeeded = users.Count / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
-
-                    // randomly select manager ids and remove them from the users list so we have a list of managers and a list of potential direct reports
-                    var managers = new List<MetaverseObject>();
-                    for (var i = 0; i < managersNeeded; i++)
-                    {
-                        var userIndex = random.Next(0, users.Count - 1);
-                        managers.Add(users[userIndex]);
-                        users.RemoveAt(userIndex);
-                    }
-
-                    // we've now got a list of managers, and we've got a list of users who are not managers, and can become non-manager subordinates
-                    var managerBinaryTree = new BinaryTree(managers);
-                    managerTreePrepStopwatch.Stop();
-                    Log.Verbose($"ExecuteTemplateAsync: Manager tree prep took: {managerTreePrepStopwatch.Elapsed}");
-
-                    // navigate the binary tree and assign manager attributes
-                    var assignManagersStopwatch = Stopwatch.StartNew();
-                    RecursivelyAssignUserManagers(managerBinaryTree, templateManagerAttribute.MetaverseAttribute);
-                    managerBinaryTree = null;
-                    assignManagersStopwatch.Stop();
-                    Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
-                }
+                    GenerateManagerAssignments(metaverseObjectsToCreate, objectType, templateManagerAttribute, random);
             }
 
             // ensure that attribute population percentage values are respected
@@ -363,6 +330,55 @@ namespace JIM.Application.Servers
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
                 BoolValue = value
             });
+        }
+
+        private static void GenerateManagerAssignments(
+            List<MetaverseObject> metaverseObjectsToCreate, 
+            DataGenerationObjectType objectType,
+            DataGenerationTemplateAttribute templateManagerAttribute,
+            Random random)
+        {
+            // binary tree approach
+            // - project users to new list
+            // - create manager list and remove manager from user list
+            // - create binary tree using managers
+            // - navigate binary tree and assign manager attributes to user objects
+            // - then work out how to gradually assign more subordinates from the non-managers list as you go deeper into the tree
+
+            if (templateManagerAttribute == null)
+                return;
+
+            if (templateManagerAttribute.ManagerDepthPercentage == null)
+                return;
+
+            if (templateManagerAttribute.MetaverseAttribute == null)
+                return;
+
+            var users = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType).ToList();
+            var managerTreePrepStopwatch = Stopwatch.StartNew();
+            var managerAttribute = templateManagerAttribute.MetaverseAttribute;
+            var managersNeeded = users.Count / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
+
+            // randomly select manager ids and remove them from the users list so we have a list of managers and a list of potential direct reports
+            var managers = new List<MetaverseObject>();
+            for (var i = 0; i < managersNeeded; i++)
+            {
+                var userIndex = random.Next(0, users.Count - 1);
+                managers.Add(users[userIndex]);
+                users.RemoveAt(userIndex);
+            }
+
+            // we've now got a list of managers, and we've got a list of users who are not managers, and can become non-manager subordinates
+            var managerBinaryTree = new BinaryTree(managers);
+            managerTreePrepStopwatch.Stop();
+            Log.Verbose($"ExecuteTemplateAsync: Manager tree prep took: {managerTreePrepStopwatch.Elapsed}");
+
+            // navigate the binary tree and assign manager attributes
+            var assignManagersStopwatch = Stopwatch.StartNew();
+            RecursivelyAssignUserManagers(managerBinaryTree, templateManagerAttribute.MetaverseAttribute);
+            managerBinaryTree = null;
+            assignManagersStopwatch.Stop();
+            Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
         }
 
         private static void RemoveUnecessaryAttributeValues(DataGenerationTemplate dataGenerationTemplate, List<MetaverseObject> metaverseObjects, Random random)
