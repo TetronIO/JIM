@@ -184,6 +184,7 @@ namespace JIM.Application.Servers
                     // navigate the binary tree and assign manager attributes
                     var assignManagersStopwatch = Stopwatch.StartNew();
                     RecursivelyAssignUserManagers(managerBinaryTree, templateManagerAttribute.MetaverseAttribute);
+                    managerBinaryTree = null;
                     assignManagersStopwatch.Stop();
                     Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
                 }
@@ -202,6 +203,10 @@ namespace JIM.Application.Servers
             persistenceStopwatch.Stop();
             totalTimeStopwatch.Stop();
             Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated.ToString("N0")} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
+
+            // trying to help garbage collection along. data generation results in a lot of ram usage.
+            metaverseObjectsToCreate = null;
+            dataGenerationValueTrackers = null;
         }
 
         private static void GenerateMetaverseStringValue(
