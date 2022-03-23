@@ -369,14 +369,14 @@ namespace JIM.Application.Servers
             }
 
             // we've now got a list of managers, and we've got a list of users who are not managers, and can become non-manager subordinates
-            var managerBinaryTree = new BinaryTree(managers);
+            var managerTree = new BinaryTree(managers);
             managerTreePrepStopwatch.Stop();
             Log.Verbose($"ExecuteTemplateAsync: Manager tree prep took: {managerTreePrepStopwatch.Elapsed}");
 
             // navigate the binary tree and assign manager attributes
             var assignManagersStopwatch = Stopwatch.StartNew();
-            RecursivelyAssignUserManagers(managerBinaryTree, templateManagerAttribute.MetaverseAttribute);
-            managerBinaryTree = null;
+            RecursivelyAssignUserManagers(managerTree, templateManagerAttribute.MetaverseAttribute, users);
+            managerTree = null;
             assignManagersStopwatch.Stop();
             Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
         }
@@ -548,7 +548,7 @@ namespace JIM.Application.Servers
         }
         #endregion
 
-        private static void RecursivelyAssignUserManagers(BinaryTree binaryTree, MetaverseAttribute managerAttribute)
+        private static void RecursivelyAssignUserManagers(BinaryTree binaryTree, MetaverseAttribute managerAttribute, List<MetaverseObject> subordinates)
         {
             // binaryTree.MetaverseObject is the manager
             // assign this in a manager attribute to both the left and right subordinates
@@ -561,7 +561,7 @@ namespace JIM.Application.Servers
                     ReferenceValue = binaryTree.MetaverseObject
                 });
 
-                RecursivelyAssignUserManagers(binaryTree.Left, managerAttribute);
+                RecursivelyAssignUserManagers(binaryTree.Left, managerAttribute, subordinates);
             }
 
             if (binaryTree.Right != null)
@@ -572,7 +572,7 @@ namespace JIM.Application.Servers
                     ReferenceValue = binaryTree.MetaverseObject
                 });
 
-                RecursivelyAssignUserManagers(binaryTree.Right, managerAttribute);
+                RecursivelyAssignUserManagers(binaryTree.Right, managerAttribute, subordinates);
             }
         }
     }
