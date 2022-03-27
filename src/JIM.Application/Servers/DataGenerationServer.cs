@@ -153,7 +153,7 @@ namespace JIM.Application.Servers
                     ta.MetaverseAttribute != null && 
                     ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
 
-                if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User && templateManagerAttribute != null && templateManagerAttribute .MetaverseAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
+                if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User && templateManagerAttribute != null && templateManagerAttribute.MetaverseAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
                     GenerateManagerAssignments(metaverseObjectsToCreate, objectType, templateManagerAttribute, random);
             }
 
@@ -332,7 +332,7 @@ namespace JIM.Application.Servers
             });
         }
 
-        private static void GenerateManagerAssignments(
+        private void GenerateManagerAssignments(
             List<MetaverseObject> metaverseObjectsToCreate, 
             DataGenerationObjectType objectType,
             DataGenerationTemplateAttribute templateManagerAttribute,
@@ -359,7 +359,7 @@ namespace JIM.Application.Servers
             var managerAttribute = templateManagerAttribute.MetaverseAttribute;
             var managersNeeded = users.Count / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
 
-            // randomly select manager ids and remove them from the users list so we have a list of managers and a list of potential direct reports
+            // randomly select managers and remove them from the users list so we have a list of managers and a list of potential direct reports
             var managers = new List<MetaverseObject>();
             for (var i = 0; i < managersNeeded; i++)
             {
@@ -371,11 +371,21 @@ namespace JIM.Application.Servers
             // we've now got a list of managers, and we've got a list of users who are not managers, and can become non-manager subordinates
             var managerTree = new BinaryTree(managers);
             managerTreePrepStopwatch.Stop();
+            var managerTreeNodeCount = 0;
+            RecursivelyCountBinaryTreeNodes(managerTree, ref managerTreeNodeCount);
+            Log.Verbose($"ExecuteTemplateAsync: Manager tree node count: {managerTreeNodeCount:N0}");
             Log.Verbose($"ExecuteTemplateAsync: Manager tree prep took: {managerTreePrepStopwatch.Elapsed}");
 
             // navigate the binary tree and assign manager attributes
             var assignManagersStopwatch = Stopwatch.StartNew();
             RecursivelyAssignUserManagers(managerTree, templateManagerAttribute.MetaverseAttribute, users);
+
+            // do the same for non-manager subordinates, i.e. assign everyone else a manager
+            var subordinatesAssigned = 0;
+            var subordinatesToAssign = users.Count / (managerTreeNodeCount - 1);
+            RecursivelyAssignSubordinates(managerTree, subordinatesToAssign, users, isFirstNode: true, templateManagerAttribute.MetaverseAttribute, ref subordinatesAssigned);
+            Log.Verbose($"ExecuteTemplateAsync: Assigned {subordinatesAssigned:N0} subordinates a manager");
+
             managerTree = null;
             assignManagersStopwatch.Stop();
             Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
@@ -548,10 +558,20 @@ namespace JIM.Application.Servers
         }
         #endregion
 
-        private static void RecursivelyAssignUserManagers(BinaryTree binaryTree, MetaverseAttribute managerAttribute, List<MetaverseObject> subordinates)
+        private void RecursivelyCountBinaryTreeNodes(BinaryTree binaryTree, ref int nodeCount)
+        {
+            nodeCount++;
+            if (binaryTree.Left != null)
+                RecursivelyCountBinaryTreeNodes(binaryTree.Left, ref nodeCount);
+
+            if (binaryTree.Right != null)
+                RecursivelyCountBinaryTreeNodes(binaryTree.Right, ref nodeCount);
+        }
+
+        private void RecursivelyAssignUserManagers(BinaryTree binaryTree, MetaverseAttribute managerAttribute, List<MetaverseObject> subordinates)
         {
             // binaryTree.MetaverseObject is the manager
-            // assign this in a manager attribute to both the left and right subordinates
+            // assign this in a manager attribute to both the left and right branches
 
             if (binaryTree.Left != null)
             {
@@ -574,6 +594,42 @@ namespace JIM.Application.Servers
 
                 RecursivelyAssignUserManagers(binaryTree.Right, managerAttribute, subordinates);
             }
+        }
+    
+        private void RecursivelyAssignSubordinates(BinaryTree binaryTree, int subordinatesToAssign, List<MetaverseObject> users, bool isFirstNode, MetaverseAttribute managerAttribute, ref int subordinatesAssigned)
+        {
+            if (isFirstNode)
+            {
+                // don't assign any subordinates. the top manager can just have managers as subordinates
+                isFirstNode = false;
+            }
+            else
+            {
+                // take the required number of subordinates out of the user list and assign them as subordinates to this manager
+                var availableSubordinates = users.Count >= subordinatesToAssign ? subordinatesToAssign : users.Count;
+                var subordinates = new MetaverseObject[availableSubordinates];
+                for (var i = 0; i < availableSubordinates; i++)
+                    subordinates[i] = users[i];
+                users.RemoveRange(0, subordinates.Length - 1);
+
+                foreach (var user in subordinates)
+                {
+                    user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                    {
+                        Attribute = managerAttribute,
+                        ReferenceValue = binaryTree.MetaverseObject
+                    });
+
+                    subordinatesAssigned++;
+                }
+            }
+
+            // now recurse and do the same for the left and right branches, if they exist
+            if (binaryTree.Left != null)
+                RecursivelyAssignSubordinates(binaryTree.Left, subordinatesToAssign, users, isFirstNode, managerAttribute, ref subordinatesAssigned);
+
+            if (binaryTree.Right != null)
+                RecursivelyAssignSubordinates(binaryTree.Right, subordinatesToAssign, users, isFirstNode, managerAttribute, ref subordinatesAssigned);
         }
     }
 }
