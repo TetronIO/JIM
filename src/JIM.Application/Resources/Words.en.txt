@@ -313,8 +313,6 @@ asparagus
 aspect
 asphalt
 aspic
-ass
-assassination
 assault
 assembly
 assertion
@@ -1189,7 +1187,6 @@ coat
 cob
 cobbler
 cobweb
-cock
 cockpit
 cockroach
 cocktail
@@ -1204,7 +1201,6 @@ codpiece
 coevolution
 cofactor
 coffee
-coffin
 cohesion
 cohort
 coil
@@ -1224,7 +1220,6 @@ collateral
 colleague
 collection
 collectivisation
-collectivization
 collector
 college
 collision
@@ -1233,7 +1228,6 @@ colon
 colonial
 colonialism
 colonisation
-colonization
 colony
 color
 colorlessness
@@ -1541,7 +1535,6 @@ croup
 crow
 crowd
 crown
-crucifixion
 crude
 cruelty
 cruise
@@ -2160,7 +2153,6 @@ estuary
 eternity
 ethernet
 ethics
-ethnicity
 ethyl
 euphonium
 eurocentrism
@@ -2169,7 +2161,6 @@ evaluator
 evaporation
 eve
 evening
-evening-wear
 event
 everybody
 everyone
@@ -2179,8 +2170,6 @@ evidence
 evil
 evocation
 evolution
-ex-husband
-ex-wife
 exaggeration
 exam
 examination
@@ -2234,7 +2223,6 @@ exterior
 external
 extinction
 extreme
-extremist
 eye
 eyeball
 eyebrow
@@ -2521,7 +2509,6 @@ frown
 fruit
 frustration
 fry
-fuck
 fuel
 fugato
 fulfillment
@@ -2941,8 +2928,6 @@ homework
 homicide
 homogenate
 homonym
-homosexual
-homosexuality
 honesty
 honey
 honeybee
@@ -3462,7 +3447,6 @@ lentil
 leopard
 leprosy
 leptocephalus
-lesbian
 lesson
 letter
 lettuce
@@ -4059,7 +4043,6 @@ nod
 node
 noir
 noise
-nonbeliever
 nonconformist
 nondisclosure
 nonsense
@@ -4286,7 +4269,6 @@ pantry
 pants
 pantsuit
 panty
-pantyhose
 papa
 papaya
 paper
@@ -4404,7 +4386,6 @@ pendulum
 penguin
 penicillin
 peninsula
-penis
 pennant
 penny
 pension
@@ -4658,8 +4639,6 @@ practice
 practitioner
 prairie
 praise
-pray
-prayer
 precedence
 precedent
 precipitation
@@ -4908,7 +4887,6 @@ range
 ranger
 rank
 rap
-rape
 raspberry
 rat
 rate
@@ -5383,8 +5361,6 @@ settlement
 settler
 severity
 sewer
-sex
-sexuality
 shack
 shackle
 shade
@@ -5425,7 +5401,6 @@ shipping
 shipyard
 shirt
 shirtdress
-shit
 shoat
 shock
 shoe
@@ -5724,7 +5699,6 @@ spruce
 spud
 spume
 spur
-spy
 spyglass
 square
 squash
@@ -5901,7 +5875,6 @@ suet
 suffocation
 sugar
 suggestion
-suicide
 suit
 suitcase
 suite
@@ -6233,7 +6206,6 @@ torte
 tortellini
 tortilla
 tortoise
-tosser
 total
 tote
 touch

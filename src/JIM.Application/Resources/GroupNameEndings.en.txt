@@ -11,3 +11,4 @@ reviewers
 advisors
 consultants
 management
+licensing

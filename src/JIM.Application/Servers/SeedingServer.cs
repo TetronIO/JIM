@@ -116,6 +116,7 @@ namespace JIM.Application.Servers
             var groupScopeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupScope, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var groupTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var managedByAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
+            var ownersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Owners, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
             var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
             #endregion
 
@@ -224,6 +225,7 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(groupObjectType, infoAttribute);
             AddAttributeToObjectType(groupObjectType, mailNicknameAttribute);
             AddAttributeToObjectType(groupObjectType, managedByAttribute);
+            AddAttributeToObjectType(groupObjectType, ownersAttribute);
             AddAttributeToObjectType(groupObjectType, objectGuidAttribute);
             AddAttributeToObjectType(groupObjectType, objectSidAttribute);
             AddAttributeToObjectType(groupObjectType, proxyAddressesAttribute);
@@ -288,12 +290,32 @@ namespace JIM.Application.Servers
             var lastnamesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Lastnames, "en", Properties.Resources.Lastnames_en);
             if (lastnamesEnDataSet != null)
                 exampleDataSetsToCreate.Add(lastnamesEnDataSet);
+
+            var adjectivesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Adjectives, "en", Properties.Resources.Adjectives_en);
+            if (adjectivesEnDataSet != null)
+                exampleDataSetsToCreate.Add(adjectivesEnDataSet);
+
+            var coloursEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Colours, "en", Properties.Resources.Colours_en);
+            if (coloursEnDataSet != null)
+                exampleDataSetsToCreate.Add(coloursEnDataSet);
+
+            var groupNameEndingsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.GroupNameEndings, "en", Properties.Resources.GroupNameEndings_en);
+            if (groupNameEndingsEnDataSet != null)
+                exampleDataSetsToCreate.Add(groupNameEndingsEnDataSet);
+
+            var wordsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Words, "en", Properties.Resources.Words_en);
+            if (wordsEnDataSet != null)
+                exampleDataSetsToCreate.Add(wordsEnDataSet);
             #endregion
 
             #region DataGenerationTemplates
-            var userDataGenerationTemplate = await PrepareUserDataGenerationTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
+            var userDataGenerationTemplate = await PrepareUserDataGenerationTemplateAsync(userObjectType, exampleDataSetsToCreate, attributesToCreate);
             if (userDataGenerationTemplate != null)
                 dataGenerationTemplatesToCreate.Add(userDataGenerationTemplate);
+
+            var groupDataGenerationTemplate = await PrepareGroupDataGenerationTemplateAsync(groupObjectType, exampleDataSetsToCreate, attributesToCreate);
+            if (groupDataGenerationTemplate != null)
+                dataGenerationTemplatesToCreate.Add(groupDataGenerationTemplate);
             #endregion
 
             // submit all the preparations to the repository for creation
@@ -364,7 +386,7 @@ namespace JIM.Application.Servers
                 return null;
         }
 
-        private async Task<DataGenerationTemplate?> PrepareUserDataGenerationTemplateAsync(MetaverseObjectType userType, MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+        private async Task<DataGenerationTemplate?> PrepareUserDataGenerationTemplateAsync(MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
         {
             var changes = false;
             var dgt = await Application.Repository.DataGeneration.GetTemplateAsync(Constants.BuiltInDataGenerationTemplates.UsersEn);
@@ -536,6 +558,105 @@ namespace JIM.Application.Servers
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Manager),
                     ManagerDepthPercentage = 25
+                });
+            }
+
+            if (changes)
+                return dgt;
+            else
+                return null;
+        }
+
+        private async Task<DataGenerationTemplate?> PrepareGroupDataGenerationTemplateAsync(MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+        {
+            var changes = false;
+            var dgt = await Application.Repository.DataGeneration.GetTemplateAsync(Constants.BuiltInDataGenerationTemplates.GroupsEn);
+            if (dgt == null)
+            {
+                dgt = new DataGenerationTemplate { Name = Constants.BuiltInDataGenerationTemplates.GroupsEn };
+                changes = true;
+            }
+
+            // do we have the group data generation object type?
+            var groupDataGenerationObjectType = dgt.ObjectTypes.SingleOrDefault(q => q.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.Group);
+            if (groupDataGenerationObjectType == null)
+            {
+                groupDataGenerationObjectType = new DataGenerationObjectType
+                {
+                    MetaverseObjectType = groupType,
+                    ObjectsToCreate = 1000
+                };
+                dgt.ObjectTypes.Add(groupDataGenerationObjectType);
+            }
+
+            // do we have all the attribute definitions?
+            var adjectivesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Adjectives);
+            var coloursDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Colours);
+            var groupEndingsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.GroupNameEndings);
+            var wordsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Words);
+
+            var displayNameAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName);
+            if (displayNameAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.DisplayName),
+                    ExampleDataSets = { adjectivesDataSet, coloursDataSet, wordsDataSet, groupEndingsDataSet },
+                    PopulatedValuesPercentage = 100,
+                    Pattern = "{0} {1} {2} {3}"
+                });
+            }
+
+            var groupTypeAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.GroupType);
+            if (groupTypeAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
+                    Pattern = "Security",
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var groupScopeAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.GroupScope);
+            if (groupScopeAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupScope),
+                    Pattern = "Universal",
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var infoAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Info);
+            if (infoAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Info),
+                    Pattern = "This group was created by the JIM data generation feature.",
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var staticMembersAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.StaticMembers);
+            if (infoAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.StaticMembers),
+                    PopulatedValuesPercentage = 100
+                });
+            }
+
+            var ownersAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Owners);
+            if (ownersAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Owners),
+                    PopulatedValuesPercentage = 75
                 });
             }
 

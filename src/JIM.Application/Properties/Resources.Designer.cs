@@ -417,6 +417,28 @@ namespace JIM.Application.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to company
+        ///division
+        ///department
+        ///team
+        ///project
+        ///programme
+        ///subjects
+        ///compliance
+        ///approvers
+        ///reviewers
+        ///advisors
+        ///consultants
+        ///management
+        ///licensing.
+        /// </summary>
+        internal static string GroupNameEndings_en {
+            get {
+                return ResourceManager.GetString("GroupNameEndings_en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Marketing Specialist
         ///Marketing Manager
         ///Marketing Director

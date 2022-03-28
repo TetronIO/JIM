@@ -110,6 +110,7 @@
             public static string GroupScope => "Group Scope";
             public static string Info => "Info";
             public static string ManagedBy => "Managed By";
+            public static string Owners => "Owners";
         }
 
         public static class BuiltInRoles
@@ -126,11 +127,16 @@
             public static string FirstnamesMale => "Firstnames Male";
             public static string FirstnamesFemale => "Firstnames Female";
             public static string Lastnames => "Lastnames";
+            public static string Adjectives => "Adjectives";
+            public static string Colours => "Colours";
+            public static string Words => "Words";
+            public static string GroupNameEndings => "Group Name Endings";
         }
 
         public static class BuiltInDataGenerationTemplates
         {
             public static string UsersEn => "Users En";
+            public static string GroupsEn => "Groups En";
         }
     }
 }
