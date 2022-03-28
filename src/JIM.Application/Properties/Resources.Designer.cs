@@ -61,6 +61,134 @@ namespace JIM.Application.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to adorable
+        ///adventurous
+        ///aggressive
+        ///agreeable
+        ///alert
+        ///alive
+        ///amused
+        ///angry
+        ///annoyed
+        ///annoying
+        ///anxious
+        ///arrogant
+        ///ashamed
+        ///attractive
+        ///average
+        ///awful
+        ///bad
+        ///beautiful
+        ///better
+        ///bewildered
+        ///black
+        ///bloody
+        ///blue
+        ///blue-eyed
+        ///blushing
+        ///bored
+        ///brainy
+        ///brave
+        ///breakable
+        ///bright
+        ///busy
+        ///calm
+        ///careful
+        ///cautious
+        ///charming
+        ///cheerful
+        ///clean
+        ///clear
+        ///clever
+        ///cloudy
+        ///clumsy
+        ///colorful
+        ///combative
+        ///comfortable
+        ///concerned
+        ///condemned
+        ///confused
+        ///cooperative
+        ///courageous
+        ///crazy
+        ///creepy
+        ///crowded
+        ///cruel
+        ///curious
+        ///cute
+        ///dangerous
+        ///dark
+        /// [rest of string was truncated]&quot;;.
+        /// </summary>
+        internal static string Adjectives_en {
+            get {
+                return ResourceManager.GetString("Adjectives_en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to alizarin
+        ///amaranth
+        ///amber
+        ///amethyst
+        ///apricot
+        ///aqua
+        ///aquamarine
+        ///asparagus
+        ///auburn
+        ///azure
+        ///beige
+        ///bistre
+        ///black
+        ///blue
+        ///blue-green
+        ///blue-violet
+        ///bondi-blue
+        ///brass
+        ///bronze
+        ///brown
+        ///buff
+        ///burgundy
+        ///camouflage-green
+        ///caput-mortuum
+        ///cardinal
+        ///carmine
+        ///carrot-orange
+        ///celadon
+        ///cerise
+        ///cerulean
+        ///champagne
+        ///charcoal
+        ///chartreuse
+        ///cherry-blossom-pink
+        ///chestnut
+        ///chocolate
+        ///cinnabar
+        ///cinnamon
+        ///cobalt
+        ///copper
+        ///coral
+        ///corn
+        ///cornflower
+        ///cream
+        ///crimson
+        ///cyan
+        ///dandelion
+        ///denim
+        ///ecru
+        ///emerald
+        ///eggplant
+        ///falu-red
+        ///fern-green
+        ///fi [rest of string was truncated]&quot;;.
+        /// </summary>
+        internal static string Colours_en {
+            get {
+                return ResourceManager.GetString("Colours_en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to CHOAM
         ///Acme Corp
         ///Sirius Cybernetics Corp
@@ -429,6 +557,65 @@ namespace JIM.Application.Properties {
         internal static string Teams_en {
             get {
                 return ResourceManager.GetString("Teams_en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ATM
+        ///CD
+        ///SUV
+        ///TV
+        ///aardvark
+        ///abacus
+        ///abbey
+        ///abbreviation
+        ///abdomen
+        ///ability
+        ///abnormality
+        ///abolishment
+        ///abortion
+        ///abrogation
+        ///absence
+        ///abundance
+        ///abuse
+        ///academics
+        ///academy
+        ///accelerant
+        ///accelerator
+        ///accent
+        ///acceptance
+        ///access
+        ///accessory
+        ///accident
+        ///accommodation
+        ///accompanist
+        ///accomplishment
+        ///accord
+        ///accordance
+        ///accordion
+        ///account
+        ///accountability
+        ///accountant
+        ///accounting
+        ///accuracy
+        ///accusation
+        ///acetate
+        ///achievement
+        ///achiever
+        ///acid
+        ///acknowledgment
+        ///acorn
+        ///acoustics
+        ///acquaintance
+        ///acquisition
+        ///acre
+        ///acrylic
+        ///act
+        ///act [rest of string was truncated]&quot;;.
+        /// </summary>
+        internal static string Words_en {
+            get {
+                return ResourceManager.GetString("Words_en", resourceCulture);
             }
         }
     }
