@@ -558,6 +558,7 @@ namespace JIM.Application.Servers
         }
         #endregion
 
+        #region Manager Assignment
         private void RecursivelyCountBinaryTreeNodes(BinaryTree binaryTree, ref int nodeCount)
         {
             nodeCount++;
@@ -631,5 +632,6 @@ namespace JIM.Application.Servers
             if (binaryTree.Right != null)
                 RecursivelyAssignSubordinates(binaryTree.Right, subordinatesToAssign, users, isFirstNode, managerAttribute, ref subordinatesAssigned);
         }
+        #endregion
     }
 }
