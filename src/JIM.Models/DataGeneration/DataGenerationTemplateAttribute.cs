@@ -8,38 +8,45 @@ namespace JIM.Models.DataGeneration
     {
         #region accessors
         public int Id { get; set; }
+        
         public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }
+        
         public MetaverseAttribute? MetaverseAttribute { get; set; }
-
+        
         /// <summary>
         /// How many values should be generated? 100% would mean every object has a value for this attribute.
         /// Not compatible with ManagerDepthPercentage.
         /// </summary>
         public int? PopulatedValuesPercentage { get; set; }
-
+        
         /// <summary>
         /// Percentage of how many boolean values should be true
         /// </summary>
         public int? BoolTrueDistribution { get; set; }
+        
         /// <summary>
         /// Should we randomly generate bool values?
         /// </summary>
         public bool? BoolShouldBeRandom { get; set; }
-
+        
         public DateTime? MinDate { get; set; }
+        
         public DateTime? MaxDate { get; set; }
-
+        
         public int? MinNumber { get; set; }
+        
         public int? MaxNumber { get; set; }
+        
         public bool? SequentialNumbers { get; set; }
+        
         public bool? RandomNumbers { get; set; }
-
+        
         /// <summary>
         /// Use a variable replacement approach to constructing string values, i.e.
         /// "{Firstname}.{Lastname}[UniqueInt]@contoso.com" to construct an email address.
         /// </summary>
         public string? Pattern { get; set; }
-
+        
         /// <summary>
         /// The example data sets to use to populate the object value.
         /// Multiple can be supplied with no Pattern value and an even distribution will be used from both sets, i.e. male/female firstname data sets.
