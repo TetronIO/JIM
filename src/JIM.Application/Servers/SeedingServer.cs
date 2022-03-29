@@ -641,11 +641,13 @@ namespace JIM.Application.Servers
             }
 
             var staticMembersAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.StaticMembers);
-            if (infoAttribute == null)
+            if (staticMembersAttribute == null)
             {
                 groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.StaticMembers),
+                    MvaRefMinAssignments = 5,
+                    MvaRefMaxAssignments = 200,
                     PopulatedValuesPercentage = 100
                 });
             }
