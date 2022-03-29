@@ -658,6 +658,8 @@ namespace JIM.Application.Servers
                 groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Owners),
+                    MvaRefMinAssignments = 0,
+                    MvaRefMaxAssignments = 5,
                     PopulatedValuesPercentage = 75
                 });
             }
