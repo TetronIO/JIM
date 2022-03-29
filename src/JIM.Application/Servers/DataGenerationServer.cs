@@ -185,17 +185,21 @@ namespace JIM.Application.Servers
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-            // a string attribute can have a string or number type value assigned
+            // a string attribute can have a string type or number type value assigned
             if (dataGenerationTemplateAttribute.IsUsingStrings())
             {
+                // logic:
+                // - if no pattern: handle one or more data set value assignments
+                // - if pattern: replace attrivute vars, replace system vars and replace example data set vars
+
                 string output;
-                if (dataGenerationTemplateAttribute.ExampleDataSets.Count == 1)
+                if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSets.Count == 1)
                 {
                     // single example-data set based
                     var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[0].Values.Count);
                     output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
                 }
-                else if (dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
+                else if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
                 {
                     // multiple example-data set based:
                     // just choose randomly a value from across the datasets. simplest for now
@@ -214,11 +218,12 @@ namespace JIM.Application.Servers
                     // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
                     // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
                     output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                    output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, output, dataGenerationValueTrackers);
+                    output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationValueTrackers, output);
+                    output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSets, dataGenerationValueTrackers, random, output);
                 }
                 else
                 {
-                    throw new InvalidDataException("DataGenerationTemplateAttribute configuration not as expected");
+                    throw new InvalidDataException("DataGenerationTemplateAttribute string atribute configuration not as expected");
                 }
 
                 metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -417,7 +422,7 @@ namespace JIM.Application.Servers
                 }
             }
             stopwatch.Stop();
-            Log.Verbose($"RemoveUnecessaryAttributeValues: Removed {attributeValuesRemoved.ToString("N0")} attribute values. Took {stopwatch.Elapsed} to complete");
+            Log.Verbose($"RemoveUnecessaryAttributeValues: Removed {attributeValuesRemoved:N0)} attribute values. Took {stopwatch.Elapsed} to complete");
         }
         #endregion
 
@@ -446,8 +451,8 @@ namespace JIM.Application.Servers
         private static string ReplaceSystemVariables(
             MetaverseObject metaverseObject,
             MetaverseAttribute metaverseAttribute,
-            string textToProcess,
-            List<DataGenerationValueTracker> dataGenerationValueTrackers)
+            List<DataGenerationValueTracker> dataGenerationValueTrackers,
+            string textToProcess)
         {
             // match system variables
             // enumerate, process
@@ -493,6 +498,74 @@ namespace JIM.Application.Servers
                     }
                 }
             }
+
+            return textToProcess;
+        }
+
+        private static string ReplaceExampleDataSetVariables(
+            MetaverseObject metaverseObject,
+            MetaverseAttribute metaverseAttribute,
+            List<ExampleDataSet> exampleDataSets,
+            List<DataGenerationValueTracker> dataGenerationValueTrackers,
+            Random random,
+            string textToProcess)
+        {
+            // logic:
+            // - replace each example data set variable in the pattern with a random value from example data sets, populating a new value variable
+            // - check if the new value variable value is unique via the tracked values list
+            // - if not, re-run until it is unique
+
+            // match example data set variables i.e. {0}
+            // enumerate, process
+            var regex = new Regex("({.*?})", RegexOptions.Compiled);
+            var exampleDataSetVariables = regex.Matches(textToProcess);
+            var isGeneratedValueUnique = false;
+            while (!isGeneratedValueUnique)
+            {
+                var completeGeneratedValue = textToProcess;
+                foreach (Match match in exampleDataSetVariables)
+                {
+                    // snip off the brackets: {} to get the variable, then test if it's an ExampleDataSet index, i.e. {0}
+                    var variable = match.Value[1..^1];
+                    if (int.TryParse(variable, out int exampleDataSetIndex))
+                        continue;
+
+                    if (exampleDataSetIndex >= exampleDataSets.Count)
+                        throw new InvalidDataException("DataGenerationTemplateAttribute example data set index variable is too high. Smaller number needed. Must be within the bounds of the assigned ExampleDataSets");
+
+                    // get the example data set and then choose a random value from it before replacing the variable
+                    var exampleDataSet = exampleDataSets[exampleDataSetIndex];
+                    var randomValueIndex = random.Next(0, exampleDataSet.Values.Count - 1);
+                    var randomValue = exampleDataSet.Values[randomValueIndex].StringValue;
+
+                    if (string.IsNullOrEmpty(randomValue))
+                        throw new InvalidDataException("Did not get a string ExampleDataSetValue value from the randomly selected list of values.");
+
+                    // replace the example data set variable with the random value
+                    completeGeneratedValue = completeGeneratedValue.Replace(match.Value, randomValue);
+                }
+
+                // is the generated value unique? exit if so
+                DataGenerationValueTracker? uniqueStringTracker = null;
+                lock (dataGenerationValueTrackers)
+                    uniqueStringTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == completeGeneratedValue);
+
+                if (uniqueStringTracker == null)
+                {
+                    // generated value is unique
+                    isGeneratedValueUnique = true;
+                    textToProcess = completeGeneratedValue;
+
+                    // add the generated value to the tracker so we don't end up generating and assigning it again
+                    lock (dataGenerationValueTrackers)
+                        dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textToProcess });
+                }
+                else
+                {
+                    // this is not a unique value, we've generated it before. go round again until it is unique
+                    Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
+                }
+            }            
 
             return textToProcess;
         }
