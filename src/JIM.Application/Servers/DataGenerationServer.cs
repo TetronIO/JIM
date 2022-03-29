@@ -101,7 +101,8 @@ namespace JIM.Application.Servers
                 throw new InvalidDataException("Template is invalid. Please check that all attributes are valid.");
 
             // object type dependency graph needs considering
-            // for now we should probably just advise people to add template object types in reverse order to how they're referenced
+            // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
+            // note: entity framework might handle dependency sequencing for us at time of persistence
 
             var random = new Random();
             var metaverseObjectsToCreate = new List<MetaverseObject>();
@@ -172,10 +173,14 @@ namespace JIM.Application.Servers
             Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated:N0} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
 
             // trying to help garbage collection along. data generation results in a lot of ram usage.
+            metaverseObjectsToCreate.Clear();
             metaverseObjectsToCreate = null;
+            dataGenerationValueTrackers.Clear();
             dataGenerationValueTrackers = null;
         }
+        #endregion
 
+        #region Attribute Generation
         private static void GenerateMetaverseStringValue(
             MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
@@ -338,7 +343,7 @@ namespace JIM.Application.Servers
         }
 
         private void GenerateManagerAssignments(
-            List<MetaverseObject> metaverseObjectsToCreate, 
+            List<MetaverseObject> metaverseObjectsToCreate,
             DataGenerationObjectType objectType,
             DataGenerationTemplateAttribute templateManagerAttribute,
             Random random)
@@ -426,7 +431,7 @@ namespace JIM.Application.Servers
         }
         #endregion
 
-        #region Raw Value Generation
+        #region Attribute Value Generation
         private static string ReplaceAttributeVariables(MetaverseObject metaverseObject, string textToProcess)
         {
             // match attribute variables
