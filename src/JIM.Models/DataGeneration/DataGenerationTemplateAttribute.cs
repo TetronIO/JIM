@@ -44,6 +44,7 @@ namespace JIM.Models.DataGeneration
         /// <summary>
         /// Use a variable replacement approach to constructing string values, i.e.
         /// "{Firstname}.{Lastname}[UniqueInt]@contoso.com" to construct an email address.
+        /// Can also be used with ExampleDataSets to form their values in a specific way by using their index position, i.e. "{0} {1} (my extra info)"
         /// </summary>
         public string? Pattern { get; set; }
         
@@ -60,6 +61,18 @@ namespace JIM.Models.DataGeneration
         /// Leave as null if you don't want to assign Manager attribute values.
         /// </summary>
         public int? ManagerDepthPercentage { get; set; }
+
+        /// <summary>
+        /// When the Metaverse Attribute is a multi-valued reference attribute, this enables a minimum number of values to be assigned.
+        /// i.e. must have more than x value assignments.
+        /// </summary>
+        public int? MvaRefMinAssignments { get; set; }
+
+        /// <summary>
+        /// When the Metaverse Attribute is a multi-valued reference attribute, this enables a maximum number of values to be assigned.
+        /// i.e. must not have more than x value assignments.
+        /// </summary>
+        public int? MvaRefMaxAssignments { get; set; }
         #endregion
 
         #region constructors
@@ -89,6 +102,7 @@ namespace JIM.Models.DataGeneration
         {
             var usingPattern = !string.IsNullOrEmpty(Pattern);
             var usingExampleData = ExampleDataSets != null && ExampleDataSets.Count > 0;
+            var usingMvaRefMinMaxAttributes = MvaRefMinAssignments.HasValue || MvaRefMaxAssignments.HasValue;
 
             // need either a cs or mv attribute reference
             if (ConnectedSystemAttribute == null && MetaverseAttribute == null)
@@ -106,10 +120,18 @@ namespace JIM.Models.DataGeneration
 
             // check for invalid use of type-specific properties
             AttributeDataType attributeDataType;
+            AttributePlurality attributePlurality;
+
             if (ConnectedSystemAttribute != null)
+            {
                 attributeDataType = ConnectedSystemAttribute.Type;
+                attributePlurality = ConnectedSystemAttribute.AttributePlurality;
+            }
             else if (MetaverseAttribute != null)
+            {
                 attributeDataType = MetaverseAttribute.Type;
+                attributePlurality = MetaverseAttribute.AttributePlurality;
+            }
             else
                 throw new InvalidDataException("Either a MetaverseAttribute OR a ConnectedSystemAttribute reference is required. None was present.");
 
@@ -146,6 +168,12 @@ namespace JIM.Models.DataGeneration
             if (attributeDataType != AttributeDataType.Reference && ManagerDepthPercentage.HasValue)
             {
                 Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage can only be used with reference attribute data types");
+                return false;
+            }
+
+            if (attributeDataType != AttributeDataType.Reference && usingMvaRefMinMaxAttributes)
+            {
+                Log.Error("DataGenerationTemplateAttribute.IsValid: MvaRefMinAssignments or MvaRefMaxAssignments can only be used with reference attribute data types");
                 return false;
             }
 
@@ -221,18 +249,44 @@ namespace JIM.Models.DataGeneration
                 }
             }
 
-            if (attributeDataType == AttributeDataType.Reference && ManagerDepthPercentage.HasValue)
+            if (attributeDataType == AttributeDataType.Reference)
             {
-                if (PopulatedValuesPercentage.HasValue)
+                if (ManagerDepthPercentage.HasValue)
                 {
-                    Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage cannot be used with PopulatedValuesPercentage. Ensure it's set to null");
-                    return false;
+                    if (PopulatedValuesPercentage.HasValue)
+                    {
+                        Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage cannot be used with PopulatedValuesPercentage. Ensure it's set to null");
+                        return false;
+                    }
+
+                    if (ManagerDepthPercentage < 1 || ManagerDepthPercentage > 99)
+                    {
+                        Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage must be between 1-99(%)");
+                        return false;
+                    }
                 }
 
-                if (ManagerDepthPercentage < 1 || ManagerDepthPercentage > 99)
+                if (usingMvaRefMinMaxAttributes)
                 {
-                    Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage must be between 1-99(%)");
-                    return false;
+                    if (attributePlurality != AttributePlurality.MultiValued)
+                    {
+                        Log.Error("DataGenerationTemplateAttribute.IsValid: MvaRefMinAssignments and MvaRefMaxAssignments can only be used on multi-valued attributes.");
+                        return false;
+                    }
+
+                    // min must be equal or greater than zero
+                    if (MvaRefMinAssignments.HasValue && MvaRefMinAssignments < 0)
+                    {
+                        Log.Error("DataGenerationTemplateAttribute.IsValid: MvaRefMinAssignments must be equal or more than 0");
+                        return false;
+                    }
+
+                    // min must be less than max
+                    if (MvaRefMinAssignments.HasValue && MvaRefMaxAssignments.HasValue && MvaRefMinAssignments.Value >= MvaRefMaxAssignments.Value)
+                    {
+                        Log.Error("DataGenerationTemplateAttribute.IsValid: MvaRefMinAssignments must be less than MvaRefMaxAssignments");
+                        return false;
+                    }
                 }
             }
 

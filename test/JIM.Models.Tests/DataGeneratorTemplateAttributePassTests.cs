@@ -378,6 +378,35 @@ namespace JIM.Models.Tests
         }
 
         [Test]
+        public void TestIsValidMvaReferencePass()
+        {
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = 10
+            };
+            Assert.IsTrue(subject1.IsValid());
+
+            var subject2 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                PopulatedValuesPercentage = 100,
+                MvaRefMaxAssignments = 10
+            };
+            Assert.IsTrue(subject2.IsValid());
+
+            var subject3 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = 10,
+                MvaRefMaxAssignments = 100
+            };
+            Assert.IsTrue(subject3.IsValid());
+        }
+
+        [Test]
         public void TestIsValidManagerPass()
         {
             var subject1 = new DataGenerationTemplateAttribute

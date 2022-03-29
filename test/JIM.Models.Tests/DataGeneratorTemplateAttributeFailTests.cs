@@ -280,5 +280,55 @@ namespace JIM.Models.Tests
             };
             Assert.IsFalse(subject6.IsValid());
         }
+
+        [Test]
+        public void TestIsValidMvaReferenceFail()
+        {
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = -1
+            };
+            Assert.IsFalse(subject1.IsValid());
+
+            // min must be less than max
+            var subject2 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = 100,
+                MvaRefMaxAssignments = 10
+            };
+            Assert.IsFalse(subject2.IsValid());
+
+            // min must be less than max
+            var subject3 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = 10,
+                MvaRefMaxAssignments = 10
+            };
+            Assert.IsFalse(subject3.IsValid());
+
+            // can't use MvaRefMinAssignments or MvaRefMaxAssignments on non-mva reference attributes
+            var subject4 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.SingleValued },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = 0,
+                MvaRefMaxAssignments = 10
+            };
+            Assert.IsFalse(subject4.IsValid());
+            var subject5 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String, AttributePlurality = AttributePlurality.MultiValued },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = 0,
+                MvaRefMaxAssignments = 10
+            };
+            Assert.IsFalse(subject5.IsValid());
+        }
     }
 }
