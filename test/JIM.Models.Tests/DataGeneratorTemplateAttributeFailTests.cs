@@ -3,6 +3,7 @@ using JIM.Models.DataGeneration;
 using JIM.Models.Staging;
 using NUnit.Framework;
 using System;
+using System.Collections.Generic;
 
 namespace JIM.Models.Tests
 {
@@ -234,7 +235,7 @@ namespace JIM.Models.Tests
             // cannot use PopulatedValuesPercentage and ManagerDepthPercentage together
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 PopulatedValuesPercentage = 100,
                 ManagerDepthPercentage = 50
             };
@@ -243,7 +244,7 @@ namespace JIM.Models.Tests
             // ManagerDepthPercentage cannot be zero. If you don't want to use ManagerDepthPercentage, then set it to null
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 0
             };
             Assert.IsFalse(subject2.IsValid());
@@ -251,7 +252,7 @@ namespace JIM.Models.Tests
             // not everyone can be a manager
             var subject3 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 100
             };
             Assert.IsFalse(subject3.IsValid());
@@ -259,7 +260,7 @@ namespace JIM.Models.Tests
             // outside of bounds
             var subject4 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 120
             };
             Assert.IsFalse(subject4.IsValid());
@@ -267,7 +268,7 @@ namespace JIM.Models.Tests
             // outside of bounds
             var subject5 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = -10
             };
             Assert.IsFalse(subject5.IsValid());
@@ -275,7 +276,7 @@ namespace JIM.Models.Tests
             // ManagerDepthPercentage can only be used on reference attribute types
             var subject6 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 50
             };
             Assert.IsFalse(subject6.IsValid());
@@ -287,6 +288,7 @@ namespace JIM.Models.Tests
             var subject1 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = -1
             };
@@ -296,6 +298,7 @@ namespace JIM.Models.Tests
             var subject2 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 100,
                 MvaRefMaxAssignments = 10
@@ -306,6 +309,7 @@ namespace JIM.Models.Tests
             var subject3 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 10,
                 MvaRefMaxAssignments = 10
@@ -316,6 +320,7 @@ namespace JIM.Models.Tests
             var subject4 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.SingleValued },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 0,
                 MvaRefMaxAssignments = 10
@@ -324,11 +329,22 @@ namespace JIM.Models.Tests
             var subject5 = new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String, AttributePlurality = AttributePlurality.MultiValued },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 0,
                 MvaRefMaxAssignments = 10
             };
             Assert.IsFalse(subject5.IsValid());
+
+            // ReferenceMetaverseObjectTypes are needed
+            var subject6 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                PopulatedValuesPercentage = 100,
+                MvaRefMinAssignments = 0,
+                MvaRefMaxAssignments = 10
+            };
+            Assert.IsFalse(subject6.IsValid());
         }
     }
 }

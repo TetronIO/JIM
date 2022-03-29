@@ -3,6 +3,7 @@ using JIM.Models.DataGeneration;
 using JIM.Models.Staging;
 using NUnit.Framework;
 using System;
+using System.Collections.Generic;
 
 namespace JIM.Models.Tests
 {
@@ -371,7 +372,8 @@ namespace JIM.Models.Tests
         {
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.StaticMembers },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100
             };
             Assert.IsTrue(subject1.IsValid());
@@ -383,6 +385,7 @@ namespace JIM.Models.Tests
             var subject1 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 10
             };
@@ -391,6 +394,7 @@ namespace JIM.Models.Tests
             var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMaxAssignments = 10
             };
@@ -399,6 +403,7 @@ namespace JIM.Models.Tests
             var subject3 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 10,
                 MvaRefMaxAssignments = 100
@@ -411,14 +416,14 @@ namespace JIM.Models.Tests
         {
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 50
             };
             Assert.IsTrue(subject1.IsValid());
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference },
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 95
             };
             Assert.IsTrue(subject2.IsValid());

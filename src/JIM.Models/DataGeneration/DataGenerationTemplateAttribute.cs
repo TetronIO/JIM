@@ -73,6 +73,12 @@ namespace JIM.Models.DataGeneration
         /// i.e. must not have more than x value assignments.
         /// </summary>
         public int? MvaRefMaxAssignments { get; set; }
+
+        /// <summary>
+        /// When populating reference attributes, we need to specify what type of object we should use as the source.
+        /// Note: does not apply to user Manager attributes, they are sourced automatically.
+        /// </summary>
+        public List<MetaverseObjectType>? ReferenceMetaverseObjectTypes { get; set; }
         #endregion
 
         #region constructors
@@ -121,16 +127,19 @@ namespace JIM.Models.DataGeneration
             // check for invalid use of type-specific properties
             AttributeDataType attributeDataType;
             AttributePlurality attributePlurality;
+            string attributeName;
 
             if (ConnectedSystemAttribute != null)
             {
                 attributeDataType = ConnectedSystemAttribute.Type;
                 attributePlurality = ConnectedSystemAttribute.AttributePlurality;
+                attributeName = ConnectedSystemAttribute.Name;
             }
             else if (MetaverseAttribute != null)
             {
                 attributeDataType = MetaverseAttribute.Type;
                 attributePlurality = MetaverseAttribute.AttributePlurality;
+                attributeName = MetaverseAttribute.Name;
             }
             else
                 throw new InvalidDataException("Either a MetaverseAttribute OR a ConnectedSystemAttribute reference is required. None was present.");
@@ -165,11 +174,20 @@ namespace JIM.Models.DataGeneration
                 }
             }
 
-            if (attributeDataType != AttributeDataType.Reference && ManagerDepthPercentage.HasValue)
+            if (attributeDataType != AttributeDataType.Reference)
             {
-                Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage can only be used with reference attribute data types");
-                return false;
-            }
+                if (ReferenceMetaverseObjectTypes != null && ReferenceMetaverseObjectTypes.Count > 0)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: ReferenceMetaverseObjectTypes can only be used with reference attribute data types");
+                    return false;
+                }
+
+                if (ManagerDepthPercentage.HasValue)
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: ManagerDepthPercentage can only be used with reference attribute data types");
+                    return false;
+                }
+            }            
 
             if (attributeDataType != AttributeDataType.Reference && usingMvaRefMinMaxAttributes)
             {
@@ -251,6 +269,12 @@ namespace JIM.Models.DataGeneration
 
             if (attributeDataType == AttributeDataType.Reference)
             {
+                if (attributeName != Constants.BuiltInAttributes.Manager && (ReferenceMetaverseObjectTypes == null || ReferenceMetaverseObjectTypes.Count == 0))
+                {
+                    Log.Error("DataGenerationTemplateAttribute.IsValid: ReferenceMetaverseObjectTypes not populated");
+                    return false;
+                }
+
                 if (ManagerDepthPercentage.HasValue)
                 {
                     if (PopulatedValuesPercentage.HasValue)

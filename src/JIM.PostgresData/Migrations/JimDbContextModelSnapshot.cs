@@ -165,11 +165,16 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DataGenerationTemplateAttributeId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DataGenerationTemplateAttributeId");
 
                     b.HasIndex("Name");
 
@@ -965,6 +970,13 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ReferenceValue");
                 });
 
+            modelBuilder.Entity("JIM.Models.Core.MetaverseObjectType", b =>
+                {
+                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", null)
+                        .WithMany("ReferenceMetaverseObjectTypes")
+                        .HasForeignKey("DataGenerationTemplateAttributeId");
+                });
+
             modelBuilder.Entity("JIM.Models.Core.ServiceSettings", b =>
                 {
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "SSONameIDAttribute")
@@ -1285,6 +1297,11 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplate", b =>
                 {
                     b.Navigation("ObjectTypes");
+                });
+
+            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", b =>
+                {
+                    b.Navigation("ReferenceMetaverseObjectTypes");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSet", b =>

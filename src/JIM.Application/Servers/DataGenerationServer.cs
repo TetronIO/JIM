@@ -137,6 +137,9 @@ namespace JIM.Application.Servers
                                 case AttributeDataType.Bool:
                                     GenerateMetaverseBooleanValue(metaverseObject, templateAttribute, random);
                                     break;
+                                case AttributeDataType.Reference:
+                                    GenerateMetaverseReferenceValue(metaverseObject, templateAttribute, random, metaverseObjectsToCreate);
+                                    break;
                             }
                         }
 
@@ -335,6 +338,34 @@ namespace JIM.Application.Servers
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
                 BoolValue = value
             });
+        }
+
+        private static void GenerateMetaverseReferenceValue(MetaverseObject metaverseObject, DataGenerationTemplateAttribute templateAttribute, Random random, List<MetaverseObject> metaverseObjects)
+        {
+            if (templateAttribute.MetaverseAttribute == null)
+                return;
+
+            // skip if this is for a user manager attribute, that's handled elsewhere
+            if (metaverseObject.Type.Name == Constants.BuiltInObjectTypes.User && templateAttribute.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager)
+                return;
+
+            var metaverseObjectsOfTypes = metaverseObjects.Where(q => templateAttribute.ReferenceMetaverseObjectTypes != null && templateAttribute.ReferenceMetaverseObjectTypes.Contains(q.Type)).ToList();
+            if (templateAttribute.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued)
+            {
+                // pick a random metaverse object and assign
+                var referencedMetaverseObjectIndex = random.Next(0, metaverseObjectsOfTypes.Count -1);
+                var referencedMetaverseObject = metaverseObjectsOfTypes[referencedMetaverseObjectIndex];
+                metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = templateAttribute.MetaverseAttribute,
+                    ReferenceValue = referencedMetaverseObject
+                });
+            }
+            else
+            {
+                // determine how many values to pick
+
+            }
         }
 
         private void GenerateManagerAssignments(List<MetaverseObject> metaverseObjectsToCreate, DataGenerationObjectType objectType, Random random)
