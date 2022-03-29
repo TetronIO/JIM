@@ -93,19 +93,6 @@ namespace JIM.Models.Tests
         }
 
         [Test]
-        public void TestIsValidStringFail()
-        {
-            var subject1 = new DataGenerationTemplateAttribute
-            {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
-                PopulatedValuesPercentage = 100,
-                Pattern = "dummy-value",
-                ExampleDataSets = { new ExampleDataSet() }
-            };
-            Assert.IsFalse(subject1.IsValid());
-        }
-
-        [Test]
         public void TestIsValidNumberMismatchFail()
         {
             var subject1 = new DataGenerationTemplateAttribute

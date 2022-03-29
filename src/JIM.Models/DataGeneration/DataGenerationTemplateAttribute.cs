@@ -42,8 +42,8 @@ namespace JIM.Models.DataGeneration
 
         /// <summary>
         /// The example data sets to use to populate the object value.
-        /// Multiple can be supplied and an even distribution will be used from both sets, i.e. male/female firstname data sets.
-        /// Shouldn't be supplied if you're using a pattern.
+        /// Multiple can be supplied with no Pattern value and an even distribution will be used from both sets, i.e. male/female firstname data sets.
+        /// One or more can be supplied with a Pattern value and index-based pattern variables can be used to say how the ExampleDataSets should be used, i.e. "{0} {1}" means use a random value from the first ExampleDataSet, a space and then a random value from the second ExampleDataSet.
         /// </summary>
         public List<ExampleDataSet> ExampleDataSets { get; set; }
 
@@ -142,20 +142,10 @@ namespace JIM.Models.DataGeneration
                 return false;
             }
 
-            if (attributeDataType == AttributeDataType.String)
+            if (attributeDataType == AttributeDataType.String && !usingPattern && !usingExampleData && !IsUsingNumbers())
             {
-                // either example data or a pattern needs to be used to populate string attribute values, and not both
-                if (usingPattern && usingExampleData)
-                {
-                    Log.Error("DataGenerationTemplateAttribute.IsValid: String but using pattern and example data");
-                    return false;
-                }
-
-                if (!usingPattern && !usingExampleData && !IsUsingNumbers())
-                {
-                    Log.Error("DataGenerationTemplateAttribute.IsValid: String but not using pattern, example data or numbers");
-                    return false;
-                }
+                Log.Error("DataGenerationTemplateAttribute.IsValid: String but not using pattern, example data or numbers");
+                return false;
             }
 
             if (attributeDataType == AttributeDataType.Bool)

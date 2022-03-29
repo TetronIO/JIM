@@ -324,6 +324,38 @@ namespace JIM.Models.Tests
         }
 
         [Test]
+        public void TestExampleDataSetUsagePass()
+        {
+            // you can assign one or more ExampleDataSets with no pattern
+            // you can assign one or more ExampleDAtaSets with a pattern
+
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                ExampleDataSets = { new ExampleDataSet() }
+            };
+            Assert.IsTrue(subject1.IsValid());
+
+            var subject2 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                ExampleDataSets = { new ExampleDataSet(), new ExampleDataSet() }
+            };
+            Assert.IsTrue(subject2.IsValid());
+
+            var subject3 = new DataGenerationTemplateAttribute
+            {
+                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                PopulatedValuesPercentage = 100,
+                ExampleDataSets = { new ExampleDataSet(), new ExampleDataSet() },
+                Pattern = "{0} {1}"
+            };
+            Assert.IsTrue(subject3.IsValid());
+        }
+
+        [Test]
         public void TestIsValidGuidPass()
         {
             var subject1 = new DataGenerationTemplateAttribute
