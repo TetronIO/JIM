@@ -584,7 +584,7 @@ namespace JIM.Application.Servers
                 groupDataGenerationObjectType = new DataGenerationObjectType
                 {
                     MetaverseObjectType = groupType,
-                    ObjectsToCreate = 1000
+                    ObjectsToCreate = 500
                 };
                 dgt.ObjectTypes.Add(groupDataGenerationObjectType);
             }
@@ -660,6 +660,16 @@ namespace JIM.Application.Servers
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Owners),
                     MvaRefMinAssignments = 0,
                     MvaRefMaxAssignments = 5,
+                    PopulatedValuesPercentage = 75
+                });
+            }
+
+            var managedByAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ManagedBy);
+            if (managedByAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ManagedBy),
                     PopulatedValuesPercentage = 75
                 });
             }

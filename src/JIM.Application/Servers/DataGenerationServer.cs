@@ -345,10 +345,11 @@ namespace JIM.Application.Servers
             if (templateAttribute.MetaverseAttribute == null)
                 return;
 
-            // skip if this is for a user manager attribute, that's handled elsewhere
+            // skip if this is for a user manager attribute, that's specially handled elsewhere
             if (metaverseObject.Type.Name == Constants.BuiltInObjectTypes.User && templateAttribute.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager)
                 return;
 
+            // is this going to be slow?
             var metaverseObjectsOfTypes = metaverseObjects.Where(q => templateAttribute.ReferenceMetaverseObjectTypes != null && templateAttribute.ReferenceMetaverseObjectTypes.Contains(q.Type)).ToList();
             if (templateAttribute.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued)
             {
@@ -363,8 +364,21 @@ namespace JIM.Application.Servers
             }
             else
             {
+                // multi-valued attribute
                 // determine how many values to pick
+                var min = templateAttribute.MvaRefMinAssignments.HasValue ? templateAttribute.MvaRefMinAssignments.Value : 0;
+                var max = templateAttribute.MvaRefMaxAssignments.HasValue ? templateAttribute.MvaRefMaxAssignments.Value : metaverseObjectsOfTypes.Count;
+                var attributeValuesToCreate = random.Next(min, max);
 
+                for (int i = 0; i < attributeValuesToCreate; i++)
+                {
+                    var referencedObject = metaverseObjectsOfTypes[random.Next(0, metaverseObjectsOfTypes.Count - 1)];
+                    metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+                    {
+                        Attribute = templateAttribute.MetaverseAttribute,
+                        ReferenceValue = referencedObject
+                    });
+                }                
             }
         }
 

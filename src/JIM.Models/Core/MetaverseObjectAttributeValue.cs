@@ -29,7 +29,6 @@ namespace JIM.Models.Core
 
         public MetaverseObjectAttributeValue()
         {
-            ByteValue = Array.Empty<byte>();
         }
     }
 }
