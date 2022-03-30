@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using JIM.Models.DataGeneration;
+using Microsoft.EntityFrameworkCore;
 
 namespace JIM.Models.Core
 {
@@ -10,6 +11,7 @@ namespace JIM.Models.Core
         public DateTime Created { get; set; }
         public List<MetaverseAttribute> Attributes { get; set; }
         public bool BuiltIn { get; set; }
+        public List<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
 
         public MetaverseObjectType()
         {
