@@ -49,11 +49,12 @@ namespace JIM.Models.DataGeneration
         public string? Pattern { get; set; }
         
         /// <summary>
-        /// The example data sets to use to populate the object value.
-        /// Multiple can be supplied with no Pattern value and an even distribution will be used from both sets, i.e. male/female firstname data sets.
-        /// One or more can be supplied with a Pattern value and index-based pattern variables can be used to say how the ExampleDataSets should be used, i.e. "{0} {1}" means use a random value from the first ExampleDataSet, a space and then a random value from the second ExampleDataSet.
+        /// The example data sets that can be used to populate a string value.
+        /// Multiple example data sets can be supplied with no Pattern value and an even distribution will be used from both sets, i.e. male/female firstname data sets.
+        /// One or more can be supplied with a Pattern value and index-based pattern variables can be used to say how the ExampleDataSets should be used, 
+        /// i.e. "{0} {1}" means use a random value from the first ExampleDataSet, a space and then a random value from the second ExampleDataSet.
         /// </summary>
-        public List<ExampleDataSet> ExampleDataSets { get; set; }
+        public List<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
 
         /// <summary>
         /// If you want Manager attributes to be assigned, specify how far into the organisational hierarchy managers should be present.
@@ -84,7 +85,8 @@ namespace JIM.Models.DataGeneration
         #region constructors
         public DataGenerationTemplateAttribute()
         {
-            ExampleDataSets = new List<ExampleDataSet>();
+            // needs to be non-null at all times for ERM reasons
+            ExampleDataSetInstances = new List<ExampleDataSetInstance>();
         }
         #endregion
 
@@ -101,13 +103,13 @@ namespace JIM.Models.DataGeneration
 
         public bool IsUsingStrings()
         {
-            return !string.IsNullOrEmpty(Pattern) || (ExampleDataSets != null && ExampleDataSets.Count > 0);
+            return !string.IsNullOrEmpty(Pattern) || (ExampleDataSetInstances != null && ExampleDataSetInstances.Count > 0);
         }
 
         public void Validate()
         {
             var usingPattern = !string.IsNullOrEmpty(Pattern);
-            var usingExampleData = ExampleDataSets != null && ExampleDataSets.Count > 0;
+            var usingExampleData = ExampleDataSetInstances != null && ExampleDataSetInstances.Count > 0;
             var usingMvaRefMinMaxAttributes = MvaRefMinAssignments.HasValue || MvaRefMaxAssignments.HasValue;
 
             // need either a cs or mv attribute reference

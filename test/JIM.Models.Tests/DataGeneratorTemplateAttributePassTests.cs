@@ -320,7 +320,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSets = { new ExampleDataSet() }
+                ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
             Assert.DoesNotThrow(subject2.Validate);
         }
@@ -335,7 +335,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSets = { new ExampleDataSet() }
+                ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
             Assert.DoesNotThrow(subject1.Validate);
 
@@ -343,7 +343,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSets = { new ExampleDataSet(), new ExampleDataSet() }
+                ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance(), new ExampleDataSetInstance() }
             };
             Assert.DoesNotThrow(subject2.Validate);
 
@@ -351,7 +351,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSets = { new ExampleDataSet(), new ExampleDataSet() },
+                ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance(), new ExampleDataSetInstance() },
                 Pattern = "{0} {1}"
             };
             Assert.DoesNotThrow(subject3.Validate);

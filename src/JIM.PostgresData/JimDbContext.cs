@@ -24,6 +24,7 @@ namespace JIM.PostgresData
         internal DbSet<Role> Roles { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
         internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
+        internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
@@ -67,6 +68,12 @@ namespace JIM.PostgresData
 
             modelBuilder.Entity<MetaverseObjectType>()
                 .HasMany(mot => mot.Attributes);
+
+            //modelBuilder.Entity<ExampleDataSet>()
+            //    .HasMany(eds => eds.ExampleDataSetInstances);
+
+            //modelBuilder.Entity<ExampleDataSetInstance>()
+            //    .HasOne(edsi => edsi.ExampleDataSet);
         }
     }
 }

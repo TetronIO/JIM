@@ -118,7 +118,8 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSets = { new ExampleDataSet() }
+                ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
+
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
 
@@ -154,7 +155,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Bool },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSets = { new ExampleDataSet() }
+                ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
 
@@ -198,7 +199,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
-                ExampleDataSets = { new ExampleDataSet() }
+                ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
 

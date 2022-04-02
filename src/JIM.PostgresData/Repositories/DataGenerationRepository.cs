@@ -55,7 +55,7 @@ namespace JIM.PostgresData.Repositories
         #region DataGenerationTemplates
         public async Task<List<DataGenerationTemplate>> GetTemplatesAsync()
         {
-            return await Repository.Database.DataGenerationTemplates.
+            var templates = await Repository.Database.DataGenerationTemplates.
                 Include(t => t.ObjectTypes).
                 ThenInclude(ot => ot.MetaverseObjectType).
                 Include(t => t.ObjectTypes).
@@ -66,14 +66,20 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ConnectedSystemAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.ExampleDataSets).
+                ThenInclude(ta => ta.ExampleDataSetInstances).
+                ThenInclude(edsi => edsi.ExampleDataSet).
                 ThenInclude(eds => eds.Values).
                 OrderBy(t => t.Name).ToListAsync();
+
+            foreach (var t in templates)
+                SortExampleDataSetInstances(t);
+
+            return templates;
         }
 
         public async Task<DataGenerationTemplate?> GetTemplateAsync(string name)
         {
-            return await Repository.Database.DataGenerationTemplates.
+            var t = await Repository.Database.DataGenerationTemplates.
                 Include(t => t.ObjectTypes).
                 ThenInclude(ot => ot.MetaverseObjectType).
                 Include(t => t.ObjectTypes).
@@ -84,14 +90,21 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ConnectedSystemAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.ExampleDataSets).
+                ThenInclude(ta => ta.ExampleDataSetInstances).
+                ThenInclude(edsi => edsi.ExampleDataSet).
                 ThenInclude(eds => eds.Values).
                 SingleOrDefaultAsync(t => t.Name == name);
+
+            if (t == null)
+                return null;
+
+            SortExampleDataSetInstances(t);
+            return t;
         }
 
         public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
         {
-            return await Repository.Database.DataGenerationTemplates.
+            var t = await Repository.Database.DataGenerationTemplates.
                 Include(t => t.ObjectTypes).
                 ThenInclude(ot => ot.MetaverseObjectType).
                 Include(t => t.ObjectTypes).
@@ -105,9 +118,16 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ReferenceMetaverseObjectTypes).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.ExampleDataSets).
+                ThenInclude(ta => ta.ExampleDataSetInstances).
+                ThenInclude(edsi => edsi.ExampleDataSet).
                 ThenInclude(eds => eds.Values).
                 SingleOrDefaultAsync(t => t.Id == id);
+
+            if (t == null)
+                return null;
+
+            SortExampleDataSetInstances(t);
+            return t;
         }
 
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
@@ -141,6 +161,14 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.DataGenerationObjectTypes.RemoveRange(template.ObjectTypes);
             Repository.Database.DataGenerationTemplates.Remove(template);
             await Repository.Database.SaveChangesAsync();
+        }
+
+        private static void SortExampleDataSetInstances(DataGenerationTemplate template)
+        {
+            foreach (var ot in template.ObjectTypes)
+                foreach (var ta in ot.TemplateAttributes)
+                    if (ta.ExampleDataSetInstances != null && ta.ExampleDataSetInstances.Count > 0)
+                        ta.ExampleDataSetInstances = ta.ExampleDataSetInstances.OrderBy(q => q.Order).ToList();
         }
         #endregion
 

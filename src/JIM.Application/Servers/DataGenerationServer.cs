@@ -199,22 +199,22 @@ namespace JIM.Application.Servers
                 // - if pattern: replace attrivute vars, replace system vars and replace example data set vars
 
                 string output;
-                if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSets.Count == 1)
+                if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSetInstances.Count == 1)
                 {
                     // single example-data set based
-                    var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSets[0].Values.Count);
-                    output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
+                    var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count);
+                    output = dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values[valueIndex].StringValue;
                 }
-                else if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSets.Count > 1)
+                else if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSetInstances.Count > 1)
                 {
                     // multiple example-data set based:
                     // just choose randomly a value from across the datasets. simplest for now
                     // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"
-                    var dataSetMaxValue = dataGenerationTemplateAttribute.ExampleDataSets.Count - 1;
+                    var dataSetMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances.Count - 1;
                     var dataSetIndex = random.Next(0, dataSetMaxValue);
-                    var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSets[dataSetIndex].Values.Count - 1;
+                    var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count - 1;
                     var valueIndex = random.Next(0, valueIndexMaxValue);
-                    output = dataGenerationTemplateAttribute.ExampleDataSets[0].Values[valueIndex].StringValue;
+                    output = dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values[valueIndex].StringValue;
                 }
                 else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
                 {
@@ -225,7 +225,7 @@ namespace JIM.Application.Servers
                     // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
                     output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
                     output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationValueTrackers, output);
-                    output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSets, dataGenerationValueTrackers, random, output);
+                    output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSetInstances, dataGenerationValueTrackers, random, output);
                 }
                 else
                 {
@@ -558,7 +558,7 @@ namespace JIM.Application.Servers
         private static string ReplaceExampleDataSetVariables(
             MetaverseObject metaverseObject,
             MetaverseAttribute metaverseAttribute,
-            List<ExampleDataSet> exampleDataSets,
+            List<ExampleDataSetInstance> exampleDataSetInstances,
             List<DataGenerationValueTracker> dataGenerationValueTrackers,
             Random random,
             string textToProcess)
@@ -571,7 +571,7 @@ namespace JIM.Application.Servers
             // match example data set variables i.e. {0}
             // enumerate, process
 
-            if (exampleDataSets == null || exampleDataSets.Count == 0)
+            if (exampleDataSetInstances == null || exampleDataSetInstances.Count == 0)
                 return textToProcess;
 
             var regex = new Regex(@"({\d.*?})", RegexOptions.Compiled);
@@ -590,11 +590,11 @@ namespace JIM.Application.Servers
                     var variable = match.Value[1..^1];
                     var exampleDataSetIndex = int.Parse(variable);
 
-                    if (exampleDataSetIndex >= exampleDataSets.Count)
+                    if (exampleDataSetIndex >= exampleDataSetInstances.Count)
                         throw new InvalidDataException("DataGenerationTemplateAttribute example data set index variable is too high. Smaller number needed. Must be within the bounds of the assigned ExampleDataSets");
 
                     // get the example data set and then choose a random value from it before replacing the variable
-                    var exampleDataSet = exampleDataSets[exampleDataSetIndex];
+                    var exampleDataSet = exampleDataSetInstances[exampleDataSetIndex].ExampleDataSet;
                     var randomValueIndex = random.Next(0, exampleDataSet.Values.Count - 1);
                     var randomValue = exampleDataSet.Values[randomValueIndex].StringValue;
 

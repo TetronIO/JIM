@@ -640,30 +640,6 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "DataGenerationTemplateAttributeExampleDataSet",
-                columns: table => new
-                {
-                    DataGenerationTemplateAttributesId = table.Column<int>(type: "integer", nullable: false),
-                    ExampleDataSetsId = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_DataGenerationTemplateAttributeExampleDataSet", x => new { x.DataGenerationTemplateAttributesId, x.ExampleDataSetsId });
-                    table.ForeignKey(
-                        name: "FK_DataGenerationTemplateAttributeExampleDataSet_DataGeneratio~",
-                        column: x => x.DataGenerationTemplateAttributesId,
-                        principalTable: "DataGenerationTemplateAttributes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_DataGenerationTemplateAttributeExampleDataSet_ExampleDataSe~",
-                        column: x => x.ExampleDataSetsId,
-                        principalTable: "ExampleDataSets",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "DataGenerationTemplateAttributeMetaverseObjectType",
                 columns: table => new
                 {
@@ -683,6 +659,33 @@ namespace JIM.PostgresData.Migrations
                         name: "FK_DataGenerationTemplateAttributeMetaverseObjectType_Metavers~",
                         column: x => x.ReferenceMetaverseObjectTypesId,
                         principalTable: "MetaverseObjectTypes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ExampleDataSetInstances",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    DataGenerationTemplateAttributeId = table.Column<int>(type: "integer", nullable: false),
+                    ExampleDataSetId = table.Column<int>(type: "integer", nullable: false),
+                    Order = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ExampleDataSetInstances", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ExampleDataSetInstances_DataGenerationTemplateAttributes_Da~",
+                        column: x => x.DataGenerationTemplateAttributeId,
+                        principalTable: "DataGenerationTemplateAttributes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ExampleDataSetInstances_ExampleDataSets_ExampleDataSetId",
+                        column: x => x.ExampleDataSetId,
+                        principalTable: "ExampleDataSets",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -815,11 +818,6 @@ namespace JIM.PostgresData.Migrations
                 column: "MetaverseObjectTypeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_DataGenerationTemplateAttributeExampleDataSet_ExampleDataSe~",
-                table: "DataGenerationTemplateAttributeExampleDataSet",
-                column: "ExampleDataSetsId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_DataGenerationTemplateAttributeMetaverseObjectType_Referenc~",
                 table: "DataGenerationTemplateAttributeMetaverseObjectType",
                 column: "ReferenceMetaverseObjectTypesId");
@@ -843,6 +841,16 @@ namespace JIM.PostgresData.Migrations
                 name: "IX_DataGenerationTemplates_Name",
                 table: "DataGenerationTemplates",
                 column: "Name");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ExampleDataSetInstances_DataGenerationTemplateAttributeId",
+                table: "ExampleDataSetInstances",
+                column: "DataGenerationTemplateAttributeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ExampleDataSetInstances_ExampleDataSetId",
+                table: "ExampleDataSetInstances",
+                column: "ExampleDataSetId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ExampleDataSetValues_ExampleDataSetId",
@@ -1029,10 +1037,10 @@ namespace JIM.PostgresData.Migrations
                 name: "ConnectedSystemRunProfile");
 
             migrationBuilder.DropTable(
-                name: "DataGenerationTemplateAttributeExampleDataSet");
+                name: "DataGenerationTemplateAttributeMetaverseObjectType");
 
             migrationBuilder.DropTable(
-                name: "DataGenerationTemplateAttributeMetaverseObjectType");
+                name: "ExampleDataSetInstances");
 
             migrationBuilder.DropTable(
                 name: "ExampleDataSetValues");

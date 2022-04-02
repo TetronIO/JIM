@@ -425,7 +425,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.FirstName),
-                    ExampleDataSets = { firstnamesMaleDataSet, firstnamesFemaleDataSet },
+                    ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = firstnamesMaleDataSet, Order = 0 }, new ExampleDataSetInstance { ExampleDataSet = firstnamesFemaleDataSet, Order = 1 } },
                     PopulatedValuesPercentage = 100
                 });
             }
@@ -436,7 +436,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.LastName),
-                    ExampleDataSets = { lastnamesDataSet },
+                    ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = lastnamesDataSet } },
                     PopulatedValuesPercentage = 100
                 });
             }
@@ -481,7 +481,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Company),
-                    ExampleDataSets = { companiesDataSet },
+                    ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = companiesDataSet } },
                     PopulatedValuesPercentage = 100
                 });
             }
@@ -492,7 +492,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Department),
-                    ExampleDataSets = { departmentsDataSet },
+                    ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = departmentsDataSet } },
                     PopulatedValuesPercentage = 100
                 });
             }
@@ -503,7 +503,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Team),
-                    ExampleDataSets = { teamsDataSet },
+                    ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = teamsDataSet } },
                     PopulatedValuesPercentage = 76
                 });
             }
@@ -514,7 +514,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.JobTitle),
-                    ExampleDataSets = { jobTitlesDataSet },
+                    ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = jobTitlesDataSet } },
                     PopulatedValuesPercentage = 90
                 });
             }
@@ -585,7 +585,11 @@ namespace JIM.Application.Servers
                 groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.DisplayName),
-                    ExampleDataSets = { adjectivesDataSet, coloursDataSet, wordsDataSet, groupEndingsDataSet },
+                    ExampleDataSetInstances = new List<ExampleDataSetInstance> { 
+                        new ExampleDataSetInstance { ExampleDataSet = adjectivesDataSet, Order = 0 }, 
+                        new ExampleDataSetInstance { ExampleDataSet = coloursDataSet, Order = 1 }, 
+                        new ExampleDataSetInstance { ExampleDataSet = wordsDataSet, Order = 2 }, 
+                        new ExampleDataSetInstance { ExampleDataSet = groupEndingsDataSet, Order = 3 } },
                     PopulatedValuesPercentage = 100,
                     Pattern = "{0} {1} {2} {3}"
                 });
