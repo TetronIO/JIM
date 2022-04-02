@@ -113,7 +113,6 @@ namespace JIM.Application.Servers
                 Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
                 Parallel.For(0, objectType.ObjectsToCreate,
                 index =>
-                //for (var i = 0; i < t.ObjectTypes.Count; i++)
                 {
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
                     foreach (var templateAttribute in objectType.TemplateAttributes)
@@ -152,7 +151,6 @@ namespace JIM.Application.Servers
 
                     Interlocked.Add(ref totalObjectsCreated, 1);
                 });
-                //}
 
                 // user manager attributes need assigning after all users have been prepared
                 GenerateManagerAssignments(metaverseObjectsToCreate, objectType, random);
