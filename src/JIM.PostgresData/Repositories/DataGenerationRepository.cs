@@ -102,6 +102,9 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ConnectedSystemAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.ReferenceMetaverseObjectTypes).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSets).
                 ThenInclude(eds => eds.Values).
                 SingleOrDefaultAsync(t => t.Id == id);

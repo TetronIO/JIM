@@ -23,7 +23,8 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
-            Assert.IsTrue(subject.IsValid());
+
+            Assert.DoesNotThrow(subject.Validate);
         }
 
         [Test]
@@ -35,7 +36,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
-            Assert.IsTrue(subject.IsValid());
+            Assert.DoesNotThrow(subject.Validate);
         }
 
         [Test]
@@ -47,7 +48,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 1,
                 Pattern = "dummy-value"
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -55,7 +56,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 50,
                 Pattern = "dummy-value"
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -63,7 +64,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
         }
 
         [Test]
@@ -76,7 +77,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MinNumber = 1
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -84,7 +85,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MaxNumber = 50
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -92,7 +93,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MaxNumber = 100
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
 
             var subject4 = new DataGenerationTemplateAttribute
             {
@@ -100,7 +101,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true
             };
-            Assert.IsTrue(subject4.IsValid());
+            Assert.DoesNotThrow(subject4.Validate);
 
             var subject5 = new DataGenerationTemplateAttribute
             {
@@ -109,7 +110,7 @@ namespace JIM.Models.Tests
                 SequentialNumbers = true,
                 MinNumber = 1
             };
-            Assert.IsTrue(subject5.IsValid());
+            Assert.DoesNotThrow(subject5.Validate);
 
             var subject6 = new DataGenerationTemplateAttribute
             {
@@ -118,7 +119,7 @@ namespace JIM.Models.Tests
                 SequentialNumbers = true,
                 MinNumber = 1
             };
-            Assert.IsTrue(subject6.IsValid());
+            Assert.DoesNotThrow(subject6.Validate);
         }
 
         [Test]
@@ -132,7 +133,7 @@ namespace JIM.Models.Tests
                 RandomNumbers = true,
                 MinNumber = 1
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -141,7 +142,7 @@ namespace JIM.Models.Tests
                 RandomNumbers = true,
                 MaxNumber = 50
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -151,7 +152,7 @@ namespace JIM.Models.Tests
                 MinNumber = 0,
                 MaxNumber = 100
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
         }
 
         [Test]
@@ -165,7 +166,7 @@ namespace JIM.Models.Tests
                 RandomNumbers = true,
                 MinNumber = 1
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -174,7 +175,7 @@ namespace JIM.Models.Tests
                 RandomNumbers = true,
                 MaxNumber = 50
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -184,7 +185,7 @@ namespace JIM.Models.Tests
                 MinNumber = 0,
                 MaxNumber = 100
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
 
             var subject4 = new DataGenerationTemplateAttribute
             {
@@ -193,7 +194,7 @@ namespace JIM.Models.Tests
                 SequentialNumbers = true,
                 MinNumber = 1
             };
-            Assert.IsTrue(subject4.IsValid());
+            Assert.DoesNotThrow(subject4.Validate);
 
             var subject5 = new DataGenerationTemplateAttribute
             {
@@ -202,7 +203,7 @@ namespace JIM.Models.Tests
                 SequentialNumbers = true,
                 MaxNumber = 50
             };
-            Assert.IsTrue(subject5.IsValid());
+            Assert.DoesNotThrow(subject5.Validate);
 
             var subject6 = new DataGenerationTemplateAttribute
             {
@@ -212,7 +213,7 @@ namespace JIM.Models.Tests
                 MinNumber = 0,
                 MaxNumber = 100
             };
-            Assert.IsTrue(subject6.IsValid());
+            Assert.DoesNotThrow(subject6.Validate);
         }
 
         [Test]
@@ -224,7 +225,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolShouldBeRandom = true
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -232,7 +233,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolShouldBeRandom = false
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -240,7 +241,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolTrueDistribution = 1
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
 
             var subject4 = new DataGenerationTemplateAttribute
             {
@@ -248,7 +249,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolTrueDistribution = 50
             };
-            Assert.IsTrue(subject4.IsValid());
+            Assert.DoesNotThrow(subject4.Validate);
 
             var subject5 = new DataGenerationTemplateAttribute
             {
@@ -256,7 +257,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolTrueDistribution = 100
             };
-            Assert.IsTrue(subject5.IsValid());
+            Assert.DoesNotThrow(subject5.Validate);
 
             var subject6 = new DataGenerationTemplateAttribute
             {
@@ -265,7 +266,7 @@ namespace JIM.Models.Tests
                 BoolTrueDistribution = 100,
                 BoolShouldBeRandom = true
             };
-            Assert.IsTrue(subject6.IsValid());
+            Assert.DoesNotThrow(subject6.Validate);
         }
 
         [Test]
@@ -276,7 +277,7 @@ namespace JIM.Models.Tests
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -284,7 +285,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MinDate = DateTime.Now
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -292,7 +293,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MaxDate = DateTime.Now
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
 
             var subject4 = new DataGenerationTemplateAttribute
             {
@@ -301,7 +302,7 @@ namespace JIM.Models.Tests
                 MinDate = DateTime.Now,
                 MaxDate = DateTime.Now.AddDays(10)
             };
-            Assert.IsTrue(subject4.IsValid());
+            Assert.DoesNotThrow(subject4.Validate);
         }
 
         [Test]
@@ -313,7 +314,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -321,7 +322,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 ExampleDataSets = { new ExampleDataSet() }
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
         }
 
         [Test]
@@ -336,7 +337,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 ExampleDataSets = { new ExampleDataSet() }
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -344,7 +345,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 ExampleDataSets = { new ExampleDataSet(), new ExampleDataSet() }
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -353,7 +354,7 @@ namespace JIM.Models.Tests
                 ExampleDataSets = { new ExampleDataSet(), new ExampleDataSet() },
                 Pattern = "{0} {1}"
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
         }
 
         [Test]
@@ -364,7 +365,7 @@ namespace JIM.Models.Tests
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Guid },
                 PopulatedValuesPercentage = 100
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
         }
 
         [Test]
@@ -376,7 +377,7 @@ namespace JIM.Models.Tests
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
         }
 
         [Test]
@@ -389,7 +390,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 10
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -398,7 +399,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MvaRefMaxAssignments = 10
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -408,7 +409,7 @@ namespace JIM.Models.Tests
                 MvaRefMinAssignments = 10,
                 MvaRefMaxAssignments = 100
             };
-            Assert.IsTrue(subject3.IsValid());
+            Assert.DoesNotThrow(subject3.Validate);
         }
 
         [Test]
@@ -419,14 +420,14 @@ namespace JIM.Models.Tests
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 50
             };
-            Assert.IsTrue(subject1.IsValid());
+            Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
                 ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 95
             };
-            Assert.IsTrue(subject2.IsValid());
+            Assert.DoesNotThrow(subject2.Validate);
         }
     }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using JIM.Models.Exceptions;
+using Microsoft.EntityFrameworkCore;
 
 namespace JIM.Models.DataGeneration
 {
@@ -16,19 +17,17 @@ namespace JIM.Models.DataGeneration
             ObjectTypes = new List<DataGenerationObjectType>();
         }
 
-        public bool IsValid()
+        public void Validate()
         {
             if (string.IsNullOrEmpty(Name))
-                return false;
+                throw new DataGeneratationTemplateException($"Null or empty {nameof(Name)}");
 
             if (ObjectTypes == null || ObjectTypes.Count == 0)
-                return false;
+                throw new DataGeneratationTemplateException("Null or empty ObjectTypes");
 
             foreach (var type in ObjectTypes)
-                if (type.TemplateAttributes.Any(q => q.IsValid() == false))
-                    return false;
-
-            return true;
+                foreach (var attribute in type.TemplateAttributes)
+                    attribute.Validate();
         }
     }
 }

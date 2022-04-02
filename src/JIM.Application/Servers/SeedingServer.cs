@@ -8,12 +8,16 @@ namespace JIM.Application.Servers
 {
     internal class SeedingServer
     {
+        #region accessors
         private JimApplication Application { get; }
+        #endregion
 
+        #region constructors
         internal SeedingServer(JimApplication application)
         {
             Application = application;
         }
+        #endregion
 
         internal async Task SeedAsync()
         {
@@ -309,13 +313,9 @@ namespace JIM.Application.Servers
             #endregion
 
             #region DataGenerationTemplates
-            var userDataGenerationTemplate = await PrepareUserDataGenerationTemplateAsync(userObjectType, exampleDataSetsToCreate, attributesToCreate);
-            if (userDataGenerationTemplate != null)
-                dataGenerationTemplatesToCreate.Add(userDataGenerationTemplate);
-
-            var groupDataGenerationTemplate = await PrepareGroupDataGenerationTemplateAsync(groupObjectType, exampleDataSetsToCreate, attributesToCreate);
-            if (groupDataGenerationTemplate != null)
-                dataGenerationTemplatesToCreate.Add(groupDataGenerationTemplate);
+            var template = await PrepareUsersAndGroupsDataGenerationTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
+            if (template != null)
+                dataGenerationTemplatesToCreate.Add(template);
             #endregion
 
             // submit all the preparations to the repository for creation
@@ -386,27 +386,29 @@ namespace JIM.Application.Servers
                 return null;
         }
 
-        private async Task<DataGenerationTemplate?> PrepareUserDataGenerationTemplateAsync(MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+        private async Task<DataGenerationTemplate?> PrepareUsersAndGroupsDataGenerationTemplateAsync(MetaverseObjectType userType, MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
         {
-            var changes = false;
-            var dgt = await Application.Repository.DataGeneration.GetTemplateAsync(Constants.BuiltInDataGenerationTemplates.UsersEn);
-            if (dgt == null)
-            {
-                dgt = new DataGenerationTemplate { Name = Constants.BuiltInDataGenerationTemplates.UsersEn };
-                changes = true;
-            }
+            var templateName = "Users & Groups";
 
-            // do we have the user data generation object type?
-            var userDataGenerationObjectType = dgt.ObjectTypes.SingleOrDefault(q => q.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User);
-            if (userDataGenerationObjectType == null)
+            // does a template exist already?
+            var template = await Application.Repository.DataGeneration.GetTemplateAsync(templateName);
+            if (template != null)
+                return null;
+
+            template = new DataGenerationTemplate { Name = templateName };
+            AddUsersToDataGenerationTemplate(template, userType, dataSets, metaverseAttributes);
+            AddGroupsToDataGenerationTemplate(template, groupType, userType, dataSets, metaverseAttributes);
+            return template;
+        }
+
+        private static void AddUsersToDataGenerationTemplate(DataGenerationTemplate template, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+        {
+            var userDataGenerationObjectType = new DataGenerationObjectType
             {
-                userDataGenerationObjectType = new DataGenerationObjectType
-                {
-                    MetaverseObjectType = userType,
-                    ObjectsToCreate = 10000
-                };
-                dgt.ObjectTypes.Add(userDataGenerationObjectType);
-            }
+                MetaverseObjectType = userType,
+                ObjectsToCreate = 10000
+            };
+            template.ObjectTypes.Add(userDataGenerationObjectType);            
 
             // do we have all the attribute definitions?
             var firstnamesMaleDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.FirstnamesMale);
@@ -560,34 +562,16 @@ namespace JIM.Application.Servers
                     ManagerDepthPercentage = 25
                 });
             }
-
-            if (changes)
-                return dgt;
-            else
-                return null;
         }
 
-        private async Task<DataGenerationTemplate?> PrepareGroupDataGenerationTemplateAsync(MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+        private static void AddGroupsToDataGenerationTemplate(DataGenerationTemplate template, MetaverseObjectType groupType, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
         {
-            var changes = false;
-            var dgt = await Application.Repository.DataGeneration.GetTemplateAsync(Constants.BuiltInDataGenerationTemplates.GroupsEn);
-            if (dgt == null)
+            var groupDataGenerationObjectType = new DataGenerationObjectType
             {
-                dgt = new DataGenerationTemplate { Name = Constants.BuiltInDataGenerationTemplates.GroupsEn };
-                changes = true;
-            }
-
-            // do we have the group data generation object type?
-            var groupDataGenerationObjectType = dgt.ObjectTypes.SingleOrDefault(q => q.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.Group);
-            if (groupDataGenerationObjectType == null)
-            {
-                groupDataGenerationObjectType = new DataGenerationObjectType
-                {
-                    MetaverseObjectType = groupType,
-                    ObjectsToCreate = 500
-                };
-                dgt.ObjectTypes.Add(groupDataGenerationObjectType);
-            }
+                MetaverseObjectType = groupType,
+                ObjectsToCreate = 500
+            };
+            template.ObjectTypes.Add(groupDataGenerationObjectType);
 
             // do we have all the attribute definitions?
             var adjectivesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Adjectives);
@@ -646,6 +630,7 @@ namespace JIM.Application.Servers
                 groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.StaticMembers),
+                    ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { userType },
                     MvaRefMinAssignments = 5,
                     MvaRefMaxAssignments = 200,
                     PopulatedValuesPercentage = 100
@@ -658,6 +643,7 @@ namespace JIM.Application.Servers
                 groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Owners),
+                    ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { userType },
                     MvaRefMinAssignments = 0,
                     MvaRefMaxAssignments = 5,
                     PopulatedValuesPercentage = 75
@@ -670,14 +656,10 @@ namespace JIM.Application.Servers
                 groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ManagedBy),
+                    ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { userType },
                     PopulatedValuesPercentage = 75
                 });
             }
-
-            if (changes)
-                return dgt;
-            else
-                return null;
         }
         #endregion
     }

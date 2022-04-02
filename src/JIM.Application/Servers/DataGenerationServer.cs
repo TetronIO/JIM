@@ -97,8 +97,7 @@ namespace JIM.Application.Servers
             if (t == null)
                 throw new ArgumentException("No template found with that id");
 
-            if (!t.IsValid())
-                throw new InvalidDataException("Template is invalid. Please check that all attributes are valid.");
+            t.Validate();
 
             // object type dependency graph needs considering
             // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
@@ -110,10 +109,12 @@ namespace JIM.Application.Servers
 
             foreach (var objectType in t.ObjectTypes)
             {
+                var objectTypeStopWatch = Stopwatch.StartNew();
+                Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
                 Parallel.For(0, objectType.ObjectsToCreate,
                 index =>
+                //for (var i = 0; i < t.ObjectTypes.Count; i++)
                 {
-
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
                     foreach (var templateAttribute in objectType.TemplateAttributes)
                     {
@@ -151,9 +152,13 @@ namespace JIM.Application.Servers
 
                     Interlocked.Add(ref totalObjectsCreated, 1);
                 });
+                //}
 
                 // user manager attributes need assigning after all users have been prepared
                 GenerateManagerAssignments(metaverseObjectsToCreate, objectType, random);
+
+                objectTypeStopWatch.Stop();
+                Log.Information($"ExecuteTemplateAsync: It took {objectTypeStopWatch.Elapsed} to process the {objectType.MetaverseObjectType.Name} metaverse object type");
             }
 
             // ensure that attribute population percentage values are respected
@@ -384,6 +389,7 @@ namespace JIM.Application.Servers
 
         private void GenerateManagerAssignments(List<MetaverseObject> metaverseObjectsToCreate, DataGenerationObjectType objectType, Random random)
         {
+            Log.Verbose("GenerateManagerAssignments: Started...");
             var templateManagerAttribute = objectType.TemplateAttributes.SingleOrDefault(ta =>
                 ta.MetaverseAttribute != null &&
                 ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
@@ -446,6 +452,7 @@ namespace JIM.Application.Servers
 
         private static void RemoveUnecessaryAttributeValues(DataGenerationTemplate dataGenerationTemplate, List<MetaverseObject> metaverseObjects, Random random)
         {
+            Log.Verbose("RemoveUnecessaryAttributeValues: Started...");
             var stopwatch = Stopwatch.StartNew();
             var attributeValuesRemoved = 0;
             foreach (var dataGenerationObjectType in dataGenerationTemplate.ObjectTypes)
@@ -470,16 +477,16 @@ namespace JIM.Application.Servers
                 }
             }
             stopwatch.Stop();
-            Log.Verbose($"RemoveUnecessaryAttributeValues: Removed {attributeValuesRemoved:N0)} attribute values. Took {stopwatch.Elapsed} to complete");
+            Log.Verbose($"RemoveUnecessaryAttributeValues: Removed {attributeValuesRemoved:N0} attribute values. Took {stopwatch.Elapsed} to complete");
         }
         #endregion
 
         #region Attribute Value Generation
         private static string ReplaceAttributeVariables(MetaverseObject metaverseObject, string textToProcess)
         {
-            // match attribute variables
+            // match attribute variables (that do not contain numbers)
             // enumerate, find their value and replace
-            var regex = new Regex("({.*?})", RegexOptions.Compiled);
+            var regex = new Regex(@"({.*?[^\d]})", RegexOptions.Compiled);
             foreach (Match match in regex.Matches(textToProcess))
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
@@ -565,8 +572,16 @@ namespace JIM.Application.Servers
 
             // match example data set variables i.e. {0}
             // enumerate, process
-            var regex = new Regex("({.*?})", RegexOptions.Compiled);
+
+            if (exampleDataSets == null || exampleDataSets.Count == 0)
+                return textToProcess;
+
+            var regex = new Regex(@"({\d.*?})", RegexOptions.Compiled);
             var exampleDataSetVariables = regex.Matches(textToProcess);
+
+            if (exampleDataSetVariables.Count == 0)
+                return textToProcess;
+
             var isGeneratedValueUnique = false;
             while (!isGeneratedValueUnique)
             {
@@ -575,8 +590,7 @@ namespace JIM.Application.Servers
                 {
                     // snip off the brackets: {} to get the variable, then test if it's an ExampleDataSet index, i.e. {0}
                     var variable = match.Value[1..^1];
-                    if (int.TryParse(variable, out int exampleDataSetIndex))
-                        continue;
+                    var exampleDataSetIndex = int.Parse(variable);
 
                     if (exampleDataSetIndex >= exampleDataSets.Count)
                         throw new InvalidDataException("DataGenerationTemplateAttribute example data set index variable is too high. Smaller number needed. Must be within the bounds of the assigned ExampleDataSets");
@@ -611,7 +625,7 @@ namespace JIM.Application.Servers
                 else
                 {
                     // this is not a unique value, we've generated it before. go round again until it is unique
-                    Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
+                    //Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
                 }
             }            
 
