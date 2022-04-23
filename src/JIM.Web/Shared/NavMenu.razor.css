@@ -4,18 +4,12 @@
 
 .top-row {
     height: 3.5rem;
-    background-color: rgba(0,0,0,0.4);
+    background-color: lawngreen;
 }
 
 .navbar-brand {
     font-size: 1.1rem;
-}
-
-.oi {
-    width: 2rem;
-    font-size: 1.1rem;
-    vertical-align: text-top;
-    top: -2px;
+    color: #000;
 }
 
 .nav-item {
