@@ -1,0 +1,82 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">JIM.Web</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <nav class="flex-column bd-links">
+        
+        <ul class="list-unstyled px-3 pt-3">
+
+            <li class="mb-1">
+                <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#home-collapse" aria-expanded="true">Home</button>
+                <div class="collapse show" id="home-collapse">
+                    <ul class="btn-toggle-nav list-unstyled pb-1 small">
+                        <li><NavLink class="link-dark rounded" href="" Match="NavLinkMatch.All">Overview</NavLink></li>
+                        <li><NavLink class="link-dark rounded" href="requests">Requests</NavLink></li>
+                    </ul>
+                </div>
+            </li>
+
+          <li class="mb-1">
+            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#users-collapse" aria-expanded="true">Users</button>
+            <div class="collapse show" id="users-collapse">
+              <ul class="btn-toggle-nav list-unstyled pb-1 small">
+                <li><NavLink class="link-dark rounded" href="people">People</NavLink></li>
+                <li><NavLink class="link-dark rounded" href="service-principals">Service Principals</NavLink></li>
+              </ul>
+            </div>
+          </li>
+
+          <li class="mb-1">
+            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#groups-collapse" aria-expanded="true">Groups</button>
+            <div class="collapse show" id="groups-collapse">
+              <ul class="btn-toggle-nav list-unstyled pb-1 small">
+                  <li><NavLink class="link-dark rounded" href="security-groups">Security Groups</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="distribution-groups">Distribution Groups</NavLink></li>
+              </ul>
+            </div>
+          </li>
+
+          <li class="mb-1">
+            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-expanded="false">Dashboard</button>
+            <div class="collapse show" id="dashboard-collapse">
+              <ul class="btn-toggle-nav list-unstyled pb-1 small">
+                <li><NavLink class="link-dark rounded" href="dashboard/weekly">Weekly</NavLink></li>
+                <li><NavLink class="link-dark rounded" href="dashboard/monthly">Monthly</NavLink></li>
+                <li><NavLink class="link-dark rounded" href="dashboard/annually">Annually</NavLink></li>
+              </ul>
+            </div>
+          </li>
+
+          <li class="border-top my-3"></li>
+          <li class="mb-1">
+            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#admin-collapse" aria-expanded="false">Admin</button>
+            <div class="collapse show" id="admin-collapse">
+              <ul class="btn-toggle-nav list-unstyled pb-1 small">
+                  <li><NavLink class="link-dark rounded" href="admin/schema">Schema</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/connected-systems">Connected Systems</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/synchronisation-rules">Synchronisation Rules</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/metaverse">Metaverse</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/settings">Settings</NavLink></li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+    private string? NavMenuCssClass => collapseNavMenu ? "sidebar-nav-collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

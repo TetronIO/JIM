@@ -2,6 +2,31 @@ version: '3.4'
 
 services:
 
+  jim.web:
+    container_name: jim.web
+    image: ${DOCKER_REGISTRY-}jim.web
+    restart: always
+    environment:
+     - LOGGING_LEVEL=Verbose
+     - LOGGING_PATH=/var/log/jim
+     - ENABLE_REQUEST_LOGGING=true
+     - SSO_AUTHORITY=1
+     - SSO_CLIENT_ID=2
+     - SSO_SECRET=3
+     - SSO_NAMEID_ATTRIBUTE=Employee ID
+     - SSO_INITIAL_ADMIN_NAMEID=1
+    volumes:
+      - jim-logs-volume:/var/log/jim
+    build:
+      context: .
+      dockerfile: src/JIM.Web/Dockerfile
+    depends_on:
+      - jim.database
+      - jim.service
+      - jim.api
+    networks:
+      - jim-network
+
   jim.api:
     container_name: jim.api
     image: ${DOCKER_REGISTRY-}jim.api
