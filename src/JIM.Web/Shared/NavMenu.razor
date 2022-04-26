@@ -36,14 +36,14 @@
             <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#groups-collapse" aria-expanded="true">Groups</button>
             <div class="collapse show" id="groups-collapse">
               <ul class="btn-toggle-nav list-unstyled pb-1 small">
-                  <li><NavLink class="link-dark rounded" href="security-groups">Security Groups</NavLink></li>
-                  <li><NavLink class="link-dark rounded" href="distribution-groups">Distribution Groups</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="groups/security">Security Groups</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="groups/distribution">Distribution Groups</NavLink></li>
               </ul>
             </div>
           </li>
 
           <li class="mb-1">
-            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-expanded="false">Dashboard</button>
+            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-expanded="true">Dashboard</button>
             <div class="collapse show" id="dashboard-collapse">
               <ul class="btn-toggle-nav list-unstyled pb-1 small">
                 <li><NavLink class="link-dark rounded" href="dashboard/weekly">Weekly</NavLink></li>
@@ -55,14 +55,15 @@
 
           <li class="border-top my-3"></li>
           <li class="mb-1">
-            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#admin-collapse" aria-expanded="false">Admin</button>
+            <button class="btn btn-toggle align-items-center rounded collapsed" data-bs-toggle="collapse" data-bs-target="#admin-collapse" aria-expanded="true">Admin</button>
             <div class="collapse show" id="admin-collapse">
               <ul class="btn-toggle-nav list-unstyled pb-1 small">
-                  <li><NavLink class="link-dark rounded" href="admin/schema">Schema</NavLink></li>
-                  <li><NavLink class="link-dark rounded" href="admin/connected-systems">Connected Systems</NavLink></li>
-                  <li><NavLink class="link-dark rounded" href="admin/synchronisation-rules">Synchronisation Rules</NavLink></li>
-                  <li><NavLink class="link-dark rounded" href="admin/metaverse">Metaverse</NavLink></li>
-                  <li><NavLink class="link-dark rounded" href="admin/settings">Settings</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin">Overview</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/schema" Match="NavLinkMatch.Prefix">Schema</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/systems" Match="NavLinkMatch.Prefix">Connected Systems</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/systems/rules" Match="NavLinkMatch.Prefix">Synchronisation Rules</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/metaverse" Match="NavLinkMatch.Prefix">Metaverse</NavLink></li>
+                  <li><NavLink class="link-dark rounded" href="admin/settings" Match="NavLinkMatch.Prefix">Settings</NavLink></li>
               </ul>
             </div>
           </li>
