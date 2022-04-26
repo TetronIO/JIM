@@ -11,8 +11,7 @@ A modern Identity Manager for organisations. Features:
 - Single Sign-On (SSO) using OpenID Connect
 
 ## Scenarios
-
-JIM is designed to support the following common IDAM scenarios:
+JIM is designed to support the following common IGA scenarios:
 - Synchronise users from HCM (aka HR) systems to directories and apps
 - Synchronise attributes back to HCM systems, i.e. email address, telephone numbers, etc.
 - Centrally manage user entitlements, i.e. group memberships in directories and apps
