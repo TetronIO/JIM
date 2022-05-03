@@ -1,24 +1,23 @@
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // setup OpenID Connect (OIDC) Authentication
+var authority = builder.Configuration["Auth:Authority"];
+var clientId = builder.Configuration["Auth:ClientId"];
+var clientSecret = builder.Configuration["Auth:ClientSecret"];
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = "Cookies";
+    options.DefaultChallengeScheme = "oidc";
 })
-    .AddCookie(setup => setup.ExpireTimeSpan = TimeSpan.FromMinutes(60))
-    .AddOpenIdConnect(options =>
+    .AddCookie("Cookies")
+    .AddOpenIdConnect("oidc", options =>
     {
-        options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        //options.Authority = builder.Configuration["Auth.Authority"];
-        options.MetadataAddress = builder.Configuration["Auth.MetadataUrl"];
-        options.ClientId = builder.Configuration["Auth.ClientId"];
-        options.ClientSecret = builder.Configuration["Auth.ClientSecret"];
+        options.Authority = authority;
+        options.ClientId = clientId;
+        options.ClientSecret = clientSecret;
         options.ResponseType = "code id_token";
         options.SaveTokens = true;
+        options.Scope.Clear();
         options.Scope.Add("openid");
         options.Scope.Add("profile");
     });
