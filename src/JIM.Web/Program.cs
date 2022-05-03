@@ -1,6 +1,6 @@
 var builder = WebApplication.CreateBuilder(args);
 
-// setup OpenID Connect (OIDC) Authentication
+// setup OpenID Connect (OIDC) authentication
 var authority = builder.Configuration["Auth:Authority"];
 var clientId = builder.Configuration["Auth:ClientId"];
 var clientSecret = builder.Configuration["Auth:ClientSecret"];
@@ -22,9 +22,10 @@ builder.Services.AddAuthentication(options =>
         options.Scope.Add("profile");
     });
 
+// setup authorisation policies
 builder.Services.AddAuthorization(options =>
 {
-    // By default, all incoming requests will be authorized according to the default policy
+    // require all users to be authenticated with our IdP
     options.FallbackPolicy = options.DefaultPolicy;
 });
 
