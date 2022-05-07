@@ -1,3 +1,5 @@
+using Microsoft.Identity.Web.UI;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // setup OpenID Connect (OIDC) authentication
@@ -21,6 +23,7 @@ builder.Services.AddAuthentication(options =>
         options.Scope.Add("openid");
         options.Scope.Add("profile");
     });
+builder.Services.AddControllersWithViews().AddMicrosoftIdentityUI();
 
 // setup authorisation policies
 builder.Services.AddAuthorization(options =>
