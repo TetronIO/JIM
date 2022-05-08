@@ -26,6 +26,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     // require all users to be authenticated with our IdP
+    // eventually this will probably have to change so we can make some pages anonymous for things like load-balance health monitors
     options.FallbackPolicy = options.DefaultPolicy;
 });
 
