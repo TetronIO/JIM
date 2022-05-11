@@ -15,8 +15,9 @@ using Serilog.Events;
 // SSO_AUTHORITY
 // SSO_CLIENT_ID
 // SSO_SECRET
-// SSO_NAMEID_ATTRIBUTE
-// SSO_INITIAL_ADMIN_NAMEID
+// SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE
+// SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME
+// SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE
 
 // Optional environment variables:
 // -------------------------------
@@ -125,12 +126,17 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 /// </summary>
 static async Task InitialiseJimApplicationAsync()
 {
-    var ssoNameIdAttribute = Environment.GetEnvironmentVariable("SSO_NAMEID_ATTRIBUTE");
-    if (string.IsNullOrEmpty(ssoNameIdAttribute))
-        throw new Exception("SSO_NAMEID_ATTRIBUTE environment variable missing");
-    var ssoInitialAdminNameId = Environment.GetEnvironmentVariable("SSO_INITIAL_ADMIN_NAMEID");
-    if (string.IsNullOrEmpty(ssoInitialAdminNameId))
-        throw new Exception("SSO_INITIAL_ADMIN_NAMEID environment variable missing");
+    var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE");
+    if (string.IsNullOrEmpty(uniqueIdentifierClaimType))
+        throw new Exception("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE environment variable missing");
+
+    var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME");
+    if (string.IsNullOrEmpty(uniqueIdentifierMetaverseAttributeName))
+        throw new Exception("SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME environment variable missing");
+
+    var initialAdminClaimValue = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE");
+    if (string.IsNullOrEmpty(initialAdminClaimValue))
+        throw new Exception("SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE environment variable missing");
 
     while (true)
     {
@@ -138,7 +144,7 @@ static async Task InitialiseJimApplicationAsync()
         {
             if (await jimApplication.IsApplicationReadyAsync())
             {
-                await jimApplication.InitialiseSSOAsync(ssoNameIdAttribute, ssoInitialAdminNameId);
+                await jimApplication.InitialiseSSOAsync(uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
                 break;
             }
         }

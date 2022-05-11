@@ -18,7 +18,7 @@ namespace JIM.PostgresData.Repositories
         {
             try
             {
-                return await Repository.Database.ServiceSettings.Include(q => q.SSONameIDAttribute).FirstOrDefaultAsync();
+                return await Repository.Database.ServiceSettings.Include(q => q.SSOUniqueIdentifierMetaverseAttribute).FirstOrDefaultAsync();
             }
             catch (Npgsql.PostgresException ex)
             {
@@ -45,7 +45,7 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.Entry(dbServiceSettings).CurrentValues.SetValues(serviceSettings);
 
             // manually update reference properties
-            dbServiceSettings.SSONameIDAttribute = serviceSettings.SSONameIDAttribute;
+            dbServiceSettings.SSOUniqueIdentifierMetaverseAttribute = serviceSettings.SSOUniqueIdentifierMetaverseAttribute;
 
             await Repository.Database.SaveChangesAsync();
         }

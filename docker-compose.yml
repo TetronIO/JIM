@@ -10,11 +10,12 @@ services:
      - LOGGING_LEVEL=Verbose
      - LOGGING_PATH=/var/log/jim
      - ENABLE_REQUEST_LOGGING=true
-     - SSO_AUTHORITY=1
-     - SSO_CLIENT_ID=2
-     - SSO_SECRET=3
-     - SSO_NAMEID_ATTRIBUTE=Employee ID
-     - SSO_INITIAL_ADMIN_NAMEID=1
+     - SSO_AUTHORITY=${SSO_AUTHORITY}
+     - SSO_CLIENT_ID=${SSO_CLIENT_ID}
+     - SSO_SECRET=${SSO_SECRET}
+     - SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=${SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE}
+     - SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=${SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME}
+     - SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=${SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE}
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -36,14 +37,15 @@ services:
      - LOGGING_PATH=/var/log/jim
      - ENABLE_REQUEST_LOGGING=true
      - DB_HOSTNAME=JIM.Database
-     - DB_NAME=jim
-     - DB_USERNAME=jim
-     - DB_PASSWORD=password
-     - SSO_AUTHORITY=1
-     - SSO_CLIENT_ID=2
-     - SSO_SECRET=3
-     - SSO_NAMEID_ATTRIBUTE=Employee ID
-     - SSO_INITIAL_ADMIN_NAMEID=1
+     - DB_NAME=${DB_NAME}
+     - DB_USERNAME=${DB_USERNAME}
+     - DB_PASSWORD=${DB_PASSWORD}
+     - SSO_AUTHORITY=${SSO_AUTHORITY}
+     - SSO_CLIENT_ID=${SSO_CLIENT_ID}
+     - SSO_SECRET=${SSO_SECRET}
+     - SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=${SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE}
+     - SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=${SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME}
+     - SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=${SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE}
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -63,9 +65,9 @@ services:
      - LOGGING_LEVEL=Verbose
      - LOGGING_PATH=/var/log/jim
      - DB_HOSTNAME=JIM.Database
-     - DB_NAME=jim
-     - DB_USERNAME=jim
-     - DB_PASSWORD=password
+     - DB_NAME=${DB_NAME}
+     - DB_USERNAME=${DB_USERNAME}
+     - DB_PASSWORD=${DB_PASSWORD}
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -84,9 +86,9 @@ services:
      - LOGGING_LEVEL=Verbose
      - LOGGING_PATH=/var/log/jim
      - DB_HOSTNAME=JIM.Database
-     - DB_NAME=jim
-     - DB_USERNAME=jim
-     - DB_PASSWORD=password
+     - DB_NAME=${DB_NAME}
+     - DB_USERNAME=${DB_USERNAME}
+     - DB_PASSWORD=${DB_PASSWORD}
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -116,9 +118,9 @@ services:
     volumes:
       - jim-db-volume:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=jim
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=jim
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}      
     networks: 
       - jim-network
 

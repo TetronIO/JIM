@@ -88,6 +88,7 @@ namespace JIM.Application.Servers
             var localityAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Locality, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var managerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Manager, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
             var mobileNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MobileNumber, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
+            var objectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var officeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Office, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var organisationAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Organisation, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var otherFacsimileTelephoneNumbersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.String, attributesToCreate);
@@ -177,6 +178,7 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(userObjectType, mailNicknameAttribute);
             AddAttributeToObjectType(userObjectType, managerAttribute);
             AddAttributeToObjectType(userObjectType, mobileNumberAttribute);
+            AddAttributeToObjectType(userObjectType, objectIdentifierAttribute);
             AddAttributeToObjectType(userObjectType, objectGuidAttribute);
             AddAttributeToObjectType(userObjectType, objectSidAttribute);
             AddAttributeToObjectType(userObjectType, officeAttribute);

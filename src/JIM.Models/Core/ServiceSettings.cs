@@ -1,16 +1,39 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace JIM.Models.Core
 {
     public class ServiceSettings
     {
+        /// <summary>
+        /// Necessary for persisting the ServiceSettings record. other than that, irrelevant as there will only be one ServiceSettings record.
+        /// </summary>
         public int Id { get; set; }
+        /// <summary>
+        /// When the ServiceSettings object created
+        /// </summary>
         public DateTime Created { get; set; }
+        /// <summary>
+        /// For display purposes only. Do not update. The value is pulled from the configuration file.
+        /// </summary>
         public string? SSOAuthority { get; set; }
+        /// <summary>
+        /// For display purposes only. Do not update. The value is pulled from the configuration file.
+        /// </summary>
         public string? SSOClientId { get; set; }
+        /// <summary>
+        /// For display purposes only. Do not update. The value is pulled from the configuration file.
+        /// </summary>
         public string? SSOSecret { get; set; }
-        public MetaverseAttribute? SSONameIDAttribute { get; set; }
+        /// <summary>
+        /// The Claim Type to use from the ID token when uniquely identifying users. This will map to a Metaverse attribute and is used to map an IDP user to a JIM user for the purposes of authenticating a user with JIM.
+        /// </summary>
+        public string? SSOUniqueIdentifierClaimType { get; set; }
+        /// <summary>
+        /// The MetaverseAttribute that the SSOUniqueIdentifierClaimType will map to when mapping IDP users to JIM users when authenticating with JIM.
+        /// </summary>
+        public MetaverseAttribute? SSOUniqueIdentifierMetaverseAttribute { get; set; }
+        /// <summary>
+        /// Controls whether or not a log-out link should be shown to the user. 
+        /// This is sometimes not desirable when people cannot actually log-out of their enterprise-managed computers, i.e. for AAD-joined devices.
+        /// </summary>
         public bool SSOEnableLogOut { get; set; }
         /// <summary>
         /// When set to true, the JIM application is having maintenance performed on it and non-primary app instances
