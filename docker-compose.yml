@@ -10,6 +10,10 @@ services:
      - LOGGING_LEVEL=Verbose
      - LOGGING_PATH=/var/log/jim
      - ENABLE_REQUEST_LOGGING=true
+     - DB_HOSTNAME=JIM.Database
+     - DB_NAME=${DB_NAME}
+     - DB_USERNAME=${DB_USERNAME}
+     - DB_PASSWORD=${DB_PASSWORD}
      - SSO_AUTHORITY=${SSO_AUTHORITY}
      - SSO_CLIENT_ID=${SSO_CLIENT_ID}
      - SSO_SECRET=${SSO_SECRET}
