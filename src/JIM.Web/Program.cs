@@ -37,9 +37,9 @@ try
     builder.Services.AddScoped<JimApplication>();
 
     // setup OpenID Connect (OIDC) authentication
-    var authority = builder.Configuration["Auth:Authority"];
-    var clientId = builder.Configuration["Auth:ClientId"];
-    var clientSecret = builder.Configuration["Auth:ClientSecret"];
+    var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
+    var clientId = Environment.GetEnvironmentVariable("SSO_CLIENT_ID");
+    var clientSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = "Cookies";
