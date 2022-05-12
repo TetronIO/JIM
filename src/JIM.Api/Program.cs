@@ -29,7 +29,6 @@ InitialiseLogging(new LoggerConfiguration(), true);
 try
 {
     Log.Information("Starting JIM.Api");
-    await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
 
@@ -118,38 +117,4 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 
     if (assignLogLogger)
         Log.Logger = loggerConfiguration.CreateLogger();
-}
-
-/// <summary>
-/// Sets up the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
-/// then ensure SSO and Initial admin are setup.
-/// </summary>
-static async Task InitialiseJimApplicationAsync()
-{
-    var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE");
-    if (string.IsNullOrEmpty(uniqueIdentifierClaimType))
-        throw new Exception("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE environment variable missing");
-
-    var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME");
-    if (string.IsNullOrEmpty(uniqueIdentifierMetaverseAttributeName))
-        throw new Exception("SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME environment variable missing");
-
-    var initialAdminClaimValue = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE");
-    if (string.IsNullOrEmpty(initialAdminClaimValue))
-        throw new Exception("SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE environment variable missing");
-
-    while (true)
-    {
-        using (var jimApplication = new JimApplication(new PostgresDataRepository()))
-        {
-            if (await jimApplication.IsApplicationReadyAsync())
-            {
-                await jimApplication.InitialiseSSOAsync(uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
-                break;
-            }
-        }
-
-        Log.Information("Application is not ready yet. Sleeping...");
-        Thread.Sleep(1000);
-    }
 }
