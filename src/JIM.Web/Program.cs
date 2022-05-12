@@ -52,7 +52,7 @@ try
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code id_token";
-            options.SaveTokens = true;
+            options.SaveTokens = false;
             options.Scope.Clear();
             options.Scope.Add("openid");
             options.Scope.Add("profile");
