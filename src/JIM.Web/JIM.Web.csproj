@@ -14,10 +14,4 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.15.1" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\JIM.Application\JIM.Application.csproj" />
-    <ProjectReference Include="..\JIM.Models\JIM.Models.csproj" />
-    <ProjectReference Include="..\JIM.PostgresData\JIM.PostgresData.csproj" />
-  </ItemGroup>
-
 </Project>
