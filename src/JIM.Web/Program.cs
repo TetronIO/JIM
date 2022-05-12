@@ -70,6 +70,9 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddServerSideBlazor();
 
+    // now setup logging with the web framework
+    builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
