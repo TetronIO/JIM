@@ -44,7 +44,13 @@ namespace JIM.Application
         /// Stores SSO information in the database so the user can view it in the interface.
         /// Also ensures there is always a user with the admin role assignment.
         /// </summary>
-        public async Task InitialiseSSOAsync(string uniqueIdentifierClaimType, string uniqueIdentifierMetaverseAttributeName, string initialAdminUniqueIdentifierClaimValue)
+        public async Task InitialiseSSOAsync(
+            string ssoAuthority,
+            string ssoClientId,
+            string ssoSecret,
+            string uniqueIdentifierClaimType, 
+            string uniqueIdentifierMetaverseAttributeName, 
+            string initialAdminUniqueIdentifierClaimValue)
         {
             Log.Debug($"InitialiseSSOAsync: uniqueIdentifierClaimType: {uniqueIdentifierClaimType}, initialAdminUniqueIdentifierClaimValue: {initialAdminUniqueIdentifierClaimValue}");
 
@@ -56,8 +62,36 @@ namespace JIM.Application
             if (serviceSettings == null)
                 throw new Exception("ServiceSettings do not exist. Application is not properly initialised. Are you sure the application is ready?");
 
+            // SSO AUTHENTICATION PROPERTIES
+            // The variables that enable authentication via SSO with our Identity Provider are mastered in the docker-compose configuration file.
+            // we want to mirror these into the database via the ServiceSettings object to make life easy for administrators, so they don't have to access the hosting environment
+            // to check the values and can do so through JIM Web.
+            // We will need to update the database if the configuration file values change.
+            if (string.IsNullOrEmpty(serviceSettings.SSOAuthority) || serviceSettings.SSOAuthority != ssoAuthority)
+            {
+                serviceSettings.SSOAuthority = ssoAuthority;
+                await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
+                Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOAuthority to: {ssoAuthority}");
+            }
+
+            if (string.IsNullOrEmpty(serviceSettings.SSOClientId) || serviceSettings.SSOClientId != ssoClientId)
+            {
+                serviceSettings.SSOClientId = ssoClientId;
+                await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
+                Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOClientId to: {ssoClientId}");
+            }
+            
+            if (string.IsNullOrEmpty(serviceSettings.SSOSecret) || serviceSettings.SSOSecret != ssoSecret)
+            {
+                serviceSettings.SSOSecret = ssoSecret;
+                await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
+
+                // don't print the secret to logs!
+                Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOSecret");
+            }
+
             // INBOUND CLAIM MAPPING:
-            // we want to make it easy for IDP and JIM teams to enable SSO. We don't want them to have to add JIM-specific claims to the OIDC ID token if possible.
+            // We want to make it easy for IDP and JIM teams to enable SSO. We don't want them to have to add JIM-specific claims to the OIDC ID token if possible.
             // we want to allow an IDP team to setup the relying party for JIM using their standard integration approach, where possible.
             // this will provide the slickest integration experience.
             if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType) || serviceSettings.SSOUniqueIdentifierClaimType != uniqueIdentifierClaimType)

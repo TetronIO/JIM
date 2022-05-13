@@ -158,6 +158,20 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 /// </summary>
 static async Task InitialiseJimApplicationAsync()
 {
+    // process auth variables
+    var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
+    if (string.IsNullOrEmpty(ssoAuthority))
+        throw new Exception("SSO_AUTHORITY environment variable missing");
+
+    var ssoClientId = Environment.GetEnvironmentVariable("SSO_CLIENT_ID");
+    if (string.IsNullOrEmpty(ssoClientId))
+        throw new Exception("SSO_CLIENT_ID environment variable missing");
+
+    var ssoSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
+    if (string.IsNullOrEmpty(ssoSecret))
+        throw new Exception("SSO_SECRET environment variable missing");
+
+    // process claim mapping variables
     var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE");
     if (string.IsNullOrEmpty(uniqueIdentifierClaimType))
         throw new Exception("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE environment variable missing");
@@ -176,7 +190,7 @@ static async Task InitialiseJimApplicationAsync()
         {
             if (await jimApplication.IsApplicationReadyAsync())
             {
-                await jimApplication.InitialiseSSOAsync(uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
+                await jimApplication.InitialiseSSOAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
                 break;
             }
         }
