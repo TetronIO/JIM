@@ -1,0 +1,32 @@
+﻿@page "/user-not-found"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h1>Error</h1>
+<h2>User Not Found</h2>
+<p>Apologies, we couldn't find you in our database.</p>
+<h3>Technical Information</h3>
+Received x claim from the Identity Provider. Couldn't map this to a y attribute in the Metaverse.
+
+@code {
+    private string authMessage;
+    private string surnameMessage;
+    private IEnumerable<Claim> claims = Enumerable.Empty<Claim>();
+
+    public async Task OnGetAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            authMessage = $"{user.Identity.Name} is authenticated.";
+            claims = user.Claims;
+        }
+        else
+        {
+            authMessage = "The user is NOT authenticated.";
+        }
+    }
+}
