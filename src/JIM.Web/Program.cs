@@ -195,7 +195,7 @@ static async Task InitialiseJimApplicationAsync()
             }
         }
 
-        Log.Information("Application is not ready yet. Sleeping...");
+        Log.Information("JimApplication is not ready yet. Sleeping...");
         Thread.Sleep(1000);
     }
 }
