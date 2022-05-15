@@ -216,3 +216,13 @@ a, .btn-link {
 .lh-tight {
     line-height: 1.25;
 }
+
+/* JIM CUSTOMISATIONS */
+.code {
+    color: #4d7a25;
+    font-family: Consolas,Andale Mono;
+    background-color: #e2f3d3;
+    padding: 3px 5px;
+    border-radius: 4px;
+    display: inline-block;
+}

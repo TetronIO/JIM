@@ -1,32 +1,35 @@
 ﻿@page "/user-not-found"
 @using System.Security.Claims
+@using JIM.Application
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject JimApplication Jim
 
-<h1>Error</h1>
-<h2>User Not Found</h2>
-<p>Apologies, we couldn't find you in our database.</p>
-<h3>Technical Information</h3>
-Received x claim from the Identity Provider. Couldn't map this to a y attribute in the Metaverse.
+<h1 class="display-6">User Not Found</h1>
+<p>Apologies, we couldn't find you in our database. Please ask your Service Desk or JIM administrator to look into this.</p>
+<h6>Technical Information</h6>
+<ul>
+    <li>User name: @userName</li>
+    <li>User claim <span class="code">@ssoClaimType</span> value: <span class="code">@userUniqueIdClaimValue</span></li>
+</ul>
+
+Could not map this claim to a Metaverse user. Please check the exists in JIM and has a value for the SSO Metaverse attribute.
 
 @code {
-    private string authMessage;
-    private string surnameMessage;
-    private IEnumerable<Claim> claims = Enumerable.Empty<Claim>();
+    private string userName;
+    private string ssoClaimType;
+    private string userUniqueIdClaimValue;
 
-    public async Task OnGetAsync()
+    protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        userName = user.Identity.Name;
 
-        if (user.Identity.IsAuthenticated)
-        {
-            authMessage = $"{user.Identity.Name} is authenticated.";
-            claims = user.Claims;
-        }
-        else
-        {
-            authMessage = "The user is NOT authenticated.";
-        }
+        var serviceSettings = await Jim.ServiceSettings.GetServiceSettingsAsync();
+        ssoClaimType = serviceSettings.SSOUniqueIdentifierClaimType;
+        var c = user.Claims.FirstOrDefault(c => c.Type == ssoClaimType);
+        if (c != null)
+            userUniqueIdClaimValue = c.Value;        
     }
 }
