@@ -117,6 +117,8 @@
         public static class BuiltInRoles
         {
             public static string Administrators => "Administrators";
+            public static string Users => "Users";
+            public static string RoleClaimType => "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
         }
 
         public static class BuiltInExampleDataSets

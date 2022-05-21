@@ -1,8 +1,11 @@
 using JIM.Application;
 using JIM.Data;
+using JIM.Models.Core;
 using JIM.PostgresData;
+using Microsoft.AspNetCore.Authentication;
 using Serilog;
 using Serilog.Events;
+using System.Security.Claims;
 
 // Required environment variables:
 // -------------------------------
@@ -56,6 +59,9 @@ try
             options.Scope.Clear();
             options.Scope.Add("openid");
             options.Scope.Add("profile");
+
+            // intercept the user login when a token is received and validate we can map them to a JIM user
+            options.Events.OnTicketReceived = async ctx => { await AuthoriseUserAsync(ctx); };
         });
 
     // setup authorisation policies
@@ -159,6 +165,7 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 static async Task InitialiseJimApplicationAsync()
 {
     // process auth variables
+    Log.Verbose("Program.InitialiseJimApplicationAsync()...");
     var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
     if (string.IsNullOrEmpty(ssoAuthority))
         throw new Exception("SSO_AUTHORITY environment variable missing");
@@ -197,5 +204,75 @@ static async Task InitialiseJimApplicationAsync()
 
         Log.Information("JimApplication is not ready yet. Sleeping...");
         Thread.Sleep(1000);
+    }
+}
+
+/// <summary>
+/// When a user signs in, we need to see if we can map the identity in the received token, to a user in the Metaverse.
+/// If we do, then the user's roles are retrieved and added to their identity, if not, they receive no roles and will
+/// not be able to access any part of JIM.
+/// </summary>
+static async Task AuthoriseUserAsync(TicketReceivedContext context)
+{
+    Log.Verbose("AuthoriseUserAsync()...");
+
+    if (context.Principal == null || context.Principal.Identity == null)
+    {
+        Log.Error($"AuthoriseUserAsync: User doesn't have a principal or identity");
+        return;
+    }
+
+    // there's probably a better way to do this, i.e. getting JimApplication from Services somehow
+    var jim = new JimApplication(new PostgresDataRepository());
+    var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync();
+    if (serviceSettings == null)
+        throw new Exception("ServiceSettings was null. Cannot continue.");
+
+    if (serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
+        throw new Exception("ServiceSettings.SSOUniqueIdentifierMetaverseAttribute is null!");
+
+    if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType))
+        throw new Exception("ServiceSettings.SSOUniqueIdentifierClaimType is null or empty!");
+
+    var uniqueIdClaimValue = context.Principal.FindFirstValue(serviceSettings.SSOUniqueIdentifierClaimType);
+    if (string.IsNullOrEmpty(uniqueIdClaimValue))
+    {
+        Log.Warning($"AuthoriseUserAsync: User '{context.Principal.Identity.Name}' doesn't have a {serviceSettings.SSOUniqueIdentifierClaimType} claim");
+        return;
+    }
+
+    Log.Debug($"AuthoriseUserAsync: User '{context.Principal.Identity.Name}' has a '{serviceSettings.SSOUniqueIdentifierClaimType}' claim value of '{uniqueIdClaimValue}'");
+
+    // get the user using their unique id claim value
+    var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User);
+    if (userType == null)
+        throw new Exception("Could not retrieve User object type");
+
+    var user = await jim.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue);
+    if (user != null)
+    {
+        // we mapped a token user to a Metaverse user, create a new identity that represents an internal view
+        // of the user, with their roles claims. This will do for MVP, when we need more a more developed RBAC
+        // system later, we might need to extend ClaimsIdentity to accomodate our complex roles.
+
+        var roles = await jim.Security.GetMetaverseObjectRolesAsync(user);
+        var claims = new List<Claim>();
+        foreach (var role in roles)
+            claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name));
+
+        // add a virtual claim for user
+        // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much
+        claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
+
+        var jimIdentity = new ClaimsIdentity(claims) {
+            Label = "Internal JIM Identity"
+        };
+        context.Principal.AddIdentity(jimIdentity);
+    }
+    else
+    {
+        // we couldn't map the token user to a Metaverse user. Quit
+        // this will be the user will have no roles added, so they won't be able to access JIM.Web
+        return;
     }
 }

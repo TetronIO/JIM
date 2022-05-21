@@ -27,13 +27,14 @@ namespace JIM.Application.Servers
             return await Application.Repository.Security.GetMetaverseObjectRolesAsync(metaverseObject.Id);
         }
 
-        public async Task<bool> IsObjectInRoleAsync(MetaverseObject @object, string roleName)
+        public async Task<bool> IsObjectInRoleAsync(MetaverseObject metaverseObject, string roleName)
         { 
-            return await Application.Repository.Security.IsObjectInRoleAsync(@object.Id, roleName);
+            return await Application.Repository.Security.IsObjectInRoleAsync(metaverseObject.Id, roleName);
         }
-        public async Task AddObjectToRoleAsync(MetaverseObject @object, string roleName)
+
+        public async Task AddObjectToRoleAsync(MetaverseObject metaverseObject, string roleName)
         {
-            await Application.Repository.Security.AddObjectToRoleAsync(@object.Id, roleName);
+            await Application.Repository.Security.AddObjectToRoleAsync(metaverseObject.Id, roleName);
         }
     }
 }
