@@ -1,6 +1,6 @@
 ﻿<AuthorizeView>
     <Authorized>
-        Hello, @context.User.Identity?.Name!
+        Hello, @context.User.Identity?.Name
         <form class="form-inline" action="/signout" method="get">
             <button type="submit" class="nav-link btn btn-link">Sign-out</button>
         </form>
