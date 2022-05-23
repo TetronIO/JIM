@@ -1,0 +1,51 @@
+﻿@using System.Security.Claims
+@using JIM.Application
+@using JIM.Models.Core
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject JimApplication Jim
+
+<h1 class="display-6">Not Authorised</h1>
+<p>Apologies, you're not authorised to view that page.</p>
+
+@if (isInUsersRole)
+{
+    <p>It seems you're missing a specific role required for this page/resoure.</p>
+}
+else
+{
+    <p>We were able to authenticate you, but we couldn't find you in our database, so cannot give you access.</p>
+
+    <h6>Technical Information</h6>
+    <ul>
+        <li>Token claim name value: @userName</li>
+        <li>Token claim <span class="code">@ssoClaimType</span> value: <span class="code">@userUniqueIdClaimValue</span></li>
+    </ul>
+
+    <p>Help for administrators: Could not map this claim to a Metaverse user. Please check the Metaverse user exists in JIM and has a value for the SSO Metaverse attribute <span class="code">@ssoAttributeName</span></p>
+}
+
+@code {
+    private string userName;
+    private string ssoClaimType;
+    private string ssoAttributeName;
+    private string userUniqueIdClaimValue;
+    private bool isInUsersRole;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        userName = user.Identity.Name;
+
+        var serviceSettings = await Jim.ServiceSettings.GetServiceSettingsAsync();
+        ssoClaimType = serviceSettings.SSOUniqueIdentifierClaimType;
+        ssoAttributeName = serviceSettings.SSOUniqueIdentifierMetaverseAttribute.Name;
+
+        var c = user.Claims.FirstOrDefault(c => c.Type == ssoClaimType);
+        if (c != null)
+            userUniqueIdClaimValue = c.Value;
+
+        isInUsersRole = user.IsInRole(Constants.BuiltInRoles.Users);
+    }
+}
