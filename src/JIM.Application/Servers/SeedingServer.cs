@@ -397,7 +397,7 @@ namespace JIM.Application.Servers
             if (template != null)
                 return null;
 
-            template = new DataGenerationTemplate { Name = templateName };
+            template = new DataGenerationTemplate { Name = templateName, BuiltIn = true };
             AddUsersToDataGenerationTemplate(template, userType, dataSets, metaverseAttributes);
             AddGroupsToDataGenerationTemplate(template, groupType, userType, dataSets, metaverseAttributes);
             return template;
