@@ -1,9 +1,37 @@
 ﻿@page "/admin/example-data"
 @attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.DataGeneration
+@inject JimApplication Jim
 
 <PageTitle>Example Data</PageTitle>
-
 <h1>Example Data</h1>
+<p class="lead">
+  You can quickly populate JIM with example data, as a way to demo or prototype new features without needing to fuly configure JIM with Connected Systems, Rules Extensions and wait for data to be imported and synchronised etc.
+</p>
 
-You can quickly fill JIM with example data, as a way to demo JIM or prototype new features without needing to fuly configure JIM with Connected Systems, Rules Extensions and wait for data to be imported and synchronised etc.
+<h2>Templates</h2>
+Templates define example data to be created in JIM. They consist of one or more Object Types and Example Data Sets are used to generate values for the object attributes.
 
+<table class="table">
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Built-in?</th>
+      <th scope="col">Created</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <tr>
+      <th scope="row">1</th>
+      <td>Mark</td>
+      <td>Otto</td>
+    </tr>
+
+  </tbody>
+</table>
+
+@code {
+
+}
