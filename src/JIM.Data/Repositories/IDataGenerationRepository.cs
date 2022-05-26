@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.DataGeneration;
+using JIM.Models.DataGeneration.Dto;
 
 namespace JIM.Data.Repositories
 {
@@ -13,6 +14,7 @@ namespace JIM.Data.Repositories
 
 
         public Task<List<DataGenerationTemplate>> GetTemplatesAsync();
+        public Task<List<DataGenerationTemplateDto>> GetTemplateDtosAsync();
         public Task<DataGenerationTemplate?> GetTemplateAsync(string name);
         public Task<DataGenerationTemplate?> GetTemplateAsync(int id);
         public Task CreateTemplateAsync(DataGenerationTemplate template);

@@ -1,5 +1,6 @@
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
+using JIM.Models.DataGeneration.Dto;
 using JIM.Models.Utility;
 using Serilog;
 using System.Diagnostics;
@@ -49,6 +50,11 @@ namespace JIM.Application.Servers
         public async Task<List<DataGenerationTemplate>> GetTemplatesAsync()
         {
             return await Application.Repository.DataGeneration.GetTemplatesAsync();
+        }
+
+        public async Task<List<DataGenerationTemplateDto>> GetTemplateDtosAsync()
+        {
+            return await Application.Repository.DataGeneration.GetTemplateDtosAsync();
         }
 
         public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)

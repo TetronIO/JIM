@@ -1,6 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
+using JIM.Models.DataGeneration.Dto;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -73,6 +74,17 @@ namespace JIM.PostgresData.Repositories
 
             foreach (var t in templates)
                 SortExampleDataSetInstances(t);
+
+            return templates;
+        }
+
+        public async Task<List<DataGenerationTemplateDto>> GetTemplateDtosAsync()
+        {
+            var templates = await Repository.Database.DataGenerationTemplates.OrderBy(t => t.Name).Select(dgt => new DataGenerationTemplateDto { 
+                Name = dgt.Name,
+                BuiltIn = dgt.BuiltIn,
+                Created = dgt.Created,
+                Id = dgt.Id}).ToListAsync();
 
             return templates;
         }
