@@ -11,34 +11,51 @@
     You can quickly populate JIM with example data, as a way to demo or prototype new features without needing to fuly configure JIM with Connected Systems, Rules Extensions and wait for data to be imported and synchronised etc.
 </p>
 
-<h2>Templates</h2>
-Templates define example data to be created in JIM. They consist of one or more object types, with Example Data Sets being  used to generate values for the object attributes.
+<div class="box mt-3">
 
-<table class="table mt-3">
-    <thead>
-        <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Built-in?</th>
-            <th scope="col">Created</th>
-        </tr>
-    </thead>
-    <tbody>
-        @if (templates != null)
-        {
-            foreach (var template in templates)
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+          <NavLink class="nav-link" aria-current="page" href="/admin/example-data">Templates</NavLink>
+      </li>
+      <li class="nav-item">
+           <NavLink class="nav-link" aria-current="page" href="/admin/example-data/sets">Data Sets</NavLink>
+      </li>
+    </ul>
+
+    <p class="mt-3">
+        Templates define example data to be created in JIM. They consist of one or more object types, with Example Data Sets being  used to generate values for the object attributes.
+    </p>
+
+    <table class="table mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Built-in?</th>
+                <th scope="col">Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (templates != null)
             {
-                <tr>
-                    <td>@template.Name</td>
-                    <td>@(template.BuiltIn ? "Yes" : "No")</td>
-                    <td>@template.Created</td>
-                </tr>
-            }    
-        }
-    </tbody>
-</table>
+                foreach (var template in templates)
+                {
+                    <tr>
+                        <td>
+                            <a href="/admin/example-data/templates/@(template.Id)">@template.Name</a>
+                        </td>
+                        <td>@(template.BuiltIn ? "Yes" : "No")</td>
+                        <td>@template.Created</td>
+                    </tr>
+                }    
+            }
+        </tbody>
+    </table>
+</div>
+
+
 
 @code {
-    private List<DataGenerationTemplateDto> templates;
+    private List<DataGenerationTemplateDto>? templates;
     
     protected override async Task OnInitializedAsync()
     {

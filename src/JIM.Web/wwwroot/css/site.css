@@ -226,3 +226,10 @@ a, .btn-link {
     border-radius: 4px;
     display: inline-block;
 }
+
+.box {
+    padding: 15px;
+    background-color: #fff;
+    border: solid 1px rgb(222, 226, 230);
+    border-radius: 6px;
+}
