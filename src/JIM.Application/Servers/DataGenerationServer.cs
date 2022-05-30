@@ -52,9 +52,9 @@ namespace JIM.Application.Servers
             return await Application.Repository.DataGeneration.GetTemplatesAsync();
         }
 
-        public async Task<List<DataGenerationTemplateDto>> GetTemplateDtosAsync()
+        public async Task<List<DataGenerationTemplateHeader>> GetTemplateHeadersAsync()
         {
-            return await Application.Repository.DataGeneration.GetTemplateDtosAsync();
+            return await Application.Repository.DataGeneration.GetTemplateHeadersAsync();
         }
 
         public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)

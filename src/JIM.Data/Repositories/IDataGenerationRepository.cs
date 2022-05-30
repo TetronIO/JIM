@@ -14,7 +14,7 @@ namespace JIM.Data.Repositories
 
 
         public Task<List<DataGenerationTemplate>> GetTemplatesAsync();
-        public Task<List<DataGenerationTemplateDto>> GetTemplateDtosAsync();
+        public Task<List<DataGenerationTemplateHeader>> GetTemplateHeadersAsync();
         public Task<DataGenerationTemplate?> GetTemplateAsync(string name);
         public Task<DataGenerationTemplate?> GetTemplateAsync(int id);
         public Task CreateTemplateAsync(DataGenerationTemplate template);

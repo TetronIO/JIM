@@ -78,9 +78,9 @@ namespace JIM.PostgresData.Repositories
             return templates;
         }
 
-        public async Task<List<DataGenerationTemplateDto>> GetTemplateDtosAsync()
+        public async Task<List<DataGenerationTemplateHeader>> GetTemplateHeadersAsync()
         {
-            var templates = await Repository.Database.DataGenerationTemplates.OrderBy(t => t.Name).Select(dgt => new DataGenerationTemplateDto { 
+            var templates = await Repository.Database.DataGenerationTemplates.OrderBy(t => t.Name).Select(dgt => new DataGenerationTemplateHeader { 
                 Name = dgt.Name,
                 BuiltIn = dgt.BuiltIn,
                 Created = dgt.Created,
