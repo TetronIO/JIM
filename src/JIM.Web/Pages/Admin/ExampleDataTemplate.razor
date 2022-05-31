@@ -3,61 +3,139 @@
 @using JIM.Application
 @using JIM.Models.DataGeneration
 @using JIM.Models.DataGeneration.Dto
+@using JIM.Models.Core
 @inject JimApplication Jim
 
-<PageTitle>Example Data Set</PageTitle>
-<h1>Example Data</h1>
-<p class="lead">
-    You can quickly populate JIM with example data, as a way to demo or prototype new features without needing to fuly configure JIM with Connected Systems, Rules Extensions and wait for data to be imported and synchronised etc.
-</p>
+<PageTitle>Data Generation Template: @template?.Name</PageTitle>
+<h1><small class="text-muted">Data Generation Template:</small> @template?.Name</h1>
 
-<div class="box mt-3">
+@if (template != null)
+{
+    foreach (var objectType in template.ObjectTypes)
+    {
+    <div class="box mt-3">
+        <h3><small class="text-muted">Object Type:</small> @objectType.MetaverseObjectType.Name</h3>
+        <p>Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
 
-    <ul class="nav nav-tabs">
-      <li class="nav-item">
-          <NavLink class="nav-link" aria-current="page" href="/admin/example-data">Templates</NavLink>
-      </li>
-      <li class="nav-item">
-           <NavLink class="nav-link" aria-current="page" href="/admin/example-data/sets">Data Sets</NavLink>
-      </li>
-    </ul>
-
-    <p class="mt-3">
-        Templates define example data to be created in JIM. They consist of one or more object types, with Example Data Sets being  used to generate values for the object attributes.
-    </p>
-
-    <table class="table mt-2">
-        <thead>
+        <table class="table">
+          <thead>
             <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Built-in?</th>
-                <th scope="col">Created</th>
+              <th scope="col">Attribute</th>
+              <th scope="col">Type</th>
+              <th scope="col">Population %</th>
+              <th scope="col">Constraints</th>
             </tr>
-        </thead>
-        <tbody>
-            @if (templates != null)
+          </thead>
+          <tbody>
+            @foreach (var ta in objectType.TemplateAttributes)
             {
-                foreach (var template in templates)
-                {
-                    <tr>
-                        <td>
-                            <a href="/admin/example-data/templates/@(template.Id)">@template.Name</a>
-                        </td>
-                        <td>@(template.BuiltIn ? "Yes" : "No")</td>
-                        <td>@template.Created</td>
-                    </tr>
-                }    
+                <tr>
+                <td>@ta.MetaverseAttribute?.Name</td>
+                <td>@ta.MetaverseAttribute?.Type</td>
+                <td>@ta.PopulatedValuesPercentage</td>
+                <td>@SimplifyAttributeConstraints(ta)</td>
+                </tr>
             }
-        </tbody>
-    </table>
+          </tbody>
+        </table>
+
+
+    </div>    
+    }    
+}
+
+<div class="alert alert-warning mt-3" role="alert">
+  <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Warning!</h4>
+  <p>Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised. 
+    This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.</p>
+  <hr>
+  <button type="submit" class="btn btn-warning">Execute Template</button>
 </div>
+
 
 @code {
     [Parameter]
     public int Id { get; set; }
-    
+
+    private DataGenerationTemplate? template;
+
     protected override async Task OnInitializedAsync()
     {
-        templates = await Jim.DataGeneration.GetTemplateHeadersAsync();
+        template = await Jim.DataGeneration.GetTemplateAsync(Id, false);
+    }
+
+    private string SimplifyAttributeConstraints(DataGenerationTemplateAttribute dgta)
+    {
+        if (dgta.MetaverseAttribute?.Type == AttributeDataType.String)
+        {
+            var response = "";
+            if (!string.IsNullOrEmpty(dgta.Pattern))
+            {
+                response += "Pattern: " + dgta.Pattern;
+            }
+
+            if (dgta.ExampleDataSetInstances != null && dgta.ExampleDataSetInstances.Count > 0)
+            {
+                response += " | Data sets: ";
+                foreach (var set in dgta.ExampleDataSetInstances)
+                    response += set.ExampleDataSet.Name + ", ";
+
+                if (response.EndsWith(", "))
+                    response = response.Substring(0, response.Length - 2);
+            }
+
+            if (dgta.MinNumber.HasValue)
+                response += " | Min: " + dgta.MinNumber;
+
+            if (dgta.MaxNumber.HasValue)
+                response += " | Max: " + dgta.MaxNumber;
+
+            if (response.StartsWith(" | "))
+                response = response.Substring(3);
+
+            return response;
+        }
+        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Number)
+        {
+            return "Min: " + dgta.MinNumber + " | Max: " + dgta.MaxNumber + " | Sequential: " + dgta.SequentialNumbers + " | Random: " + dgta.RandomNumbers;
+        }
+        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Bool)
+        {
+            return "Random: " + dgta.BoolShouldBeRandom + " | True distribution: " + dgta.BoolTrueDistribution;
+        }
+        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.DateTime)
+        {
+            return "Min: " + dgta.MinDate + " | Max: " + dgta.MaxDate;
+        }
+        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Reference)
+        {
+            var response = "";
+
+            if (dgta.MvaRefMinAssignments.HasValue)
+                response += "MVA min assignments: " + dgta.MvaRefMinAssignments;
+
+            if (dgta.MvaRefMaxAssignments.HasValue)
+                response += " | MVA max assignments: " + dgta.MvaRefMaxAssignments;
+
+            if (dgta.ReferenceMetaverseObjectTypes != null && dgta.ReferenceMetaverseObjectTypes.Count > 0)
+            {
+                response += " | Reference type(s): ";
+                foreach (var refType in dgta.ReferenceMetaverseObjectTypes)
+                    response += refType.Name + ", ";
+
+                if (response.EndsWith(", "))
+                    response = response.Substring(0, response.Length - 2);
+            }
+
+            if (dgta.ManagerDepthPercentage.HasValue)
+                response += " | Manager depth: " + dgta.ManagerDepthPercentage + "%";
+
+            if (response.StartsWith(" | "))
+                response = response.Substring(3);
+
+            return response;
+        }
+
+        return "-";
     }
 }

@@ -57,14 +57,14 @@ namespace JIM.Application.Servers
             return await Application.Repository.DataGeneration.GetTemplateHeadersAsync();
         }
 
-        public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
+        public async Task<DataGenerationTemplate?> GetTemplateAsync(int id, bool retrieveValues)
         {
-            return await Application.Repository.DataGeneration.GetTemplateAsync(id);
+            return await Application.Repository.DataGeneration.GetTemplateAsync(id, retrieveValues);
         }
 
-        public async Task<DataGenerationTemplate?> GetTemplateAsync(string name)
+        public async Task<DataGenerationTemplate?> GetTemplateAsync(string name, bool retrieveValues)
         {
-            return await Application.Repository.DataGeneration.GetTemplateAsync(name);
+            return await Application.Repository.DataGeneration.GetTemplateAsync(name, retrieveValues);
         }
 
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
@@ -96,7 +96,7 @@ namespace JIM.Application.Servers
             objectPreparationStopwatch.Start();
             var totalObjectsCreated = 0;
             var getTemplateStopwatch = Stopwatch.StartNew();
-            var t = await GetTemplateAsync(templateId);
+            var t = await GetTemplateAsync(templateId, true);
             getTemplateStopwatch.Stop();
             Log.Verbose($"ExecuteTemplateAsync: get template took: {getTemplateStopwatch.Elapsed}");
 

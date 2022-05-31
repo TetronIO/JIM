@@ -393,7 +393,7 @@ namespace JIM.Application.Servers
             var templateName = "Users & Groups";
 
             // does a template exist already?
-            var template = await Application.Repository.DataGeneration.GetTemplateAsync(templateName);
+            var template = await Application.Repository.DataGeneration.GetTemplateAsync(templateName, false);
             if (template != null)
                 return null;
 
