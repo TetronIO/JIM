@@ -23,7 +23,7 @@
               <th scope="col">Attribute</th>
               <th scope="col">Type</th>
               <th scope="col">Population %</th>
-              <th scope="col">Constraints</th>
+              <th scope="col">Rule(s)</th>
             </tr>
           </thead>
           <tbody>
@@ -81,7 +81,7 @@
                 if (setValues.EndsWith(", "))
                     setValues = setValues.Substring(0, setValues.Length - 2);
 
-                response += CreateBadgeHtml("Data sets", setValues);
+                response += CreateBadgeHtml("Data set(s)", setValues);
             }
 
             if (dgta.MinNumber.HasValue)
@@ -149,6 +149,6 @@
 
     private string CreateBadgeHtml(string prefix, string value)
     {
-        return "<span class=\"badge bg-secondary inline me-2\">" + prefix + ": " + value + "</span>";
+        return "<span class=\"badge badge-bigger bg-secondary inline me-2\"><span class=\"fw-normal\">" + prefix + ":</span> " + value + "</span>";
     }
 }
