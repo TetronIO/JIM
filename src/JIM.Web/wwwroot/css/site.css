@@ -233,3 +233,5 @@ a, .btn-link {
     border: solid 1px rgb(222, 226, 230);
     border-radius: 6px;
 }
+
+.inline {display:inline-block}

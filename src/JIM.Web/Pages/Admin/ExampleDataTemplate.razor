@@ -33,7 +33,7 @@
                 <td>@ta.MetaverseAttribute?.Name</td>
                 <td>@ta.MetaverseAttribute?.Type</td>
                 <td>@ta.PopulatedValuesPercentage</td>
-                <td>@SimplifyAttributeConstraints(ta)</td>
+                <td>@((MarkupString)SimplifyAttributeConstraints(ta))</td>
                 </tr>
             }
           </tbody>
@@ -66,76 +66,89 @@
 
     private string SimplifyAttributeConstraints(DataGenerationTemplateAttribute dgta)
     {
+        string response = "";
         if (dgta.MetaverseAttribute?.Type == AttributeDataType.String)
         {
-            var response = "";
             if (!string.IsNullOrEmpty(dgta.Pattern))
-            {
-                response += "Pattern: " + dgta.Pattern;
-            }
+                response += CreateBadgeHtml("Pattern", dgta.Pattern);
 
             if (dgta.ExampleDataSetInstances != null && dgta.ExampleDataSetInstances.Count > 0)
             {
-                response += " | Data sets: ";
+                var setValues = "";
                 foreach (var set in dgta.ExampleDataSetInstances)
-                    response += set.ExampleDataSet.Name + ", ";
+                    setValues += set.ExampleDataSet.Name + ", ";
 
-                if (response.EndsWith(", "))
-                    response = response.Substring(0, response.Length - 2);
+                if (setValues.EndsWith(", "))
+                    setValues = setValues.Substring(0, setValues.Length - 2);
+
+                response += CreateBadgeHtml("Data sets", setValues);
             }
 
             if (dgta.MinNumber.HasValue)
-                response += " | Min: " + dgta.MinNumber;
+                response += CreateBadgeHtml("Min", dgta.MinNumber.Value.ToString("N0"));
 
             if (dgta.MaxNumber.HasValue)
-                response += " | Max: " + dgta.MaxNumber;
-
-            if (response.StartsWith(" | "))
-                response = response.Substring(3);
-
-            return response;
+                response += CreateBadgeHtml("Max", dgta.MaxNumber.Value.ToString("N0"));
         }
         else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Number)
         {
-            return "Min: " + dgta.MinNumber + " | Max: " + dgta.MaxNumber + " | Sequential: " + dgta.SequentialNumbers + " | Random: " + dgta.RandomNumbers;
+            if (dgta.MinNumber.HasValue)
+                response += CreateBadgeHtml("Min", dgta.MinNumber.Value.ToString("N0"));
+
+            if (dgta.MaxNumber.HasValue)
+                response += CreateBadgeHtml("Max", dgta.MaxNumber.Value.ToString("N0"));
+
+            if (dgta.SequentialNumbers.HasValue)
+                response += CreateBadgeHtml("Sequential", dgta.SequentialNumbers.Value.ToString());
+
+            if (dgta.RandomNumbers.HasValue)
+                response += CreateBadgeHtml("Random", dgta.RandomNumbers.Value.ToString());
         }
         else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Bool)
         {
-            return "Random: " + dgta.BoolShouldBeRandom + " | True distribution: " + dgta.BoolTrueDistribution;
+            if (dgta.BoolShouldBeRandom.HasValue)
+                response += CreateBadgeHtml("Random", dgta.BoolShouldBeRandom.Value.ToString());
+
+            if (dgta.BoolTrueDistribution.HasValue)
+                response += CreateBadgeHtml("True distribution", dgta.BoolTrueDistribution.Value.ToString("N0"));
         }
-        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.DateTime)
+        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.DateTime && (dgta.MinDate.HasValue || dgta.MaxDate.HasValue))
         {
-            return "Min: " + dgta.MinDate + " | Max: " + dgta.MaxDate;
+            if (dgta.MinDate.HasValue)
+                response += CreateBadgeHtml("Min", dgta.MinDate.Value.ToShortDateString());
+
+            if (dgta.MaxDate.HasValue)
+                response += CreateBadgeHtml("Min", dgta.MaxDate.Value.ToShortDateString());
         }
         else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Reference)
         {
-            var response = "";
-
             if (dgta.MvaRefMinAssignments.HasValue)
-                response += "MVA min assignments: " + dgta.MvaRefMinAssignments;
+                response += CreateBadgeHtml("MVA min assignments", dgta.MvaRefMinAssignments.Value.ToString("N0"));
 
             if (dgta.MvaRefMaxAssignments.HasValue)
-                response += " | MVA max assignments: " + dgta.MvaRefMaxAssignments;
+                response += CreateBadgeHtml("MVA max assignments", dgta.MvaRefMaxAssignments.Value.ToString("N0"));
 
             if (dgta.ReferenceMetaverseObjectTypes != null && dgta.ReferenceMetaverseObjectTypes.Count > 0)
             {
-                response += " | Reference type(s): ";
+                var refTypes = "";
                 foreach (var refType in dgta.ReferenceMetaverseObjectTypes)
-                    response += refType.Name + ", ";
+                    refTypes += refType.Name + ", ";
 
-                if (response.EndsWith(", "))
-                    response = response.Substring(0, response.Length - 2);
+                if (refTypes.EndsWith(", "))
+                    refTypes = refTypes.Substring(0, refTypes.Length - 2);
+
+                response += CreateBadgeHtml("Reference type(s)", refTypes);
             }
 
             if (dgta.ManagerDepthPercentage.HasValue)
-                response += " | Manager depth: " + dgta.ManagerDepthPercentage + "%";
-
-            if (response.StartsWith(" | "))
-                response = response.Substring(3);
-
-            return response;
+                response += CreateBadgeHtml("Manager depth", dgta.ManagerDepthPercentage + "%");
         }
 
-        return "-";
+        return response;
+    }
+
+    private string CreateBadgeHtml(string prefix, string value)
+    {
+        return "<span class=\"badge bg-secondary inline me-2\">" + prefix + ": " + value + "</span>";
     }
 }
