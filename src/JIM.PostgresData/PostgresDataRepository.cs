@@ -15,6 +15,7 @@ namespace JIM.PostgresData
         public ISecurityRepository Security { get; }
         public IDataGenerationRepository DataGeneration { get; }
         public ISeedingRepository Seeding { get; }
+        public ITaskingRepository Tasking { get; }
 
         internal JimDbContext Database { get; }
 
@@ -31,6 +32,7 @@ namespace JIM.PostgresData
             Security = new SecurityRepository(this);
             DataGeneration = new DataGenerationRepository(this);
             Seeding = new SeedingRepository(this);
+            Tasking = new TaskingRepository(this);
             Database = new JimDbContext();
         }
 

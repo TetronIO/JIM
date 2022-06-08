@@ -11,4 +11,10 @@
     <PackageReference Include="Serilog" Version="2.10.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="Tasking\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Tasking\" />
+  </ItemGroup>
 </Project>

@@ -3,6 +3,7 @@ using JIM.Models.DataGeneration;
 using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +29,11 @@ namespace JIM.PostgresData
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
+        /// <summary>
+        /// Do not use this, this is required for EF Core to handle base and derived classes persisted to the db.
+        /// </summary>
+        internal DbSet<ServiceTask> ServiceTasks { get; set; }
+        internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
 
         private readonly string _connectionString;
 
@@ -68,12 +74,6 @@ namespace JIM.PostgresData
 
             modelBuilder.Entity<MetaverseObjectType>()
                 .HasMany(mot => mot.Attributes);
-
-            //modelBuilder.Entity<ExampleDataSet>()
-            //    .HasMany(eds => eds.ExampleDataSetInstances);
-
-            //modelBuilder.Entity<ExampleDataSetInstance>()
-            //    .HasOne(edsi => edsi.ExampleDataSet);
         }
     }
 }

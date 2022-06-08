@@ -10,6 +10,7 @@ namespace JIM.Data
         public ISecurityRepository Security { get; }
         public IDataGenerationRepository DataGeneration { get; }
         public ISeedingRepository Seeding { get; }
+        public ITaskingRepository Tasking { get; }
 
         public Task InitialiseDatabaseAsync();
         public Task InitialisationCompleteAsync();

@@ -5,8 +5,9 @@
 //
 // Needs to:
 // - Loop until asked to close down
-// - Check the database for manual synchronisation jobs
-// - check the database for synchronisation schedule jobs
+// - Check the database for manual synchronisation tasks
+// - check the database for synchronisation schedule tasks
+// - check the database for data generation template tasks
 // - create tasks for the jobs, keeping track of cancellation tokens
 // - execute the tasks
 //
@@ -42,7 +43,10 @@ try
 
     while (true)
     {
-        Log.Information("JIM.Service - Doing some work!");
+        // get the oldest ready task
+
+
+
         Thread.Sleep(4000);
     }
 }
