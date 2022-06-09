@@ -1,5 +1,3 @@
-@import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
-
 h1:focus {
     outline: none;
 }
@@ -236,3 +234,7 @@ a, .btn-link {
 
 .inline {display:inline-block}
 .badge-bigger { font-size: 0.8em; }
+
+.text-warning-dark {
+    color: #70570b;
+}

@@ -16,7 +16,15 @@ namespace JIM.PostgresData.Repositories
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
         {
-            await Repository.Database.ServiceTasks.AddAsync(serviceTask);
+            if (serviceTask is DataGenerationTemplateServiceTask task)
+            {
+                Repository.Database.DataGenerationTemplateServiceTasks.Add(task);
+                await Repository.Database.SaveChangesAsync();
+            }
+            else
+            {
+                throw new ArgumentException("serviceTask was of an unexpected type: " + serviceTask.GetType());
+            }
         }
 
         public async Task<ServiceTask?> GetNextServiceTaskAsync()
@@ -26,17 +34,19 @@ namespace JIM.PostgresData.Repositories
 
         public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)
         {
-            var dbServiceTask = await Repository.Database.ServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
-            if (dbServiceTask == null)
+            if (serviceTask is DataGenerationTemplateServiceTask task)
             {
-                Log.Error("UpdateServiceTaskAsync: Could not retrieve a ServiceTask object to update.");
-                return;
+                var dbDataGenerationTemplateServiceTask = await Repository.Database.DataGenerationTemplateServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
+                if (dbDataGenerationTemplateServiceTask == null)
+                {
+                    Log.Error("UpdateServiceTaskAsync: Could not retrieve a DataGenerationTemplateServiceTask object to update.");
+                    return;
+                }
+
+                // map scalar value updates to the db version of the object
+                Repository.Database.Entry(dbDataGenerationTemplateServiceTask).CurrentValues.SetValues(task);
             }
 
-            // map scalar value updates to the db version of the object
-            Repository.Database.Entry(dbServiceTask).CurrentValues.SetValues(serviceTask);
-
-            // manually update reference properties
             await Repository.Database.SaveChangesAsync();
         }
 

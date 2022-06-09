@@ -16,7 +16,7 @@ namespace JIM.Application.Servers
             await Application.Repository.Tasking.CreateServiceTaskAsync(serviceTask);
         }
 
-        public async Task<ServiceTask> GetNextServiceTaskAsync()
+        public async Task<ServiceTask?> GetNextServiceTaskAsync()
         {
             return await Application.Repository.Tasking.GetNextServiceTaskAsync();
         }

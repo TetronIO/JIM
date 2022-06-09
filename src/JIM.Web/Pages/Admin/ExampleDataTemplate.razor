@@ -13,34 +13,32 @@
 {
     foreach (var objectType in template.ObjectTypes)
     {
-    <div class="box mt-3">
-        <h3><small class="text-muted">Object Type:</small> @objectType.MetaverseObjectType.Name</h3>
-        <p>Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
+        <div class="box mt-3">
+            <h3><small class="text-muted">Object Type:</small> @objectType.MetaverseObjectType.Name</h3>
+            <p>Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
 
-        <table class="table">
-          <thead>
-            <tr>
-              <th scope="col">Attribute</th>
-              <th scope="col">Type</th>
-              <th scope="col">Population %</th>
-              <th scope="col">Rule(s)</th>
-            </tr>
-          </thead>
-          <tbody>
-            @foreach (var ta in objectType.TemplateAttributes)
-            {
+            <table class="table">
+              <thead>
                 <tr>
-                <td>@ta.MetaverseAttribute?.Name</td>
-                <td>@ta.MetaverseAttribute?.Type</td>
-                <td>@ta.PopulatedValuesPercentage</td>
-                <td>@((MarkupString)SimplifyAttributeConstraints(ta))</td>
+                  <th scope="col">Attribute</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Population %</th>
+                  <th scope="col">Rule(s)</th>
                 </tr>
-            }
-          </tbody>
-        </table>
-
-
-    </div>    
+              </thead>
+              <tbody>
+                @foreach (var ta in objectType.TemplateAttributes)
+                {
+                    <tr>
+                    <td>@ta.MetaverseAttribute?.Name</td>
+                    <td>@ta.MetaverseAttribute?.Type</td>
+                    <td>@ta.PopulatedValuesPercentage</td>
+                    <td>@((MarkupString)SimplifyAttributeConstraints(ta))</td>
+                    </tr>
+                }
+              </tbody>
+            </table>
+        </div>
     }    
 }
 
@@ -49,7 +47,17 @@
   <p>Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised. 
     This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.</p>
   <hr>
-  <button type="submit" class="btn btn-warning">Execute Template</button>
+  <button type="submit" class="btn btn-warning" @onclick="ExecuteTemplateAsync" disabled="@isTemplateBeingExecuted">
+        @if (!isTemplateBeingExecuted)
+        {
+            <text>Execute Template</text>
+        }
+        else
+        {
+            <div class="spinner-border spinner-border-sm me-2 text-warning-dark" role="status"></div>
+            <text>Executing...</text>
+        }
+    </button>
 </div>
 
 
@@ -58,6 +66,7 @@
     public int Id { get; set; }
 
     private DataGenerationTemplate? template;
+    private bool isTemplateBeingExecuted = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,5 +159,10 @@
     private string CreateBadgeHtml(string prefix, string value)
     {
         return "<span class=\"badge badge-bigger bg-secondary inline me-2\"><span class=\"fw-normal\">" + prefix + ":</span> " + value + "</span>";
+    }
+
+    private async Task ExecuteTemplateAsync()
+    {
+        isTemplateBeingExecuted = true;
     }
 }
