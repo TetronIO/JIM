@@ -1,6 +1,4 @@
-﻿using static JIM.Models.Tasking.Enums;
-
-namespace JIM.Models.Tasking
+﻿namespace JIM.Models.Tasking
 {
 	public abstract class ServiceTask
 	{
@@ -11,6 +9,7 @@ namespace JIM.Models.Tasking
 		public ServiceTask()
         {
 			Timestamp = DateTime.Now;
+			Status = ServiceTaskStatus.Queued;
         }
 	}
 }

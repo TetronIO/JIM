@@ -21,6 +21,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetNextServiceTaskAsync();
         }
 
+        public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)
+        {
+            return await Application.Repository.Tasking.GetFirstDataGenerationServiceTaskAsync(dataGenerationTemplateId);
+        }
+
         public async Task DeleteServiceTaskAsync(ServiceTask serviceTask)
         {
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);

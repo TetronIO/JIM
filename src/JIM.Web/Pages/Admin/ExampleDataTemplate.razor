@@ -2,9 +2,10 @@
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.DataGeneration
-@using JIM.Models.DataGeneration.Dto
 @using JIM.Models.Core
+@using JIM.Models.Tasking
 @inject JimApplication Jim
+@inject NavigationManager NavManager
 
 <PageTitle>Data Generation Template: @template?.Name</PageTitle>
 <h1><small class="text-muted">Data Generation Template:</small> @template?.Name</h1>
@@ -47,15 +48,20 @@
   <p>Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised. 
     This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.</p>
   <hr>
-  <button type="submit" class="btn btn-warning" @onclick="ExecuteTemplateAsync" disabled="@isTemplateBeingExecuted">
-        @if (!isTemplateBeingExecuted)
-        {
-            <text>Execute Template</text>
-        }
-        else
+  <button type="submit" class="btn btn-warning" @onclick="ExecuteTemplateAsync" disabled="@(isTemplateBeingExecuted || isTemplateScheduledForExecution)">
+        @if (isTemplateBeingExecuted)
         {
             <div class="spinner-border spinner-border-sm me-2 text-warning-dark" role="status"></div>
             <text>Executing...</text>
+        }
+        else if (isTemplateScheduledForExecution)
+        {
+            <i class="bi bi-hourglass me-2"></i>
+            <text>Scheduled...</text>
+        }
+        else
+        {
+            <text>Execute Template</text>
         }
     </button>
 </div>
@@ -67,10 +73,26 @@
 
     private DataGenerationTemplate? template;
     private bool isTemplateBeingExecuted = false;
+    private bool isTemplateScheduledForExecution = false;
 
     protected override async Task OnInitializedAsync()
     {
         template = await Jim.DataGeneration.GetTemplateAsync(Id, false);
+        if (template == null)
+        {
+            // template not found, redirect to index page
+            NavManager.NavigateTo("../");
+            return;
+        }
+
+        var task = await Jim.Tasking.GetFirstDataGenerationServiceTaskAsync(template.Id);
+        if (task != null)
+        {
+            if (task.Status == ServiceTaskStatus.Queued)
+                isTemplateScheduledForExecution = true;
+            else if (task.Status == ServiceTaskStatus.Processing)
+                isTemplateBeingExecuted = true;
+        }
     }
 
     private string SimplifyAttributeConstraints(DataGenerationTemplateAttribute dgta)
@@ -163,6 +185,11 @@
 
     private async Task ExecuteTemplateAsync()
     {
+        if (template == null)
+            return;
+
+        var task = new DataGenerationTemplateServiceTask(template.Id);
+        await Jim.Tasking.CreateServiceTaskAsync(task);
         isTemplateBeingExecuted = true;
     }
 }

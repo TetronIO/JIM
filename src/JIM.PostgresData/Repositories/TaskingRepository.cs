@@ -29,7 +29,12 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ServiceTask?> GetNextServiceTaskAsync()
         {
-            return await Repository.Database.ServiceTasks.OrderByDescending(q => q.Timestamp).FirstOrDefaultAsync();
+            return await Repository.Database.ServiceTasks.Where(q => q.Status == ServiceTaskStatus.Queued).OrderByDescending(q => q.Timestamp).FirstOrDefaultAsync();
+        }
+
+        public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)
+        {
+            return await Repository.Database.DataGenerationTemplateServiceTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
         }
 
         public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)

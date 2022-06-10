@@ -8,6 +8,8 @@ namespace JIM.Data.Repositories
 
         public Task<ServiceTask?> GetNextServiceTaskAsync();
 
+        public Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId);
+
         public Task UpdateServiceTaskAsync(ServiceTask serviceTask);
 
         public Task DeleteServiceTaskAsync(ServiceTask serviceTask);

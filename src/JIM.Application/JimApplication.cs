@@ -12,6 +12,8 @@ namespace JIM.Application
         public SecurityServer Security { get; }
         public ServiceSettingsServer ServiceSettings { get; }
         public DataGenerationServer DataGeneration { get; }
+        public TaskingServer Tasking { get; }
+
         internal SeedingServer Seeding { get; }
         internal IRepository Repository { get; }
 
@@ -22,6 +24,7 @@ namespace JIM.Application
             Security = new SecurityServer(this);
             ServiceSettings = new ServiceSettingsServer(this);
             DataGeneration = new DataGenerationServer(this);
+            Tasking = new TaskingServer(this);
             Seeding = new SeedingServer(this);
             Repository = dataRepository;
             Log.Verbose("The JIM Application has started.");

@@ -1,11 +1,8 @@
 ﻿namespace JIM.Models.Tasking
 {
-	public class Enums
+	public enum ServiceTaskStatus
 	{
-		public enum ServiceTaskStatus
-        {
-			Ready = 0,
-			InProgress = 1,
-        }
+		Queued = 0,
+		Processing = 1,
 	}
 }
