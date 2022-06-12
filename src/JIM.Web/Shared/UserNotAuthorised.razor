@@ -26,21 +26,27 @@ else
 }
 
 @code {
-    private string userName;
-    private string ssoClaimType;
-    private string ssoAttributeName;
-    private string userUniqueIdClaimValue;
+    private string? userName;
+    private string? ssoClaimType;
+    private string? ssoAttributeName;
+    private string? userUniqueIdClaimValue;
     private bool isInUsersRole;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        if (user == null || user.Identity == null)
+            return;
+
         userName = user.Identity.Name;
 
         var serviceSettings = await Jim.ServiceSettings.GetServiceSettingsAsync();
+        if (serviceSettings == null)
+            return;
+
         ssoClaimType = serviceSettings.SSOUniqueIdentifierClaimType;
-        ssoAttributeName = serviceSettings.SSOUniqueIdentifierMetaverseAttribute.Name;
+        ssoAttributeName = serviceSettings.SSOUniqueIdentifierMetaverseAttribute?.Name;
 
         var c = user.Claims.FirstOrDefault(c => c.Type == ssoClaimType);
         if (c != null)

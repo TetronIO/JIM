@@ -21,8 +21,7 @@
 }
 
 @code {
-    private string authMessage;
-    private string surnameMessage;
+    private string? authMessage;
     private IEnumerable<Claim> claims = Enumerable.Empty<Claim>();
 
     private async Task GetClaimsPrincipalData()
@@ -30,7 +29,7 @@
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
-        if (user.Identity.IsAuthenticated)
+        if (user != null && user.Identity != null && user.Identity.IsAuthenticated)
         {
             authMessage = $"{user.Identity.Name} is authenticated.";
             claims = user.Claims;
