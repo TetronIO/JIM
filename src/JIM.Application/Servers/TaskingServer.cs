@@ -18,7 +18,14 @@ namespace JIM.Application.Servers
 
         public async Task<ServiceTask?> GetNextServiceTaskAsync()
         {
-            return await Application.Repository.Tasking.GetNextServiceTaskAsync();
+            var task = await Application.Repository.Tasking.GetNextServiceTaskAsync();
+            if (task == null)
+                return null;
+
+            // we need to mark the task as being processed, so it's not picked up again by any other queue clients
+            task.Status = ServiceTaskStatus.Processing;
+            await Application.Repository.Tasking.UpdateServiceTaskAsync(task);
+            return task;
         }
 
         public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)

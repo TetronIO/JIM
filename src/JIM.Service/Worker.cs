@@ -1,7 +1,7 @@
-using Microsoft.Extensions.Hosting;
 using JIM.Application;
 using JIM.PostgresData;
 using Serilog;
+using JIM.Models.Tasking;
 
 namespace JIM.Service
 {
@@ -42,16 +42,32 @@ namespace JIM.Service
             InitialiseLogging();
             Log.Information("Starting JIM.Service");
 
-            // as JIM.Service is the primary JimApplication client, it's responsible for seeing the database is intialised.
+            // as JIM.Service is the initial JimApplication client, it's responsible for seeing the database is intialised.
             // other JimAppication clients will need to check if the app is ready before completing their initialisation.
             // JimApplication instances are ephemeral and should be disposed as soon as a unit of work is complete (for database tracking reasons).
-            using var application = new JimApplication(new PostgresDataRepository());
-            await application.InitialiseDatabaseAsync();
+            using var jim = new JimApplication(new PostgresDataRepository());
+            await jim.InitialiseDatabaseAsync();
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 // get the oldest ready task
-                await Task.Delay(4000, stoppingToken);
+                var task = await jim.Tasking.GetNextServiceTaskAsync();
+                if (task == null)
+                {
+                    Log.Debug("ExecuteAsync: No task on queue. Sleeping...");
+                    await Task.Delay(4000, stoppingToken);
+                }
+                else
+                {
+                    if (task is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
+                    {
+                        Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenerationTemplateServiceTask.TemplateId);
+                        await jim.DataGeneration.ExecuteTemplateAsync(dataGenerationTemplateServiceTask.TemplateId);
+                    }
+
+                    // very importamt: we must delete the task once it's completed so we know it's complete
+                    await jim.Tasking.DeleteServiceTaskAsync(task);
+                }
             }
         }
 
