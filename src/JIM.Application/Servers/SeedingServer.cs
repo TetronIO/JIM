@@ -24,8 +24,14 @@ namespace JIM.Application.Servers
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            if (!await Application.ServiceSettings.ServiceSettingsExistAsync())
-                await Application.ServiceSettings.CreateServiceSettingsAsync(new ServiceSettings());
+            // has seeding already happened? don't run it twice!
+            if (await Application.ServiceSettings.ServiceSettingsExistAsync())
+            {
+                Log.Information("SeedAsync: ServiceSettings already exists so believe seeding has already been performed. Stopping.");
+                return;
+            }
+
+            await Application.ServiceSettings.CreateServiceSettingsAsync(new ServiceSettings());
 
             // get attributes, if they don't exist, prepare object in list for bulk submission via seeding method
             // create object types as needed
