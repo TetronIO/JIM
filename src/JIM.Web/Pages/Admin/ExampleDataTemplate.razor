@@ -4,6 +4,7 @@
 @using JIM.Models.DataGeneration
 @using JIM.Models.Core
 @using JIM.Models.Tasking
+@using System.Diagnostics
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
@@ -19,45 +20,47 @@
             <p>Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
 
             <table class="table">
-              <thead>
-                <tr>
-                  <th scope="col">Attribute</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Population %</th>
-                  <th scope="col">Rule(s)</th>
-                </tr>
-              </thead>
-              <tbody>
-                @foreach (var ta in objectType.TemplateAttributes)
-                {
+                <thead>
                     <tr>
-                    <td>@ta.MetaverseAttribute?.Name</td>
-                    <td>@ta.MetaverseAttribute?.Type</td>
-                    <td>@ta.PopulatedValuesPercentage</td>
-                    <td>@((MarkupString)SimplifyAttributeConstraints(ta))</td>
+                        <th scope="col">Attribute</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Population %</th>
+                        <th scope="col">Rule(s)</th>
                     </tr>
-                }
-              </tbody>
+                </thead>
+                <tbody>
+                    @foreach (var ta in objectType.TemplateAttributes)
+                    {
+                        <tr>
+                            <td>@ta.MetaverseAttribute?.Name</td>
+                            <td>@ta.MetaverseAttribute?.Type</td>
+                            <td>@ta.PopulatedValuesPercentage</td>
+                            <td>@((MarkupString)SimplifyAttributeConstraints(ta))</td>
+                        </tr>
+                    }
+                </tbody>
             </table>
         </div>
-    }    
+    }
 }
 
 <div class="alert alert-warning mt-3" role="alert">
-  <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Warning!</h4>
-  <p>Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised. 
-    This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.</p>
-  <hr>
-  <button type="submit" class="btn btn-warning" @onclick="ExecuteTemplateAsync" disabled="@(isTemplateBeingExecuted || isTemplateScheduledForExecution)">
-        @if (isTemplateBeingExecuted)
+    <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Warning!</h4>
+    <p>
+        Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised.
+        This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.
+    </p>
+    <hr>
+    <button type="submit" class="btn btn-warning" @onclick="ExecuteTemplateAsync" disabled="@(status != null)">
+        @if (status != null && status == ServiceTaskStatus.Processing)
         {
             <div class="spinner-border spinner-border-sm me-2 text-warning-dark" role="status"></div>
-            <text>Executing...</text>
+            <text>Processing...</text>
         }
-        else if (isTemplateScheduledForExecution)
+        else if (status != null && status == ServiceTaskStatus.Queued)
         {
             <i class="bi bi-hourglass me-2"></i>
-            <text>Scheduled...</text>
+            <text>Queued...</text>
         }
         else
         {
@@ -72,8 +75,8 @@
     public int Id { get; set; }
 
     private DataGenerationTemplate? template;
-    private bool isTemplateBeingExecuted = false;
-    private bool isTemplateScheduledForExecution = false;
+    private DataGenerationTemplateServiceTask? task;
+    private ServiceTaskStatus? status;
 
     protected override async Task OnInitializedAsync()
     {
@@ -85,14 +88,34 @@
             return;
         }
 
-        var task = await Jim.Tasking.GetFirstDataGenerationServiceTaskAsync(template.Id);
-        if (task != null)
+        // has this template already been scheduled, or is already being processed on the service queue?
+        // continuously update the UI to show any change in status
+        // POLLING_TO_REPLACE - tagging this functionality for replacement with an event-based ui update approach in the future
+        var timer = new Timer(new TimerCallback(async _ =>
         {
-            if (task.Status == ServiceTaskStatus.Queued)
-                isTemplateScheduledForExecution = true;
-            else if (task.Status == ServiceTaskStatus.Processing)
-                isTemplateBeingExecuted = true;
-        }
+            Debug.WriteLine("Timer loop executing...");
+            if (template != null)
+            {
+                status = await Jim.Tasking.GetFirstDataGenerationTemplateServiceTaskStatus(template.Id);
+                if (status != null)
+                {
+                    Debug.WriteLine("TimerLoop: status is " + status);
+                }
+                else
+                {
+                    Debug.WriteLine("TimerLoop: status is null");
+                }
+            }
+            else
+            {
+                Debug.WriteLine("TimerLoop: template is null");
+            }
+
+            await InvokeAsync(() =>
+            {
+                StateHasChanged();
+            });
+        }), null, 2000, 2000);
     }
 
     private string SimplifyAttributeConstraints(DataGenerationTemplateAttribute dgta)
@@ -188,8 +211,7 @@
         if (template == null)
             return;
 
-        var task = new DataGenerationTemplateServiceTask(template.Id);
+        task = new DataGenerationTemplateServiceTask(template.Id);
         await Jim.Tasking.CreateServiceTaskAsync(task);
-        isTemplateBeingExecuted = true;
     }
 }

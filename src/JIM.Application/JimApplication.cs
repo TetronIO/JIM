@@ -155,8 +155,8 @@ namespace JIM.Application
 
         public void Dispose()
         {
-            if (Repository != null)
-                Repository.Dispose();
+            //if (Repository != null)
+            //    Repository.Dispose();
         }
     }
 }

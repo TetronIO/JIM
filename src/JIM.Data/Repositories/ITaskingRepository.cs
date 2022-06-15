@@ -10,6 +10,8 @@ namespace JIM.Data.Repositories
 
         public Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId);
 
+        public Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId);
+
         public Task UpdateServiceTaskAsync(ServiceTask serviceTask);
 
         public Task DeleteServiceTaskAsync(ServiceTask serviceTask);

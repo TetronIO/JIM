@@ -28,9 +28,14 @@ namespace JIM.Application.Servers
             return task;
         }
 
-        public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)
+        public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationTemplateServiceTaskAsync(int templateId)
         {
-            return await Application.Repository.Tasking.GetFirstDataGenerationServiceTaskAsync(dataGenerationTemplateId);
+            return await Application.Repository.Tasking.GetFirstDataGenerationServiceTaskAsync(templateId);
+        }
+
+        public async Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId)
+        {
+            return await Application.Repository.Tasking.GetFirstDataGenerationTemplateServiceTaskStatus(templateId);
         }
 
         public async Task DeleteServiceTaskAsync(ServiceTask serviceTask)

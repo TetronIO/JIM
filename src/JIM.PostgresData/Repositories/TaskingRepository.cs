@@ -37,6 +37,14 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.DataGenerationTemplateServiceTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
         }
 
+        public async Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId)
+        {
+            var result = await Repository.Database.DataGenerationTemplateServiceTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
+            if (result != null && result.Count == 1)
+               return result[0];
+
+            return null;
+        }
         public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)
         {
             if (serviceTask is DataGenerationTemplateServiceTask task)
