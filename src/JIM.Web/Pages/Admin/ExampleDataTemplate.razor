@@ -98,13 +98,9 @@
             {
                 status = await Jim.Tasking.GetFirstDataGenerationTemplateServiceTaskStatus(template.Id);
                 if (status != null)
-                {
                     Debug.WriteLine("TimerLoop: status is " + status);
-                }
                 else
-                {
                     Debug.WriteLine("TimerLoop: status is null");
-                }
             }
             else
             {
