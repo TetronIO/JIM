@@ -6,6 +6,6 @@ namespace JIM.Data.Repositories
 {
     public interface ISeedingRepository
     {
-        public Task SeedDataAsync(List<MetaverseAttribute> metaverseAttributes, List<MetaverseObjectType> metaverseObjectTypes, List<Role> roles, List<ExampleDataSet> exampleDataSets, List<DataGenerationTemplate> dataGenerationTemplates);
+        public Task SeedDataAsync(List<MetaverseAttribute> metaverseAttributes, List<MetaverseObjectTypeGroup> metaverseObjectTypeGroups, List<Role> roles, List<ExampleDataSet> exampleDataSets, List<DataGenerationTemplate> dataGenerationTemplates);
     }
 }

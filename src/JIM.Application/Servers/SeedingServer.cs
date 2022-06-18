@@ -38,7 +38,7 @@ namespace JIM.Application.Servers
             // if attributes don't exist on type, prepare type attributes and submit in bulk via seeding method
 
             var attributesToCreate = new List<MetaverseAttribute>();
-            var objectTypesToCreate = new List<MetaverseObjectType>();
+            var objectTypeGroupsToCreate = new List<MetaverseObjectTypeGroup>();
             var rolesToCreate = new List<Role>();
             var exampleDataSetsToCreate = new List<ExampleDataSet>();
             var dataGenerationTemplatesToCreate = new List<DataGenerationTemplate>();
@@ -131,13 +131,27 @@ namespace JIM.Application.Servers
             var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
             #endregion
 
+            #region MetaverseObjectTypeGroups
+            var identitiesObjectTypeGroup = new MetaverseObjectTypeGroup {
+                Name = "Identities",
+                BuiltIn = true
+            };
+            var entitlementsObjectTypeGroup = new MetaverseObjectTypeGroup {
+                Name = "Entitlements",
+                BuiltIn = true,
+                Order = 1
+            };
+            objectTypeGroupsToCreate.Add(identitiesObjectTypeGroup);
+            objectTypeGroupsToCreate.Add(entitlementsObjectTypeGroup);
+            #endregion
+
             #region MetaverseObjectTypes
             // prepare the user object type and attribute mappings
             var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User);
             if (userObjectType == null)
             {
                 userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, BuiltIn = true };
-                objectTypesToCreate.Add(userObjectType);
+                identitiesObjectTypeGroup.ObjectTypes.Add(userObjectType);
                 Log.Information("SeedAsync: Preparing MetaverseObjectType User");
             }
 
@@ -222,7 +236,7 @@ namespace JIM.Application.Servers
             if (groupObjectType == null)
             {
                 groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, BuiltIn = true };
-                objectTypesToCreate.Add(groupObjectType);
+                entitlementsObjectTypeGroup.ObjectTypes.Add(groupObjectType);
                 Log.Information("SeedAsync: Preparing MetaverseObjectType Group");
             }
 
@@ -257,6 +271,10 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute7);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute8);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
+            #endregion
+
+            #region metaverse object type groups
+
             #endregion
 
             #region Roles
@@ -327,7 +345,7 @@ namespace JIM.Application.Servers
             #endregion
 
             // submit all the preparations to the repository for creation
-            await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypesToCreate, rolesToCreate, exampleDataSetsToCreate, dataGenerationTemplatesToCreate);
+            await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypeGroupsToCreate, rolesToCreate, exampleDataSetsToCreate, dataGenerationTemplatesToCreate);
             stopwatch.Stop();
             Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
         }
