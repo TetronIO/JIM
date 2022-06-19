@@ -11,7 +11,6 @@ namespace JIM.PostgresData
 {
     public class JimDbContext : DbContext
     {
-        internal DbSet<MetaverseObjectTypeGroup> MetaverseObjectTypeGroups { get; set; }
         internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
         internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
         internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }

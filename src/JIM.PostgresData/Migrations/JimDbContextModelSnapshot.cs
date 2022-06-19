@@ -165,46 +165,15 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("GroupId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Order")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("GroupId");
 
                     b.HasIndex("Name");
 
                     b.ToTable("MetaverseObjectTypes");
-                });
-
-            modelBuilder.Entity("JIM.Models.Core.MetaverseObjectTypeGroup", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("BuiltIn")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Order")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("MetaverseObjectTypeGroups");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.ServiceSettings", b =>
@@ -1061,17 +1030,6 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ReferenceValue");
                 });
 
-            modelBuilder.Entity("JIM.Models.Core.MetaverseObjectType", b =>
-                {
-                    b.HasOne("JIM.Models.Core.MetaverseObjectTypeGroup", "Group")
-                        .WithMany("ObjectTypes")
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Group");
-                });
-
             modelBuilder.Entity("JIM.Models.Core.ServiceSettings", b =>
                 {
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "SSOUniqueIdentifierMetaverseAttribute")
@@ -1401,11 +1359,6 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
                 {
                     b.Navigation("AttributeValues");
-                });
-
-            modelBuilder.Entity("JIM.Models.Core.MetaverseObjectTypeGroup", b =>
-                {
-                    b.Navigation("ObjectTypes");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationObjectType", b =>

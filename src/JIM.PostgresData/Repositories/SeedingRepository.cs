@@ -19,7 +19,7 @@ namespace JIM.PostgresData.Repositories
         /// Creates data needed by the application to run.
         /// Does not perform existence checks, you need to do this before calling this method.
         /// </summary>
-        public async Task SeedDataAsync(List<MetaverseAttribute> metaverseAttributes, List<MetaverseObjectTypeGroup> metaverseObjectTypeGroups, List<Role> roles, List<ExampleDataSet> exampleDataSets, List<DataGenerationTemplate> dataGenerationTemplates)
+        public async Task SeedDataAsync(List<MetaverseAttribute> metaverseAttributes, List<MetaverseObjectType> metaverseObjectTypes, List<Role> roles, List<ExampleDataSet> exampleDataSets, List<DataGenerationTemplate> dataGenerationTemplates)
         {
             var changes = false;
             if (metaverseAttributes != null)
@@ -29,11 +29,10 @@ namespace JIM.PostgresData.Repositories
                 changes = true;
             }
 
-            if (metaverseObjectTypeGroups != null)
+            if (metaverseObjectTypes != null)
             {
-                Repository.Database.MetaverseObjectTypeGroups.AddRange(metaverseObjectTypeGroups);
-                var objectTypesCount = metaverseObjectTypeGroups.Sum(q => q.ObjectTypes.Count());
-                Log.Information($"SeedDataAsync: Created {metaverseObjectTypeGroups.Count} MetaverseObjectTypeGroups and {objectTypesCount} MetaverseObjectTypes");
+                Repository.Database.MetaverseObjectTypes.AddRange(metaverseObjectTypes);
+                Log.Information($"SeedDataAsync: Created {metaverseObjectTypes.Count} MetaverseObjectTypes");
                 changes = true;
             }
 

@@ -4,13 +4,6 @@ namespace JIM.Data.Repositories
 {
     public interface IMetaverseRepository
     {
-        #region object type groups
-        public Task<List<MetaverseObjectTypeGroup>> GetMetaverseObjectTypeGroupsAsync(bool includeChildObjects);
-        public Task<MetaverseObjectTypeGroup?> GetMetaverseObjectTypeGroupAsync(int id, bool includeChildObjects);
-        public Task CreateMetaverseObjectTypeGroupAsync(MetaverseObjectTypeGroup metaverseObjectTypeGroup);
-        public Task UpdateMetaverseObjectTypeGroupAsync(MetaverseObjectTypeGroup metaverseObjectTypeGroup);
-        #endregion
-
         #region object types
         public Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync();
 
@@ -49,4 +42,5 @@ namespace JIM.Data.Repositories
         public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);
         #endregion
     }
+
 }
