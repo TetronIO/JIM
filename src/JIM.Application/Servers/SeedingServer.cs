@@ -50,6 +50,7 @@ namespace JIM.Application.Servers
             var displayNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var distinguishedNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DistinguishedName, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var emailAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Email, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
+            var endDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
             var extensionAttribute1Attribute1 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute1, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var extensionAttribute1Attribute10 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute10, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
             var extensionAttribute1Attribute11 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute11, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
@@ -71,7 +72,7 @@ namespace JIM.Application.Servers
             var objectGuidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectGUID, AttributePlurality.SingleValued, AttributeDataType.Guid, attributesToCreate);
             var objectSidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
             var startDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
-            var endDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
+            var typeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Type, AttributePlurality.SingleValued, AttributeDataType.String, attributesToCreate);
 
             // user-specific attributes
             var accountExpiresAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountExpires, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
@@ -208,6 +209,7 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(userObjectType, streetAddressAttribute);
             AddAttributeToObjectType(userObjectType, teamAttribute);
             AddAttributeToObjectType(userObjectType, telephoneNumberAttribute);
+            AddAttributeToObjectType(userObjectType, typeAttribute);
             AddAttributeToObjectType(userObjectType, urlsAttribute);
             AddAttributeToObjectType(userObjectType, userAccountControlAttribute);
             AddAttributeToObjectType(userObjectType, userCertificatesAttribute);
