@@ -8,7 +8,7 @@
 <PageTitle>@(MetaverseObjectType?.Name)s</PageTitle>
 <h1>@(MetaverseObjectType?.Name)</h1>
 <p class="lead">
-    Some intro for @(MetaverseObjectType?.Name)s...
+    Some intro for @(MetaverseObjectType?.Name)...
 </p>
 
 <div class="box mt-3">
@@ -25,7 +25,7 @@
             </tr>
         </thead>
         <tbody>
-            @if (MetaverseObjects != null)
+            @if (MetaverseObjects != null && MetaverseObjects.Results.Count > 0)
             {
                 foreach (var mo in MetaverseObjects.Results)
                 {
@@ -34,6 +34,12 @@
                         <td>@mo.Created</td>
                     </tr>
                 }    
+            }
+            else
+            {
+                <tr>
+                    <td colspan="2" class="lead">No results</td>
+                </tr>
             }
         </tbody>
     </table>

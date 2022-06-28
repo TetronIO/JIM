@@ -14,7 +14,6 @@ namespace JIM.Models.Core
         public MetaverseObject()
         {
             Created = DateTime.Now;
-            Roles = new List<Role>();
             AttributeValues = new List<MetaverseObjectAttributeValue>();
         }
 
