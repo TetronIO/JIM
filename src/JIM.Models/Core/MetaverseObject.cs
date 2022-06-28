@@ -14,7 +14,13 @@ namespace JIM.Models.Core
         public MetaverseObject()
         {
             Created = DateTime.Now;
+            Roles = new List<Role>();
             AttributeValues = new List<MetaverseObjectAttributeValue>();
+        }
+
+        public MetaverseObjectAttributeValue? GetAttributeValue(string name)
+        {
+            return AttributeValues.SingleOrDefault(q => q.Attribute.Name == name);
         }
     }
 }

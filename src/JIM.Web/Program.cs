@@ -244,7 +244,7 @@ static async Task AuthoriseUserAsync(TicketReceivedContext context)
     Log.Debug($"AuthoriseUserAsync: User '{context.Principal.Identity.Name}' has a '{serviceSettings.SSOUniqueIdentifierClaimType}' claim value of '{uniqueIdClaimValue}'");
 
     // get the user using their unique id claim value
-    var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User);
+    var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false);
     if (userType == null)
         throw new Exception("Could not retrieve User object type");
 

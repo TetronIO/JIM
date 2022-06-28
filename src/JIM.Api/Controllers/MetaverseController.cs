@@ -18,17 +18,17 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/metaverse/object_types")]
-        public async Task<IEnumerable<MetaverseObjectType>> GetObjectTypesAsync()
+        public async Task<IEnumerable<MetaverseObjectType>> GetObjectTypesAsync(bool includeChildObjects)
         {
             _logger.LogTrace($"Someone requested the metaverse object types");
-            return await _application.Metaverse.GetMetaverseObjectTypesAsync();
+            return await _application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
         }
 
         [HttpGet("/metaverse/object_types/{id}")]
-        public async Task<MetaverseObjectType?> GetObjectTypeAsync(int id)
+        public async Task<MetaverseObjectType?> GetObjectTypeAsync(int id, bool includeChildObjects)
         {
             _logger.LogTrace($"Someone requested an object type: {id}");
-            return await _application.Metaverse.GetMetaverseObjectTypeAsync(id);
+            return await _application.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);
         }
 
         [HttpGet("/metaverse/attributes")]

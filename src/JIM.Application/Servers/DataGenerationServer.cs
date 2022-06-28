@@ -358,7 +358,7 @@ namespace JIM.Application.Servers
                 return;
 
             // skip if this is for a user manager attribute, that's specially handled elsewhere
-            if (metaverseObject.Type.Name == Constants.BuiltInObjectTypes.User && templateAttribute.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager)
+            if (metaverseObject.Type.Name == Constants.BuiltInObjectTypes.Users && templateAttribute.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager)
                 return;
 
             // is this going to be slow?
@@ -401,7 +401,7 @@ namespace JIM.Application.Servers
                 ta.MetaverseAttribute != null &&
                 ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
 
-            if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.User && templateManagerAttribute != null && templateManagerAttribute.MetaverseAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
+            if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.Users && templateManagerAttribute != null && templateManagerAttribute.MetaverseAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
             {
                 // binary tree approach
                 // - project users to new list

@@ -30,10 +30,4 @@
         DateCreated,
         Name
     }
-
-    public enum BuiltInObjectTypeNames
-    {
-        User,
-        Group
-    }
 }

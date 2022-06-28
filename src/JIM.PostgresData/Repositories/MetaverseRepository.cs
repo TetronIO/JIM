@@ -6,27 +6,48 @@ namespace JIM.PostgresData.Repositories
 {
     public class MetaverseRepository : IMetaverseRepository
     {
+        #region accessors
         private PostgresDataRepository Repository { get; }
+        #endregion
 
+        #region constructors
         internal MetaverseRepository(PostgresDataRepository dataRepository)
         {
             Repository = dataRepository;
         }
+        #endregion
 
-        public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync()
+        #region metaverse object types
+
+        public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
         {
-            return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).OrderBy(x => x.Name).ToListAsync();
+            var result = Repository.Database.MetaverseObjectTypes;
+            if (includeChildObjects)
+                result.Include(q => q.Attributes);
+
+            return await result.OrderBy(x => x.Name).ToListAsync();
         }
 
-        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id)
+        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id, bool includeChildObjects)
         {
-            return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(x => x.Id == id);
+            var result = Repository.Database.MetaverseObjectTypes;
+            if (includeChildObjects)
+                result.Include(q => q.Attributes);
+                           
+            return await result.SingleOrDefaultAsync(x => x.Id == id);
         }
 
-        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name)
+        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects)
         {
-            return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(q => q.Name == name);
+            var result = Repository.Database.MetaverseObjectTypes;
+            if (includeChildObjects)
+                result.Include(q => q.Attributes);
+
+            return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
         }
+        #endregion
+
+        #region metaverse attributes
 
         public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
         {
@@ -42,7 +63,9 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);
         }
+        #endregion
 
+        #region metaverse objects
         public async Task<MetaverseObject?> GetMetaverseObjectAsync(int id)
         {
             return await Repository.Database.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefaultAsync(x => x.Id == id);
@@ -162,5 +185,6 @@ namespace JIM.PostgresData.Repositories
 
             return pagedResultSet;
         }
+        #endregion
     }
 }

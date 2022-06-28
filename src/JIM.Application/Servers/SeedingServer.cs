@@ -134,10 +134,10 @@ namespace JIM.Application.Servers
 
             #region MetaverseObjectTypes
             // prepare the user object type and attribute mappings
-            var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User);
+            var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, true);
             if (userObjectType == null)
             {
-                userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, BuiltIn = true };
+                userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Users, BuiltIn = true };
                 objectTypesToCreate.Add(userObjectType);
                 Log.Information("SeedAsync: Preparing MetaverseObjectType User");
             }
@@ -220,10 +220,10 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(userObjectType, endDateAttribute);
 
             // create the group object type and attribute mappings
-            var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group);
+            var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Groups, true);
             if (groupObjectType == null)
             {
-                groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, BuiltIn = true };
+                groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Groups, BuiltIn = true };
                 objectTypesToCreate.Add(groupObjectType);
                 Log.Information("SeedAsync: Preparing MetaverseObjectType Group");
             }

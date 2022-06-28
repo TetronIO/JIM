@@ -1,0 +1,66 @@
+﻿@page "/t/{TypeNameUrlParam}"
+@attribute [Authorize(Roles = "Users")]
+@using JIM.Application
+@using JIM.Models.Core
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>@(MetaverseObjectType?.Name)s</PageTitle>
+<h1>@(MetaverseObjectType?.Name)</h1>
+<p class="lead">
+    Some intro for @(MetaverseObjectType?.Name)s...
+</p>
+
+<div class="box mt-3">
+
+    <p class="mt-3">
+        Maybe some more text to explain what you can do here.
+    </p>
+
+    <table class="table mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (MetaverseObjects != null)
+            {
+                foreach (var mo in MetaverseObjects.Results)
+                {
+                    <tr>
+                        <td><a href="/t/@(MetaverseObjectType?.Name.ToLower())/@mo.Id">@mo.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue</a></td>
+                        <td>@mo.Created</td>
+                    </tr>
+                }    
+            }
+        </tbody>
+    </table>
+</div>
+
+
+
+@code {
+    [Parameter]
+    public string TypeNameUrlParam { get; set; }
+
+    private PagedResultSet<MetaverseObject>? MetaverseObjects { get; set; }
+
+    private MetaverseObjectType? MetaverseObjectType { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var typeName = Utilities.ConvertFromUrlParam(TypeNameUrlParam);
+        MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(typeName, false);
+        if (MetaverseObjectType == null)
+        {
+            NavManager.NavigateTo("/");
+            return;
+        }
+
+        // get a page of results for the metaverse objects matching this type...
+        MetaverseObjects = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(MetaverseObjectType, 1, 20, 500);
+        var x = 1;
+    }
+}

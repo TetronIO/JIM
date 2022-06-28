@@ -112,9 +112,9 @@ namespace JIM.Application
 
             // check for a matching user, if not create, and check admin role assignment
             // get user by attribute = get metaverse object by attribute value
-            var objectType = await Metaverse.GetMetaverseObjectTypeAsync(BuiltInObjectTypeNames.User.ToString());
+            var objectType = await Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false);
             if (objectType == null)
-                throw new Exception($"{BuiltInObjectTypeNames.User} object type could not be found. Something went wrong with db seeding.");
+                throw new Exception($"{Constants.BuiltInObjectTypes.Users} object type could not be found. Something went wrong with db seeding.");
 
             var user = await Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(objectType, uniqueIdentifierMetaverseAttribute, initialAdminUniqueIdentifierClaimValue);
             if (user != null)

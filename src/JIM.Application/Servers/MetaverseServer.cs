@@ -11,19 +11,19 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync()
+        public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
         {
-            return await Application.Repository.Metaverse.GetMetaverseObjectTypesAsync();
+            return await Application.Repository.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
         }
 
-        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id)
+        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id, bool includeChildObjects)
         {
-            return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(id);
+            return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);
         }
 
-        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName)
+        public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName, bool includeChildObjects)
         {
-            return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName);
+            return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects);
         }
 
         public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()

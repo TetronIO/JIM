@@ -12,8 +12,8 @@
 
         public static class BuiltInObjectTypes
         {
-            public static string User => "User";
-            public static string Group => "Group";
+            public static string Users => "Users";
+            public static string Groups => "Groups";
         }
 
         public static class BuiltInAttributes
