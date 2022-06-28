@@ -21,5 +21,10 @@ namespace JIM.Models.Core
         {
             return AttributeValues.SingleOrDefault(q => q.Attribute.Name == name);
         }
+
+        public bool HasAttributeValue(string name)
+        {
+            return AttributeValues.Any(q => q.Attribute.Name == name);
+        }
     }
 }

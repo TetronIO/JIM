@@ -68,7 +68,11 @@ namespace JIM.PostgresData.Repositories
         #region metaverse objects
         public async Task<MetaverseObject?> GetMetaverseObjectAsync(int id)
         {
-            return await Repository.Database.MetaverseObjects.Include(q => q.AttributeValues).Include(q => q.Type).SingleOrDefaultAsync(x => x.Id == id);
+            return await Repository.Database.MetaverseObjects.
+                Include(q => q.AttributeValues).
+                ThenInclude(av => av.Attribute).
+                Include(q => q.Type).
+                SingleOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
@@ -84,7 +88,11 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
         {
-            var av = await Repository.Database.MetaverseObjectAttributeValues.Include(q => q.MetaverseObject).SingleOrDefaultAsync(av =>
+            var av = await Repository.Database.MetaverseObjectAttributeValues
+                .Include(q => q.MetaverseObject)
+                .ThenInclude(mo => mo.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+                .SingleOrDefaultAsync(av =>
                  av.Attribute.Id == metaverseAttribute.Id &&
                  av.StringValue != null && av.StringValue == attributeValue &&
                  av.MetaverseObject.Type.Id == metaverseObjectType.Id);
@@ -127,7 +135,10 @@ namespace JIM.PostgresData.Repositories
             if (maxResults > 500)
                 maxResults = 500;
 
-            var objects = from o in Repository.Database.MetaverseObjects.Where(q => q.Type.Id == metaverseObjectTypeId)
+            var objects = from o in Repository.Database.MetaverseObjects.
+                          Include(mo => mo.AttributeValues).
+                          ThenInclude(av => av.Attribute).
+                          Where(q => q.Type.Id == metaverseObjectTypeId)
                           select o;
 
             if (queryRange != QueryRange.Forever)

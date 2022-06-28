@@ -61,7 +61,10 @@ try
             options.Scope.Add("profile");
 
             // intercept the user login when a token is received and validate we can map them to a JIM user
-            options.Events.OnTicketReceived = async ctx => { await AuthoriseUserAsync(ctx); };
+            options.Events.OnTicketReceived = async ctx =>
+            {
+                await AuthoriseAndUpdateUserAsync(ctx);
+            };
         });
 
     // setup authorisation policies
@@ -211,8 +214,12 @@ static async Task InitialiseJimApplicationAsync()
 /// When a user signs in, we need to see if we can map the identity in the received token, to a user in the Metaverse.
 /// If we do, then the user's roles are retrieved and added to their identity, if not, they receive no roles and will
 /// not be able to access any part of JIM.
+/// 
+/// Also, if the user has claims that map to the user's Metaverse attributes that have no values, then those attributes
+/// will be set from the claim values, i.e. assign initial values. This ensures initial admins are represented properly,
+/// i.e. have a Display Name.
 /// </summary>
-static async Task AuthoriseUserAsync(TicketReceivedContext context)
+static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 {
     Log.Verbose("AuthoriseUserAsync()...");
 
@@ -264,15 +271,110 @@ static async Task AuthoriseUserAsync(TicketReceivedContext context)
         // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much
         claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
 
-        var jimIdentity = new ClaimsIdentity(claims) {
+        var jimIdentity = new ClaimsIdentity(claims)
+        {
             Label = "Internal JIM Identity"
         };
         context.Principal.AddIdentity(jimIdentity);
+
+        // now also see if we can assign any initial user attribute values from the claims principal
+        await UpdateUserAttributesFromClaimsAsync(jim, user, context.Principal);
     }
     else
     {
         // we couldn't map the token user to a Metaverse user. Quit
         // this will be the user will have no roles added, so they won't be able to access JIM.Web
         return;
+    }
+}
+
+static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, MetaverseObject user, ClaimsPrincipal claimsPrincipal)
+{
+    var updateRequired = false;
+    if (!user.HasAttributeValue(Constants.BuiltInAttributes.DisplayName))
+    {
+        var nameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");
+        if (nameClaim != null)
+        {
+            var displayNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName);
+            if (displayNameAttribute != null)
+            {
+                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = displayNameAttribute,
+                    StringValue = nameClaim.Value
+                });
+
+                updateRequired = true;
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + nameClaim.Type);
+            }
+        }
+    }
+
+    if (!user.HasAttributeValue(Constants.BuiltInAttributes.FirstName))
+    {
+        var givenNameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname");
+        if (givenNameClaim != null)
+        {
+            var firstNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.FirstName);
+            if (firstNameAttribute != null)
+            {
+                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = firstNameAttribute,
+                    StringValue = givenNameClaim.Value
+                });
+
+                updateRequired = true;
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + firstNameAttribute.Type);
+            }
+        }
+    }
+
+    if (!user.HasAttributeValue(Constants.BuiltInAttributes.LastName))
+    {
+        var surnameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname");
+        if (surnameClaim != null)
+        {
+            var lastNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.LastName);
+            if (lastNameAttribute != null)
+            {
+                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = lastNameAttribute,
+                    StringValue = surnameClaim.Value
+                });
+
+                updateRequired = true;
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + lastNameAttribute.Type);
+            }
+        }
+    }
+
+    if (!user.HasAttributeValue(Constants.BuiltInAttributes.UserPrincipalName))
+    {
+        var upnClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn");
+        if (upnClaim != null)
+        {
+            var upnAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.UserPrincipalName);
+            if (upnAttribute != null)
+            {
+                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = upnAttribute,
+                    StringValue = upnClaim.Value
+                });
+
+                updateRequired = true;
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + upnAttribute.Type);
+            }
+        }
+    }
+
+    if (updateRequired)
+    {
+        // update the user with the new attribute values
+        await jim.Metaverse.UpdateMetaverseObjectAsync(user);
+        Log.Debug("UpdateUserAttributesFromClaimsAsync: Updated user with new attribute values from some claims");
     }
 }

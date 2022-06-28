@@ -4,13 +4,18 @@ namespace JIM.Application.Servers
 {
     public class MetaverseServer
     {
+        #region accessors
         private JimApplication Application { get; }
+        #endregion
 
+        #region constructors
         internal MetaverseServer(JimApplication application)
         {
             Application = application;
         }
+        #endregion
 
+        #region metaverse object types
         public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
@@ -25,7 +30,9 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects);
         }
+        #endregion
 
+        #region metaverse attributes
         public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
         {
             return await Application.Repository.Metaverse.GetMetaverseAttributesAsync();
@@ -40,10 +47,17 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(name);
         }
+        #endregion
 
+        #region metaverse objects
         public async Task<MetaverseObject?> GetMetaverseObjectAsync(int id)
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectAsync(id);
+        }
+
+        public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
+        {
+            await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
         }
 
         public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
@@ -78,5 +92,6 @@ namespace JIM.Application.Servers
                 pageSize,
                 maxResults);
         }
+        #endregion
     }
 }
