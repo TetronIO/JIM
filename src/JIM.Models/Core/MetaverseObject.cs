@@ -11,6 +11,18 @@ namespace JIM.Models.Core
         public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
         public List<Role> Roles { get; set; }
 
+        public string? DisplayName 
+        { 
+            get
+            {
+                var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
+                if (av != null && ! string.IsNullOrEmpty(av.StringValue))
+                    return av.StringValue;
+
+                return null;
+            } 
+        }
+
         public MetaverseObject()
         {
             Created = DateTime.Now;

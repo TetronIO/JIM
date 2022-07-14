@@ -1,0 +1,89 @@
+﻿@page "/t/{TypeNameUrlParam}/v/{IdParam:int}"
+@attribute [Authorize(Roles = "Users")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Utility
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>@MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1): @displayName</PageTitle>
+<h1>@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1)): @displayName</h1>
+
+<div class="box mt-3">
+    
+    @if (MetaverseObject != null)
+    {
+        @foreach (var attributeValue in MetaverseObject.AttributeValues)
+        {
+            <div class="mb-3 row">
+                <label for="staticEmail" class="col-sm-2 col-form-label">@attributeValue.Attribute.Name</label>
+                <div class="col-sm-10">
+                    @if (attributeValue.Attribute.Type == AttributeDataType.String)
+                    {
+                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.StringValue">
+                    } 
+                    else if (attributeValue.Attribute.Type == AttributeDataType.Number)
+                    {
+                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.IntValue">
+                    }
+                    else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
+                    {
+                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.DateTimeValue">
+                    }
+                    else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
+                    {
+                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.GuidValue.ToString()">
+                    }
+                    else if (attributeValue.Attribute.Type == AttributeDataType.Bool && attributeValue.BoolValue.HasValue)
+                    {
+                        <input type="text" readonly class="form-control-plaintext" value="@(attributeValue.BoolValue.Value ? "true" : "false")">
+                    }
+                    else if (attributeValue.Attribute.Type == AttributeDataType.Binary)
+                    {
+                        <i>Binary value not shown</i>
+                    }
+                    else if (attributeValue.Attribute.Type == AttributeDataType.Reference)
+                    {
+                        <i>Reference values not yet supported</i>
+                    }
+                </div>
+            </div>
+        }    
+    }
+
+</div>
+
+@code {
+    [Parameter]
+    public string TypeNameUrlParam { get; set; }
+
+    [Parameter]
+    public int IdParam { get; set; }
+
+    private MetaverseObject MetaverseObject { get; set; }
+
+    private MetaverseObjectType MetaverseObjectType { get; set; }
+
+    string displayName;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var typeName = Utilities.ConvertFromUrlParam(TypeNameUrlParam);
+        MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(typeName, false);
+        if (MetaverseObjectType == null)
+        {
+            NavManager.NavigateTo("/");
+            return;
+        }
+
+        // get the metaverse object...
+        MetaverseObject = await Jim.Metaverse.GetMetaverseObjectAsync(IdParam);
+        if (MetaverseObject == null)
+        {
+            NavManager.NavigateTo("/");
+            return;
+        }
+
+        displayName = MetaverseObject.DisplayName;
+    }
+}

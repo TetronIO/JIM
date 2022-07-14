@@ -30,7 +30,7 @@
                 foreach (var mo in MetaverseObjects.Results)
                 {
                     <tr>
-                        <td><a href="/t/@(MetaverseObjectType?.Name.ToLower())/@mo.Id">@mo.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue</a></td>
+                        <td><a href="/t/@(MetaverseObjectType?.Name.ToLower())/v/@mo.Id">@mo.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue</a></td>
                         <td>@mo.Created</td>
                     </tr>
                 }    
