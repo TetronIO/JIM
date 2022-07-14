@@ -1,5 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Enums;
+using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories

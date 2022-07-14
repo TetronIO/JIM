@@ -2,21 +2,21 @@
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Utility
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>@(MetaverseObjectType?.Name)s</PageTitle>
+<PageTitle>@MetaverseObjectType?.Name</PageTitle>
 <h1>@(MetaverseObjectType?.Name)</h1>
 <p class="lead">
     Search or browse for @MetaverseObjectType?.Name
 </p>
 
+<div>
+    <MetaverseObjectPaginator Results="@MetaverseObjects" />
+</div>
+
 <div class="box mt-3">
-
-    @*<p class="mt-3">
-        Maybe some more text to explain what you can do here.
-    </p>*@
-
     <table class="table mt-2">
         <thead>
             <tr>
@@ -45,18 +45,28 @@
     </table>
 </div>
 
+<div class="mt-3">
+    <MetaverseObjectPaginator Results="@MetaverseObjects" />
+</div>
 
 
 @code {
     [Parameter]
     public string TypeNameUrlParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+
     private PagedResultSet<MetaverseObject>? MetaverseObjects { get; set; }
 
     private MetaverseObjectType? MetaverseObjectType { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        if (Page == null || Page < 1)
+            Page = 1;
+
         var typeName = Utilities.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(typeName, false);
         if (MetaverseObjectType == null)
@@ -66,7 +76,6 @@
         }
 
         // get a page of results for the metaverse objects matching this type...
-        MetaverseObjects = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(MetaverseObjectType, 1, 20, 500);
-        var x = 1;
+        MetaverseObjects = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(MetaverseObjectType, Page.Value, 20, 500);
     }
 }

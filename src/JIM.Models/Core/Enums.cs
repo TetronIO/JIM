@@ -16,18 +16,4 @@
         SingleValued = 0,
         MultiValued = 1
     }
-
-    public enum QueryRange
-    {
-        Forever,
-        LastYear,
-        LastMonth,
-        LastWeek
-    }
-
-    public enum QuerySortBy
-    {
-        DateCreated,
-        Name
-    }
 }

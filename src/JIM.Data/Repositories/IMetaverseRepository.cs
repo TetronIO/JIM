@@ -1,4 +1,6 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Enums;
+using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories
 {
