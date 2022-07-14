@@ -38,10 +38,6 @@
                     {
                         <input type="text" readonly class="form-control-plaintext" value="@(attributeValue.BoolValue.Value ? "true" : "false")">
                     }
-                    else if (attributeValue.Attribute.Type == AttributeDataType.Binary)
-                    {
-                        <i>Binary value not shown</i>
-                    }
                     else if (attributeValue.Attribute.Type == AttributeDataType.Reference)
                     {
                         <i>Reference values not yet supported</i>
