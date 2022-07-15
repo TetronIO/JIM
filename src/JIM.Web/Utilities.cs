@@ -1,4 +1,6 @@
-﻿namespace JIM.Web
+﻿using JIM.Models.Core;
+
+namespace JIM.Web
 {
     public static class Utilities
     {
@@ -16,6 +18,14 @@
         public static string ConvertFromUrlParam(string urlParam)
         {
             return urlParam.Replace("-", " ");
+        }
+
+        public static string GetMetaverseObjectUrl(MetaverseObject metaverseObject)
+        {
+            if (metaverseObject == null)
+                return String.Empty;
+
+            return $"/t/{ConvertToUrlParam(metaverseObject.Type.Name)}/v/{metaverseObject.Id}";
         }
     }
 }

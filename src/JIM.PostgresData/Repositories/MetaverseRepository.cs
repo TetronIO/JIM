@@ -71,10 +71,16 @@ namespace JIM.PostgresData.Repositories
         public async Task<MetaverseObject?> GetMetaverseObjectAsync(int id)
         {
             return await Repository.Database.MetaverseObjects.
-                Include(q => q.AttributeValues).
+                Include(mo => mo.Type).
+                Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.Attribute).
-                Include(q => q.Type).
-                SingleOrDefaultAsync(x => x.Id == id);
+                Include(mo => mo.AttributeValues).
+                ThenInclude(av => av.ReferenceValue).
+                ThenInclude(rv => rv.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+                Include(mo => mo.AttributeValues).
+                ThenInclude(av => av.ReferenceValue).
+                ThenInclude(rv => rv.Type).
+                SingleOrDefaultAsync(mo => mo.Id == id);
         }
 
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)

@@ -2,7 +2,6 @@
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
 @using JIM.Models.Core
-@using JIM.Models.Utility
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
@@ -38,9 +37,9 @@
                     {
                         <input type="text" readonly class="form-control-plaintext" value="@(attributeValue.BoolValue.Value ? "true" : "false")">
                     }
-                    else if (attributeValue.Attribute.Type == AttributeDataType.Reference)
+                    else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
                     {
-                        <i>Reference values not yet supported</i>
+                        <a href="@Utilities.GetMetaverseObjectUrl(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</a>
                     }
                 </div>
             </div>
