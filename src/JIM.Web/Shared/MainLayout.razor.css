@@ -14,10 +14,10 @@ main {
 }
 
 .top-row {
-    /*justify-content: flex-end;*/
+    justify-content: flex-end;
     height: 3.5rem;
-    /*display: flex;*/
-    /*align-items: center;*/
+    display: flex;
+    align-items: center;
     background-color: #eef2f6;
 }
 
@@ -29,6 +29,28 @@ main {
     .top-row a:first-child {
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+/* JIM Customisations */
+.jim-top-bar {
+    padding-left: 15px;
+    padding-right: 15px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: 3.5rem;
+    background-color: #eff2f6;
+}
+    .jim-top-bar header {
+        height: 3.5rem;
+    }
+
+    .jim-top-bar input {
+        width: 350px;
+    }
+
+    .jim-top-bar div {
+        padding-top: 1rem;
     }
 
 @media (max-width: 640.98px) {
@@ -68,26 +90,3 @@ main {
         padding-right: 1.5rem !important;
     }
 }
-
-
-/* JIM Customisations */
-.jim-top-bar {
-    padding-left: 15px;
-    padding-right: 15px;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    height: 3.5rem;
-    background-color: #eff2f6;
-}
-    .jim-top-bar header {
-        height: 3.5rem;
-    }
-
-    .jim-top-bar input {
-        width: 350px;
-    }
-
-    .jim-top-bar div {
-        padding-top: 1rem;
-    }
