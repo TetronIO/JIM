@@ -10,6 +10,7 @@ namespace JIM.Models.Core
         public MetaverseObjectType Type { get; set; }
         public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
         public List<Role> Roles { get; set; }
+        public MetaverseObjectStatus Status { get; set; }
 
         public string? DisplayName 
         { 
@@ -29,6 +30,7 @@ namespace JIM.Models.Core
         public MetaverseObject()
         {
             Created = DateTime.Now;
+            Status = MetaverseObjectStatus.Normal;
             AttributeValues = new List<MetaverseObjectAttributeValue>();
         }
 

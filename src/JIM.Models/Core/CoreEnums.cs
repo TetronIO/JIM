@@ -16,4 +16,10 @@
         SingleValued = 0,
         MultiValued = 1
     }
+
+    public enum MetaverseObjectStatus
+    {
+        Normal = 0,
+        Obsolete = 1
+    }
 }

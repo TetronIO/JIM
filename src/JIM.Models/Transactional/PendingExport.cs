@@ -4,7 +4,7 @@ namespace JIM.Models.Transactional
 {
     public class PendingExport
     {
-        // this object would get created when a synchronisation is run against a connector space object
+        // this object will get created when a synchronisation is run against a connector space object
         // and it's determined a change needs to be made to the corresponding object in the connected system.
         // the pending export would get processed on an export run, with the change being attempted against
         // the connected system. changes would be made and where possible, the PendingExport or 
@@ -20,12 +20,17 @@ namespace JIM.Models.Transactional
 
         public int Id { get; set; }
         public ConnectedSystemObject ConnectedSystemObject { get; set; }
-
         public PendingExportChangeType ChangeType { get; set; }
         public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; }
+        public PendingExportStatus Status { get; set; }
+        /// <summary>
+        /// How many times have we encounted an error whilst trying to export this change?
+        /// </summary>
+        public int? ErrorCount { get; set; }
 
         public PendingExport()
         {
+            Status = PendingExportStatus.Pending;
             AttributeValueChanges = new List<PendingExportAttributeValueChange>();
         }
     }
