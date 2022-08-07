@@ -2,6 +2,9 @@
 
 namespace JIM.Models.Transactional
 {
+    /// <summary>
+    /// Represents an instance of a synchronisation run, i.e. an import/export/synchronisation.
+    /// </summary>
     public class SyncRun
     {
         public int Id { get; set; }

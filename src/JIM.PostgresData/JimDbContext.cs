@@ -11,29 +11,32 @@ namespace JIM.PostgresData
 {
     public class JimDbContext : DbContext
     {
-        internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
-        internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
-        internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }
-        internal DbSet<MetaverseObject> MetaverseObjects { get; set; }
-        internal DbSet<SyncRule> SyncRules { get; set; }
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
+        internal DbSet<ConnectedSystemAttribute> ConnectedSystemAttributes { get; set; }
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
         internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
-        internal DbSet<ConnectedSystemAttribute> ConnectedSystemAttributes { get; set; }
-        internal DbSet<SyncRun> SynchronisationRuns { get; set; }
-        internal DbSet<ServiceSettings> ServiceSettings { get; set; }
-        internal DbSet<Role> Roles { get; set; }
-        internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
-        internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
-        internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
-        internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
+        internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
+        internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
+        internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
+        internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
+        internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
+        internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
+        internal DbSet<MetaverseObject> MetaverseObjects { get; set; }
+        internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }
+        internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
+        internal DbSet<PendingExport> PendingExports { get; set; }
+        internal DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; }
+        internal DbSet<Role> Roles { get; set; }
+        internal DbSet<ServiceSettings> ServiceSettings { get; set; }
         /// <summary>
         /// Do not use this, this is required for EF Core to handle base and derived classes persisted to the db.
         /// </summary>
         internal DbSet<ServiceTask> ServiceTasks { get; set; }
-        internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
+        internal DbSet<SyncRule> SyncRules { get; set; }
+        internal DbSet<SyncRun> SyncRuns { get; set; }
+        internal DbSet<SyncRunObject> SyncRunObjects { get; set; }
 
         private readonly string _connectionString;
 

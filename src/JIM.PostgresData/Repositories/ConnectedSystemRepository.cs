@@ -27,7 +27,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
         {
-            return await Repository.Database.SynchronisationRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToListAsync();
+            return await Repository.Database.SyncRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToListAsync();
         }
 
         public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
