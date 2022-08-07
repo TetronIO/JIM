@@ -8,7 +8,7 @@ namespace JIM.Models.Transactional
     /// </summary>
     public class SyncRunObject
     {
-        public int Id { get; set; }
+        public long Id { get; set; }
         /// <summary>
         /// The parent synchronisation run this object relates to.
         /// </summary>

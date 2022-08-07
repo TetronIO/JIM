@@ -11,7 +11,7 @@ namespace JIM.Models.Core
     [Index(nameof(GuidValue))]
     public class MetaverseObjectAttributeValue
     {
-        public int Id { get; set; }
+        public long Id { get; set; }
         public MetaverseAttribute Attribute { get; set; }
         public MetaverseObject MetaverseObject { get; set; }
         public string? StringValue { get; set; }

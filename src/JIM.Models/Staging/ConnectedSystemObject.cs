@@ -2,7 +2,7 @@
 {
     public class ConnectedSystemObject
     {
-        public int Id { get; set; }
+        public long Id { get; set; }
         public DateTime Created { get; set; }
         public DateTime? LastUpdated { get; set; }
         public ConnectedSystemObjectType Type { get; set; }

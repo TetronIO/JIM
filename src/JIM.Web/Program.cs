@@ -326,7 +326,7 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
                 });
 
                 updateRequired = true;
-                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + firstNameAttribute.Type);
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + givenNameClaim.Type);
             }
         }
     }
@@ -346,7 +346,7 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
                 });
 
                 updateRequired = true;
-                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + lastNameAttribute.Type);
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + surnameClaim.Type);
             }
         }
     }
@@ -366,7 +366,7 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
                 });
 
                 updateRequired = true;
-                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + upnAttribute.Type);
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + upnClaim.Type);
             }
         }
     }
