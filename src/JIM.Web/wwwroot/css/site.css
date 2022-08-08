@@ -200,7 +200,7 @@ a, .btn-link {
 
     .btn-toggle-nav a:hover,
     .btn-toggle-nav a:focus {
-        background-color: #d2f4ea;
+        background-color: #e3e3e3;
     }
 
 .scrollarea {
@@ -228,7 +228,7 @@ a, .btn-link {
 .box {
     padding: 15px;
     background-color: #fff;
-    border: solid 2px rgb(222, 226, 230);
+    border: solid 1px rgb(222, 226, 230);
     border-radius: 8px;
 }
 
