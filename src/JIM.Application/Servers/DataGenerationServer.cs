@@ -222,8 +222,9 @@ namespace JIM.Application.Servers
                     if (valueIndexMaxValue < 0)
                         valueIndexMaxValue = 0;
 
+                    var dataSetInstancesIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count -1);
                     var valueIndex = random.Next(0, valueIndexMaxValue);
-                    output = dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values[valueIndex].StringValue;
+                    output = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetInstancesIndex].ExampleDataSet.Values[valueIndex].StringValue;
                 }
                 else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
                 {

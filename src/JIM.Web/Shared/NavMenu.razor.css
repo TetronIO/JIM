@@ -9,7 +9,8 @@
 
 .navbar-brand {
     font-size: 1.1rem;
-    color: #000;
+    color: #0f5132;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif
 }
 
 .sidebar-nav-collapse {
@@ -26,6 +27,3 @@
         display: block;
     }
 }
-
-
-

@@ -69,7 +69,7 @@ a, .btn-link {
         position: sticky;
         top: 5rem;
         display: block !important;
-        height: calc(100vh - 7rem);
+        height: calc(100vh - 3.5rem);
         padding-left: .25rem;
         margin-left: -.25rem;
         overflow-y: auto
@@ -228,13 +228,18 @@ a, .btn-link {
 .box {
     padding: 15px;
     background-color: #fff;
-    border: solid 1px rgb(222, 226, 230);
-    border-radius: 6px;
+    border: solid 2px rgb(222, 226, 230);
+    border-radius: 8px;
 }
 
 .inline {display:inline-block}
-.badge-bigger { font-size: 0.8em; }
+.badge-bigger { font-size: 0.85em; }
 
 .text-warning-dark {
     color: #70570b;
 }
+
+h1 { font-size: 1.7rem; }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.2rem; }
+h4 { font-size: 1rem; }
