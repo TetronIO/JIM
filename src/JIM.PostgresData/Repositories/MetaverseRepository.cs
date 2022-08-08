@@ -175,7 +175,7 @@ namespace JIM.PostgresData.Repositories
             }
 
             // now just retrieve a page's worth of images from the results
-            var grossCount = await objects.CountAsync();
+            var grossCount = objects.Count();
             var offset = (page - 1) * pageSize;
             var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
             var results = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
