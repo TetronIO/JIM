@@ -96,14 +96,14 @@ namespace JIM.Application.Servers
             objectPreparationStopwatch.Start();
             var totalObjectsCreated = 0;
             var getTemplateStopwatch = Stopwatch.StartNew();
-            var t = await GetTemplateAsync(templateId, true);
+            var template = await GetTemplateAsync(templateId, true);
             getTemplateStopwatch.Stop();
             Log.Verbose($"ExecuteTemplateAsync: get template took: {getTemplateStopwatch.Elapsed}");
 
-            if (t == null)
+            if (template == null)
                 throw new ArgumentException("No template found with that id");
 
-            t.Validate();
+            template.Validate();
 
             // object type dependency graph needs considering
             // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
@@ -113,7 +113,7 @@ namespace JIM.Application.Servers
             var metaverseObjectsToCreate = new List<MetaverseObject>();
             var dataGenerationValueTrackers = new List<DataGenerationValueTracker>();
 
-            foreach (var objectType in t.ObjectTypes)
+            foreach (var objectType in template.ObjectTypes)
             {
                 var objectTypeStopWatch = Stopwatch.StartNew();
                 Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
@@ -167,7 +167,7 @@ namespace JIM.Application.Servers
 
             // ensure that attribute population percentage values are respected
             // do this by assigning all attributes with values (done), then go and randomly delete the required amount
-            RemoveUnecessaryAttributeValues(t, metaverseObjectsToCreate, random);
+            RemoveUnecessaryAttributeValues(template, metaverseObjectsToCreate, random);
             Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count:N0} objects");
             objectPreparationStopwatch.Stop();
 
@@ -177,7 +177,7 @@ namespace JIM.Application.Servers
             await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate);
             persistenceStopwatch.Stop();
             totalTimeStopwatch.Stop();
-            Log.Information($"ExecuteTemplateAsync: Template '{t.Name}' complete. {totalObjectsCreated:N0} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
+            Log.Information($"ExecuteTemplateAsync: Template '{template.Name}' complete. {totalObjectsCreated:N0} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
 
             // trying to help garbage collection along. data generation results in a lot of ram usage.
             metaverseObjectsToCreate.Clear();
