@@ -35,10 +35,6 @@ try
     await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
-
-    //builder.Services.AddScoped<IRepository, PostgresDataRepository>();
-    //builder.Services.AddScoped<JimApplication>();
-
     builder.Services.AddTransient<IRepository, PostgresDataRepository>();
     builder.Services.AddTransient<JimApplication>();
 
