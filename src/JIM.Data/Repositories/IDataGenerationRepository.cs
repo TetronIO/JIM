@@ -7,11 +7,12 @@ namespace JIM.Data.Repositories
     public interface IDataGenerationRepository
     {
         public Task<List<ExampleDataSet>> GetExampleDataSetsAsync();
+        public Task<List<ExampleDataSetHeader>> GetExampleDataSetHeadersAsync();
         public Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture);
+        public Task<ExampleDataSet?> GetExampleDataSetAsync(int id);
         public Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet);
         public Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet);
         public Task DeleteExampleDataSetAsync(int exampleDataSetId);
-
 
         public Task<List<DataGenerationTemplate>> GetTemplatesAsync();
         public Task<List<DataGenerationTemplateHeader>> GetTemplateHeadersAsync();
@@ -30,7 +31,6 @@ namespace JIM.Data.Repositories
         public Task CreateTemplateAsync(DataGenerationTemplate template);
         public Task UpdateTemplateAsync(DataGenerationTemplate template);
         public Task DeleteTemplateAsync(int templateId);
-
 
         public Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects);
     }

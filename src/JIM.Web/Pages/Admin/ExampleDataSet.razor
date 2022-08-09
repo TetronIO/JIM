@@ -1,0 +1,64 @@
+﻿@page "/admin/example-data/datasets/{Id:int}"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.DataGeneration
+@using JIM.Models.Core
+@using JIM.Models.Tasking
+@using System.Diagnostics
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Example Data Set: @exampleDataSet?.Name</PageTitle>
+<h1><small class="text-muted">Example Data Set:</small> @exampleDataSet?.Name</h1>
+
+@if (exampleDataSet != null)
+{
+    <div class="box">
+        <table>
+            <tr>
+                <td class="light pe-3">Created:</td>
+                <td><span class="font-monospace">@exampleDataSet.Created</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Built-in?</td>
+                <td><span class="font-monospace">@builtIn</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Culture:</td>
+                <td><span class="font-monospace">@exampleDataSet.Culture</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Values:</td>
+                <td><span class="font-monospace">@exampleDataSet.Values.Count</span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="box mt-3">
+        @foreach (var val in exampleDataSet.Values)
+        {
+            <span class="badge badge-outline badge-bigger bg-light text-dark">@val.StringValue</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private JIM.Models.DataGeneration.ExampleDataSet? exampleDataSet;
+    private string? builtIn;
+
+    protected override async Task OnInitializedAsync()
+    {
+        exampleDataSet = await Jim.DataGeneration.GetExampleDataSetAsync(Id);
+        if (exampleDataSet == null)
+        {
+            // template not found, redirect to index page
+            NavManager.NavigateTo("../");
+            return;
+        }
+
+        builtIn = exampleDataSet.BuiltIn ? "Yes" : "No";
+    }
+}

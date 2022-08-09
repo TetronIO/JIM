@@ -22,9 +22,27 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ExampleDataSets.Include(q => q.Values).OrderBy(q => q.Name).ToListAsync();
         }
 
+        public async Task<List<ExampleDataSetHeader>> GetExampleDataSetHeadersAsync()
+        {
+            var datasetHeaders = await Repository.Database.ExampleDataSets.OrderBy(d => d.Name).Select(d => new ExampleDataSetHeader {
+                Name = d.Name,
+                BuiltIn = d.BuiltIn,
+                Created = d.Created,
+                Id = d.Id,
+                Culture = d.Culture,
+                Values = d.Values.Count()}).ToListAsync();
+
+            return datasetHeaders;
+        }
+
         public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture)
         {
             return await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Name == name && q.Culture == culture);
+        }
+
+        public async Task<ExampleDataSet?> GetExampleDataSetAsync(int id)
+        {
+            return await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Id == id);
         }
 
         public async Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet)
