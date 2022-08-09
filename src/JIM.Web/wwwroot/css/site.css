@@ -4,7 +4,12 @@ h1:focus {
 
 a, .btn-link {
     color: #0071c1;
+    text-decoration: none;
 }
+    a:hover, .btn-link:hover {
+        color: #b32121;
+        transition: color 0.3s;
+    }
 
 .btn-primary {
     color: #fff;
