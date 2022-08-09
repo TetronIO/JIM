@@ -16,8 +16,8 @@
     foreach (var objectType in template.ObjectTypes)
     {
         <div class="box mt-3">
-            <h3><small class="text-muted">Object Type:</small> @objectType.MetaverseObjectType.Name</h3>
-            <p>Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
+            <h3>@objectType.MetaverseObjectType.Name</h3>
+            <p class="light">Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
 
             <table class="table">
                 <thead>
