@@ -45,13 +45,13 @@ namespace JIM.Service
             // as JIM.Service is the initial JimApplication client, it's responsible for seeing the database is intialised.
             // other JimAppication clients will need to check if the app is ready before completing their initialisation.
             // JimApplication instances are ephemeral and should be disposed as soon as a unit of work is complete (for database tracking reasons).
-            using var jim = new JimApplication(new PostgresDataRepository());
-            await jim.InitialiseDatabaseAsync();
+            using var outerJim = new JimApplication(new PostgresDataRepository());
+            await outerJim.InitialiseDatabaseAsync();
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 // get the oldest ready task
-                var task = await jim.Tasking.GetNextServiceTaskAsync();
+                var task = await outerJim.Tasking.GetNextServiceTaskAsync();
                 if (task == null)
                 {
                     Log.Debug("ExecuteAsync: No task on queue. Sleeping...");
@@ -62,11 +62,11 @@ namespace JIM.Service
                     if (task is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
                     {
                         Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenerationTemplateServiceTask.TemplateId);
-                        await jim.DataGeneration.ExecuteTemplateAsync(dataGenerationTemplateServiceTask.TemplateId);
+                        await outerJim.DataGeneration.ExecuteTemplateAsync(dataGenerationTemplateServiceTask.TemplateId);
                     }
 
                     // very importamt: we must delete the task once it's completed so we know it's complete
-                    await jim.Tasking.DeleteServiceTaskAsync(task);
+                    await outerJim.Tasking.DeleteServiceTaskAsync(task);
                 }
             }
         }
