@@ -216,15 +216,14 @@ namespace JIM.Application.Servers
                     // multiple example-data set based:
                     // just choose randomly a value from across the datasets. simplest for now
                     // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"
-                    var dataSetMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances.Count - 1;
-                    var dataSetIndex = random.Next(0, dataSetMaxValue);
-                    var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count - 1;
+                    
+                    var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count);
+                    var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count;
                     if (valueIndexMaxValue < 0)
                         valueIndexMaxValue = 0;
 
-                    var dataSetInstancesIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count -1);
                     var valueIndex = random.Next(0, valueIndexMaxValue);
-                    output = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetInstancesIndex].ExampleDataSet.Values[valueIndex].StringValue;
+                    output = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values[valueIndex].StringValue;
                 }
                 else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
                 {

@@ -36,8 +36,11 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.Services.AddScoped<IRepository, PostgresDataRepository>();
-    builder.Services.AddScoped<JimApplication>();
+    //builder.Services.AddScoped<IRepository, PostgresDataRepository>();
+    //builder.Services.AddScoped<JimApplication>();
+
+    builder.Services.AddTransient<IRepository, PostgresDataRepository>();
+    builder.Services.AddTransient<JimApplication>();
 
     // setup OpenID Connect (OIDC) authentication
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
