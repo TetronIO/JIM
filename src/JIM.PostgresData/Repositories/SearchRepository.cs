@@ -1,0 +1,32 @@
+﻿using JIM.Data.Repositories;
+using JIM.Models.Search.Dto;
+using Microsoft.EntityFrameworkCore;
+
+namespace JIM.PostgresData.Repositories
+{
+    public class SearchRepository : ISearchRepository
+    {
+        private PostgresDataRepository Repository { get; }
+
+        internal SearchRepository(PostgresDataRepository dataRepository)
+        {
+            Repository = dataRepository;
+        }       
+
+        public async Task<IList<PredefinedSearchHeader>> GetPredefinedSearchHeadersAsync()
+        {
+            var predefinedSearchHeaders = await Repository.Database.PredefinedSearches.OrderBy(d => d.Name).Select(d => new PredefinedSearchHeader
+            {
+                Name = d.Name,
+                Uri = d.Uri,
+                BuiltIn = d.BuiltIn,
+                Created = d.Created,
+                Id = d.Id,
+                MetaverseAttributeCount = d.MetaverseAttributes.Count(),
+                MetaverseObjectTypeName = d.MetaverseObjectType.Name
+            }).ToListAsync();
+
+            return predefinedSearchHeaders;
+        }
+    }
+}

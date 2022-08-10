@@ -15,7 +15,6 @@
     <None Remove="Tasking\" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Search\" />
     <Folder Include="Tasking\" />
   </ItemGroup>
 </Project>

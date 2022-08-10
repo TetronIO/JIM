@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using JIM.Models.Search;
+using Microsoft.EntityFrameworkCore;
 
 namespace JIM.Models.Core
 {
@@ -12,6 +13,7 @@ namespace JIM.Models.Core
         public AttributePlurality AttributePlurality { get; set; }
         public bool BuiltIn { get; set; }
         public List<MetaverseObjectType> MetaverseObjectTypes { get; set; }
+        public List<PredefinedSearch> PredefinedSearches { get; set; }
 
         public MetaverseAttribute()
         {

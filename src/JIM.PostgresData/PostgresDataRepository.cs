@@ -10,11 +10,12 @@ namespace JIM.PostgresData
     public class PostgresDataRepository : IRepository, IDisposable
     {
         public IConnectedSystemRepository ConnectedSystems { get; }
-        public IMetaverseRepository Metaverse { get; }
-        public IServiceSettingsRepository ServiceSettings { get; }
-        public ISecurityRepository Security { get; }
         public IDataGenerationRepository DataGeneration { get; }
+        public IMetaverseRepository Metaverse { get; }
+        public ISearchRepository Search { get; }
+        public ISecurityRepository Security { get; }
         public ISeedingRepository Seeding { get; }
+        public IServiceSettingsRepository ServiceSettings { get; }
         public ITaskingRepository Tasking { get; }
 
         internal JimDbContext Database { get; }
@@ -27,11 +28,12 @@ namespace JIM.PostgresData
             AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
             ConnectedSystems = new ConnectedSystemRepository(this);
-            Metaverse = new MetaverseRepository(this);
-            ServiceSettings = new ServiceSettingsRepository(this);
-            Security = new SecurityRepository(this);
             DataGeneration = new DataGenerationRepository(this);
+            Metaverse = new MetaverseRepository(this);
+            Security = new SecurityRepository(this);
+            Search = new SearchRepository(this);
             Seeding = new SeedingRepository(this);
+            ServiceSettings = new ServiceSettingsRepository(this);
             Tasking = new TaskingRepository(this);
             Database = new JimDbContext();
         }

@@ -45,7 +45,7 @@ namespace JIM.Service
             // as JIM.Service is the initial JimApplication client, it's responsible for seeing the database is intialised.
             // other JimAppication clients will need to check if the app is ready before completing their initialisation.
             // JimApplication instances are ephemeral and should be disposed as soon as a unit of work is complete (for database tracking reasons).
-            using var outerJim = new JimApplication(new PostgresDataRepository());
+            var outerJim = new JimApplication(new PostgresDataRepository());
             await outerJim.InitialiseDatabaseAsync();
 
             while (!stoppingToken.IsCancellationRequested)

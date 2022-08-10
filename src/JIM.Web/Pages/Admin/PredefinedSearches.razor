@@ -1,0 +1,52 @@
+﻿@page "/admin/predefined-searches"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Search.Dto
+@inject JimApplication Jim
+
+<PageTitle>Predefined Searches</PageTitle>
+<h1>Predefined Searches</h1>
+<p class="light">
+    Predefined Searches make it easy to find objects and control what attributes are returned.
+</p>
+
+<div class="box mt-3">
+
+    <table class="table mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Uri</th>
+                <th scope="col">Object Type</th>
+                <th scope="col">Built-in?</th>                
+                <th scope="col">Attributes</th>
+                <th scope="col">Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (predefinedSearchHeaders != null)
+            {
+                foreach (var predefinedSearchHeader in predefinedSearchHeaders)
+                {
+                    <tr>
+                        <td><a href="/admin/predefined-searches/@(predefinedSearchHeader.Id)">@predefinedSearchHeader.Name</a></td>
+                        <td>@predefinedSearchHeader.Uri</td>
+                        <td>@predefinedSearchHeader.MetaverseObjectTypeName</td>
+                        <td>@(predefinedSearchHeader.BuiltIn ? "Yes" : "No")</td>
+                        <td>@predefinedSearchHeader.MetaverseAttributeCount</td>
+                        <td>@predefinedSearchHeader.Created</td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IList<PredefinedSearchHeader>? predefinedSearchHeaders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        predefinedSearchHeaders = await Jim.Search.GetPredefinedSearchHeadersAsync();
+    }
+}

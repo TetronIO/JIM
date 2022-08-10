@@ -9,6 +9,7 @@ namespace JIM.Data
         public IServiceSettingsRepository ServiceSettings { get; }
         public ISecurityRepository Security { get; }
         public IDataGenerationRepository DataGeneration { get; }
+        public ISearchRepository Search { get; }
         public ISeedingRepository Seeding { get; }
         public ITaskingRepository Tasking { get; }
 

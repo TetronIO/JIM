@@ -1,6 +1,7 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -28,6 +29,7 @@ namespace JIM.PostgresData
         internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
         internal DbSet<PendingExport> PendingExports { get; set; }
         internal DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; }
+        internal DbSet<PredefinedSearch> PredefinedSearches { get; set; }
         internal DbSet<Role> Roles { get; set; }
         internal DbSet<ServiceSettings> ServiceSettings { get; set; }
         /// <summary>

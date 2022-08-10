@@ -195,13 +195,11 @@ static async Task InitialiseJimApplicationAsync()
 
     while (true)
     {
-        using (var jimApplication = new JimApplication(new PostgresDataRepository()))
+        var jimApplication = new JimApplication(new PostgresDataRepository());
+        if (await jimApplication.IsApplicationReadyAsync())
         {
-            if (await jimApplication.IsApplicationReadyAsync())
-            {
-                await jimApplication.InitialiseSSOAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
-                break;
-            }
+            await jimApplication.InitialiseSSOAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
+            break;
         }
 
         Log.Information("JimApplication is not ready yet. Sleeping...");

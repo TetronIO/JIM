@@ -1,3 +1,4 @@
+using JIM.Application.Search;
 using JIM.Application.Servers;
 using JIM.Data;
 using JIM.Models.Core;
@@ -5,28 +6,29 @@ using Serilog;
 
 namespace JIM.Application
 {
-    public class JimApplication : IDisposable
+    public class JimApplication
     {
         public ConnectedSystemServer ConnectedSystems { get; }
+        public DataGenerationServer DataGeneration { get; }
         public MetaverseServer Metaverse { get; }
+        public SearchServer Search { get; }
         public SecurityServer Security { get; }
         public ServiceSettingsServer ServiceSettings { get; }
-        public DataGenerationServer DataGeneration { get; }
         public TaskingServer Tasking { get; }
-
         internal SeedingServer Seeding { get; }
         internal IRepository Repository { get; }
 
         public JimApplication(IRepository dataRepository)
         {
             ConnectedSystems = new ConnectedSystemServer(this);
-            Metaverse = new MetaverseServer(this);
-            Security = new SecurityServer(this);
-            ServiceSettings = new ServiceSettingsServer(this);
             DataGeneration = new DataGenerationServer(this);
-            Tasking = new TaskingServer(this);
-            Seeding = new SeedingServer(this);
+            Metaverse = new MetaverseServer(this);
             Repository = dataRepository;
+            Search = new SearchServer(this);
+            Security = new SecurityServer(this);
+            Seeding = new SeedingServer(this);
+            ServiceSettings = new ServiceSettingsServer(this);
+            Tasking = new TaskingServer(this);
             Log.Verbose("The JIM Application has started.");
         }
 
@@ -151,12 +153,6 @@ namespace JIM.Application
                 return false;
 
             return true;
-        }
-
-        public void Dispose()
-        {
-            //if (Repository != null)
-            //    Repository.Dispose();
         }
     }
 }
