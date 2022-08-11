@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.DataGeneration;
+using JIM.Models.Search;
 using JIM.Models.Security;
 using Serilog;
 using System.Diagnostics;
@@ -39,6 +40,7 @@ namespace JIM.Application.Servers
 
             var attributesToCreate = new List<MetaverseAttribute>();
             var objectTypesToCreate = new List<MetaverseObjectType>();
+            var predefinedSearchesToCreate = new List<PredefinedSearch>();
             var rolesToCreate = new List<Role>();
             var exampleDataSetsToCreate = new List<ExampleDataSet>();
             var dataGenerationTemplatesToCreate = new List<DataGenerationTemplate>();
@@ -244,6 +246,7 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(groupObjectType, objectSidAttribute);
             AddAttributeToObjectType(groupObjectType, proxyAddressesAttribute);
             AddAttributeToObjectType(groupObjectType, staticMembersAttribute);
+            AddAttributeToObjectType(groupObjectType, statusAttribute);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute1);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute10);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute11);
@@ -259,6 +262,53 @@ namespace JIM.Application.Servers
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute7);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute8);
             AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
+            #endregion
+
+            #region PredefinedSearches
+            var usersPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("users");
+            if (usersPredefinedSearch == null)
+            {
+                usersPredefinedSearch = new PredefinedSearch
+                {
+                    Name = "Users",
+                    Uri = "users",
+                    IsDefaultForMetaverseObjectType = true,
+                    BuiltIn = true,
+                    MetaverseObjectType = userObjectType,
+                };
+
+                usersPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
+                usersPredefinedSearch.MetaverseAttributes.Add(jobTitleAttribute);
+                usersPredefinedSearch.MetaverseAttributes.Add(departmentAttribute);
+                usersPredefinedSearch.MetaverseAttributes.Add(companyAttribute);
+                usersPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
+                usersPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                
+                predefinedSearchesToCreate.Add(usersPredefinedSearch);
+                Log.Information("SeedAsync: Preparing User default PredefinedSearch");
+            }
+
+            var groupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("groups");
+            if (groupsPredefinedSearch == null)
+            {
+                groupsPredefinedSearch = new PredefinedSearch
+                {
+                    Name = "Groups",
+                    Uri = "groups",
+                    IsDefaultForMetaverseObjectType = true,
+                    BuiltIn = true,
+                    MetaverseObjectType = groupObjectType,
+                };
+
+                groupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
+                groupsPredefinedSearch.MetaverseAttributes.Add(groupTypeAttribute);
+                groupsPredefinedSearch.MetaverseAttributes.Add(groupScopeAttribute);
+                groupsPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
+                groupsPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                
+                predefinedSearchesToCreate.Add(groupsPredefinedSearch);
+                Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
+            }
             #endregion
 
             #region Roles
@@ -329,7 +379,13 @@ namespace JIM.Application.Servers
             #endregion
 
             // submit all the preparations to the repository for creation
-            await Application.Repository.Seeding.SeedDataAsync(attributesToCreate, objectTypesToCreate, rolesToCreate, exampleDataSetsToCreate, dataGenerationTemplatesToCreate);
+            await Application.Repository.Seeding.SeedDataAsync(
+                attributesToCreate, 
+                objectTypesToCreate, 
+                predefinedSearchesToCreate,
+                rolesToCreate, 
+                exampleDataSetsToCreate, 
+                dataGenerationTemplatesToCreate);
             stopwatch.Stop();
             Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
         }

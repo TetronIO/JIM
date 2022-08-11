@@ -1,6 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
+using JIM.Models.Search;
 using JIM.Models.Security;
 using Serilog;
 
@@ -19,7 +20,13 @@ namespace JIM.PostgresData.Repositories
         /// Creates data needed by the application to run.
         /// Does not perform existence checks, you need to do this before calling this method.
         /// </summary>
-        public async Task SeedDataAsync(List<MetaverseAttribute> metaverseAttributes, List<MetaverseObjectType> metaverseObjectTypes, List<Role> roles, List<ExampleDataSet> exampleDataSets, List<DataGenerationTemplate> dataGenerationTemplates)
+        public async Task SeedDataAsync(
+            List<MetaverseAttribute> metaverseAttributes, 
+            List<MetaverseObjectType> metaverseObjectTypes, 
+            List<PredefinedSearch> predefinedSearches,
+            List<Role> roles, 
+            List<ExampleDataSet> exampleDataSets, 
+            List<DataGenerationTemplate> dataGenerationTemplates)
         {
             var changes = false;
             if (metaverseAttributes != null)
@@ -33,6 +40,13 @@ namespace JIM.PostgresData.Repositories
             {
                 Repository.Database.MetaverseObjectTypes.AddRange(metaverseObjectTypes);
                 Log.Information($"SeedDataAsync: Created {metaverseObjectTypes.Count} MetaverseObjectTypes");
+                changes = true;
+            }
+
+            if (predefinedSearches != null)
+            {
+                Repository.Database.PredefinedSearches.AddRange(predefinedSearches);
+                Log.Information($"SeedDataAsync: Created {predefinedSearches.Count} PredefinedSearches");
                 changes = true;
             }
 

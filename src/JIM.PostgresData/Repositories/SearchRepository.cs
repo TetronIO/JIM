@@ -1,4 +1,5 @@
 ﻿using JIM.Data.Repositories;
+using JIM.Models.Search;
 using JIM.Models.Search.Dto;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,10 +24,16 @@ namespace JIM.PostgresData.Repositories
                 Created = d.Created,
                 Id = d.Id,
                 MetaverseAttributeCount = d.MetaverseAttributes.Count(),
-                MetaverseObjectTypeName = d.MetaverseObjectType.Name
+                MetaverseObjectTypeName = d.MetaverseObjectType.Name,
+                IsDefaultForMetaverseObjectType = d.IsDefaultForMetaverseObjectType
             }).ToListAsync();
 
             return predefinedSearchHeaders;
+        }
+
+        public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
+        {
+            return await Repository.Database.PredefinedSearches.SingleOrDefaultAsync(q => q.Uri == uri);
         }
     }
 }

@@ -11,6 +11,11 @@ namespace JIM.Models.Search
     {
         public int Id { get; set; }
         public MetaverseObjectType MetaverseObjectType { get; set; }
+        /// <summary>
+        /// If true, this is the default predefined search for the associated metaverse object type. 
+        /// This means in the web portal, a search parameter does not have to be used on the URL.
+        /// </summary>
+        public bool IsDefaultForMetaverseObjectType { get; set; }
         public string Name { get; set; }
         /// <summary>
         /// The uri component to use in URLs for the predefined search, i.e. "distribution" would result in: https://iga.tetron.io/t/groups/s/distribution

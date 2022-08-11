@@ -4,6 +4,7 @@
     {
         public int Id { get; set; }
         public string MetaverseObjectTypeName { get; set; }
+        public bool IsDefaultForMetaverseObjectType { get; set; }
         public string Name { get; set; }
         public string Uri { get; set; }
         public bool BuiltIn { get; set; }

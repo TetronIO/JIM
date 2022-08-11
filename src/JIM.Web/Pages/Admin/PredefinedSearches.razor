@@ -18,6 +18,7 @@
                 <th scope="col">Name</th>
                 <th scope="col">Uri</th>
                 <th scope="col">Object Type</th>
+                <th scope="col">Default?</th>
                 <th scope="col">Built-in?</th>                
                 <th scope="col">Attributes</th>
                 <th scope="col">Created</th>
@@ -29,9 +30,10 @@
                 foreach (var predefinedSearchHeader in predefinedSearchHeaders)
                 {
                     <tr>
-                        <td><a href="/admin/predefined-searches/@(predefinedSearchHeader.Id)">@predefinedSearchHeader.Name</a></td>
+                        <td><a href="/admin/predefined-searches/@(predefinedSearchHeader.Uri)">@predefinedSearchHeader.Name</a></td>
                         <td>@predefinedSearchHeader.Uri</td>
                         <td>@predefinedSearchHeader.MetaverseObjectTypeName</td>
+                        <td>@(predefinedSearchHeader.IsDefaultForMetaverseObjectType ? "Yes" : "No")</td>
                         <td>@(predefinedSearchHeader.BuiltIn ? "Yes" : "No")</td>
                         <td>@predefinedSearchHeader.MetaverseAttributeCount</td>
                         <td>@predefinedSearchHeader.Created</td>

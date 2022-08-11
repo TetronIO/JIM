@@ -1,4 +1,5 @@
-﻿using JIM.Models.Search.Dto;
+﻿using JIM.Models.Search;
+using JIM.Models.Search.Dto;
 
 namespace JIM.Application.Search
 {
@@ -19,6 +20,11 @@ namespace JIM.Application.Search
         public async Task<IList<PredefinedSearchHeader>> GetPredefinedSearchHeadersAsync()
         {
             return await Application.Repository.Search.GetPredefinedSearchHeadersAsync();
+        }
+
+        public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
+        {
+            return await Application.Repository.Search.GetPredefinedSearchAsync(uri);
         }
         #endregion
     }
