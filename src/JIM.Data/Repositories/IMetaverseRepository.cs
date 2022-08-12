@@ -1,5 +1,7 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Core.Dto;
 using JIM.Models.Enums;
+using JIM.Models.Search;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories
@@ -29,6 +31,14 @@ namespace JIM.Data.Repositories
 
         public Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
             int metaverseObjectTypeId,
+            int page,
+            int pageSize,
+            int maxResults,
+            QuerySortBy querySortBy = QuerySortBy.DateCreated,
+            QueryRange queryRange = QueryRange.Forever);
+
+        public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
+            PredefinedSearch predefinedSearch,
             int page,
             int pageSize,
             int maxResults,

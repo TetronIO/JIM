@@ -1,6 +1,8 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.Dto;
 using JIM.Models.Enums;
+using JIM.Models.Search;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 
@@ -203,6 +205,113 @@ namespace JIM.PostgresData.Repositories
             }
 
             return pagedResultSet;
+        }
+
+        public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
+            PredefinedSearch predefinedSearch, 
+            int page,
+            int pageSize,
+            int maxResults,
+            QuerySortBy querySortBy = QuerySortBy.DateCreated, 
+            QueryRange queryRange = QueryRange.Forever)
+        {
+            if (pageSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+            if (page < 1)
+                page = 1;
+
+            // limit page size to avoid increasing latency unecessarily
+            if (pageSize > 100)
+                pageSize = 100;
+
+            // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
+            if (maxResults > 500)
+                maxResults = 500;
+
+            var objects = from o in Repository.Database.MetaverseObjects.
+                          Include(mo => mo.AttributeValues).
+                          ThenInclude(av => av.Attribute).
+                          Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id)
+                          select o;
+
+            if (queryRange != QueryRange.Forever)
+            {
+                switch (queryRange)
+                {
+                    case QueryRange.LastYear:
+                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(365));
+                        break;
+                    case QueryRange.LastMonth:
+                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(30));
+                        break;
+                    case QueryRange.LastWeek:
+                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(7));
+                        break;
+                }
+            }
+
+            switch (querySortBy)
+            {
+                case QuerySortBy.DateCreated:
+                    objects = objects.OrderByDescending(q => q.Created);
+                    break;
+
+                    // todo: support more ways of sorting, i.e. by attribute value
+            }
+
+            // now just retrieve a page's worth of images from the results
+            var grossCount = objects.Count();
+            var offset = (page - 1) * pageSize;
+            var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
+
+            // select just the attributes we need into a header and just enough objects for the desired page
+            var results = await objects.Skip(offset).Take(itemsToGet).Select(d => new MetaverseObjectHeader
+            {
+                Id = d.Id,
+                Created = d.Created,
+                Status = d.Status,
+                TypeId = d.Type.Id,
+                TypeName = d.Type.Name,
+                AttributeValues = GetFilteredAttributeValuesList(predefinedSearch, d)
+            }).ToListAsync();
+
+            // now with all the ids we know how many total results there are and so can populate paging info
+            var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
+            {
+                PageSize = pageSize,
+                TotalResults = grossCount,
+                CurrentPage = page,
+                QuerySortBy = querySortBy,
+                QueryRange = queryRange,
+                Results = results
+            };
+
+            if (page == 1 && pagedResultSet.TotalPages == 0)
+                return pagedResultSet;
+
+            // don't let users try and request a page that doesn't exist
+            if (page > pagedResultSet.TotalPages)
+            {
+                pagedResultSet.TotalResults = 0;
+                pagedResultSet.Results.Clear();
+                return pagedResultSet;
+            }
+
+            return pagedResultSet;
+        }
+
+        private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
+        {
+            var list = new List<MetaverseObjectAttributeValue>();
+            foreach (var predefinedSearchAttribute in predefinedSearch.MetaverseAttributes)
+            {
+                var metaverseObjectAttribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Id == predefinedSearchAttribute.Id);
+                if (metaverseObjectAttribute != null)
+                    list.Add(metaverseObjectAttribute);
+            }
+
+            return list;
         }
         #endregion
     }

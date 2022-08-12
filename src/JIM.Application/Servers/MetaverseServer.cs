@@ -1,4 +1,6 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Core.Dto;
+using JIM.Models.Search;
 using JIM.Models.Utility;
 
 namespace JIM.Application.Servers
@@ -89,6 +91,19 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(
                 metaverseObjectType.Id,
+                page,
+                pageSize,
+                maxResults);
+        }
+
+        public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
+            PredefinedSearch predefinedSearch,
+            int page = 1,
+            int pageSize = 20,
+            int maxResults = 500)
+        {
+            return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(
+                predefinedSearch,
                 page,
                 pageSize,
                 maxResults);
