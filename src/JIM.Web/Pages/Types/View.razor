@@ -6,7 +6,7 @@
 @inject NavigationManager NavManager
 
 <PageTitle>@MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1): @displayName</PageTitle>
-<h1>@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1)): @displayName</h1>
+<h1><span class="text-muted">@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1)):</span> @displayName</h1>
 
 <div class="box mt-3">
     
@@ -19,7 +19,11 @@
                 <div class="col-sm-10">
                     @if (attributeValue.Attribute.Type == AttributeDataType.String)
                     {
-                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.StringValue">
+                        if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue)) {
+                            <a href="mailto:@attributeValue.StringValue">@attributeValue.StringValue</a>
+                        } else {
+                            <input type="text" readonly class="form-control-plaintext" value="@attributeValue.StringValue">
+                        }
                     } 
                     else if (attributeValue.Attribute.Type == AttributeDataType.Number)
                     {
