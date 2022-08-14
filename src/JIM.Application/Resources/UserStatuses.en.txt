@@ -1,0 +1,8 @@
+﻿Active
+Suspended
+Sebatical
+Seconded
+Maternity
+Paternity
+Leaving
+Leaver

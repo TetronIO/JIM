@@ -139,6 +139,16 @@
 
             if (dgta.MaxNumber.HasValue)
                 response += CreateBadgeHtml("Max", dgta.MaxNumber.Value.ToString("N0"));
+
+            if (dgta.WeightedStringValues != null && dgta.WeightedStringValues.Count > 0)
+            {
+                string weightedStringValues = "";
+                foreach (var wsv in dgta.WeightedStringValues)
+                    weightedStringValues += $"{wsv.Value}: {wsv.Weight}, ";
+
+                weightedStringValues = weightedStringValues.Substring(0, weightedStringValues.Length -2);
+                response += CreateBadgeHtml("Weighted Values", weightedStringValues);
+            }
         }
         else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Number)
         {

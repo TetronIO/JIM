@@ -439,6 +439,17 @@ namespace JIM.Application.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Active
+        ///Retiring
+        ///Retired.
+        /// </summary>
+        internal static string GroupStatuses_en {
+            get {
+                return ResourceManager.GetString("GroupStatuses_en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Marketing Specialist
         ///Marketing Manager
         ///Marketing Director
@@ -579,6 +590,22 @@ namespace JIM.Application.Properties {
         internal static string Teams_en {
             get {
                 return ResourceManager.GetString("Teams_en", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Active
+        ///Suspended
+        ///Sebatical
+        ///Seconded
+        ///Maternity
+        ///Paternity
+        ///Leaving
+        ///Leaver.
+        /// </summary>
+        internal static string UserStatuses_en {
+            get {
+                return ResourceManager.GetString("UserStatuses_en", resourceCulture);
             }
         }
         

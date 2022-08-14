@@ -8,46 +8,33 @@ namespace JIM.Models.DataGeneration
     {
         #region accessors
         public int Id { get; set; }
-        
         public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }
-        
         public MetaverseAttribute? MetaverseAttribute { get; set; }
-        
         /// <summary>
         /// How many values should be generated? 100% would mean every object has a value for this attribute.
         /// Not compatible with ManagerDepthPercentage.
         /// </summary>
         public int? PopulatedValuesPercentage { get; set; }
-        
         /// <summary>
         /// Percentage of how many boolean values should be true
         /// </summary>
         public int? BoolTrueDistribution { get; set; }
-        
         /// <summary>
         /// Should we randomly generate bool values?
         /// </summary>
         public bool? BoolShouldBeRandom { get; set; }
-        
         public DateTime? MinDate { get; set; }
-        
         public DateTime? MaxDate { get; set; }
-        
         public int? MinNumber { get; set; }
-        
         public int? MaxNumber { get; set; }
-        
         public bool? SequentialNumbers { get; set; }
-        
         public bool? RandomNumbers { get; set; }
-        
         /// <summary>
         /// Use a variable replacement approach to constructing string values, i.e.
         /// "{Firstname}.{Lastname}[UniqueInt]@contoso.com" to construct an email address.
         /// Can also be used with ExampleDataSets to form their values in a specific way by using their index position, i.e. "{0} {1} (my extra info)"
         /// </summary>
         public string? Pattern { get; set; }
-        
         /// <summary>
         /// The example data sets that can be used to populate a string value.
         /// Multiple example data sets can be supplied with no Pattern value and an even distribution will be used from both sets, i.e. male/female firstname data sets.
@@ -55,26 +42,27 @@ namespace JIM.Models.DataGeneration
         /// i.e. "{0} {1}" means use a random value from the first ExampleDataSet, a space and then a random value from the second ExampleDataSet.
         /// </summary>
         public List<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
-
+        /// <summary>
+        /// Instead of random selection from a dataset, you can specify specific string values to choose from, with weights to control, roughly, how many
+        /// of each value should be selected, i.e. majority can be 'active', some can be 'retired'.
+        /// </summary>
+        public List<DataGenerationTemplateAttributeWeightedValue> WeightedStringValues { get; set; }
         /// <summary>
         /// If you want Manager attributes to be assigned, specify how far into the organisational hierarchy managers should be present.
         /// i.e. if you want a heavy labour force, then you might specify 50%. If you want a heavily organised hierarchy then you might specify 95%.
         /// Leave as null if you don't want to assign Manager attribute values.
         /// </summary>
         public int? ManagerDepthPercentage { get; set; }
-
         /// <summary>
         /// When the Metaverse Attribute is a multi-valued reference attribute, this enables a minimum number of values to be assigned.
         /// i.e. must have more than x value assignments.
         /// </summary>
         public int? MvaRefMinAssignments { get; set; }
-
         /// <summary>
         /// When the Metaverse Attribute is a multi-valued reference attribute, this enables a maximum number of values to be assigned.
         /// i.e. must not have more than x value assignments.
         /// </summary>
         public int? MvaRefMaxAssignments { get; set; }
-
         /// <summary>
         /// When populating reference attributes, we need to specify what type of object we should use as the source.
         /// Note: does not apply to user Manager attributes, they are sourced automatically.
@@ -103,7 +91,9 @@ namespace JIM.Models.DataGeneration
 
         public bool IsUsingStrings()
         {
-            return !string.IsNullOrEmpty(Pattern) || (ExampleDataSetInstances != null && ExampleDataSetInstances.Count > 0);
+            return !string.IsNullOrEmpty(Pattern) ||
+                (ExampleDataSetInstances != null && ExampleDataSetInstances.Count > 0) ||
+                (WeightedStringValues != null && WeightedStringValues.Count > 0);
         }
 
         public void Validate()
@@ -111,6 +101,7 @@ namespace JIM.Models.DataGeneration
             var usingPattern = !string.IsNullOrEmpty(Pattern);
             var usingExampleData = ExampleDataSetInstances != null && ExampleDataSetInstances.Count > 0;
             var usingMvaRefMinMaxAttributes = MvaRefMinAssignments.HasValue || MvaRefMaxAssignments.HasValue;
+            var usingWeightedStringValues = WeightedStringValues != null && WeightedStringValues.Count > 0;
 
             // need either a cs or mv attribute reference
             if (ConnectedSystemAttribute == null && MetaverseAttribute == null)
@@ -170,8 +161,8 @@ namespace JIM.Models.DataGeneration
             if (attributeDataType != AttributeDataType.Reference && usingMvaRefMinMaxAttributes)
                 throw new DataGeneratationTemplateAttributeException("MvaRefMinAssignments or MvaRefMaxAssignments can only be used with reference attribute data types");
 
-            if (attributeDataType == AttributeDataType.String && !usingPattern && !usingExampleData && !IsUsingNumbers())
-                throw new DataGeneratationTemplateAttributeException("String but not using pattern, example data or numbers");
+            if (attributeDataType == AttributeDataType.String && !usingPattern && !usingExampleData && !usingWeightedStringValues && !IsUsingNumbers())
+                throw new DataGeneratationTemplateAttributeException("String but not using pattern, example data, weighted string values or numbers");
 
             if (attributeDataType == AttributeDataType.Bool)
             {

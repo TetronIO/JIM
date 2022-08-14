@@ -326,6 +326,24 @@ namespace JIM.Models.Tests
         }
 
         [Test]
+        public void TestIsValidWeightedStringValuesPass()
+        {
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
+                WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                {
+                    new DataGenerationTemplateAttributeWeightedValue { Value = "Active", Weight = 0.85f },
+                    new DataGenerationTemplateAttributeWeightedValue { Value = "Suspended", Weight = 0.1f },
+                    new DataGenerationTemplateAttributeWeightedValue { Value = "Leaver", Weight = 0.05f }
+                },
+                PopulatedValuesPercentage = 100
+            };
+
+            Assert.DoesNotThrow(subject1.Validate);
+        }
+
+        [Test]
         public void TestExampleDataSetUsagePass()
         {
             // you can assign one or more ExampleDataSets with no pattern

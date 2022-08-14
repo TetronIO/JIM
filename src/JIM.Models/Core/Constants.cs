@@ -135,6 +135,8 @@
             public static string Colours => "Colours";
             public static string Words => "Words";
             public static string GroupNameEndings => "Group Name Endings";
+            public static string UserStatuses => "User Statuses";
+            public static string GroupStatuses => "Group Statuses";
         }
 
         public static class BuiltInDataGenerationTemplates

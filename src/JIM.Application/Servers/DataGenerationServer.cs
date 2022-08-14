@@ -225,8 +225,7 @@ namespace JIM.Application.Servers
                 {
                     // multiple example-data set based:
                     // just choose randomly a value from across the datasets. simplest for now
-                    // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"
-                    
+                    // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"                    
                     var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count);
                     var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count;
                     if (valueIndexMaxValue < 0)
@@ -245,6 +244,10 @@ namespace JIM.Application.Servers
                     output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
                     output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationValueTrackers, output);
                     output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSetInstances, dataGenerationValueTrackers, random, output);
+                }
+                else if (dataGenerationTemplateAttribute.WeightedStringValues != null && dataGenerationTemplateAttribute.WeightedStringValues.Count > 0)
+                {
+                    output = dataGenerationTemplateAttribute.WeightedStringValues.RandomElementByWeight(x => x.Weight).Value;
                 }
                 else
                 {

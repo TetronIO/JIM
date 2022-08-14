@@ -139,6 +139,9 @@
   <data name="GroupNameEndings_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\resources\groupnameendings.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
+  <data name="GroupStatuses_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\resources\groupstatuses.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
+  </data>
   <data name="JobTitles_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\resources\jobtitles.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
   </data>
@@ -147,6 +150,9 @@
   </data>
   <data name="Teams_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\resources\teams.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+  </data>
+  <data name="UserStatuses_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\resources\userstatuses.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="Words_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\resources\words.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>

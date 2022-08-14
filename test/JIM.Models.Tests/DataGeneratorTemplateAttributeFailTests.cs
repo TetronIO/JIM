@@ -233,6 +233,25 @@ namespace JIM.Models.Tests
         }
 
         [Test]
+        public void TestIsValidWeightedStringValuesFail()
+        {
+            var subject1 = new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.String },
+                WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                {
+                    new DataGenerationTemplateAttributeWeightedValue { Value = "Active", Weight = 0.85f },
+                    new DataGenerationTemplateAttributeWeightedValue { Value = "Suspended", Weight = 0.1f },
+                    new DataGenerationTemplateAttributeWeightedValue { Value = "Leaver", Weight = 0.05f }
+                },
+                PopulatedValuesPercentage = 100,
+                BoolShouldBeRandom = true
+            };
+
+            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+        }
+
+        [Test]
         public void TestIsValidManagerFail()
         {
             // cannot use PopulatedValuesPercentage and ManagerDepthPercentage together

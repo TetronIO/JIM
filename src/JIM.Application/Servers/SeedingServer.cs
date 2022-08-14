@@ -370,6 +370,14 @@ namespace JIM.Application.Servers
             var wordsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Words, "en", Properties.Resources.Words_en);
             if (wordsEnDataSet != null)
                 exampleDataSetsToCreate.Add(wordsEnDataSet);
+
+            var userStatusesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.UserStatuses, "en", Properties.Resources.UserStatuses_en);
+            if (userStatusesEnDataSet != null)
+                exampleDataSetsToCreate.Add(userStatusesEnDataSet);
+
+            var groupStatusesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.GroupStatuses, "en", Properties.Resources.GroupStatuses_en);
+            if (groupStatusesEnDataSet != null)
+                exampleDataSetsToCreate.Add(groupStatusesEnDataSet);
             #endregion
 
             #region DataGenerationTemplates
@@ -484,6 +492,7 @@ namespace JIM.Application.Servers
             var departmentsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Departments);
             var teamsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Teams);
             var jobTitlesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.JobTitles);
+            var userStatusDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.UserStatuses);
 
             var firstnameAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.FirstName);
             if (firstnameAttribute == null)
@@ -628,6 +637,27 @@ namespace JIM.Application.Servers
                     ManagerDepthPercentage = 25
                 });
             }
+
+            var statusAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Status);
+            if (statusAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Status),
+                    WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                    {
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Active", Weight = 0.8f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Suspended", Weight = 0.02f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Sebatical", Weight = 0.03f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Seconded", Weight = 0.03f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Maternity", Weight = 0.03f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Paternity", Weight = 0.03f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Leaving", Weight = 0.03f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Leaver", Weight = 0.03f }
+                    },
+                    PopulatedValuesPercentage = 100
+                });
+            }
         }
 
         private static void AddGroupsToDataGenerationTemplate(DataGenerationTemplate template, MetaverseObjectType groupType, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
@@ -728,6 +758,22 @@ namespace JIM.Application.Servers
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ManagedBy),
                     ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { userType },
                     PopulatedValuesPercentage = 75
+                });
+            }
+
+            var statusAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Status);
+            if (statusAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Status),
+                    WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                    {
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Active", Weight = 0.9f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Retiring", Weight = 0.05f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Retired", Weight = 0.05f },
+                    },
+                    PopulatedValuesPercentage = 100
                 });
             }
         }

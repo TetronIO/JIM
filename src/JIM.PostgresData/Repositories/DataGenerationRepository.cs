@@ -24,13 +24,15 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<List<ExampleDataSetHeader>> GetExampleDataSetHeadersAsync()
         {
-            var datasetHeaders = await Repository.Database.ExampleDataSets.OrderBy(d => d.Name).Select(d => new ExampleDataSetHeader {
+            var datasetHeaders = await Repository.Database.ExampleDataSets.OrderBy(d => d.Name).Select(d => new ExampleDataSetHeader
+            {
                 Name = d.Name,
                 BuiltIn = d.BuiltIn,
                 Created = d.Created,
                 Id = d.Id,
                 Culture = d.Culture,
-                Values = d.Values.Count()}).ToListAsync();
+                Values = d.Values.Count()
+            }).ToListAsync();
 
             return datasetHeaders;
         }
@@ -98,11 +100,13 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<List<DataGenerationTemplateHeader>> GetTemplateHeadersAsync()
         {
-            var templates = await Repository.Database.DataGenerationTemplates.OrderBy(t => t.Name).Select(dgt => new DataGenerationTemplateHeader { 
+            var templates = await Repository.Database.DataGenerationTemplates.OrderBy(t => t.Name).Select(dgt => new DataGenerationTemplateHeader
+            {
                 Name = dgt.Name,
                 BuiltIn = dgt.BuiltIn,
                 Created = dgt.Created,
-                Id = dgt.Id}).ToListAsync();
+                Id = dgt.Id
+            }).ToListAsync();
 
             return templates;
         }
@@ -120,12 +124,15 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ConnectedSystemAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.WeightedStringValues).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).
                 ThenInclude(edsi => edsi.ExampleDataSet);
 
             if (retrieveValues)
                 q.ThenInclude(eds => eds.Values);
-                                
+
             var t = await q.SingleOrDefaultAsync(t => t.Name == name);
             if (t == null)
                 return null;
@@ -148,6 +155,9 @@ namespace JIM.PostgresData.Repositories
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ReferenceMetaverseObjectTypes).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.WeightedStringValues).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).
