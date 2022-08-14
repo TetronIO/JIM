@@ -660,7 +660,12 @@ namespace JIM.Application.Servers
             }
         }
 
-        private static void AddGroupsToDataGenerationTemplate(DataGenerationTemplate template, MetaverseObjectType groupType, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+        private static void AddGroupsToDataGenerationTemplate(
+            DataGenerationTemplate template, 
+            MetaverseObjectType groupType, 
+            MetaverseObjectType userType, 
+            List<ExampleDataSet> dataSets, 
+            List<MetaverseAttribute> metaverseAttributes)
         {
             var groupDataGenerationObjectType = new DataGenerationObjectType
             {
@@ -697,7 +702,11 @@ namespace JIM.Application.Servers
                 groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
-                    Pattern = "Security",
+                    WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                    {
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Security", Weight = 0.6f },
+                        new DataGenerationTemplateAttributeWeightedValue { Value = "Distribution", Weight = 0.4f },
+                    },
                     PopulatedValuesPercentage = 100
                 });
             }
