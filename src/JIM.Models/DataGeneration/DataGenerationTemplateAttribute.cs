@@ -68,6 +68,10 @@ namespace JIM.Models.DataGeneration
         /// Note: does not apply to user Manager attributes, they are sourced automatically.
         /// </summary>
         public List<MetaverseObjectType>? ReferenceMetaverseObjectTypes { get; set; }
+        /// <summary>
+        /// If generation of this attribute depends on another, then specify it here.
+        /// </summary>
+        public DataGenerationTemplateAttributeDependency? AttributeDependency { get; set; }
         #endregion
 
         #region constructors

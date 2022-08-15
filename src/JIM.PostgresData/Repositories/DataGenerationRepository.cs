@@ -90,6 +90,10 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ExampleDataSetInstances).
                 ThenInclude(edsi => edsi.ExampleDataSet).
                 ThenInclude(eds => eds.Values).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.AttributeDependency).
+                ThenInclude(ad => ad.MetaverseAttribute).
                 OrderBy(t => t.Name).ToListAsync();
 
             foreach (var t in templates)
@@ -127,6 +131,10 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.WeightedStringValues).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.AttributeDependency).
+                ThenInclude(ad => ad.MetaverseAttribute).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).
                 ThenInclude(edsi => edsi.ExampleDataSet);
 
@@ -158,6 +166,10 @@ namespace JIM.PostgresData.Repositories
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.WeightedStringValues).
+                Include(t => t.ObjectTypes).
+                ThenInclude(o => o.TemplateAttributes).
+                ThenInclude(ta => ta.AttributeDependency).
+                ThenInclude(ad => ad.MetaverseAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).

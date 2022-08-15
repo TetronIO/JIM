@@ -5,6 +5,7 @@ using JIM.Models.Utility;
 using Serilog;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace JIM.Application.Servers
 {
@@ -131,10 +132,40 @@ namespace JIM.Application.Servers
                 index =>
                 {
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
-                    foreach (var templateAttribute in objectType.TemplateAttributes)
+                    // make sure we process attributes with no depedencies first
+                    foreach (var templateAttribute in objectType.TemplateAttributes.OrderBy(q => q.AttributeDependency))
                     {
+                        // only supporting Metaverse attributes for now.
+                        // generating values for Connector Space values will ahve to come later, subject to demand
                         if (templateAttribute.MetaverseAttribute != null)
                         {
+                            // is this attribute dependent upon another?
+                            if (templateAttribute.AttributeDependency != null)
+                            {
+                                // get the dependent attribute value
+                                var dependentAttributeValue = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Id == templateAttribute.AttributeDependency.MetaverseAttribute.Id);
+                                if (dependentAttributeValue == null)
+                                {
+                                    // there's no dependent attribute, so nothing to compare. do not generate a value
+                                    continue;
+                                }
+                                else
+                                {
+                                    if (templateAttribute.AttributeDependency.ComparisonType == ComparisonType.Equals)
+                                    {
+                                        if (dependentAttributeValue.StringValue != templateAttribute.AttributeDependency.StringValue)
+                                        {
+                                            Log.Debug($"ExecuteTemplateAsync: Not generating {templateAttribute.MetaverseAttribute.Name} attribute value, as dependent attribute value '{dependentAttributeValue.StringValue}' does not equal '{templateAttribute.AttributeDependency.StringValue}'");
+                                            continue;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        throw new NotSupportedException("Not currently supporting ComparisonTypes other than Equals");
+                                    }
+                                }
+                            }
+
                             // handle each attribute type in dedicated functions
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
@@ -158,8 +189,6 @@ namespace JIM.Application.Servers
                                     break;
                             }
                         }
-
-                        // todo: support Connector Space data generation
                     }
 
                     lock (metaverseObjectsToCreate)
@@ -228,10 +257,10 @@ namespace JIM.Application.Servers
                     // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"                    
                     var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count);
                     var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count;
-                    if (valueIndexMaxValue < 0)
-                        valueIndexMaxValue = 0;
-
                     var valueIndex = random.Next(0, valueIndexMaxValue);
+
+                    // for some reason, Firstnames Female sometimes loads with zero values and an exception is thrown
+                    // no idea why. need to spend time trying to diagnose this
                     output = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values[valueIndex].StringValue;
                 }
                 else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))
@@ -247,7 +276,9 @@ namespace JIM.Application.Servers
                 }
                 else if (dataGenerationTemplateAttribute.WeightedStringValues != null && dataGenerationTemplateAttribute.WeightedStringValues.Count > 0)
                 {
+                    #pragma warning disable CS8602 // Dereference of a possibly null reference.
                     output = dataGenerationTemplateAttribute.WeightedStringValues.RandomElementByWeight(x => x.Weight).Value;
+                    #pragma warning restore CS8602 // Dereference of a possibly null reference.
                 }
                 else
                 {
@@ -379,7 +410,7 @@ namespace JIM.Application.Servers
             if (templateAttribute.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued)
             {
                 // pick a random metaverse object and assign
-                var referencedMetaverseObjectIndex = random.Next(0, metaverseObjectsOfTypes.Count -1);
+                var referencedMetaverseObjectIndex = random.Next(0, metaverseObjectsOfTypes.Count - 1);
                 var referencedMetaverseObject = metaverseObjectsOfTypes[referencedMetaverseObjectIndex];
                 metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
                 {
@@ -403,7 +434,7 @@ namespace JIM.Application.Servers
                         Attribute = templateAttribute.MetaverseAttribute,
                         ReferenceValue = referencedObject
                     });
-                }                
+                }
             }
         }
 
@@ -647,7 +678,7 @@ namespace JIM.Application.Servers
                     // this is not a unique value, we've generated it before. go round again until it is unique
                     //Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
                 }
-            }            
+            }
 
             return textToProcess;
         }
@@ -751,7 +782,7 @@ namespace JIM.Application.Servers
                 RecursivelyAssignUserManagers(binaryTree.Right, managerAttribute, subordinates);
             }
         }
-    
+
         private void RecursivelyAssignSubordinates(BinaryTree binaryTree, int subordinatesToAssign, List<MetaverseObject> users, bool isFirstNode, MetaverseAttribute managerAttribute, ref int subordinatesAssigned)
         {
             if (isFirstNode)

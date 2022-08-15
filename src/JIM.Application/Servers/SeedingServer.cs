@@ -711,6 +711,22 @@ namespace JIM.Application.Servers
                 });
             }
 
+            var emailAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Email);
+            if (emailAttribute == null)
+            {
+                groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
+                    AttributeDependency = new DataGenerationTemplateAttributeDependency { 
+                        MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
+                        ComparisonType = ComparisonType.Equals,
+                        StringValue = "Distribution"
+                    },
+                    PopulatedValuesPercentage = 100,
+                    Pattern = "distro-[UniqueInt]@demo.tetron.io"
+                });
+            }
+
             var groupScopeAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.GroupScope);
             if (groupScopeAttribute == null)
             {
