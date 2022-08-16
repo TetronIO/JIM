@@ -1,4 +1,5 @@
 ﻿@page "/t/{TypeNameUrlParam}"
+@page "/t/{TypeNameUrlParam}/s/{PredefinedSearchUri}"
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
 @using JIM.Models.Core
@@ -66,6 +67,9 @@ else
 @code {
     [Parameter]
     public string TypeNameUrlParam { get; set; }
+
+    [Parameter]
+    public string? PredefinedSearchUri { get; set; }
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "p")]
