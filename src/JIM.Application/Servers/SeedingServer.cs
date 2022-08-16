@@ -274,7 +274,7 @@ namespace JIM.Application.Servers
                     Uri = "users",
                     IsDefaultForMetaverseObjectType = true,
                     BuiltIn = true,
-                    MetaverseObjectType = userObjectType,
+                    MetaverseObjectType = userObjectType
                 };
 
                 usersPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
@@ -297,7 +297,7 @@ namespace JIM.Application.Servers
                     Uri = "groups",
                     IsDefaultForMetaverseObjectType = true,
                     BuiltIn = true,
-                    MetaverseObjectType = groupObjectType,
+                    MetaverseObjectType = groupObjectType
                 };
 
                 groupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
@@ -308,6 +308,71 @@ namespace JIM.Application.Servers
                 
                 predefinedSearchesToCreate.Add(groupsPredefinedSearch);
                 Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
+            }
+
+            var securityGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("groups");
+            if (securityGroupsPredefinedSearch == null)
+            {
+                securityGroupsPredefinedSearch = new PredefinedSearch
+                {
+                    Name = "Security Groups",
+                    Uri = "security",
+                    BuiltIn = true,
+                    MetaverseObjectType = groupObjectType
+                };
+
+                securityGroupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
+                securityGroupsPredefinedSearch.MetaverseAttributes.Add(groupTypeAttribute);
+                securityGroupsPredefinedSearch.MetaverseAttributes.Add(groupScopeAttribute);
+                securityGroupsPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
+                securityGroupsPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+
+                securityGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup {
+                    Type = PredefinedSearchGroupType.And,
+                    Criteria = new List<PredefinedSearchCriteria> {
+                        new PredefinedSearchCriteria {
+                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            MetaverseAttribute = groupTypeAttribute,
+                            StringValue = "security" 
+                        } 
+                    }
+                });
+
+                predefinedSearchesToCreate.Add(securityGroupsPredefinedSearch);
+                Log.Information("SeedAsync: Preparing Security Groups PredefinedSearch");
+            }
+
+            var distributionGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("groups");
+            if (distributionGroupsPredefinedSearch == null)
+            {
+                distributionGroupsPredefinedSearch = new PredefinedSearch
+                {
+                    Name = "Distribution Groups",
+                    Uri = "distribution",
+                    BuiltIn = true,
+                    MetaverseObjectType = groupObjectType
+                };
+
+                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
+                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(groupTypeAttribute);
+                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(groupScopeAttribute);
+                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
+                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+
+                distributionGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
+                {
+                    Type = PredefinedSearchGroupType.And,
+                    Criteria = new List<PredefinedSearchCriteria> {
+                        new PredefinedSearchCriteria {
+                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            MetaverseAttribute = groupTypeAttribute,
+                            StringValue = "distribution"
+                        }
+                    }
+                });
+
+                predefinedSearchesToCreate.Add(distributionGroupsPredefinedSearch);
+                Log.Information("SeedAsync: Preparing Distribution Groups PredefinedSearch");
             }
             #endregion
 

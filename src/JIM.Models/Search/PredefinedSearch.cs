@@ -24,12 +24,12 @@ namespace JIM.Models.Search
         public bool BuiltIn { get; set; }
         public List<MetaverseAttribute> MetaverseAttributes { get; set; }
         public DateTime Created { get; set; }
-
-        //todo: criteria for custom searches
+        public List<PredefinedSearchCriteriaGroup> CriteriaGroups { get; set; }
 
         public PredefinedSearch()
         {
             MetaverseAttributes = new List<MetaverseAttribute>();
+            CriteriaGroups = new List<PredefinedSearchCriteriaGroup>();
             Created = DateTime.Now;
         }
     }

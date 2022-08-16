@@ -30,6 +30,8 @@ namespace JIM.PostgresData
         internal DbSet<PendingExport> PendingExports { get; set; }
         internal DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; }
         internal DbSet<PredefinedSearch> PredefinedSearches { get; set; }
+        internal DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; }
+        internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; }
         internal DbSet<Role> Roles { get; set; }
         internal DbSet<ServiceSettings> ServiceSettings { get; set; }
         /// <summary>
