@@ -9,10 +9,10 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>@MetaverseObjectType?.Name</PageTitle>
-<h1>@(MetaverseObjectType?.Name)</h1>
+<PageTitle>@PageTitle</PageTitle>
+<h1>@PageTitle</h1>
 <p class="light">
-    Search, or browse for @MetaverseObjectType?.Name
+    Search, or browse for @PageTitle
 </p>
 
 @if (PredefinedSearch != null)
@@ -61,7 +61,14 @@
 }
 else
 {
-    <b>Please create a default Predefined Search for this Metaverse Object Type</b>
+    if (!string.IsNullOrEmpty(PredefinedSearchUri))
+    {
+        <b>No such predefined search found, sorry</b>
+    }
+    else
+    {
+    <b>Please create a default Predefined Search for this Metaverse Object Type</b>    
+    }
 }
 
 @code {
@@ -78,6 +85,7 @@ else
     private PagedResultSet<MetaverseObjectHeader>? MetaverseObjectHeaders { get; set; }
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private PredefinedSearch? PredefinedSearch { get; set; }
+    private string PageTitle { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -92,12 +100,25 @@ else
             return;
         }
 
-        // is there a default predefined search for this object type?
-        PredefinedSearch = await Jim.Search.GetPredefinedSearchAsync(MetaverseObjectType);
+        // set a default name for the objects on this page
+        PageTitle = MetaverseObjectType.Name;
+
+        // are we being asked to load a specific PredefinedSearch, via the URL?
+        if (!string.IsNullOrEmpty(PredefinedSearchUri))
+        {
+            PredefinedSearch = await Jim.Search.GetPredefinedSearchAsync(PredefinedSearchUri);
+        }
+        else
+        {
+            // is there a default predefined search for this object type?
+            PredefinedSearch = await Jim.Search.GetPredefinedSearchAsync(MetaverseObjectType);
+        }
+
         if (PredefinedSearch != null)
         {
             // get a page of results for the metaverse objects matching this type...
             MetaverseObjectHeaders = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(PredefinedSearch, Page.Value, 20, 500);
+            PageTitle = PredefinedSearch.Name;
         }
     }
 }
