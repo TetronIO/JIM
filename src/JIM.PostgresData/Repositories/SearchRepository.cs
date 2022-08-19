@@ -37,6 +37,9 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.PredefinedSearches.
                 Include(q => q.MetaverseAttributes).
                 Include(q => q.MetaverseObjectType).
+                Include(q => q.CriteriaGroups).
+                ThenInclude(cg => cg.Criteria).
+                ThenInclude(c => c.MetaverseAttribute).
                 SingleOrDefaultAsync(q => q.Uri == uri);
         }
 
@@ -45,6 +48,9 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.PredefinedSearches.
                 Include(q => q.MetaverseAttributes).
                 Include(q => q.MetaverseObjectType).
+                Include(q => q.CriteriaGroups).
+                ThenInclude(cg => cg.Criteria).
+                ThenInclude(c => c.MetaverseAttribute).
                 SingleOrDefaultAsync(q => q.MetaverseObjectType.Id == metaverseObjectType.Id && q.IsDefaultForMetaverseObjectType);
         }
     }

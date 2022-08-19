@@ -288,6 +288,72 @@ namespace JIM.Application.Servers
                 Log.Information("SeedAsync: Preparing User default PredefinedSearch");
             }
 
+            var peopleUsersPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("people");
+            if (peopleUsersPredefinedSearch == null)
+            {
+                peopleUsersPredefinedSearch = new PredefinedSearch
+                {
+                    Name = "People",
+                    Uri = "people",
+                    BuiltIn = true,
+                    MetaverseObjectType = userObjectType
+                };
+
+                peopleUsersPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
+                peopleUsersPredefinedSearch.MetaverseAttributes.Add(jobTitleAttribute);
+                peopleUsersPredefinedSearch.MetaverseAttributes.Add(departmentAttribute);
+                peopleUsersPredefinedSearch.MetaverseAttributes.Add(companyAttribute);
+                peopleUsersPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
+                peopleUsersPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+
+                peopleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
+                {
+                    Type = PredefinedSearchGroupType.And,
+                    Criteria = new List<PredefinedSearchCriteria> {
+                        new PredefinedSearchCriteria {
+                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            MetaverseAttribute = typeAttribute,
+                            StringValue = "person"
+                        }
+                    }
+                });
+
+                predefinedSearchesToCreate.Add(peopleUsersPredefinedSearch);
+                Log.Information("SeedAsync: Preparing People PredefinedSearch");
+            }
+
+            var servicePrincipleUsersPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("service-principals");
+            if (servicePrincipleUsersPredefinedSearch == null)
+            {
+                servicePrincipleUsersPredefinedSearch = new PredefinedSearch
+                {
+                    Name = "Service Principals",
+                    Uri = "service-principals",
+                    BuiltIn = true,
+                    MetaverseObjectType = userObjectType
+                };
+
+                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
+                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(accountNameAttribute);
+                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
+                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+
+                servicePrincipleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
+                {
+                    Type = PredefinedSearchGroupType.And,
+                    Criteria = new List<PredefinedSearchCriteria> {
+                        new PredefinedSearchCriteria {
+                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            MetaverseAttribute = typeAttribute,
+                            StringValue = "service principal"
+                        }
+                    }
+                });
+
+                predefinedSearchesToCreate.Add(servicePrincipleUsersPredefinedSearch);
+                Log.Information("SeedAsync: Preparing Service Principals PredefinedSearch");
+            }
+
             var groupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("groups");
             if (groupsPredefinedSearch == null)
             {
@@ -310,7 +376,7 @@ namespace JIM.Application.Servers
                 Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
             }
 
-            var securityGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("groups");
+            var securityGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("security");
             if (securityGroupsPredefinedSearch == null)
             {
                 securityGroupsPredefinedSearch = new PredefinedSearch
@@ -333,7 +399,7 @@ namespace JIM.Application.Servers
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = groupTypeAttribute,
-                            StringValue = "security" 
+                            StringValue = "Security" 
                         } 
                     }
                 });
@@ -342,7 +408,7 @@ namespace JIM.Application.Servers
                 Log.Information("SeedAsync: Preparing Security Groups PredefinedSearch");
             }
 
-            var distributionGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("groups");
+            var distributionGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("distribution");
             if (distributionGroupsPredefinedSearch == null)
             {
                 distributionGroupsPredefinedSearch = new PredefinedSearch
@@ -366,7 +432,7 @@ namespace JIM.Application.Servers
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = groupTypeAttribute,
-                            StringValue = "distribution"
+                            StringValue = "Distribution"
                         }
                     }
                 });

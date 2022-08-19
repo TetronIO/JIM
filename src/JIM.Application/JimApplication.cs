@@ -136,6 +136,17 @@ namespace JIM.Application
                     StringValue = initialAdminUniqueIdentifierClaimValue
                 });
 
+                var typeAttribute = await Repository.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.Type);
+                if (typeAttribute == null)
+                    throw new Exception($"Couldn't get essential attribute: {Constants.BuiltInAttributes.Type}");
+
+                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    MetaverseObject = user,
+                    Attribute = typeAttribute,
+                    StringValue = "person"
+                });
+
                 await Metaverse.CreateMetaverseObjectAsync(user);
                 await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrators);
                 Log.Information($"InitialiseSSOAsync: Created metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigned the {Constants.BuiltInRoles.Administrators} role.");

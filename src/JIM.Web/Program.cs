@@ -268,10 +268,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much
         claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
 
-        var jimIdentity = new ClaimsIdentity(claims)
-        {
-            Label = "Internal JIM Identity"
-        };
+        var jimIdentity = new ClaimsIdentity(claims) { Label = "Internal JIM Identity" };
         context.Principal.AddIdentity(jimIdentity);
 
         // now also see if we can assign any initial user attribute values from the claims principal
