@@ -144,7 +144,7 @@ namespace JIM.Application
                 {
                     MetaverseObject = user,
                     Attribute = typeAttribute,
-                    StringValue = "person"
+                    StringValue = "Person"
                 });
 
                 await Metaverse.CreateMetaverseObjectAsync(user);

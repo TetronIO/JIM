@@ -313,7 +313,7 @@ namespace JIM.Application.Servers
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
-                            StringValue = "person"
+                            StringValue = "Person"
                         }
                     }
                 });
@@ -710,6 +710,17 @@ namespace JIM.Application.Servers
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Team),
                     ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = teamsDataSet } },
                     PopulatedValuesPercentage = 76
+                });
+            }
+
+            var typeAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Type);
+            if (typeAttribute == null)
+            {
+                userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+                {
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Type),
+                    Pattern = "Person",
+                    PopulatedValuesPercentage = 100
                 });
             }
 
