@@ -390,7 +390,6 @@ namespace JIM.Application.Servers
                 securityGroupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
                 securityGroupsPredefinedSearch.MetaverseAttributes.Add(groupTypeAttribute);
                 securityGroupsPredefinedSearch.MetaverseAttributes.Add(groupScopeAttribute);
-                securityGroupsPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
                 securityGroupsPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
 
                 securityGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup {
