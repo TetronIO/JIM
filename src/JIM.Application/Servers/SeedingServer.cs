@@ -277,12 +277,12 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = userObjectType
                 };
 
-                usersPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
-                usersPredefinedSearch.MetaverseAttributes.Add(jobTitleAttribute);
-                usersPredefinedSearch.MetaverseAttributes.Add(departmentAttribute);
-                usersPredefinedSearch.MetaverseAttributes.Add(companyAttribute);
-                usersPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
-                usersPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = jobTitleAttribute, Position = 1 });
+                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = departmentAttribute, Position = 2 });
+                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = companyAttribute, Position = 3 });
+                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 4 });
+                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 5 });
                 
                 predefinedSearchesToCreate.Add(usersPredefinedSearch);
                 Log.Information("SeedAsync: Preparing User default PredefinedSearch");
@@ -299,12 +299,12 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = userObjectType
                 };
 
-                peopleUsersPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
-                peopleUsersPredefinedSearch.MetaverseAttributes.Add(jobTitleAttribute);
-                peopleUsersPredefinedSearch.MetaverseAttributes.Add(departmentAttribute);
-                peopleUsersPredefinedSearch.MetaverseAttributes.Add(companyAttribute);
-                peopleUsersPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
-                peopleUsersPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = jobTitleAttribute, Position = 1 });
+                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = departmentAttribute, Position = 2 });
+                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = companyAttribute, Position = 3 });
+                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 4 });
+                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 5 });
 
                 peopleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
@@ -333,10 +333,10 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = userObjectType
                 };
 
-                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
-                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(accountNameAttribute);
-                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
-                servicePrincipleUsersPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = accountNameAttribute, Position = 1 });
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 2 });
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 3 });
 
                 servicePrincipleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
@@ -366,11 +366,11 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = groupObjectType
                 };
 
-                groupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
-                groupsPredefinedSearch.MetaverseAttributes.Add(groupTypeAttribute);
-                groupsPredefinedSearch.MetaverseAttributes.Add(groupScopeAttribute);
-                groupsPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
-                groupsPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupTypeAttribute, Position = 1 });
+                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupScopeAttribute, Position = 2 });
+                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 3 });
+                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 4 });
                 
                 predefinedSearchesToCreate.Add(groupsPredefinedSearch);
                 Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
@@ -387,10 +387,10 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = groupObjectType
                 };
 
-                securityGroupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
-                securityGroupsPredefinedSearch.MetaverseAttributes.Add(groupTypeAttribute);
-                securityGroupsPredefinedSearch.MetaverseAttributes.Add(groupScopeAttribute);
-                securityGroupsPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupTypeAttribute, Position = 1 });
+                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupScopeAttribute, Position = 2 });
+                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 3 });
 
                 securityGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup {
                     Type = PredefinedSearchGroupType.And,
@@ -418,11 +418,11 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = groupObjectType
                 };
 
-                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(displayNameAttribute);
-                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(groupTypeAttribute);
-                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(groupScopeAttribute);
-                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(emailAttribute);
-                distributionGroupsPredefinedSearch.MetaverseAttributes.Add(statusAttribute);
+                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupTypeAttribute, Position = 1 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupScopeAttribute, Position = 2 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 3 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 4 });
 
                 distributionGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {

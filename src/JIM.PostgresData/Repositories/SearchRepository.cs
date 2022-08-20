@@ -24,7 +24,7 @@ namespace JIM.PostgresData.Repositories
                 BuiltIn = d.BuiltIn,
                 Created = d.Created,
                 Id = d.Id,
-                MetaverseAttributeCount = d.MetaverseAttributes.Count(),
+                MetaverseAttributeCount = d.Attributes.Count(),
                 MetaverseObjectTypeName = d.MetaverseObjectType.Name,
                 IsDefaultForMetaverseObjectType = d.IsDefaultForMetaverseObjectType
             }).ToListAsync();
@@ -35,7 +35,8 @@ namespace JIM.PostgresData.Repositories
         public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
         {
             return await Repository.Database.PredefinedSearches.
-                Include(q => q.MetaverseAttributes).
+                Include(q => q.Attributes).
+                ThenInclude(q => q.MetaverseAttribute).
                 Include(q => q.MetaverseObjectType).
                 Include(q => q.CriteriaGroups).
                 ThenInclude(cg => cg.Criteria).
@@ -46,7 +47,8 @@ namespace JIM.PostgresData.Repositories
         public async Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType)
         {
             return await Repository.Database.PredefinedSearches.
-                Include(q => q.MetaverseAttributes).
+                Include(q => q.Attributes).
+                ThenInclude(a => a.MetaverseAttribute).
                 Include(q => q.MetaverseObjectType).
                 Include(q => q.CriteriaGroups).
                 ThenInclude(cg => cg.Criteria).

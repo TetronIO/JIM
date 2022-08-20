@@ -1,6 +1,7 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Models.Search.Dto;
+using System;
 
 namespace JIM.Application.Search
 {
@@ -25,7 +26,11 @@ namespace JIM.Application.Search
 
         public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
         {
-            return await Application.Repository.Search.GetPredefinedSearchAsync(uri);
+            var predefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync(uri);
+            if (predefinedSearch != null)
+                predefinedSearch = PostProcessPredefinedSearch(predefinedSearch);
+
+            return predefinedSearch;
         }
 
         /// <summary>
@@ -33,7 +38,17 @@ namespace JIM.Application.Search
         /// </summary>
         public async Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType)
         {
-            return await Application.Repository.Search.GetPredefinedSearchAsync(metaverseObjectType);
+            var predefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync(metaverseObjectType);
+            if (predefinedSearch != null)
+                predefinedSearch = PostProcessPredefinedSearch(predefinedSearch);
+
+            return predefinedSearch;
+        }
+
+        private static PredefinedSearch PostProcessPredefinedSearch(PredefinedSearch predefinedSearch)
+        {
+            predefinedSearch.Attributes = predefinedSearch.Attributes.OrderBy(q => q.Position).ToList();
+            return predefinedSearch;
         }
         #endregion
     }

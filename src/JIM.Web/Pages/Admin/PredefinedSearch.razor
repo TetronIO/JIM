@@ -41,9 +41,9 @@
     <div class="box mt-3">
         <h6>Metaverse Attributes</h6>
         <div class="light mb-3">These will be the attributes shown in the search results.</div>
-        @foreach (var ma in predefinedSearch.MetaverseAttributes)
+        @foreach (var psa in predefinedSearch.Attributes)
         {
-            <span class="badge badge-outline badge-bigger bg-light text-dark">@ma.Name</span>
+            <span class="badge badge-outline badge-bigger bg-light text-dark">@psa.MetaverseAttribute.Name</span>
         }
     </div>
 }

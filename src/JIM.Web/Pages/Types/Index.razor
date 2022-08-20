@@ -25,9 +25,9 @@
         <table class="table mt-2">
             <thead>
                 <tr>
-                    @foreach (MetaverseAttribute ma in PredefinedSearch.MetaverseAttributes)
+                    @foreach (PredefinedSearchAttribute psa in PredefinedSearch.Attributes)
                     {
-                        <th scope="col">@ma.Name</th>
+                        <th scope="col">@psa.MetaverseAttribute.Name</th>
                     }
                 </tr>
             </thead>
@@ -38,9 +38,9 @@
                     {
                         <tr>
                             <td><a href="/t/@(MetaverseObjectType?.Name.ToLower())/v/@mo.Id">@mo.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue</a></td>
-                            @foreach (var ma in PredefinedSearch.MetaverseAttributes.Where(q => q.Name != Constants.BuiltInAttributes.DisplayName))
+                            @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
                             {
-                                <td>@mo.GetAttributeValue(ma.Name)?.StringValue</td>
+                                <td>@mo.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</td>
                             }
                         </tr>
                     }
@@ -48,7 +48,7 @@
                 else
                 {
                     <tr>
-                        <td colspan="@PredefinedSearch.MetaverseAttributes.Count" class="light text-center">No results</td>
+                        <td colspan="@PredefinedSearch.Attributes.Count" class="light text-center">No results</td>
                     </tr>
                 }
             </tbody>

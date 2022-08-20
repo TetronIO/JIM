@@ -22,13 +22,13 @@ namespace JIM.Models.Search
         /// </summary>
         public string Uri { get; set; }
         public bool BuiltIn { get; set; }
-        public List<MetaverseAttribute> MetaverseAttributes { get; set; }
+        public List<PredefinedSearchAttribute> Attributes { get; set; }
         public DateTime Created { get; set; }
         public List<PredefinedSearchCriteriaGroup> CriteriaGroups { get; set; }
 
         public PredefinedSearch()
         {
-            MetaverseAttributes = new List<MetaverseAttribute>();
+            Attributes = new List<PredefinedSearchAttribute>();
             CriteriaGroups = new List<PredefinedSearchCriteriaGroup>();
             Created = DateTime.Now;
         }

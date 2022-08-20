@@ -346,9 +346,9 @@ namespace JIM.PostgresData.Repositories
         private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
         {
             var list = new List<MetaverseObjectAttributeValue>();
-            foreach (var predefinedSearchAttribute in predefinedSearch.MetaverseAttributes)
+            foreach (var predefinedSearchAttribute in predefinedSearch.Attributes)
             {
-                var metaverseObjectAttribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Id == predefinedSearchAttribute.Id);
+                var metaverseObjectAttribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Id == predefinedSearchAttribute.MetaverseAttribute.Id);
                 if (metaverseObjectAttribute != null)
                     list.Add(metaverseObjectAttribute);
             }

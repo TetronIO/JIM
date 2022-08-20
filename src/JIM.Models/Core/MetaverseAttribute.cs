@@ -13,7 +13,7 @@ namespace JIM.Models.Core
         public AttributePlurality AttributePlurality { get; set; }
         public bool BuiltIn { get; set; }
         public List<MetaverseObjectType> MetaverseObjectTypes { get; set; }
-        public List<PredefinedSearch> PredefinedSearches { get; set; }
+        public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; }
 
         public MetaverseAttribute()
         {
