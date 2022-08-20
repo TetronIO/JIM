@@ -382,7 +382,7 @@ namespace JIM.Application.Servers
                 securityGroupsPredefinedSearch = new PredefinedSearch
                 {
                     Name = "Security Groups",
-                    Uri = "security",
+                    Uri = "security-groups",
                     BuiltIn = true,
                     MetaverseObjectType = groupObjectType
                 };
@@ -413,7 +413,7 @@ namespace JIM.Application.Servers
                 distributionGroupsPredefinedSearch = new PredefinedSearch
                 {
                     Name = "Distribution Groups",
-                    Uri = "distribution",
+                    Uri = "distribution-groups",
                     BuiltIn = true,
                     MetaverseObjectType = groupObjectType
                 };
