@@ -271,10 +271,17 @@ namespace JIM.PostgresData.Repositories
                     }
                 }
 
-                if (group.Type == PredefinedSearchGroupType.And)
+                if (group.Type == PredefinedSearchGroupType.All)
                 {
                     // err?    
                 }
+                else
+                {
+                    // Any
+                    // More err...
+                }
+
+                // todo: handle group nesting as well
             }
                           
             if (queryRange != QueryRange.Forever)

@@ -2,8 +2,8 @@
 {
     public enum PredefinedSearchGroupType
     {
-        And = 0,
-        Or = 1
+        All = 0,
+        Any = 1
     }
 
     public enum PredefinedSearchComparisonType
