@@ -46,6 +46,30 @@
             <span class="badge badge-outline badge-bigger bg-light text-dark">@psa.MetaverseAttribute.Name</span>
         }
     </div>
+
+    @if (predefinedSearch.CriteriaGroups.Count > 0)
+    {
+        <div class="box mt-3">
+            <h6>Criteria</h6>
+            <div class="light mb-3">This search has criteria to filter the results down:</div>
+            @foreach (var criteriaGroup in predefinedSearch.CriteriaGroups)
+            {
+                <div class="callout callout-primary">
+                    <div class="light">
+                        Type: @criteriaGroup.Type
+                    </div>
+                    @foreach (var criteria in criteriaGroup.Criteria)
+                    {
+                        <div class="mt-3">
+                            <span class="badge badge-outline badge-bigger bg-light text-dark">@criteria.MetaverseAttribute.Name</span>
+                            <span class="badge badge-outline badge-bigger bg-light text-dark">@criteria.ComparisonType</span>
+                            <span class="badge badge-outline badge-bigger bg-light text-dark">@criteria.StringValue</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
 }
 
 @code {
