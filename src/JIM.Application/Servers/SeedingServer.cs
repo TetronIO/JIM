@@ -308,7 +308,7 @@ namespace JIM.Application.Servers
 
                 peopleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
-                    Type = PredefinedSearchGroupType.And,
+                    Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
@@ -340,7 +340,7 @@ namespace JIM.Application.Servers
 
                 servicePrincipleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
-                    Type = PredefinedSearchGroupType.And,
+                    Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
@@ -393,7 +393,7 @@ namespace JIM.Application.Servers
                 securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 3 });
 
                 securityGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup {
-                    Type = PredefinedSearchGroupType.And,
+                    Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
@@ -426,7 +426,7 @@ namespace JIM.Application.Servers
 
                 distributionGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
-                    Type = PredefinedSearchGroupType.And,
+                    Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
