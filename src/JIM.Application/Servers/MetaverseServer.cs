@@ -24,6 +24,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
         }
 
+        public async Task<IList<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
+        {
+            return await Application.Repository.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+        }
+
         public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id, bool includeChildObjects)
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);

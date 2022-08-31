@@ -11,6 +11,8 @@ namespace JIM.Data.Repositories
         #region object types
         public Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects);
 
+        public Task<IList<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync();
+
         public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id, bool includeChildObjects);
 
         public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects);

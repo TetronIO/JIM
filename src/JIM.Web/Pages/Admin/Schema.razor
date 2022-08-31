@@ -1,0 +1,51 @@
+﻿@page "/admin/schema"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.Dto
+@inject JimApplication Jim
+
+<PageTitle>Schema</PageTitle>
+<h1>Schema</h1>
+<p class="light">
+    Manage metaverse object types and their attributes.
+</p>
+
+<div class="box mt-3">
+
+    <table class="table mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Attributes</th>
+                <th scope="col">Has Predefined Searches?</th>
+                <th scope="col">Built-in?</th>
+                <th scope="col">Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (metaverseObjectTypeHeaders != null)
+            {
+                foreach (var metaverseObjectTypeHeader in metaverseObjectTypeHeaders)
+                {
+                    <tr>
+                        <td><a href="/admin/schema/object-types/@(metaverseObjectTypeHeader.Id)">@metaverseObjectTypeHeader.Name</a></td>
+                        <td>@metaverseObjectTypeHeader.AttributesCount</td>
+                        <td>@(metaverseObjectTypeHeader.HasPredefinedSearches ? "Yes" : "No")</td>
+                        <td>@(metaverseObjectTypeHeader.BuiltIn ? "Yes" : "No")</td>
+                        <td>@metaverseObjectTypeHeader.Created</td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IList<MetaverseObjectTypeHeader>? metaverseObjectTypeHeaders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        metaverseObjectTypeHeaders = await Jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+    }
+}

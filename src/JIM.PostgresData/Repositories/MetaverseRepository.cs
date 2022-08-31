@@ -32,6 +32,21 @@ namespace JIM.PostgresData.Repositories
             return await result.OrderBy(x => x.Name).ToListAsync();
         }
 
+        public async Task<IList<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
+        {
+            var metaverseObjectTypeHeaders = await Repository.Database.MetaverseObjectTypes.OrderBy(t => t.Name).Select(t => new MetaverseObjectTypeHeader
+            {
+                Id = t.Id,
+                Name = t.Name,
+                Created = t.Created,
+                AttributesCount = t.Attributes.Count,
+                BuiltIn = t.BuiltIn,
+                HasPredefinedSearches = t.PredefinedSearches.Count > 0
+            }).ToListAsync();
+
+            return metaverseObjectTypeHeaders;
+        }
+
         public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id, bool includeChildObjects)
         {
             var result = Repository.Database.MetaverseObjectTypes;
