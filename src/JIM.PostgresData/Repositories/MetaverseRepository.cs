@@ -27,7 +27,7 @@ namespace JIM.PostgresData.Repositories
         {
             var result = Repository.Database.MetaverseObjectTypes;
             if (includeChildObjects)
-                result.Include(q => q.Attributes);
+                 result.Include(q => q.Attributes);
 
             return await result.OrderBy(x => x.Name).ToListAsync();
         }
@@ -49,11 +49,10 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id, bool includeChildObjects)
         {
-            var result = Repository.Database.MetaverseObjectTypes;
             if (includeChildObjects)
-                result.Include(q => q.Attributes);
-                           
-            return await result.SingleOrDefaultAsync(x => x.Id == id);
+                return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(x => x.Id == id);
+            else
+                return await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects)
