@@ -1,4 +1,6 @@
 ﻿using JIM.Models.Core;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace JIM.Web
 {
@@ -26,6 +28,13 @@ namespace JIM.Web
                 return String.Empty;
 
             return $"/t/{ConvertToUrlParam(metaverseObject.Type.Name)}/v/{metaverseObject.Id}";
+        }
+
+        public static string SplitOnCapitalLetters(this string inputString)
+        {
+            var words = Regex.Matches(inputString, @"([A-Z][a-z]+)").Cast<Match>().Select(m => m.Value);
+            var withSpaces = string.Join(" ", words);
+            return withSpaces;
         }
     }
 }

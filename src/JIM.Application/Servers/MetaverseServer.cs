@@ -46,6 +46,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.Metaverse.GetMetaverseAttributesAsync();
         }
 
+        public async Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync()
+        {
+            return await Application.Repository.Metaverse.GetMetaverseAttributeHeadersAsync();
+        }
+
         public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id)
         {
             return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(id);

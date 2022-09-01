@@ -51,6 +51,8 @@ namespace JIM.Data.Repositories
         #region attributes
         public Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync();
 
+        public Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync();
+
         public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id);
 
         public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);

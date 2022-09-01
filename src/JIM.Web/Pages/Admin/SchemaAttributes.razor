@@ -1,0 +1,76 @@
+﻿@page "/admin/schema/attributes"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.Dto
+@inject JimApplication Jim
+
+<PageTitle>Schema</PageTitle>
+<h1>Schema</h1>
+<p class="light">
+    Manage metaverse object types and their attributes.
+</p>
+
+<div class="box mt-3">
+
+    <ul class="nav nav-pills">
+        <li class="nav-item">
+            <a class="nav-link" aria-current="page" href="/admin/schema">Object Types</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active" href="/admin/schema/attributes">Attributes</a>
+        </li>
+    </ul>
+
+    <table class="table mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Plurality</th>
+                <th scope="col">Built-in?</th>
+                <th scope="col">Created</th>
+                <th scope="col">Object Types</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (attributeHeaders != null)
+            {
+                foreach (var attributeHeader in attributeHeaders)
+                {
+                    <tr>
+                        <td><a href="/admin/schema/attributes/@(attributeHeader.Id)">@attributeHeader.Name</a></td>
+                        <td>@attributeHeader.Type.ToString().SplitOnCapitalLetters()</td>
+                        <td>
+                            @if (attributeHeader.AttributePlurality == AttributePlurality.SingleValued)
+                            {
+                                <i class="bi bi-dot" title="Single-Valued"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-three-dots" title="Multi-Valued"></i>
+                            }
+                        </td>
+                        <td>@(attributeHeader.BuiltIn ? "Yes" : "No")</td>
+                        <td>@attributeHeader.Created</td>
+                        <td>
+                            @foreach (var stub in attributeHeader.MetaverseObjectTypes)
+                            {
+                                <span class="badge badge-outline badge-bigger bg-light text-dark"><a href="/admin/schema/object-types/@stub.Key">@stub.Value</a></span>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IList<MetaverseAttributeHeader>? attributeHeaders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        attributeHeaders = await Jim.Metaverse.GetMetaverseAttributeHeadersAsync();
+    }
+}
