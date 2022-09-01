@@ -39,16 +39,13 @@
                 foreach (var attributeHeader in attributeHeaders)
                 {
                     <tr>
-                        <td><a href="/admin/schema/attributes/@(attributeHeader.Id)">@attributeHeader.Name</a></td>
+                        <td>@attributeHeader.Name</td>
                         <td>@attributeHeader.Type.ToString().SplitOnCapitalLetters()</td>
-                        <td>
-                            @if (attributeHeader.AttributePlurality == AttributePlurality.SingleValued)
-                            {
-                                <i class="bi bi-dot" title="Single-Valued"></i>
-                            }
-                            else
-                            {
-                                <i class="bi bi-three-dots" title="Multi-Valued"></i>
+                        <td title="@(attributeHeader.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")">
+                            @if (attributeHeader.AttributePlurality == AttributePlurality.SingleValued) {
+                                <i class="bi bi-dot"></i>
+                            } else {
+                                <i class="bi bi-three-dots"></i>
                             }
                         </td>
                         <td>@(attributeHeader.BuiltIn ? "Yes" : "No")</td>
