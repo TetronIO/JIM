@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
 
 namespace JIM.Data.Repositories
@@ -7,6 +8,7 @@ namespace JIM.Data.Repositories
     public interface IConnectedSystemRepository
     {
         public Task<IList<ConnectedSystem>> GetConnectedSystemsAsync();
+        public Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
         public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
         public Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id);
         public Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id);

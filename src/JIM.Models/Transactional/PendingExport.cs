@@ -19,7 +19,15 @@ namespace JIM.Models.Transactional
         // - update attribute: atomic, some can succeed, some can fail
 
         public long Id { get; set; }
-        public ConnectedSystemObject ConnectedSystemObject { get; set; }
+        /// <summary>
+        /// If the change type is create, then it's essential we know what connected system this applies to :)
+        /// </summary>
+        public ConnectedSystem ConnectedSystem { get; set; }
+        /// <summary>
+        /// If the change type is delete or update, then we can link an existing connector space object.
+        /// If the change type is create, then there won't be a connector space object yet that we can link.
+        /// </summary>
+        public ConnectedSystemObject? ConnectedSystemObject { get; set; }
         public PendingExportChangeType ChangeType { get; set; }
         public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; }
         public PendingExportStatus Status { get; set; }

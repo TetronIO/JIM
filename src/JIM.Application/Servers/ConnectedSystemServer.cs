@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.Servers
@@ -16,6 +17,11 @@ namespace JIM.Application.Servers
         public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync();
+        }
+
+        public async Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemHeadersAsync();
         }
 
         public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)

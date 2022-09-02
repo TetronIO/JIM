@@ -1,6 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +19,19 @@ namespace JIM.PostgresData.Repositories
         public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             return await Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToListAsync();
+        }
+
+        public async Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
+        {
+            return await Repository.Database.ConnectedSystems.OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
+            {
+                Id = cs.Id,
+                Name = cs.Name,
+                Description = cs.Description,
+                ObjectCount = cs.Objects.Count,
+                ConnectorsCount = cs.Objects.Count(q => q.MetaverseObject != null),
+                PendingExportObjectsCount = cs.PendingExports.Count,
+            }).ToListAsync();
         }
 
         public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
@@ -45,7 +59,7 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
-        public async Task <IList<SyncRule>?> GetSyncRulesAsync()
+        public async Task<IList<SyncRule>?> GetSyncRulesAsync()
         {
             return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
         }

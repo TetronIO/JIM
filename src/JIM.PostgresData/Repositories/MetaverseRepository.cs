@@ -82,7 +82,6 @@ namespace JIM.PostgresData.Repositories
                 BuiltIn = a.BuiltIn,
                 Type = a.Type,
                 AttributePlurality = a.AttributePlurality,
-                //MetaverseObjectTypes = a.MetaverseObjectTypes.ToDictionary(t => t.Id, t => t.Name)
                 MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
             }).ToListAsync();
         }

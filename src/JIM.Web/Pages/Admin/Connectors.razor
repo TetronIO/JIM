@@ -1,0 +1,57 @@
+﻿@page "/admin/connected-systems"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.Dto
+@using JIM.Models.Staging.Dtos
+@inject JimApplication Jim
+
+<PageTitle>Connected Systems</PageTitle>
+<h1>Connected Systems</h1>
+<p class="light">
+    JIM imports, and exports data through Connectors, seen below.
+</p>
+
+<div class="box mt-3">
+    <table class="table mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Description</th>
+                <th scope="col">Objects</th>
+                <th scope="col">Connected Objects (%)</th>
+                <th scope="col">Pending Exports</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (connectedSystemHeaders != null && connectedSystemHeaders.Count > 0)
+            {
+                foreach (var header in connectedSystemHeaders)
+                {
+                    <tr>
+                        <td><a href="/admin/connected-systems/@(header.Id)">@header.Name</a></td>
+                        <td>@header.Description</td>
+                        <td>@header.ObjectCount.ToString("N0")</td>
+                        <td>@header.ConnectorsCount.ToString("N0") (@(100 / header.ObjectCount * header.ConnectorsCount))%</td>
+                        <td>@header.PendingExportObjectsCount.ToString("N0")</td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="5" class="light text-center">No connectors, yet</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IList<ConnectedSystemHeader>? connectedSystemHeaders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+    }
+}
