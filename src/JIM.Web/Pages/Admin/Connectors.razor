@@ -20,7 +20,7 @@
                 <th scope="col">Description</th>
                 <th scope="col">Objects</th>
                 <th scope="col">Connected Objects (%)</th>
-                <th scope="col">Pending Exports</th>
+                <th scope="col">Pending Exports (%)</th>
             </tr>
         </thead>
         <tbody>
@@ -32,15 +32,15 @@
                         <td><a href="/admin/connected-systems/@(header.Id)">@header.Name</a></td>
                         <td>@header.Description</td>
                         <td>@header.ObjectCount.ToString("N0")</td>
-                        <td>@header.ConnectorsCount.ToString("N0") (@(100 / header.ObjectCount * header.ConnectorsCount))%</td>
-                        <td>@header.PendingExportObjectsCount.ToString("N0")</td>
+                        <td>@header.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.ConnectorsCount))</td>
+                        <td>@header.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.PendingExportObjectsCount))</td>
                     </tr>
                 }
             }
             else
             {
                 <tr>
-                    <td colspan="5" class="light text-center">No connectors, yet</td>
+                    <td colspan="5" class="light text-center">No connectors yet</td>
                 </tr>
             }
         </tbody>
@@ -53,5 +53,14 @@
     protected override async Task OnInitializedAsync()
     {
         connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+    }
+
+    private string GetPercentageStatement(int bigNumber, int smallNumber)
+    {
+        if (bigNumber == 0 || smallNumber == 0)
+            return string.Empty;
+
+        var percentage = 100 / bigNumber * smallNumber;
+        return $"({percentage}%)";
     }
 }
