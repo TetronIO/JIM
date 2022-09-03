@@ -21,6 +21,7 @@
                 <th scope="col">Objects</th>
                 <th scope="col">Connected Objects (%)</th>
                 <th scope="col">Pending Exports (%)</th>
+                <th scope="col">Updated</th>
             </tr>
         </thead>
         <tbody>
@@ -34,13 +35,14 @@
                         <td>@header.ObjectCount.ToString("N0")</td>
                         <td>@header.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.ConnectorsCount))</td>
                         <td>@header.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.PendingExportObjectsCount))</td>
+                        <td>@header.LastUpdated.ToShortDateString()</td>
                     </tr>
                 }
             }
             else
             {
                 <tr>
-                    <td colspan="5" class="light text-center">No connectors yet</td>
+                    <td colspan="6" class="light text-center">No connectors yet</td>
                 </tr>
             }
         </tbody>

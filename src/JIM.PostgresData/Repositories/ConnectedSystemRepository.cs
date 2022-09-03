@@ -31,6 +31,7 @@ namespace JIM.PostgresData.Repositories
                 ObjectCount = cs.Objects.Count,
                 ConnectorsCount = cs.Objects.Count(q => q.MetaverseObject != null),
                 PendingExportObjectsCount = cs.PendingExports.Count,
+                LastUpdated = cs.LastUpdated
             }).ToListAsync();
         }
 
