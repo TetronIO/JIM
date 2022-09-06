@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Logic;
+using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
@@ -59,9 +60,14 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
         }
 
-        public async Task<IList<SyncRule>?> GetSyncRulesAsync()
+        public async Task<IList<SyncRule>> GetSyncRulesAsync()
         {
             return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
+        }
+
+        public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+        {
+            return await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync();
         }
 
         public async Task<SyncRule?> GetSyncRuleAsync(int id)

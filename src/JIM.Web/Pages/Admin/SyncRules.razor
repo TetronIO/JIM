@@ -1,0 +1,71 @@
+﻿@page "/admin/connected-systems/sync-rules"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.Dto
+@using JIM.Models.Logic;
+@using JIM.Models.Logic.Dtos
+@inject JimApplication Jim
+
+<PageTitle>Synchronisation Rules</PageTitle>
+<h1>Synchronisation Rules</h1>
+<p class="light">
+    Synchronisation Rules are used to define the flow of information between JIM and connected systems.
+</p>
+
+<div class="box mt-3">
+
+    <table class="table mt-2">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Direction</th>
+                <th scope="col">Connected System</th>
+                <th scope="col">Metaverse Object Type</th>
+                <th scope="col">Connected System Object Type</th>
+                <th scope="col">Provision?</th>
+                <th scope="col">Project?</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (syncRuleHeaders != null && syncRuleHeaders.Count > 0)
+            {
+                foreach (var syncRuleHeader in syncRuleHeaders)
+                {
+                    <tr>
+                        <td><a href="/admin/connected-systems/sync-rules/@syncRuleHeader.Id">@syncRuleHeader.Name</a></td>
+                        <td title="@syncRuleHeader.Direction">
+                            @if (syncRuleHeader.Direction == SyncRuleDirection.Import)
+                            {
+                                <i class="bi bi-arrow-left"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-arrow-right"></i>
+                            }
+                        </td>
+                        <td>@syncRuleHeader.ConnectedSystemName</td>
+                        <td>@syncRuleHeader.MetaverseObjectTypeName</td>
+                        <td>@(syncRuleHeader.ProvisionToConnectedSystem.HasValue && syncRuleHeader.ProvisionToConnectedSystem.Value ? "Yes" : "No")</td>
+                        <td>@(syncRuleHeader.ProjectToMetaverse.HasValue && syncRuleHeader.ProjectToMetaverse.Value ? "Yes" : "No")</td>
+                    </tr>
+                }
+            }
+            else
+            {
+                    <tr>
+                        <td colspan="7" class="light text-center">No sync rules yet</td>
+                    </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private IList<SyncRuleHeader>? syncRuleHeaders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        syncRuleHeaders = await Jim.ConnectedSystems.GetSyncRuleHeadersAsync();
+    }
+}

@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Logic;
+using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
@@ -16,7 +17,8 @@ namespace JIM.Data.Repositories
         public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id);
         public Task<int> GetConnectedSystemObjectCountAsync();
         public Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId);
-        public Task<IList<SyncRule>?> GetSyncRulesAsync();
+        public Task<IList<SyncRule>> GetSyncRulesAsync();
+        public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
         public Task<SyncRule?> GetSyncRuleAsync(int id);
     }
 }

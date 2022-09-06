@@ -1,5 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Logic;
+using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
@@ -60,9 +61,25 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
-        public async Task<IList<SyncRule>?> GetSyncRulesAsync()
+        public async Task<IList<SyncRule>> GetSyncRulesAsync()
         {
             return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
+        }
+
+        public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+        {
+            return await Repository.Database.SyncRules.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
+            {
+                Id = sr.Id,
+                Name = sr.Name,
+                ConnectedSystemName = sr.ConnectedSystem.Name,
+                ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
+                Created = sr.Created,
+                Direction = sr.Direction,
+                MetaverseObjectTypeName = sr.MetaverseObjectType.Name,
+                ProjectToMetaverse = sr.ProjectToMetaverse,
+                ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem
+            }).ToListAsync();
         }
 
         public async Task<SyncRule?> GetSyncRuleAsync(int id)
