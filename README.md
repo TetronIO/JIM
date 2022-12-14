@@ -33,7 +33,7 @@ JIM is currently targetting the following means of connecting to systems via it'
 - PostgreSQL Database
 - MySQL Database
 - Oracle Database
-- CSV
+- CSV/Text files
 - PowerShell
 - SCIM 2.0
 
