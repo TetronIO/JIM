@@ -27,7 +27,7 @@ Various topologies supported, depending on your needs:
 - Scaled-out web frontends - To handle more users accessing the web app and for high-availability
 
 ## Connectors
-JIM is currently targetting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will be able to develop their own, custom Connectors for use with JIM to support bespoke scenarios.
+JIM is currently targetting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will also be able to develop their own custom Connectors for use with JIM to support bespoke scenarios.
 - LDAP
 - SQL Server
 - PostgreSQL
