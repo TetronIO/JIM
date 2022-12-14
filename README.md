@@ -2,8 +2,8 @@
 A modern Identity Manager for organisations. Features:
 
 - Synchronises objects between systems. Supports Users and Groups by default
-- Supports custom object types, i.e. Departments, Qualifications, Courses, Licenses, Computers, etc.
-- Transforms data using a wide range of functions
+- Supports custom object types, i.e. Departments, Qualifications, Courses, Licenses, Roles, Computers, etc.
+- Transform data using a wide range of functions
 - Extensible with custom functions
 - Extensible with custom JIM connectors (fully unit-testable)
 - Also supports Microsoft Identity Manager 2016 ECMA 2.x management agents
