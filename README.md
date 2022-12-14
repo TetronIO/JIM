@@ -28,12 +28,14 @@ Various topologies supported, depending on your needs:
 
 ## Connectors
 JIM is currently targetting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will also be able to develop their own custom Connectors for use with JIM to support bespoke scenarios.
-- LDAP
-- SQL Server
-- PostgreSQL
+- LDAP (incl. Active Directory)
+- SQL Server Database
+- PostgreSQL Database
+- MySQL Database
+- Oracle Database
 - CSV
 - PowerShell
-- SCIM
+- SCIM 2.0
 
 ## Roadmap
 JIM is in active development. There are many plans for new features. Check back soon for more details.
