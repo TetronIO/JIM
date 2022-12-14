@@ -6,7 +6,6 @@ A modern Identity Manager for organisations. Features:
 - Transform data using a wide range of functions
 - Extensible with custom functions
 - Extensible with custom JIM connectors (fully unit-testable)
-- Also supports Microsoft Identity Manager 2016 ECMA 2.x management agents
 - A modern Web Portal and API
 - Single Sign-On (SSO) using OpenID Connect
 
@@ -26,6 +25,15 @@ Various topologies supported, depending on your needs:
 - Standalone (single-server, built-in database) - Perfect for smaller organisations or pre-production environments
 - External database - Use an existing database platform for reslliancy and scale
 - Scaled-out web frontends - To handle more users accessing the web app and for high-availability
+
+## Connectors
+JIM is currently targetting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will be able to develop their own, custom Connectors for use with JIM to support bespoke scenarios.
+- LDAP
+- SQL Server
+- PostgreSQL
+- CSV
+- PowerShell
+- SCIM
 
 ## Roadmap
 JIM is in active development. There are many plans for new features. Check back soon for more details.
