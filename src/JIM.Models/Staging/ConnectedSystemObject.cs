@@ -9,6 +9,10 @@ namespace JIM.Models.Staging
         public DateTime? LastUpdated { get; set; }
         public ConnectedSystemObjectType Type { get; set; }
         public ConnectedSystem ConnectedSystem { get; set; }
+        /// <summary>
+        /// The attribute that uniquely identifies this object in the connected system.
+        /// It should be immutable (not change for the lifetime of the object). The connected system may author it, or you may specify it at provisioning time. It depends on the system.
+        /// </summary>
         public ConnectedSystemAttribute UniqueIdentifierAttribute { get; set; }
         public List<ConnectedSystemAttributeValue> AttributeValues { get; set; }
         public ConnectedSystemObjectStatus Status { get; set; }

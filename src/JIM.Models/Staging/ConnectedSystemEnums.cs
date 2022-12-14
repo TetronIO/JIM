@@ -26,4 +26,24 @@
         /// </summary>
         Joined = 3
     }
+
+    public enum ConnectedSystemSettingCategory
+    {
+        Connectivity,
+        General,
+        Capabilities,
+        Schema
+    }
+
+    public enum ConnectedSystemSettingType
+    {
+        String,
+        StringEncrypted,
+        Label,
+        Text,
+        DropDown,
+        CheckBox,
+        Spacer,
+        File
+    }
 }
