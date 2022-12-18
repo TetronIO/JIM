@@ -2,13 +2,13 @@
 
 namespace JIM.Models.Staging
 {
-    public class ConnectedSystemSchemaAttribute
+    public class ConnectorSchemaAttribute
     {
         public string Name { get; set; }
         public AttributeDataType Type { get; set; }
         public AttributePlurality AttributePlurality { get; set; }
 
-        public ConnectedSystemSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality)
+        public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality)
         {
             Name = name;
             Type = type;

@@ -11,6 +11,52 @@
         public string? Description { get; set; }
         public ConnectedSystemSettingCategory Category { get; set; }
         public ConnectedSystemSettingType Type { get; set; }
+        public bool DefaultCheckboxValue { get; }
+        public string DefaultStringValue { get; }
+        public List<string> DropDownValues { get; }
+        public string LabelValue { get; set; }
 
+        public ConnectedSystemSetting() { }
+
+        public ConnectedSystemSetting(string name, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
+        {
+            Name = name;
+            Category = category;
+            Type = type;
+        }
+
+        public ConnectedSystemSetting(string name, string? description, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
+        {
+            Name = name;
+            Description = description;
+            Category = category;
+            Type = type;
+        }
+
+        public ConnectedSystemSetting(string name, string? description, string defaultStringValue, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
+        {
+            Name = name;
+            Description = description;
+            DefaultStringValue = defaultStringValue;
+            Category = category;
+            Type = type;
+        }
+
+        public ConnectedSystemSetting(string name, bool defaultCheckboxValue, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
+        {
+            Name = name;
+            DefaultCheckboxValue = defaultCheckboxValue;
+            Category = category;
+            Type = type;
+        }
+
+        public ConnectedSystemSetting(string name, string? description, bool defaultCheckboxValue, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
+        {
+            Name = name;
+            Description = description;
+            DefaultCheckboxValue = defaultCheckboxValue;
+            Category = category;
+            Type = type;
+        }
     }
 }

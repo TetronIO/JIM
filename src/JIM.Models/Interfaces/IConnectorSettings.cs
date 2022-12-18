@@ -8,6 +8,6 @@ namespace JIM.Models.Interfaces
     /// </summary>
     public interface IConnectorSettings
     {
-        public List<ConnectedSystemSetting> GetSettings();
+        public IList<ConnectedSystemSetting> GetSettings();
     }
 }
