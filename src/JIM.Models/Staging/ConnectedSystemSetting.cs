@@ -1,20 +1,13 @@
 ﻿namespace JIM.Models.Staging
 {
     /// <summary>
-    /// Defines a setting that a Connector will ask the administrator to supply a value for. 
+    /// Defines a setting that a Connector will ask an administrator to supply a value for. 
     /// Values for the setting are modelled by the ConnectorSettingValue object.
+    /// Inherits from ConnectorSetting. Needs to be a dedicated class so we can persist to the database with an ID.
     /// </summary>
-    public class ConnectedSystemSetting
+    public class ConnectedSystemSetting : ConnectorSetting
     {
-        public int Id { get; set; }
-        public string? Name { get; set; }
-        public string? Description { get; set; }
-        public ConnectedSystemSettingCategory Category { get; set; }
-        public ConnectedSystemSettingType Type { get; set; }
-        public bool DefaultCheckboxValue { get; }
-        public string DefaultStringValue { get; }
-        public List<string> DropDownValues { get; }
-        public string LabelValue { get; set; }
+        public int Id { get; set; }        
 
         public ConnectedSystemSetting() { }
 

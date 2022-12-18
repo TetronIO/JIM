@@ -20,40 +20,54 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorSettings members
-        public IList<ConnectedSystemSetting> GetSettings()
+        // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
+        private string _settingForestName = "Forest Name";
+        private string _settingDomainName = "Domain Name";
+        private string _settingDomainController = "Domain Controller";
+        private string _settingHostname = "Hostname";
+        private string _settingPort = "Port";
+        private string _settingUseEncryptedConnection = "Use Encrypted Connection?";
+        private string _settingUsername = "Username";
+        private string _settingPassword = "Password";
+        private string _settingCreateContainersAsNeeded = "Create containers as needed?";
+
+        public IList<ConnectorSetting> GetSettings()
         {
-            var settings = new List<ConnectedSystemSetting>
+            var settings = new List<ConnectorSetting>
             {
-                new ConnectedSystemSetting("Active Directory", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
-                new ConnectedSystemSetting("Forest Name", "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectedSystemSetting("Domain Name", "What's the name for the domain you want to synchronise with in the forest? i.e. lab", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectedSystemSetting("Domain Controller", "When connecting to an untrusted domain, supply a domain controller hostname or ip address here.", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectedSystemSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
+                new ConnectorSetting("Active Directory", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
+                new ConnectorSetting(_settingForestName, "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectorSetting(_settingDomainName, "What's the name for the domain you want to synchronise with in the forest? i.e. lab", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectorSetting(_settingDomainController, "When connecting to an untrusted domain, supply a domain controller hostname or ip address here.", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectorSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
 
-                new ConnectedSystemSetting("LDAP", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
-                new ConnectedSystemSetting("Hostname", "The host for the directory, i.e. addls-01.lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectedSystemSetting("Port", "The port for the directory, i.e. 389", "389", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectedSystemSetting("Use Encrypted Connection?", true, ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.CheckBox),
-                new ConnectedSystemSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
+                new ConnectorSetting("LDAP", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
+                new ConnectorSetting(_settingHostname, "The host for the directory, i.e. addls-01.lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectorSetting(_settingPort, "The port for the directory, i.e. 389", "389", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectorSetting(_settingUseEncryptedConnection, true, ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.CheckBox),
+                new ConnectorSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
 
-                new ConnectedSystemSetting("Credentials", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
-                new ConnectedSystemSetting("Username", "What's the username for the service account you want to use to connect to the domain? i.e. svc-jimadc", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectedSystemSetting("Password", "What's the password for the service account you want to use to connect to the domain?", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.StringEncrypted),
+                new ConnectorSetting("Credentials", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
+                new ConnectorSetting(_settingUsername, "What's the username for the service account you want to use to connect to the domain? i.e. svc-jimadc", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectorSetting(_settingPassword, "What's the password for the service account you want to use to connect to the domain?", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.StringEncrypted),
 
-                new ConnectedSystemSetting("Container Provisioning", ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.Heading),
-                new ConnectedSystemSetting("Create containers as needed?", "i.e. create OUs as needed when provisioning new objects.", false, ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.CheckBox)
+                new ConnectorSetting("Container Provisioning", ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.Heading),
+                new ConnectorSetting(_settingCreateContainersAsNeeded, "i.e. create OUs as needed when provisioning new objects.", false, ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.CheckBox)
             };
 
             return settings;
+        }
+
+        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSettingValue> settingValues)
+        {
+            throw new NotImplementedException();
         }
         #endregion
 
         #region IConnectorContainers
         public ConnectorContainer? GetContainers(IList<ConnectedSystemSettingValue> settingValues)
         {
-            // require connection setting values. validate for presence.
-            
-
+            // require connection setting values. validate for presence...
             throw new NotImplementedException();
         }
         #endregion
