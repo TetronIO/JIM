@@ -24,11 +24,24 @@ namespace JIM.Connectors.LDAP
         {
             var settings = new List<ConnectedSystemSetting>
             {
+                new ConnectedSystemSetting("Active Directory", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
                 new ConnectedSystemSetting("Forest Name", "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
                 new ConnectedSystemSetting("Domain Name", "What's the name for the domain you want to synchronise with in the forest? i.e. lab", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectedSystemSetting("Domain Controller", "When connecting to an untrusted domain, supply a domain controller hostname or ip address here.", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectedSystemSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
+
+                new ConnectedSystemSetting("LDAP", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
+                new ConnectedSystemSetting("Hostname", "The host for the directory, i.e. addls-01.lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectedSystemSetting("Port", "The port for the directory, i.e. 389", "389", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectedSystemSetting("Use Encrypted Connection?", true, ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.CheckBox),
+                new ConnectedSystemSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
+
+                new ConnectedSystemSetting("Credentials", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
                 new ConnectedSystemSetting("Username", "What's the username for the service account you want to use to connect to the domain? i.e. svc-jimadc", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
                 new ConnectedSystemSetting("Password", "What's the password for the service account you want to use to connect to the domain?", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.StringEncrypted),
-                new ConnectedSystemSetting("Use Encrypted Connection", true, ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.CheckBox)
+
+                new ConnectedSystemSetting("Container Provisioning", ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.Heading),
+                new ConnectedSystemSetting("Create containers as needed?", "i.e. create OUs as needed when provisioning new objects.", false, ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.CheckBox)
             };
 
             return settings;
@@ -36,8 +49,11 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorContainers
-        public ConnectorContainer? GetContainers()
+        public ConnectorContainer? GetContainers(IList<ConnectedSystemSettingValue> settingValues)
         {
+            // require connection setting values. validate for presence.
+            
+
             throw new NotImplementedException();
         }
         #endregion

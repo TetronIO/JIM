@@ -7,7 +7,7 @@
     public class ConnectedSystemSetting
     {
         public int Id { get; set; }
-        public string Name { get; set; }
+        public string? Name { get; set; }
         public string? Description { get; set; }
         public ConnectedSystemSettingCategory Category { get; set; }
         public ConnectedSystemSettingType Type { get; set; }
@@ -17,6 +17,12 @@
         public string LabelValue { get; set; }
 
         public ConnectedSystemSetting() { }
+
+        public ConnectedSystemSetting(ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
+        {
+            Category = category;
+            Type = type;
+        }
 
         public ConnectedSystemSetting(string name, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
         {

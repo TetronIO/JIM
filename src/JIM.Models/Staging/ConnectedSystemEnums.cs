@@ -39,11 +39,12 @@
     {
         String,
         StringEncrypted,
+        Heading,
         Label,
         Text,
         DropDown,
         CheckBox,
-        Spacer,
+        Divider,
         File
     }
 }
