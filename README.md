@@ -34,7 +34,7 @@ JIM is currently targetting the following means of connecting to systems via it'
 - MySQL Database
 - Oracle Database
 - CSV/Text files
-- PowerShell
+- PowerShell (Core)
 - SCIM 2.0
 
 ## Roadmap
