@@ -5,10 +5,10 @@ namespace JIM.Models.Interfaces
 {
     public interface IConnectorExportUsingCalls
     {
-        public void OpenConnection(IList<ConnectedSystemSetting> settings);
+        public void OpenExportConnection(IList<ConnectedSystemSettingValue> settingValues);
 
         public void Export(IList<PendingExport> pendingExports);
 
-        public void CloseConnection();
+        public void CloseExportConnection();
     }
 }

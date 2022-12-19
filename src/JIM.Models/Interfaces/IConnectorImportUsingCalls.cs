@@ -4,10 +4,10 @@ namespace JIM.Models.Interfaces
 {
     public interface IConnectorImportUsingCalls
     {
-        public void OpenConnection(IList<ConnectedSystemSetting> settings);
+        public void OpenImportConnection(IList<ConnectedSystemSettingValue> settingValues);
 
         public ConnectedSystemImportResult Import(ConnectedSystemRunProfile runProfile);
 
-        public void CloseConnection();
+        public void CloseImportConnection();
     }
 }
