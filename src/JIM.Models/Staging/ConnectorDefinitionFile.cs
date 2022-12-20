@@ -16,5 +16,6 @@
         public bool ImplementsIImportUsingFiles { get; set; }
         public int FileSizeBytes { get; set; }
         public byte[] File { get; set; }
+        public string Version { get; set; }
     }
 }

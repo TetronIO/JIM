@@ -7,7 +7,6 @@
         public string? Description { get; set; }
         public DateTime Created { get; set; }
         public DateTime? LastUpdated { get; set; }
-        public string? Version { get; set; }
         /// <summary>
         /// Is this a Connector built-in to JIM itself, or third-party supplied?
         /// </summary>
