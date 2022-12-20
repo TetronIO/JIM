@@ -1,6 +1,6 @@
 ﻿namespace JIM.Models.Staging
 {
-    public class ConnectorContainer
+    public class ConnectorPartitionContainer
     {
         /// <summary>
         /// The unique identifier for the container.
@@ -24,26 +24,31 @@
         public bool Hidden { get; set; }
 
         /// <summary>
+        /// If this is a top-level container, the it should reside in a connector partition.
+        /// </summary>
+        public ConnectorPartition? ConnectorPartition { get; set; }
+
+        /// <summary>
         /// Containers can container children containers.
         /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
         /// </summary>
-        public List<ConnectorContainer> ChildContainers { get; }
+        public List<ConnectorPartitionContainer> ChildContainers { get; }
 
-        public ConnectorContainer(string id, string name, bool hidden = false)
+        public ConnectorPartitionContainer(string id, string name, bool hidden = false)
         {
             Id = id;
             Name = name;
             Hidden = hidden;
-            ChildContainers = new List<ConnectorContainer>();
+            ChildContainers = new List<ConnectorPartitionContainer>();
         }
 
-        public ConnectorContainer(string id, string name, string description, bool hidden = false)
+        public ConnectorPartitionContainer(string id, string name, string description, bool hidden = false)
         {
             Id = id;
             Name = name;
             Description = description;
             Hidden = hidden;
-            ChildContainers = new List<ConnectorContainer>();
+            ChildContainers = new List<ConnectorPartitionContainer>();
         }
     }
 }

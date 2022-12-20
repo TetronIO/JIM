@@ -3,7 +3,7 @@ using JIM.Models.Staging;
 
 namespace JIM.Connectors.LDAP
 {
-    public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorContainers, IConnectorImportUsingCalls
+    public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorPartitions, IConnectorContainers, IConnectorImportUsingCalls
     {
         #region IConnector members
         public string Name => "JIM LDAP Connector";
@@ -64,8 +64,20 @@ namespace JIM.Connectors.LDAP
         }
         #endregion
 
+        #region IConnectorPartitions members
+        public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSettingValue> settingValues)
+        {
+            throw new NotImplementedException();
+        }
+        #endregion
+
         #region IConnectorContainers members
-        public ConnectorContainer? GetContainers(IList<ConnectedSystemSettingValue> settingValues)
+        public ConnectorPartitionContainer? GetContainers(IList<ConnectedSystemSettingValue> settingValues)
+        {
+            throw new NotImplementedException();
+        }
+
+        public ConnectorPartitionContainer? GetContainers(IList<ConnectedSystemSettingValue> settings, ConnectorPartition connectorPartition)
         {
             // require connection setting values. validate for presence...
             throw new NotImplementedException();
@@ -88,5 +100,7 @@ namespace JIM.Connectors.LDAP
             throw new NotImplementedException();
         }
         #endregion
+
+        
     }
 }
