@@ -24,7 +24,7 @@
         public bool Hidden { get; set; }
 
         /// <summary>
-        /// If this is a top-level container, the it should reside in a connector partition.
+        /// If this is a top-level container, then it may reside in a connector partition, though this isn't required if the connector doesn't implement partitions.
         /// </summary>
         public ConnectorPartition? ConnectorPartition { get; set; }
 
