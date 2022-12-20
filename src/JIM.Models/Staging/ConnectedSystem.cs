@@ -12,11 +12,15 @@ namespace JIM.Models.Staging
         public List<ConnectedSystemRunProfile> RunProfiles { get; set; }
         public List<ConnectedSystemObject> Objects { get; set; }
         public List<PendingExport> PendingExports { get; set; }
+        public ConnectorDefinition ConnectorDefinition { get; set; }
+        public List<ConnectedSystemSetting> Settings { get; set; }
 
         public ConnectedSystem()
         {
             RunProfiles = new List<ConnectedSystemRunProfile>();
             Objects = new List<ConnectedSystemObject>();
+            Settings = new List<ConnectedSystemSetting>();
+            Created = DateTime.Now;
         }
     }
 }

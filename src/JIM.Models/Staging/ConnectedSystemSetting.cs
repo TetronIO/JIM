@@ -3,11 +3,14 @@
     /// <summary>
     /// Defines a setting that a Connector will ask an administrator to supply a value for. 
     /// Values for the setting are modelled by the ConnectorSettingValue object.
-    /// Inherits from ConnectorSetting. Needs to be a dedicated class so we can persist to the database with an ID.
+    /// Inherits from ConnectorSetting. 
+    /// Needs to be a dedicated class so we can persist to the database with id, connected system and value references.
     /// </summary>
     public class ConnectedSystemSetting : ConnectorSetting
     {
-        public int Id { get; set; }        
+        public int Id { get; set; }
+        public ConnectedSystem ConnectedSystem { get; set; }
+        public ConnectedSystemSettingValue? Value { get; set; }
 
         public ConnectedSystemSetting() { }
 

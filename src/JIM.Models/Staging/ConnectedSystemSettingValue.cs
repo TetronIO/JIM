@@ -8,8 +8,9 @@ namespace JIM.Models.Staging
     public class ConnectedSystemSettingValue
     {
         public int Id { get; set; }
-        public ConnectedSystemSetting ConnectorSetting { get; set; }
+        public ConnectedSystemSetting ConnectedSystemSetting { get; set; }
         public string? StringValue { get; set; }
         public SecureString? StringEncryptedValue { get; set; }
+        public bool CheckboxValue { get; set; }
     }
 }
