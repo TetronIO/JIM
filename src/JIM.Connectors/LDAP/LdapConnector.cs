@@ -43,7 +43,7 @@ namespace JIM.Connectors.LDAP
 
                 new ConnectorSetting("LDAP", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
                 new ConnectorSetting(_settingHostname, "The host for the directory, i.e. addls-01.lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectorSetting(_settingPort, "The port for the directory, i.e. 389", "389", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
+                new ConnectorSetting(_settingPort, "The port for the directory, i.e. 636", "636", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
                 new ConnectorSetting(_settingUseEncryptedConnection, true, ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.CheckBox),
                 new ConnectorSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
 
