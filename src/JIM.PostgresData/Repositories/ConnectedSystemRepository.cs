@@ -4,6 +4,7 @@ using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
+using JIM.PostgresData.Migrations;
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories
@@ -97,6 +98,9 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).CountAsync();
         }
 
+
+
+
         public async Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
         {
             return await Repository.Database.ConnectorDefinitions.OrderBy(x => x.Name).Select(cd => new ConnectorDefinitionHeader
@@ -116,6 +120,35 @@ namespace JIM.PostgresData.Repositories
         public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
         {
             return await Repository.Database.ConnectorDefinitions.Include(x => x.Files).SingleOrDefaultAsync(cd => cd.Id == id);
+        }
+
+        public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            Repository.Database.ConnectorDefinitions.Add(connectorDefinition);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            Repository.Database.ConnectorDefinitions.Remove(connectorDefinition);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+        {
+            Repository.Database.ConnectorDefinitionFiles.Add(connectorDefinitionFile);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+        {
+            Repository.Database.ConnectorDefinitionFiles.Remove(connectorDefinitionFile);
+            await Repository.Database.SaveChangesAsync();
         }
     }
 }

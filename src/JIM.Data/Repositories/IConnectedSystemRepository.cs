@@ -14,6 +14,11 @@ namespace JIM.Data.Repositories
 
         public Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
+        public Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
+        public Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
+        public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
+        public Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
+        public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
 
         public Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id);
         public Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id);

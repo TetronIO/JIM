@@ -60,6 +60,7 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
         }
 
+        #region SyncRules
         public async Task<IList<SyncRule>> GetSyncRulesAsync()
         {
             return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
@@ -74,7 +75,9 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
         }
+        #endregion
 
+        #region ConnectorDefinitions
         public async Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
@@ -84,5 +87,31 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id);
         }
+
+        public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
+        }
+
+        public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            await Application.Repository.ConnectedSystems.UpdateConnectorDefinitionAsync(connectorDefinition);
+        }
+
+        public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionAsync(connectorDefinition);
+        }
+
+        public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+        {
+            await Application.Repository.ConnectedSystems.CreateConnectorDefinitionFileAsync(connectorDefinitionFile);
+        }
+
+        public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+        {
+            await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionFileAsync(connectorDefinitionFile);
+        }
+        #endregion
     }
 }
