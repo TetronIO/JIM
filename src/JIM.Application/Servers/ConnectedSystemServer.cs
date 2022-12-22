@@ -15,6 +15,7 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
+        #region ConnectedSystems
         public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync();
@@ -29,17 +30,16 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id);
         }
+        #endregion
 
-        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
-        {
-            return await Application.Repository.ConnectedSystems.GetSynchronisationRunsAsync(id);
-        }
-
+        #region ConnectedSytemAttributes
         public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetAttributesAsync(id);
         }
+        #endregion
 
+        #region ConnectedSystemObjectTypes
         public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(id);
@@ -59,6 +59,14 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
         }
+        #endregion
+
+        #region SynchronisationRuns
+        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
+        {
+            return await Application.Repository.ConnectedSystems.GetSynchronisationRunsAsync(id);
+        }
+        #endregion
 
         #region SyncRules
         public async Task<IList<SyncRule>> GetSyncRulesAsync()
