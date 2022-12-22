@@ -1,10 +1,8 @@
-﻿using JIM.Data;
-using JIM.Models.Logic;
+﻿using JIM.Models.Logic;
 using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
-using System.Diagnostics.CodeAnalysis;
 
 namespace JIM.Application.Servers
 {
