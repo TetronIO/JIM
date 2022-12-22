@@ -7,6 +7,6 @@ namespace JIM.Models.Interfaces
     /// </summary>
     public interface IConnectorPartitions
     {
-        public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSettingValue> settingValues);
+        public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSetting> settings);
     }
 }

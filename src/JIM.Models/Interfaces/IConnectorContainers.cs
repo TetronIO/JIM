@@ -12,7 +12,7 @@ namespace JIM.Models.Interfaces
         /// Gets the top-level container for a connected system, that the Connector is authorised to read.
         /// The container may/is likely to contain child containers to represent a hierarchy of containers.
         /// </summary>
-        public ConnectorPartitionContainer? GetContainers(IList<ConnectedSystemSettingValue> settings);
+        public ConnectorContainer? GetContainers(IList<ConnectedSystemSetting> settings);
 
         /// <summary>
         /// Gets the top-level container of a partition in a connected system, that the Connector is authorised to read.
@@ -21,6 +21,6 @@ namespace JIM.Models.Interfaces
         /// <remarks> 
         /// If the Connector implements IConnectorPartitions, then it will call this overload for a specific partition, not the basic constructor.
         /// </remarks>
-        public ConnectorPartitionContainer? GetContainers(IList<ConnectedSystemSettingValue> settings, ConnectorPartition connectorPartition);
+        public ConnectorContainer? GetContainers(IList<ConnectedSystemSetting> settings, ConnectorPartition connectorPartition);
     }
 }

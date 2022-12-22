@@ -18,6 +18,10 @@ namespace JIM.PostgresData
         internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
         internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
         internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; }
+        internal DbSet<ConnectedSystemSetting> ConnectedSystemSettings { get; set; }
+
+
+
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }

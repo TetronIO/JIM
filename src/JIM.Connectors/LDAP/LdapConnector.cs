@@ -58,26 +58,26 @@ namespace JIM.Connectors.LDAP
             return settings;
         }
 
-        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSettingValue> settingValues)
+        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSetting> settings)
         {
             throw new NotImplementedException();
         }
         #endregion
 
         #region IConnectorPartitions members
-        public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSettingValue> settingValues)
+        public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSetting> settings)
         {
             throw new NotImplementedException();
         }
         #endregion
 
         #region IConnectorContainers members
-        public ConnectorPartitionContainer? GetContainers(IList<ConnectedSystemSettingValue> settingValues)
+        public ConnectorContainer? GetContainers(IList<ConnectedSystemSetting> settingss)
         {
             throw new NotImplementedException();
         }
 
-        public ConnectorPartitionContainer? GetContainers(IList<ConnectedSystemSettingValue> settings, ConnectorPartition connectorPartition)
+        public ConnectorContainer? GetContainers(IList<ConnectedSystemSetting> settings, ConnectorPartition connectorPartition)
         {
             // require connection setting values. validate for presence...
             throw new NotImplementedException();
@@ -85,7 +85,7 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorImportUsingCalls members
-        public void OpenImportConnection(IList<ConnectedSystemSettingValue> settingValues)
+        public void OpenImportConnection(IList<ConnectedSystemSetting> settings)
         {
             throw new NotImplementedException();
         }
