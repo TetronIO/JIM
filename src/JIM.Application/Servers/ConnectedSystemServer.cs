@@ -1,8 +1,10 @@
-﻿using JIM.Models.Logic;
+﻿using JIM.Data;
+using JIM.Models.Logic;
 using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
+using System.Diagnostics.CodeAnalysis;
 
 namespace JIM.Application.Servers
 {
@@ -73,6 +75,16 @@ namespace JIM.Application.Servers
         public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
+        }
+
+        public async Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+        }
+
+        public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id);
         }
     }
 }

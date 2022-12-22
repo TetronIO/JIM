@@ -96,5 +96,26 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).CountAsync();
         }
+
+        public async Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
+        {
+            return await Repository.Database.ConnectorDefinitions.OrderBy(x => x.Name).Select(cd => new ConnectorDefinitionHeader
+            {
+                Id = cd.Id,
+                Name = cd.Name,
+                Created = cd.Created,
+                LastUpdated = cd.LastUpdated,
+                Description = cd.Description,
+                BuiltIn = cd.BuiltIn,
+                Files = cd.Files.Count,
+                InUse = cd.ConnectedSystems != null && cd.ConnectedSystems.Count > 0,
+                Versions = string.Join(", ", cd.Files.Select(q => q.Version).Distinct())
+            }).ToListAsync();
+        }
+
+        public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
+        {
+            return await Repository.Database.ConnectorDefinitions.Include(x => x.Files).SingleOrDefaultAsync(cd => cd.Id == id);
+        }
     }
 }

@@ -11,6 +11,10 @@ namespace JIM.Data.Repositories
         public Task<IList<ConnectedSystem>> GetConnectedSystemsAsync();
         public Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
         public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
+
+        public Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
+        public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
+
         public Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id);
         public Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id);
         public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
