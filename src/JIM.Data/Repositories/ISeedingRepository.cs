@@ -2,6 +2,7 @@
 using JIM.Models.DataGeneration;
 using JIM.Models.Search;
 using JIM.Models.Security;
+using JIM.Models.Staging;
 
 namespace JIM.Data.Repositories
 {
@@ -13,6 +14,7 @@ namespace JIM.Data.Repositories
             List<PredefinedSearch> predefinedSearches,
             List<Role> roles, 
             List<ExampleDataSet> exampleDataSets, 
-            List<DataGenerationTemplate> dataGenerationTemplates);
+            List<DataGenerationTemplate> dataGenerationTemplates,
+            List<ConnectorDefinition> connectorDefinitions);
     }
 }

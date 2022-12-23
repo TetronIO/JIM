@@ -39,6 +39,11 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ConnectorDefinitions.Include(x => x.Files).SingleOrDefaultAsync(cd => cd.Id == id);
         }
 
+        public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
+        {
+            return await Repository.Database.ConnectorDefinitions.Include(x => x.Files).SingleOrDefaultAsync(cd => cd.Name.Equals(name));
+        }
+
         public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
         {
             Repository.Database.ConnectorDefinitions.Add(connectorDefinition);

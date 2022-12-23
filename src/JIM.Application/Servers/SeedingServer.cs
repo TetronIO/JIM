@@ -1,7 +1,10 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Connectors.LDAP;
+using JIM.Models.Core;
 using JIM.Models.DataGeneration;
+using JIM.Models.Interfaces;
 using JIM.Models.Search;
 using JIM.Models.Security;
+using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
 
@@ -44,6 +47,7 @@ namespace JIM.Application.Servers
             var rolesToCreate = new List<Role>();
             var exampleDataSetsToCreate = new List<ExampleDataSet>();
             var dataGenerationTemplatesToCreate = new List<DataGenerationTemplate>();
+            var connectorDefinitions = new List<ConnectorDefinition>();
 
             #region MetaverseAttributes
             // generic attributes
@@ -516,14 +520,22 @@ namespace JIM.Application.Servers
                 dataGenerationTemplatesToCreate.Add(template);
             #endregion
 
-            // submit all the preparations to the repository for creation
-            await Application.Repository.Seeding.SeedDataAsync(
+            #region Connector Definitions
+            var ldapConnector = new LdapConnector();
+            var ldapConnectorDefinition = await PrepareConnectorDefinitionAsync(ldapConnector);
+            if (ldapConnectorDefinition != null)
+                connectorDefinitions.Add(ldapConnectorDefinition);
+            #endregion
+
+                // submit all the preparations to the repository for creation
+                await Application.Repository.Seeding.SeedDataAsync(
                 attributesToCreate, 
                 objectTypesToCreate, 
                 predefinedSearchesToCreate,
                 rolesToCreate, 
                 exampleDataSetsToCreate, 
-                dataGenerationTemplatesToCreate);
+                dataGenerationTemplatesToCreate,
+                connectorDefinitions);
             stopwatch.Stop();
             Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
         }
@@ -603,6 +615,29 @@ namespace JIM.Application.Servers
             AddUsersToDataGenerationTemplate(template, userType, dataSets, metaverseAttributes);
             AddGroupsToDataGenerationTemplate(template, groupType, userType, dataSets, metaverseAttributes);
             return template;
+        }
+
+        private async Task<ConnectorDefinition?> PrepareConnectorDefinitionAsync(IConnector connector)
+        {
+            var connectorCapabilities = (IConnectorCapabilities)connector;
+            if (connectorCapabilities == null)
+                throw new ArgumentException("connector does not implement IConnectorCapabilities");
+
+            var connectorDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name);
+            if (connectorDefinition != null)
+                return null;
+
+            connectorDefinition = new ConnectorDefinition
+            {
+                Name = connector.Name,
+                Description = connector.Description,
+                BuiltIn = true,
+                SupportsFullImport = connectorCapabilities.SupportsFullImport,
+                SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport,
+                SupportsExport = connectorCapabilities.SupportsExport
+            };
+
+            return connectorDefinition;
         }
 
         private static void AddUsersToDataGenerationTemplate(DataGenerationTemplate template, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)

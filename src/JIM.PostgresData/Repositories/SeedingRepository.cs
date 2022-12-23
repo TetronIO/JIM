@@ -3,6 +3,7 @@ using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using JIM.Models.Search;
 using JIM.Models.Security;
+using JIM.Models.Staging;
 using Serilog;
 
 namespace JIM.PostgresData.Repositories
@@ -26,7 +27,8 @@ namespace JIM.PostgresData.Repositories
             List<PredefinedSearch> predefinedSearches,
             List<Role> roles, 
             List<ExampleDataSet> exampleDataSets, 
-            List<DataGenerationTemplate> dataGenerationTemplates)
+            List<DataGenerationTemplate> dataGenerationTemplates,
+            List<ConnectorDefinition> connectorDefinitions)
         {
             var changes = false;
             if (metaverseAttributes != null)
@@ -68,6 +70,13 @@ namespace JIM.PostgresData.Repositories
             {
                 Repository.Database.DataGenerationTemplates.AddRange(dataGenerationTemplates);
                 Log.Information($"SeedDataAsync: Created {dataGenerationTemplates.Count} DataGenerationTemplates");
+                changes = true;
+            }
+
+            if (connectorDefinitions != null)
+            {
+                Repository.Database.ConnectorDefinitions.AddRange(connectorDefinitions);
+                Log.Information($"SeedDataAsync: Created {connectorDefinitions.Count} ConnectorDefinitions");
                 changes = true;
             }
 

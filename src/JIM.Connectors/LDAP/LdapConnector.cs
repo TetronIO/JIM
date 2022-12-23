@@ -6,7 +6,7 @@ namespace JIM.Connectors.LDAP
     public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorPartitions, IConnectorContainers, IConnectorImportUsingCalls
     {
         #region IConnector members
-        public string Name => "JIM LDAP Connector";
+        public string Name => Constants.LdapConnectorName;
 
         public string Description => "Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory.";
 
@@ -100,7 +100,5 @@ namespace JIM.Connectors.LDAP
             throw new NotImplementedException();
         }
         #endregion
-
-        
     }
 }

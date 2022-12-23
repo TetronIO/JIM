@@ -26,6 +26,13 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id);
         }
 
+        public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name);
+        }
+
+
+
         public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
         {
             await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
