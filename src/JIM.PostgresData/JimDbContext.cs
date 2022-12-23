@@ -18,6 +18,7 @@ namespace JIM.PostgresData
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
         internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
         internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; }
+        internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; }
         internal DbSet<ConnectedSystemSetting> ConnectedSystemSettings { get; set; }
         internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
         internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; }

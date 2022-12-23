@@ -5,6 +5,8 @@ namespace JIM.Models.Staging
     public class ConnectedSystemRunProfile
     {
         public int Id { get; set; }
+
+        public string Name { get; set; }
         
         public ConnectedSystem ConnectedSystem { get; set; }
         

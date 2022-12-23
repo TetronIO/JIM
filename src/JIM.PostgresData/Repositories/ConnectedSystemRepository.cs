@@ -173,6 +173,35 @@ namespace JIM.PostgresData.Repositories
         }
         #endregion
 
+        #region Connected System Run Profiles
+        public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
+        {
+            Repository.Database.ConnectedSystemRunProfiles.Add(runProfile);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
+        {
+            Repository.Database.ConnectedSystemRunProfiles.Remove(runProfile);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+        {
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
+        {
+            return await GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
+        }
+
+        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId)
+        {
+            return await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == connectedSystemId).ToListAsync();
+        }
+        #endregion
+
         #region Sync Rules
         public async Task<IList<SyncRule>> GetSyncRulesAsync()
         {

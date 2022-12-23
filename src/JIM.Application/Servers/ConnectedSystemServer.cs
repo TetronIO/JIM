@@ -1,4 +1,5 @@
-﻿using JIM.Models.Logic;
+﻿using JIM.Data;
+using JIM.Models.Logic;
 using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
@@ -160,6 +161,42 @@ namespace JIM.Application.Servers
 
 
             await Application.Repository.ConnectedSystems.DeleteConnectedSystemContainerAsync(connectedSystemContainer);
+        }
+        #endregion
+
+        #region Connected System Run Profiles
+        public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+        {
+            if (connectedSystemRunProfile == null)
+                throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        }
+
+        public async Task DeleteConnectedSystemRunProfile(ConnectedSystemRunProfile connectedSystemRunProfile)
+        {
+            if (connectedSystemRunProfile == null)
+                return;
+
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        }
+
+        public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+        {
+            if (connectedSystemRunProfile == null)
+                throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        }
+
+        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
+        {
+            return await GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
+        }
+
+        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         }
         #endregion
 
