@@ -14,16 +14,13 @@ namespace JIM.PostgresData
     {
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
         internal DbSet<ConnectedSystemAttribute> ConnectedSystemAttributes { get; set; }
+        internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
         internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
+        internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; }
+        internal DbSet<ConnectedSystemSetting> ConnectedSystemSettings { get; set; }
         internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
         internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; }
-        internal DbSet<ConnectedSystemSetting> ConnectedSystemSettings { get; set; }
-        internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; }
-        internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
-
-
-
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
