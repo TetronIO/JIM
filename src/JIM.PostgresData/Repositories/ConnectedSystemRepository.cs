@@ -4,7 +4,6 @@ using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
 using JIM.Models.Transactional;
-using JIM.PostgresData.Migrations;
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories
@@ -18,90 +17,8 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
-        public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
-        {
-            return await Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToListAsync();
-        }
-
-        public async Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
-        {
-            return await Repository.Database.ConnectedSystems.OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
-            {
-                Id = cs.Id,
-                Name = cs.Name,
-                Description = cs.Description,
-                ObjectCount = cs.Objects.Count,
-                ConnectorsCount = cs.Objects.Count(q => q.MetaverseObject != null),
-                PendingExportObjectsCount = cs.PendingExports.Count,
-                LastUpdated = cs.LastUpdated
-            }).ToListAsync();
-        }
-
-        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
-        {
-            return await Repository.Database.ConnectedSystems.SingleOrDefaultAsync(x => x.Id == id);
-        }
-
-        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
-        {
-            return await Repository.Database.SyncRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToListAsync();
-        }
-
-        public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
-        {
-            return await Repository.Database.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
-        }
-
-        public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
-        {
-            return await Repository.Database.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
-        }
-
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
-        {
-            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
-        }
-
-        public async Task<IList<SyncRule>> GetSyncRulesAsync()
-        {
-            return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
-        }
-
-        public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
-        {
-            return await Repository.Database.SyncRules.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
-            {
-                Id = sr.Id,
-                Name = sr.Name,
-                ConnectedSystemName = sr.ConnectedSystem.Name,
-                ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
-                Created = sr.Created,
-                Direction = sr.Direction,
-                MetaverseObjectTypeName = sr.MetaverseObjectType.Name,
-                ProjectToMetaverse = sr.ProjectToMetaverse,
-                ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem
-            }).ToListAsync();
-        }
-
-        public async Task<SyncRule?> GetSyncRuleAsync(int id)
-        {
-            return await Repository.Database.SyncRules.SingleOrDefaultAsync(x => x.Id == id);
-        }
-
-        public async Task<int> GetConnectedSystemObjectCountAsync()
-        {
-            return await Repository.Database.ConnectedSystemObjects.CountAsync();
-        }
-
-        public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId)
-        {
-            return await Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).CountAsync();
-        }
-
-
-
-
-        public async Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
+        #region Connector Definitions
+        public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
         {
             return await Repository.Database.ConnectorDefinitions.OrderBy(x => x.Name).Select(cd => new ConnectorDefinitionHeader
             {
@@ -150,5 +67,140 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.ConnectorDefinitionFiles.Remove(connectorDefinitionFile);
             await Repository.Database.SaveChangesAsync();
         }
+        #endregion
+
+        #region Connected Systems
+        public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
+        {
+            return await Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToListAsync();
+        }
+
+        public async Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
+        {
+            return await Repository.Database.ConnectedSystems.OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
+            {
+                Id = cs.Id,
+                Name = cs.Name,
+                Description = cs.Description,
+                ObjectCount = cs.Objects.Count,
+                ConnectorsCount = cs.Objects.Count(q => q.MetaverseObject != null),
+                PendingExportObjectsCount = cs.PendingExports.Count,
+                LastUpdated = cs.LastUpdated
+            }).ToListAsync();
+        }
+
+        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
+        {
+            return await Repository.Database.ConnectedSystems.SingleOrDefaultAsync(x => x.Id == id);
+        }
+        #endregion
+
+        #region Connected System Attributes
+        public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
+        {
+            return await Repository.Database.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
+        }
+        #endregion
+
+        #region Connected System Objects
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
+        {
+            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+        }
+
+        public async Task<int> GetConnectedSystemObjectCountAsync()
+        {
+            return await Repository.Database.ConnectedSystemObjects.CountAsync();
+        }
+
+        public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId)
+        {
+            return await Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).CountAsync();
+        }
+        #endregion
+
+        #region Connected System Object Types
+        public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
+        {
+            return await Repository.Database.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
+        }
+        #endregion
+
+        #region Connected System Partitions
+        public async Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+        {
+            Repository.Database.ConnectedSystemPartitions.Add(connectedSystemPartition);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem)
+        {
+            return await Repository.Database.ConnectedSystemPartitions.Include(csp => csp.Containers).Where(q => q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
+        }
+
+        public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+        {
+            Repository.Database.ConnectedSystemPartitions.Remove(connectedSystemPartition);
+            await Repository.Database.SaveChangesAsync();
+        }
+        #endregion
+
+        #region Connected System Containers
+        /// <summary>
+        /// Used to create a top-level container (optionally with children), when the connector does not implement Partitions.
+        /// If the connector implements Partitions, then use CreateConnectedSystemPartitionAsync and add the container to that.
+        /// </summary>
+        public async Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+        {
+            Repository.Database.ConnectedSystemContainers.Add(connectedSystemContainer);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
+        {
+            return await Repository.Database.ConnectedSystemContainers.Where(q => q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
+        }
+
+        public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+        {
+            Repository.Database.ConnectedSystemContainers.Remove(connectedSystemContainer);
+            await Repository.Database.SaveChangesAsync();
+        }
+        #endregion
+
+        #region Sync Rules
+        public async Task<IList<SyncRule>> GetSyncRulesAsync()
+        {
+            return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
+        }
+
+        public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+        {
+            return await Repository.Database.SyncRules.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
+            {
+                Id = sr.Id,
+                Name = sr.Name,
+                ConnectedSystemName = sr.ConnectedSystem.Name,
+                ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
+                Created = sr.Created,
+                Direction = sr.Direction,
+                MetaverseObjectTypeName = sr.MetaverseObjectType.Name,
+                ProjectToMetaverse = sr.ProjectToMetaverse,
+                ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem
+            }).ToListAsync();
+        }
+
+        public async Task<SyncRule?> GetSyncRuleAsync(int id)
+        {
+            return await Repository.Database.SyncRules.SingleOrDefaultAsync(x => x.Id == id);
+        }
+        #endregion
+
+        #region Sync Runs
+        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
+        {
+            return await Repository.Database.SyncRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToListAsync();
+        }
+        #endregion
     }
 }

@@ -32,11 +32,6 @@
         public string? Description { get; set; }
 
         /// <summary>
-        /// Some systems enable containers to be hidden by default, to reduce the risk of exposing internal objects to end-users.
-        /// </summary>
-        public bool Hidden { get; set; }
-
-        /// <summary>
         /// Containers can container children containers.
         /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
         /// </summary>

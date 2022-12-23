@@ -61,6 +61,64 @@ namespace JIM.Application.Servers
         }
         #endregion
 
+        #region Connected System Partitions
+        public async Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+        {
+            if (connectedSystemPartition == null)
+                throw new ArgumentNullException(nameof(connectedSystemPartition));
+
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemPartitionAsync(connectedSystemPartition);
+        }
+
+        public async Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem)
+        {
+            if (connectedSystem == null)
+                throw new ArgumentNullException(nameof(connectedSystem));
+
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+        }
+
+        public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+        {
+            if (connectedSystemPartition == null)
+                throw new ArgumentNullException(nameof(connectedSystemPartition));
+
+
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemPartitionAsync(connectedSystemPartition);
+        }
+        #endregion
+
+        #region Connected System Containers
+        /// <summary>
+        /// Used to create a top-level container (optionally with children), when the connector does not implement Partitions.
+        /// If the connector implements Partitions, then use CreateConnectedSystemPartitionAsync and add the container to that.
+        /// </summary>
+        public async Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+        {
+            if (connectedSystemContainer == null)
+                throw new ArgumentNullException(nameof(connectedSystemContainer));
+
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemContainerAsync(connectedSystemContainer);
+        }
+
+        public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
+        {
+            if (connectedSystem == null)
+                throw new ArgumentNullException(nameof(connectedSystem));
+
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemContainersAsync(connectedSystem);
+        }
+
+        public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+        {
+            if (connectedSystemContainer == null)
+                throw new ArgumentNullException(nameof(connectedSystemContainer));
+
+
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemContainerAsync(connectedSystemContainer);
+        }
+        #endregion
+
         #region SynchronisationRuns
         public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
         {
@@ -86,7 +144,7 @@ namespace JIM.Application.Servers
         #endregion
 
         #region ConnectorDefinitions
-        public async Task<List<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
+        public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
         }
