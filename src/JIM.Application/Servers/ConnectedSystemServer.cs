@@ -15,7 +15,44 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        #region ConnectedSystems
+        #region Connector Definitions
+        public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+        }
+
+        public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id);
+        }
+
+        public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
+        }
+
+        public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            await Application.Repository.ConnectedSystems.UpdateConnectorDefinitionAsync(connectorDefinition);
+        }
+
+        public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+        {
+            await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionAsync(connectorDefinition);
+        }
+
+        public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+        {
+            await Application.Repository.ConnectedSystems.CreateConnectorDefinitionFileAsync(connectorDefinitionFile);
+        }
+
+        public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+        {
+            await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionFileAsync(connectorDefinitionFile);
+        }
+        #endregion
+
+        #region Connected Systems
         public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync();
@@ -32,14 +69,14 @@ namespace JIM.Application.Servers
         }
         #endregion
 
-        #region ConnectedSytemAttributes
+        #region Connected Sytem Attributes
         public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetAttributesAsync(id);
         }
         #endregion
 
-        #region ConnectedSystemObjectTypes
+        #region Connected System Object Types
         public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(id);
@@ -119,14 +156,14 @@ namespace JIM.Application.Servers
         }
         #endregion
 
-        #region SynchronisationRuns
+        #region Synchronisation Runs
         public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetSynchronisationRunsAsync(id);
         }
         #endregion
 
-        #region SyncRules
+        #region Sync Rules
         public async Task<IList<SyncRule>> GetSyncRulesAsync()
         {
             return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
@@ -140,43 +177,6 @@ namespace JIM.Application.Servers
         public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
-        }
-        #endregion
-
-        #region ConnectorDefinitions
-        public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
-        {
-            return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
-        }
-
-        public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
-        {
-            return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id);
-        }
-
-        public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
-        {
-            await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
-        }
-
-        public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
-        {
-            await Application.Repository.ConnectedSystems.UpdateConnectorDefinitionAsync(connectorDefinition);
-        }
-
-        public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
-        {
-            await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionAsync(connectorDefinition);
-        }
-
-        public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
-        {
-            await Application.Repository.ConnectedSystems.CreateConnectorDefinitionFileAsync(connectorDefinitionFile);
-        }
-
-        public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
-        {
-            await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionFileAsync(connectorDefinitionFile);
         }
         #endregion
     }
