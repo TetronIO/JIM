@@ -8,9 +8,9 @@ namespace JIM.Connectors.LDAP
         #region IConnector members
         public string Name => Constants.LdapConnectorName;
 
-        public string Description => "Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory.";
+        public string? Description => "Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory.";
 
-        public string Url => "https://github.com/TetronIO/JIM";
+        public string? Url => "https://github.com/TetronIO/JIM";
         #endregion
 
         #region IConnectorCapability members

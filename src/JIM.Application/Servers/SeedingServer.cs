@@ -631,6 +631,7 @@ namespace JIM.Application.Servers
             {
                 Name = connector.Name,
                 Description = connector.Description,
+                Url = connector.Url,
                 BuiltIn = true,
                 SupportsFullImport = connectorCapabilities.SupportsFullImport,
                 SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport,
