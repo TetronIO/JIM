@@ -9,7 +9,11 @@
 <PageTitle>Connected Systems</PageTitle>
 <h1>Connected Systems</h1>
 <p class="light">
-    JIM imports, and exports data through Connectors, seen below.
+    JIM imports from and exports data to connected systems using connectors. 
+    @if(connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
+    {
+     <span>Configure at least one connected system to make JIM happy.</span>
+    }
 </p>
 
 <div class="box mt-3">
@@ -21,7 +25,7 @@
                 <th scope="col">Objects</th>
                 <th scope="col">Connected Objects (%)</th>
                 <th scope="col">Pending Exports (%)</th>
-                <th scope="col">Updated</th>
+                <th scope="col">Connector</th>
             </tr>
         </thead>
         <tbody>
@@ -35,14 +39,14 @@
                         <td>@header.ObjectCount.ToString("N0")</td>
                         <td>@header.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.ConnectorsCount))</td>
                         <td>@header.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.PendingExportObjectsCount))</td>
-                        <td>@header.LastUpdated.ToShortDateString()</td>
+                        <td>@header.ConnectorName</td>
                     </tr>
                 }
             }
             else
             {
                 <tr>
-                    <td colspan="6" class="light text-center">No connectors yet</td>
+                    <td colspan="6" class="light text-center">It's a bit of a vacuum here. No connected systems yet.</td>
                 </tr>
             }
         </tbody>

@@ -277,11 +277,11 @@ h4 { font-size: 1rem; }
 }
 
 thead {
+    color: #515151;
     color: #777;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    border-bottom: 1px solid #ccc;
+    font-size: 0.9rem;
 }
+
 .table > :not(:last-child) > :last-child > * {
     border-bottom-color: inherit;
 }

@@ -82,7 +82,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
         {
-            return await Repository.Database.ConnectedSystems.OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
+            return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
             {
                 Id = cs.Id,
                 Name = cs.Name,
@@ -90,7 +90,8 @@ namespace JIM.PostgresData.Repositories
                 ObjectCount = cs.Objects.Count,
                 ConnectorsCount = cs.Objects.Count(q => q.MetaverseObject != null),
                 PendingExportObjectsCount = cs.PendingExports.Count,
-                LastUpdated = cs.LastUpdated
+                ConnectorName = cs.ConnectorDefinition.Name,
+                ConnectorId = cs.ConnectorDefinition.Id
             }).ToListAsync();
         }
 

@@ -5,10 +5,11 @@
         public int Id { get; set; }
         public string Name { get; set; }
         public string? Description { get; set; }
-        public DateTime LastUpdated { get; set; }
         public int ObjectCount { get; set; }
         public int ConnectorsCount { get; set; }
         public int PendingExportObjectsCount { get; set; }
+        public string ConnectorName { get; set; }
+        public int ConnectorId { get; set; }
 
     }
 }
