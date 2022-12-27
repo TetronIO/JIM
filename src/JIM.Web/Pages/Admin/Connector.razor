@@ -1,0 +1,154 @@
+﻿@page "/admin/connected-systems/connectors/{Id:int}"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.Dto
+@using JIM.Models.Interfaces;
+@using JIM.Models.Staging.Dtos
+@using JIM.Models.Staging;
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Connector: @connector?.Name</PageTitle>
+<h1><span class="text-muted">Connector:</span> @connector?.Name</h1>
+
+@if (connector != null)
+{
+    <div class="box">
+        <h2>Details</h2>
+        <table>
+            <tr>
+                <td class="light pe-3">Description:</td>
+                <td><span class="font-monospace">@connector.Description</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Url:</td>
+                <td><span class="font-monospace"><a href="@connector.Url" target="_blank">@connector.Url</a></span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Built-In:</td>
+                <td><span class="font-monospace">@(connector.BuiltIn ? "Yes" : "No")</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Created:</td>
+                <td><span class="font-monospace">@connector.Created</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Last Updated:</td>
+                <td><span class="font-monospace">@(connector.LastUpdated.HasValue ? connector.LastUpdated : "-")</span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="box mt-3">
+        <h2>Capabilities</h2>
+        <table>
+            <tr>
+                <td class="light pe-3">Supports Full Import?</td>
+                <td><span class="font-monospace">@(connector.SupportsFullImport ? "Yes" : "No")</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Supports Delta-Import?</td>
+                <td><span class="font-monospace">@(connector.SupportsDeltaImport ? "Yes" : "No")</span></td>
+            </tr>
+            <tr>
+                <td class="light pe-3">Supports Export?</td>
+                <td><span class="font-monospace">@(connector.SupportsExport ? "Yes" : "No")</span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="box mt-3">
+        <h2>Files</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Filename</th>
+                    <th scope="col">Filesize (kb)</th>
+                    <th scope="col">Interfaces</th>
+                    <th scope="col">Version</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (connector.Files.Count > 0)
+                {
+                    foreach (var file in connector.Files)
+                    {
+                        <tr>
+                            <td>@file.Filename</td>
+                            <td>@(file.FileSizeBytes/1024)</td>
+                            <td>@GetFileInterfaces(file)</td>
+                            <td>@file.Version</td>
+                        </tr>
+                    }
+                }
+                else if (connector.Files.Count == 0 && connector.BuiltIn)
+                {
+                    <tr>
+                        <td colspan="4" class="light text-center">No files due to being a built-in connector</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="4" class="light text-center">No files. Upload some.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private JIM.Models.Staging.ConnectorDefinition? connector;
+
+    protected override async Task OnInitializedAsync()
+    {
+        connector = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(Id);
+        if (connector == null)
+        {
+            // connector definition not found, redirect to index page
+            NavManager.NavigateTo("../");
+            return;
+        }
+    }
+
+    private string GetFileInterfaces(ConnectorDefinitionFile file)
+    {
+        var interfaces = "";
+        if (file.ImplementsIConnector)
+            interfaces += nameof(IConnector) + ", ";
+
+        if (file.ImplementsICapabilities)
+            interfaces += nameof(IConnectorCapabilities) + ", ";
+
+        if (file.ImplementsISettings)
+            interfaces += nameof(IConnectorSettings) + ", ";
+
+        if (file.ImplementsIContainers)
+            interfaces += nameof(IConnectorContainers) + ", ";
+
+        if (file.ImplementsISchema)
+            interfaces += nameof(IConnectorSchema) + ", ";
+
+        if (file.ImplementsIExportUsingCalls)
+            interfaces += nameof(IConnectorExportUsingCalls) + ", ";
+
+        if (file.ImplementsIExportUsingFiles)
+            interfaces += nameof(IConnectorExportUsingFiles) + ", ";
+
+        if (file.ImplementsIImportUsingCalls)
+            interfaces += nameof(IConnectorImportUsingCalls) + ", ";
+
+        if (file.ImplementsIImportUsingFiles)
+            interfaces += nameof(IConnectorImportUsingFiles) + ", ";
+
+        if (interfaces != "")
+            interfaces = interfaces.Substring(0, interfaces.Length - 2);
+
+        return interfaces;
+    }
+}

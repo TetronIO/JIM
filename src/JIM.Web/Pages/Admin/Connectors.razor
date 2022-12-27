@@ -1,4 +1,4 @@
-﻿@page "/admin/connected-systems"
+﻿@page "/admin/connected-systems/connectors"
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.Core
@@ -6,47 +6,52 @@
 @using JIM.Models.Staging.Dtos
 @inject JimApplication Jim
 
-<PageTitle>Connected Systems</PageTitle>
-<h1>Connected Systems</h1>
+<PageTitle>Connectors</PageTitle>
+<h1>Connectors</h1>
 <p class="light">
-    JIM imports from and exports data to connected systems using connectors. 
-    @if(connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
-    {
-     <span>Configure at least one connected system to make JIM happy.</span>
-    }
+    JIM uses connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors. 
+    From here you can see which are installed and if any have updates that can be applied.
 </p>
 
 <div class="box mt-3">
+
+    <div class="btn-group btn-group-sm" role="group" aria-label="Navigation options">
+        <a class="btn btn-outline-secondary" href="/admin/connected-systems">Connected Systems</a>
+        <a class="btn btn-outline-secondary active" aria-current="page" href="/admin/connected-systems/connectors">Connectors</a>
+    </div>
+
     <table class="table mt-2">
         <thead>
             <tr>
                 <th scope="col">Name</th>
                 <th scope="col">Description</th>
-                <th scope="col">Objects</th>
-                <th scope="col">Connected Objects (%)</th>
-                <th scope="col">Pending Exports (%)</th>
-                <th scope="col">Connector</th>
+                <th scope="col">Built-in?</th>
+@*                <th scope="col">Created</th>
+                <th scope="col">Last Updated</th>*@
+                <th scope="col">Version(s)</th>
+                <th scope="col">In Use?</th>
             </tr>
         </thead>
         <tbody>
-            @if (connectedSystemHeaders != null && connectedSystemHeaders.Count > 0)
+            @if (headers != null && headers.Count > 0)
             {
-                foreach (var header in connectedSystemHeaders)
+                foreach (var header in headers)
                 {
                     <tr>
-                        <td><a href="/admin/connected-systems/@(header.Id)">@header.Name</a></td>
+                        <td><a href="/admin/connected-systems/connectors/@(header.Id)">@header.Name</a></td>
                         <td>@header.Description</td>
-                        <td>@header.ObjectCount.ToString("N0")</td>
-                        <td>@header.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.ConnectorsCount))</td>
-                        <td>@header.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.PendingExportObjectsCount))</td>
-                        <td>@header.ConnectorName</td>
+                        <td>@(header.BuiltIn ? "Yes" : "No")</td>
+@*                        <td>@header.Created</td>
+                        <td>@header.LastUpdated</td>*@
+                        <td>@(!string.IsNullOrEmpty(header.Versions) ? header.Versions :"-")</td>
+                        <td>@(header.InUse ? "Yes" : "No")</td>
                     </tr>
                 }
             }
             else
             {
                 <tr>
-                    <td colspan="6" class="light text-center">It's a bit of a vacuum here. No connected systems yet.</td>
+                    <td colspan="6" class="light text-center">No connectors to show.</td>
                 </tr>
             }
         </tbody>
@@ -54,19 +59,10 @@
 </div>
 
 @code {
-    private IList<ConnectedSystemHeader>? connectedSystemHeaders;
+    private IList<ConnectorDefinitionHeader>? headers;
 
     protected override async Task OnInitializedAsync()
     {
-        connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-    }
-
-    private string GetPercentageStatement(int bigNumber, int smallNumber)
-    {
-        if (bigNumber == 0 || smallNumber == 0)
-            return string.Empty;
-
-        var percentage = 100 / bigNumber * smallNumber;
-        return $"({percentage}%)";
+        headers = await Jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }
 }
