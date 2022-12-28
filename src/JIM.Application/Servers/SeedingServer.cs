@@ -617,6 +617,9 @@ namespace JIM.Application.Servers
             return template;
         }
 
+        /// <summary>
+        /// Prepare the built-in connectors for seeding.
+        /// </summary>
         private async Task<ConnectorDefinition?> PrepareConnectorDefinitionAsync(IConnector connector)
         {
             var connectorCapabilities = (IConnectorCapabilities)connector;
