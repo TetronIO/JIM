@@ -1,5 +1,4 @@
-﻿using JIM.Data;
-using JIM.Models.Logic;
+﻿using JIM.Models.Logic;
 using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
@@ -74,6 +73,17 @@ namespace JIM.Application.Servers
         public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id);
+        }
+
+        public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)
+        {
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        }
+
+        public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
+        {
+            connectedSystem.LastUpdated = DateTime.Now;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         }
         #endregion
 

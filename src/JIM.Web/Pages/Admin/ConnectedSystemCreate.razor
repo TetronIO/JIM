@@ -1,0 +1,68 @@
+﻿@page "/admin/connected-systems/create"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.Dto
+@using JIM.Models.Staging.Dtos
+@using JIM.Models.Staging;
+@using JIM.Web.Models;
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Create a Connected System</PageTitle>
+<h1>Create a Connected System</h1>
+<p class="light">
+    Provide some basic details here, and then we'll move on to configuring the Connected System.
+</p>
+
+<div class="box mt-3">
+    <EditForm Model="@model" OnValidSubmit="HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <div class="mb-3">
+            <label for="selectConnector" class="form-label">Connector</label>
+            <InputSelect id="selectConnector" class="form-select" aria-label="Connector options" @bind-Value="model.ConnectorId">
+                <option selected>Select a connector...</option>
+                @if (connectorDefinitionHeaders != null)
+                {
+                    foreach (var header in connectorDefinitionHeaders)
+                    {
+                        <option value="@header.Id">@header.Name</option>
+                    }        
+                }
+            </InputSelect>
+        </div>
+        <div class="mb-3">
+            <label for="inputName" class="form-label">Name</label>
+            <InputText class="form-control" id="inputName" @bind-Value="model.Name" />
+        </div>
+        <div class="mb-3">
+            <label for="textAreaDescription" class="form-label">Description</label>
+            <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="model.Description" />
+        </div>
+        <button type="submit" class="btn btn-primary">Submit</button>
+    </EditForm>
+</div>
+
+@code {
+    private IList<ConnectorDefinitionHeader>? connectorDefinitionHeaders;
+    private ConnectedSystemCreateViewModel model = new ConnectedSystemCreateViewModel();
+
+    protected override async Task OnInitializedAsync()
+    {
+        connectorDefinitionHeaders = await Jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var connectedSystem = new JIM.Models.Staging.ConnectedSystem
+            {
+                Name = model.Name,
+                Description = model.Description,
+                ConnectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId))
+            };
+
+        await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}/{Utilities.ConvertToUrlParam(connectedSystem.Name)}");
+    }
+}

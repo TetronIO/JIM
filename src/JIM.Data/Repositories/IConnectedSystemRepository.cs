@@ -8,6 +8,7 @@ namespace JIM.Data.Repositories
 {
     public interface IConnectedSystemRepository
     {
+        public Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem);       
         public Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
         public Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
         public Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
@@ -21,6 +22,8 @@ namespace JIM.Data.Repositories
         public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
         public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
 
+
+        public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
         public Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile);
         public Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
 

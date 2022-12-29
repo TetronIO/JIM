@@ -18,9 +18,16 @@
 
 <div class="box mt-3">
 
-    <div class="btn-group btn-group-sm" role="group" aria-label="Navigation options">
-        <a class="btn btn-outline-secondary active" aria-current="page" href="/admin/connected-systems">Connected Systems</a>
-        <a class="btn btn-outline-secondary" href="/admin/connected-systems/connectors">Connectors</a>
+    <div class="row">
+        <div class="col">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Navigation options">
+                <a class="btn btn-outline-secondary active" aria-current="page" href="/admin/connected-systems">Connected Systems</a>
+                <a class="btn btn-outline-secondary" href="/admin/connected-systems/connectors">Connectors</a>
+            </div>
+        </div>
+        <div class="col text-end">
+            <a class="btn btn-outline-primary btn-sm" href="/admin/connected-systems/create"><i class="bi bi-node-plus"></i> Create Connected System</a>
+        </div>
     </div>
 
     <table class="table mt-2">
@@ -40,7 +47,7 @@
                 foreach (var header in connectedSystemHeaders)
                 {
                     <tr>
-                        <td><a href="/admin/connected-systems/@(header.Id)">@header.Name</a></td>
+                        <td><a href="/admin/connected-systems/@(header.Id)/@(Utilities.ConvertToUrlParam(header.Name))">@header.Name</a></td>
                         <td>@header.Description</td>
                         <td>@header.ObjectCount.ToString("N0")</td>
                         <td>@header.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.ConnectorsCount))</td>
@@ -52,7 +59,7 @@
             else
             {
                 <tr>
-                    <td colspan="6" class="light text-center">No connected systems yet.</td>
+                    <td colspan="6" class="light text-center">No connected systems yet</td>
                 </tr>
             }
         </tbody>

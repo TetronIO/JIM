@@ -1,0 +1,84 @@
+﻿@page "/admin/connected-systems/{Id:int}/{Name}"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.Dto
+@using JIM.Models.Staging.Dtos
+@using JIM.Models.Staging;
+@using JIM.Web.Models;
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Connected System: @connectedSystem?.Name</PageTitle>
+<h1><span class="text-muted">Connected System:</span> @connectedSystem?.Name</h1>
+
+<p>Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</p>
+
+<ul class="nav nav-tabs mt-3">
+    <li class="nav-item">
+        <a class="nav-link active" aria-current="page" href="#">Details</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="#">Settings</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link disabled" href="#">Object Types</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link disabled" href="#">Attributes</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link disabled" href="#">Partitions &amp; Containers</a>
+    </li>
+</ul>
+<div class="box-no-top">
+
+    @if (connectedSystem != null)
+    {
+        <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidDetailsSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <div class="mb-3">
+                <label for="inputConnector" class="form-label">Connector</label>
+                <InputText class="form-control" id="inputConnector" @bind-Value="connectedSystem.ConnectorDefinition.Name" disabled />
+            </div>
+            <div class="mb-3">
+                <label for="inputName" class="form-label">Name</label>
+                <InputText class="form-control" id="inputName" @bind-Value="connectedSystem.Name" DisplayName="Name" />
+            </div>
+            <div class="mb-3">
+                <label for="textAreaDescription" class="form-label">Description</label>
+                <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="connectedSystem.Description" />
+            </div>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+        </EditForm>
+    }
+
+</div>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    [Parameter]
+    public string? Name { get; set; }
+
+    private JIM.Models.Staging.ConnectedSystem? connectedSystem;
+
+    protected override async Task OnInitializedAsync()
+    {
+        connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(Id);
+        if (connectedSystem == null)
+        {
+            // connected system not found, redirect to index page
+            NavManager.NavigateTo("../");
+            return;
+        }
+    }
+
+    private async Task HandleValidDetailsSubmit()
+    {
+        if (connectedSystem != null)
+            await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+    }
+}

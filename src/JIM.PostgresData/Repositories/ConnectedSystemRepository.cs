@@ -97,7 +97,18 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
         {
-            return await Repository.Database.ConnectedSystems.SingleOrDefaultAsync(x => x.Id == id);
+            return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).SingleOrDefaultAsync(x => x.Id == id);
+        }
+
+        public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)
+        {
+            Repository.Database.ConnectedSystems.Add(connectedSystem);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
+        {
+            await Repository.Database.SaveChangesAsync();
         }
         #endregion
 

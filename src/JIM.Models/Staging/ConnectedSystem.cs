@@ -1,10 +1,12 @@
 ﻿using JIM.Models.Transactional;
+using System.ComponentModel.DataAnnotations;
 
 namespace JIM.Models.Staging
 {
     public partial class ConnectedSystem
     {
         public int Id { get; set; }
+        [Required(ErrorMessage = "Please provide a name for the connected system")]
         public string Name { get; set; }
         public string? Description { get; set; }
         public DateTime Created { get; set; }

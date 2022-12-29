@@ -1,5 +1,4 @@
 ﻿using JIM.Models.Core;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace JIM.Web
@@ -11,11 +10,12 @@ namespace JIM.Web
         /// </summary>
         public static string ConvertToUrlParam(string textToConvert)
         {
-            return textToConvert.Replace(" ", "-");
+            return textToConvert.Replace(" ", "-").ToLower();
         }
 
         /// <summary>
         /// Converts a string taken from a Url parameter back to the plain text version.
+        /// Note: This does not change case from lower-case URL param to whatever it was originally.
         /// </summary>
         public static string ConvertFromUrlParam(string urlParam)
         {
