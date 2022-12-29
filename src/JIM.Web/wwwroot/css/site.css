@@ -254,6 +254,16 @@ a, .btn-link {
     border-radius: 8px;
 }
 
+.box-no-top {
+    padding: 15px;
+    background-color: #fff;
+    border: solid 1px rgb(222, 226, 230);
+    border-top: 0;
+    border-radius: 8px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
 .inline {display:inline-block}
 .badge-bigger { font-size: 0.85em; }
 .badge-outline {
