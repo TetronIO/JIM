@@ -16,19 +16,19 @@
 
 <ul class="nav nav-tabs mt-3">
     <li class="nav-item">
-        <a class="nav-link active" aria-current="page" href="#">Details</a>
+        <a class="nav-link @(showDetailsTab ? "active" : "")" aria-current="page" href="#">Details</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link" href="#">Settings</a>
+        <a class="nav-link @(showSettingsTab ? "active" : "")" href="#">Settings</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link disabled" href="#">Object Types</a>
+        <a class="nav-link @(showObjectTypesTab ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="#">Object Types</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link disabled" href="#">Attributes</a>
+        <a class="nav-link @(showAttributesTab ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="#">Attributes</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link disabled" href="#">Partitions &amp; Containers</a>
+        <a class="nav-link @(showContainersTab ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="#">Partitions &amp; Containers</a>
     </li>
 </ul>
 <div class="box-no-top">
@@ -50,11 +50,13 @@
                 <label for="textAreaDescription" class="form-label">Description</label>
                 <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="connectedSystem.Description" />
             </div>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
         </EditForm>
     }
 
 </div>
+
+<Toasts class="p-3" Messages="messages" Placement="ToastsPlacement.BottomCenter" AutoHide="true" />
 
 @code {
     [Parameter]
@@ -64,6 +66,14 @@
     public string? Name { get; set; }
 
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
+    private List<ToastMessage> messages = new List<ToastMessage>();
+    private bool detailsFormSubmitting = false;
+    private bool showDetailsTab = true;
+    private bool showSettingsTab = false;
+    private bool showObjectTypesTab = false;
+    private bool showAttributesTab = false;
+    private bool showContainersTab = false;
+    private bool settingsValidated = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -78,7 +88,24 @@
 
     private async Task HandleValidDetailsSubmit()
     {
-        if (connectedSystem != null)
-            await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        if (connectedSystem == null)
+        {
+            Console.WriteLine("HandleValidDetailsSubmit: connectedSystem was null");
+            return;
+        }
+        
+        detailsFormSubmitting = true;
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your changes have been saved."));
+        detailsFormSubmitting = false;
     }
+
+    private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => 
+        new ToastMessage
+        {
+            Type = toastType,
+            Title = title,
+            HelpText = $"{DateTime.Now}",
+            Message = message,
+        };
 }

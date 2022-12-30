@@ -1,3 +1,4 @@
+using BlazorBootstrap;
 using JIM.Application;
 using JIM.Data;
 using JIM.Models.Core;
@@ -80,6 +81,9 @@ try
 
     // now setup logging with the web framework
     builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
+
+    // blazor component helpers
+    builder.Services.AddBlazorBootstrap();
 
     var app = builder.Build();
 
