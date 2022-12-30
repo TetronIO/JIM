@@ -13,6 +13,6 @@ namespace JIM.Models.Interfaces
         /// </summary>
         /// <param name="settings">The connected system settings the user has specified. Recommend this is where you pass in the output file path.</param>
         /// <param name="pendingExports">The connected system object pending exports that need to written to the output file for the connected system to consume.</param>
-        public void Export(IList<ConnectedSystemSetting> settings, IList<PendingExport> pendingExports);
+        public void Export(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports);
     }
 }

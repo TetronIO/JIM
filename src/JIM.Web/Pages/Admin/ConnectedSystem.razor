@@ -16,42 +16,95 @@
 
 <ul class="nav nav-tabs mt-3">
     <li class="nav-item">
-        <a class="nav-link @(showDetailsTab ? "active" : "")" aria-current="page" href="#">Details</a>
+        <a class="nav-link @(activeTab == Tabs.Details ? "active" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Details">Details</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(showSettingsTab ? "active" : "")" href="#">Settings</a>
+        <a class="nav-link @(activeTab == Tabs.Settings ? "active" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Settings">Settings</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(showObjectTypesTab ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="#">Object Types</a>
+        <a class="nav-link @(activeTab == Tabs.ObjectTypes ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.ObjectTypes">Object Types</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(showAttributesTab ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="#">Attributes</a>
+        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Attributes">Attributes</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(showContainersTab ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="#">Partitions &amp; Containers</a>
+        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
     </li>
 </ul>
 <div class="box-no-top">
 
-    @if (connectedSystem != null)
+    @if (connectedSystem != null && settingCategories != null) 
     {
-        <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidDetailsSubmit">
-            <DataAnnotationsValidator />
-            <ValidationSummary />
-            <div class="mb-3">
-                <label for="inputConnector" class="form-label">Connector</label>
-                <InputText class="form-control" id="inputConnector" @bind-Value="connectedSystem.ConnectorDefinition.Name" disabled />
+        if (activeTab == Tabs.Details)
+        {
+            <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidDetailsSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="mb-3">
+                    <label for="inputConnector" class="form-label">Connector</label>
+                    <InputText class="form-control" id="inputConnector" @bind-Value="connectedSystem.ConnectorDefinition.Name" disabled />
+                </div>
+                <div class="mb-3">
+                    <label for="inputName" class="form-label">Name</label>
+                    <InputText class="form-control" id="inputName" @bind-Value="connectedSystem.Name" DisplayName="Name" />
+                </div>
+                <div class="mb-3">
+                    <label for="textAreaDescription" class="form-label">Description</label>
+                    <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="connectedSystem.Description" />
+                </div>
+                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
+            </EditForm>
+        }
+        else if (activeTab == Tabs.Settings)
+        {
+            <p>Configure the connector for your environment by supplying values for the settings below.</p>
+
+            <div class="accordion">
+                @for (var i = 0; i < settingCategories.Count; i++)
+                {
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="panelsStayOpen-heading@(i)">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#panelsStayOpen-collapse@(i)" aria-expanded="true" aria-controls="panelsStayOpen-collapse@(i)">
+                                @settingCategories[i]
+                            </button>
+                        </h2>
+                        <div id="panelsStayOpen-collapse@(i)" class="accordion-collapse collapse show" aria-labelledby="panelsStayOpen-heading@(i)">
+                            <div class="accordion-body">
+
+                                @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == @settingCategories[i]))
+                                {
+                                    @if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
+                                    {
+                                        <strong>@settingValue.Setting.Name</strong>
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
+                                    {
+                                        <hr />
+                                    }
+                                    else
+                                    {
+                                        <p>@settingValue.Setting.Name : @settingValue.Setting.Type</p>
+                                    }
+                                }
+
+                            </div>
+                        </div>
+                    </div>
+                }
             </div>
-            <div class="mb-3">
-                <label for="inputName" class="form-label">Name</label>
-                <InputText class="form-control" id="inputName" @bind-Value="connectedSystem.Name" DisplayName="Name" />
-            </div>
-            <div class="mb-3">
-                <label for="textAreaDescription" class="form-label">Description</label>
-                <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="connectedSystem.Description" />
-            </div>
-            <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
-        </EditForm>
+        }
+        else if (activeTab == Tabs.ObjectTypes)
+        {
+            <p>object types tab...</p>
+        }
+        else if (activeTab == Tabs.Attributes)
+        {
+            <p>attributes tab...</p>
+        }
+        else if (activeTab == Tabs.Containers)
+        {
+            <p>containers tab...</p>
+        }
     }
 
 </div>
@@ -68,12 +121,18 @@
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
     private List<ToastMessage> messages = new List<ToastMessage>();
     private bool detailsFormSubmitting = false;
-    private bool showDetailsTab = true;
-    private bool showSettingsTab = false;
-    private bool showObjectTypesTab = false;
-    private bool showAttributesTab = false;
-    private bool showContainersTab = false;
     private bool settingsValidated = false;
+    private Tabs activeTab = Tabs.Details;
+    private List<ConnectedSystemSettingCategory>? settingCategories;
+
+    private enum Tabs
+    {
+        Details,
+        Settings,
+        ObjectTypes,
+        Attributes,
+        Containers
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -84,6 +143,9 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        // get a list of the distinct setting categories in use, so we can render them in category blocks
+        settingCategories = connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
     }
 
     private async Task HandleValidDetailsSubmit()
@@ -100,12 +162,11 @@
         detailsFormSubmitting = false;
     }
 
-    private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => 
-        new ToastMessage
-        {
-            Type = toastType,
-            Title = title,
-            HelpText = $"{DateTime.Now}",
-            Message = message,
-        };
+    private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
+    {
+        Type = toastType,
+        Title = title,
+        HelpText = $"{DateTime.Now}",
+        Message = message,
+    };
 }

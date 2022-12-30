@@ -626,6 +626,10 @@ namespace JIM.Application.Servers
             if (connectorCapabilities == null)
                 throw new ArgumentException("connector does not implement IConnectorCapabilities");
 
+            var connectorSettings = (IConnectorSettings)connector;
+            if (connectorSettings == null)
+                throw new ArgumentException("connector does not implement IConnectorSettings");
+
             var connectorDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name);
             if (connectorDefinition != null)
                 return null;
@@ -641,6 +645,7 @@ namespace JIM.Application.Servers
                 SupportsExport = connectorCapabilities.SupportsExport
             };
 
+            Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
             return connectorDefinition;
         }
 

@@ -36,7 +36,10 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
         {
-            return await Repository.Database.ConnectorDefinitions.Include(x => x.Files).SingleOrDefaultAsync(cd => cd.Id == id);
+            return await Repository.Database.ConnectorDefinitions
+                .Include(cd => cd.Files)
+                .Include(cd => cd.Settings)
+                .SingleOrDefaultAsync(cd => cd.Id == id);
         }
 
         public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
@@ -97,7 +100,11 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
         {
-            return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).SingleOrDefaultAsync(x => x.Id == id);
+            return await Repository.Database.ConnectedSystems
+                .Include(cs => cs.ConnectorDefinition)
+                .Include(cs => cs.SettingValues)
+                .ThenInclude(sv => sv.Setting)
+                .SingleOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)

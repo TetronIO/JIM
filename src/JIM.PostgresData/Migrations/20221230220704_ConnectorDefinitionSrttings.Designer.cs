@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20221230220704_ConnectorDefinitionSrttings")]
+    partial class ConnectorDefinitionSrttings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1284,6 +1286,7 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text[]");
 
                     b.Property<string>("Name")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("Type")
@@ -1969,7 +1972,7 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemSettingValue", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
-                        .WithMany("SettingValues")
+                        .WithMany("Settings")
                         .HasForeignKey("ConnectedSystemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2179,7 +2182,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.Navigation("RunProfiles");
 
-                    b.Navigation("SettingValues");
+                    b.Navigation("Settings");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>

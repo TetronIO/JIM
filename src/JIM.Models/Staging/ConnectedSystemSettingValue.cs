@@ -1,23 +1,15 @@
-﻿using Microsoft.Extensions.Primitives;
-
-namespace JIM.Models.Staging
+﻿namespace JIM.Models.Staging
 {
     /// <summary>
-    /// Defines a setting that a Connector will ask an administrator to supply a value for. 
+    /// Defines an instance of a connector definition setting that JIM will ask an administrator to supply a value for when configuring a Connected System.
     /// </summary>
-    public class ConnectedSystemSetting
+    public class ConnectedSystemSettingValue
     {
         public int Id { get; set; }
         
         public ConnectedSystem ConnectedSystem { get; set; }
 
-        public string Name { get; set; }
-
-        public string Description { get; set; }
-
-        public ConnectedSystemSettingCategory Category { get; set; }
-
-        public ConnectedSystemSettingType Type { get; set; }
+        public ConnectorDefinitionSetting Setting { get; set; }
 
         public string? StringValue { get; set; }
         

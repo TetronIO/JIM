@@ -1,4 +1,5 @@
-﻿using JIM.Models.Logic;
+﻿using JIM.Models.Interfaces;
+using JIM.Models.Logic;
 using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
 using JIM.Models.Staging.Dtos;
@@ -77,6 +78,24 @@ namespace JIM.Application.Servers
 
         public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)
         {
+            if (connectedSystem == null) 
+                throw new ArgumentNullException(nameof(connectedSystem));
+            
+            if (connectedSystem.ConnectorDefinition == null)
+                throw new ArgumentException("connectedSystem.ConnectorDefinition is null!");
+
+            if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
+                throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
+
+            // create the connected system setting value objects from the connected system definition settings
+            foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
+            {
+                connectedSystem.SettingValues.Add(new ConnectedSystemSettingValue
+                {
+                    Setting = connectedSystemDefinitionSetting
+                });
+            }
+
             await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
         }
 
@@ -84,6 +103,26 @@ namespace JIM.Application.Servers
         {
             connectedSystem.LastUpdated = DateTime.Now;
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        }
+
+        /// <summary>
+        /// Use this when a connector is being parsed for persistence as a connector definition to create the connector definition settings from the connector instance.
+        /// </summary>
+        public void CopyConnectorSettingsToConnectorDefinition(IConnectorSettings connector, ConnectorDefinition connectorDefinition)
+        {
+            foreach (var connectorSetting in connector.GetSettings())
+            {
+                connectorDefinition.Settings.Add(new ConnectorDefinitionSetting
+                {
+                    Category = connectorSetting.Category,
+                    DefaultCheckboxValue = connectorSetting.DefaultCheckboxValue,
+                    DefaultStringValue = connectorSetting.DefaultStringValue,
+                    Description = connectorSetting.Description,
+                    DropDownValues = connectorSetting.DropDownValues,
+                    Name = connectorSetting.Name,
+                    Type = connectorSetting.Type
+                });
+            }
         }
         #endregion
 

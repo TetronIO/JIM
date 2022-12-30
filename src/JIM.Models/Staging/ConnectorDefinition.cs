@@ -13,11 +13,16 @@
         /// </summary>
         public bool BuiltIn { get; set; }
         public List<ConnectorDefinitionFile> Files { get; }
-        public List<ConnectedSystem>? ConnectedSystems { get; set; }
+        public List<ConnectorDefinitionSetting> Settings { get; set; }
+        /// <summary>
+        /// Backwards navigation link for EF.
+        /// </summary>
+        public List<ConnectedSystem>? ConnectedSystems { get; set; }        
 
         public ConnectorDefinition() 
         {
             Files = new List<ConnectorDefinitionFile>();
+            Settings = new List<ConnectorDefinitionSetting>();
             Created = DateTime.Now;
         }
 

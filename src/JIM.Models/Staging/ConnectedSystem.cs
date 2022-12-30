@@ -15,7 +15,7 @@ namespace JIM.Models.Staging
         public List<ConnectedSystemObject> Objects { get; set; }
         public List<PendingExport> PendingExports { get; set; }
         public ConnectorDefinition ConnectorDefinition { get; set; }
-        public List<ConnectedSystemSetting> Settings { get; set; }
+        public List<ConnectedSystemSettingValue> SettingValues { get; set; }
 
         /// <summary>
         /// If the Connector implements partitions, then at least one partition is required, and containers may reside under those, if implemented by the Connector.
@@ -34,7 +34,7 @@ namespace JIM.Models.Staging
         {
             RunProfiles = new List<ConnectedSystemRunProfile>();
             Objects = new List<ConnectedSystemObject>();
-            Settings = new List<ConnectedSystemSetting>();
+            SettingValues = new List<ConnectedSystemSettingValue>();
             Created = DateTime.Now;
         }
     }
