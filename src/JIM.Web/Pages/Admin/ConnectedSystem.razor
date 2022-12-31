@@ -121,6 +121,7 @@
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
     private List<ToastMessage> messages = new List<ToastMessage>();
     private bool detailsFormSubmitting = false;
+    private bool settingsFormSubmitting = false;
     private bool settingsValidated = false;
     private Tabs activeTab = Tabs.Details;
     private List<ConnectedSystemSettingCategory>? settingCategories;
@@ -152,14 +153,29 @@
     {
         if (connectedSystem == null)
         {
-            Console.WriteLine("HandleValidDetailsSubmit: connectedSystem was null");
+            Console.WriteLine($"{nameof(HandleValidDetailsSubmit)}: connectedSystem was null");
             return;
         }
         
         detailsFormSubmitting = true;
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
-        messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your changes have been saved."));
+        messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your details changes have been saved."));
         detailsFormSubmitting = false;
+    }
+
+    private async Task HandleValidSettingsSubmit()
+    {
+        if (connectedSystem == null)
+        {
+            Console.WriteLine($"{nameof(HandleValidSettingsSubmit)}: connectedSystem was null);
+            return;
+        }
+
+        settingsFormSubmitting = true;
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your setting changes have been saved."));
+        settingsFormSubmitting = false;
+        settingsValidated = true;
     }
 
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
