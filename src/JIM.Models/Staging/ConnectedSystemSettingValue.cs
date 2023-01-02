@@ -15,12 +15,12 @@
         
         public string? StringEncryptedValue { get; set; }
         
-        public bool? CheckboxValue { get; set; }
+        public bool CheckboxValue { get; set; }
 
         public bool IsValueValid()
         {
             // at least one value is required for the object to be valid
-            return StringValue != null || StringEncryptedValue != null || CheckboxValue != null;
+            return StringValue != null || StringEncryptedValue != null;
         }
 
     }

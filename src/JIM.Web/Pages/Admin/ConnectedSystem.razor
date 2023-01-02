@@ -59,39 +59,82 @@
         {
             <p>Configure the connector for your environment by supplying values for the settings below.</p>
 
-            <div class="accordion">
-                @for (var i = 0; i < settingCategories.Count; i++)
-                {
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="panelsStayOpen-heading@(i)">
-                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#panelsStayOpen-collapse@(i)" aria-expanded="true" aria-controls="panelsStayOpen-collapse@(i)">
-                                @settingCategories[i]
-                            </button>
-                        </h2>
-                        <div id="panelsStayOpen-collapse@(i)" class="accordion-collapse collapse show" aria-labelledby="panelsStayOpen-heading@(i)">
-                            <div class="accordion-body">
+            <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidSettingsSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="accordion mb-3">
+                    @for (var i = 0; i < settingCategories.Count; i++)
+                    {
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="panelsStayOpen-heading@(i)">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#panelsStayOpen-collapse@(i)" aria-expanded="true" aria-controls="panelsStayOpen-collapse@(i)">
+                                    @settingCategories[i]
+                                </button>
+                            </h2>
+                            <div id="panelsStayOpen-collapse@(i)" class="accordion-collapse collapse show" aria-labelledby="panelsStayOpen-heading@(i)">
+                                <div class="accordion-body">
 
-                                @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == @settingCategories[i]))
-                                {
-                                    @if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
+                                    @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == @settingCategories[i]))
                                     {
-                                        <strong>@settingValue.Setting.Name</strong>
+                                        var formElementName = $"setting-el-{i}";
+                                        @if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
+                                        {
+                                            <strong>@settingValue.Setting.Name</strong>
+                                        }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
+                                        {
+                                            <hr />
+                                        }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
+                                        {
+                                            <div class="mb-3">
+                                                <label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>
+                                                <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringValue" />
+                                            </div>
+                                        }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
+                                        {
+                                            <div class="mb-3">
+                                                <label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>
+                                                <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringEncryptedValue" type="password" />
+                                            </div>
+                                        }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
+                                        {
+                                            <div class="mb-3">
+                                                @*<label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>*@
+                                                <Switch @bind-Value="settingValue.CheckboxValue" id="@formElementName" Label="@settingValue.Setting.Name" />
+                                            </div>
+                                        }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
+                                        {
+                                            <div class="mb-3">
+                                                <label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>
+                                                <InputSelect @bind-Value="settingValue.StringValue" id="@formElementName">
+                                                    @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
+                                                    {
+                                                        <option value="@dropDownValue">@dropDownValue</option>
+                                                    }
+                                                </InputSelect>
+                                            </div>
+                                        }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
+                                        {
+                                            <p>Files not yet supported for settings.</p>
+                                        }
+                                        else
+                                        {
+                                            <p>Oops. Unknown setting type!</p>
+                                        }                                       
                                     }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
-                                    {
-                                        <hr />
-                                    }
-                                    else
-                                    {
-                                        <p>@settingValue.Setting.Name : @settingValue.Setting.Type</p>
-                                    }
-                                }
 
+                                </div>
                             </div>
                         </div>
-                    </div>
-                }
-            </div>
+                    }
+                </div>
+                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
+            </EditForm>            
         }
         else if (activeTab == Tabs.ObjectTypes)
         {
