@@ -33,7 +33,7 @@
 </ul>
 <div class="box-no-top">
 
-    @if (connectedSystem != null && settingCategories != null) 
+    @if (connectedSystem != null && settingCategories != null)
     {
         if (activeTab == Tabs.Details)
         {
@@ -87,35 +87,43 @@
                                         }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
                                         {
-                                            <div class="mb-3">
-                                                <label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>
-                                                <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringValue" />
+                                            <div class="row mb-3">
+                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name</label>
+                                                <div class="col-sm-10">
+                                                    <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringValue" />
+                                                </div>
                                             </div>
                                         }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                         {
-                                            <div class="mb-3">
-                                                <label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>
-                                                <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringEncryptedValue" type="password" />
+                                            <div class="row mb-3">
+                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name</label>
+                                                <div class="col-sm-10">
+                                                    <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringEncryptedValue" type="password" />
+                                                </div>
                                             </div>
                                         }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                         {
-                                            <div class="mb-3">
-                                                @*<label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>*@
-                                                <Switch @bind-Value="settingValue.CheckboxValue" id="@formElementName" Label="@settingValue.Setting.Name" />
+                                            <div class="row mb-3">
+                                                <label for="@formElementName" class="col-sm-2 col-form-label"></label>
+                                                <div class="col-sm-10">
+                                                    <Switch @bind-Value="settingValue.CheckboxValue" id="@formElementName" Label="@settingValue.Setting.Name" />
+                                                </div>
                                             </div>
                                         }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                         {
-                                            <div class="mb-3">
-                                                <label for="@formElementName" class="form-label">@settingValue.Setting.Name</label>
-                                                <InputSelect @bind-Value="settingValue.StringValue" id="@formElementName">
-                                                    @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
-                                                    {
-                                                        <option value="@dropDownValue">@dropDownValue</option>
-                                                    }
-                                                </InputSelect>
+                                            <div class="row mb-3">
+                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name</label>
+                                                <div class="col-sm-10">
+                                                    <InputSelect @bind-Value="settingValue.StringValue" id="@formElementName">
+                                                        @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
+                                                        {
+                                                            <option value="@dropDownValue">@dropDownValue</option>
+                                                        }
+                                                    </InputSelect>
+                                                </div>
                                             </div>
                                         }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
@@ -125,7 +133,7 @@
                                         else
                                         {
                                             <p>Oops. Unknown setting type!</p>
-                                        }                                       
+                                        }
                                     }
 
                                 </div>
@@ -134,7 +142,7 @@
                     }
                 </div>
                 <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
-            </EditForm>            
+            </EditForm>
         }
         else if (activeTab == Tabs.ObjectTypes)
         {
@@ -199,7 +207,7 @@
             Console.WriteLine($"{nameof(HandleValidDetailsSubmit)}: connectedSystem was null");
             return;
         }
-        
+
         detailsFormSubmitting = true;
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your details changes have been saved."));
@@ -222,10 +230,10 @@
     }
 
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
-    {
-        Type = toastType,
-        Title = title,
-        HelpText = $"{DateTime.Now}",
-        Message = message,
-    };
+        {
+            Type = toastType,
+            Title = title,
+            HelpText = $"{DateTime.Now}",
+            Message = message,
+        };
 }
