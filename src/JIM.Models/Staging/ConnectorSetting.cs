@@ -13,54 +13,6 @@
         public bool? DefaultCheckboxValue { get; set; }
         public string? DefaultStringValue { get; set; }
         public List<string>? DropDownValues { get; set; }
-
-        public ConnectorSetting() { }
-
-        public ConnectorSetting(ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
-        {
-            Category = category;
-            Type = type;
-        }
-
-        public ConnectorSetting(string name, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
-        {
-            Name = name;
-            Category = category;
-            Type = type;
-        }
-
-        public ConnectorSetting(string name, string? description, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
-        {
-            Name = name;
-            Description = description;
-            Category = category;
-            Type = type;
-        }
-
-        public ConnectorSetting(string name, string? description, string defaultStringValue, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
-        {
-            Name = name;
-            Description = description;
-            DefaultStringValue = defaultStringValue;
-            Category = category;
-            Type = type;
-        }
-
-        public ConnectorSetting(string name, bool defaultCheckboxValue, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
-        {
-            Name = name;
-            DefaultCheckboxValue = defaultCheckboxValue;
-            Category = category;
-            Type = type;
-        }
-
-        public ConnectorSetting(string name, string? description, bool defaultCheckboxValue, ConnectedSystemSettingCategory category, ConnectedSystemSettingType type)
-        {
-            Name = name;
-            Description = description;
-            DefaultCheckboxValue = defaultCheckboxValue;
-            Category = category;
-            Type = type;
-        }
+        public bool Required { get; set; }
     }
 }

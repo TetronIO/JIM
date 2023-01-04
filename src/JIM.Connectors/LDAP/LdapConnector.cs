@@ -35,24 +35,24 @@ namespace JIM.Connectors.LDAP
         {
             var settings = new List<ConnectorSetting>
             {
-                new ConnectorSetting("Active Directory", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
-                new ConnectorSetting(_settingForestName, "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectorSetting(_settingDomainName, "What's the name for the domain you want to synchronise with in the forest? i.e. lab", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectorSetting(_settingDomainController, "When connecting to an untrusted domain, supply a domain controller hostname or ip address here.", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectorSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
+                new ConnectorSetting { Name = "Active Directory", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
+                new ConnectorSetting { Name = _settingForestName, Description = "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingDomainName, Description = "What's the name for the domain you want to synchronise with in the forest? i.e. lab", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingDomainController, Description = "When connecting to an untrusted domain, supply a domain controller hostname or ip address here.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
-                new ConnectorSetting("LDAP", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
-                new ConnectorSetting(_settingHostname, "The host for the directory, i.e. addls-01.lab.tetron.io", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectorSetting(_settingPort, "The port for the directory, i.e. 636", "636", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectorSetting(_settingUseEncryptedConnection, true, ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.CheckBox),
-                new ConnectorSetting(ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Divider),
+                new ConnectorSetting { Name = "LDAP", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
+                new ConnectorSetting { Name = _settingHostname, Description = "The host for the directory, i.e. addls-01.lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingPort, Description = "The port for the directory, i.e. 636", DefaultStringValue = "636", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingUseEncryptedConnection, DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
-                new ConnectorSetting("Credentials", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.Heading),
-                new ConnectorSetting(_settingUsername, "What's the username for the service account you want to use to connect to the domain? i.e. svc-jimadc", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.String),
-                new ConnectorSetting(_settingPassword, "What's the password for the service account you want to use to connect to the domain?", ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingType.StringEncrypted),
+                new ConnectorSetting { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
+                new ConnectorSetting { Name = _settingUsername, Description = "What's the username for the service account you want to use to connect to the domain? i.e. svc-jimadc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingPassword, Description = "What's the password for the service account you want to use to connect to the domain?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
 
-                new ConnectorSetting("Container Provisioning", ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.Heading),
-                new ConnectorSetting(_settingCreateContainersAsNeeded, "i.e. create OUs as needed when provisioning new objects.", false, ConnectedSystemSettingCategory.General, ConnectedSystemSettingType.CheckBox)
+                new ConnectorSetting { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
+                new ConnectorSetting { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
             };
 
             return settings;
