@@ -120,7 +120,8 @@ namespace JIM.Application.Servers
                     Description = connectorSetting.Description,
                     DropDownValues = connectorSetting.DropDownValues,
                     Name = connectorSetting.Name,
-                    Type = connectorSetting.Type
+                    Type = connectorSetting.Type,
+                    Required = connectorSetting.Required
                 });
             }
         }

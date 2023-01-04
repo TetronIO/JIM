@@ -48,8 +48,8 @@ namespace JIM.Connectors.LDAP
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
                 new ConnectorSetting { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingUsername, Description = "What's the username for the service account you want to use to connect to the domain? i.e. svc-jimadc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingPassword, Description = "What's the password for the service account you want to use to connect to the domain?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
+                new ConnectorSetting { Name = _settingUsername, Description = "What's the username for the service account you want to use to connect to the domain? i.e. svc-jimadc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String, Required = true },
+                new ConnectorSetting { Name = _settingPassword, Description = "What's the password for the service account you want to use to connect to the domain?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted, Required = true },
 
                 new ConnectorSetting { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
                 new ConnectorSetting { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
