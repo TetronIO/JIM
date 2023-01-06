@@ -11,10 +11,10 @@ namespace JIM.Service
     // Needs to:
     // - Loop until asked to close down
     // - Check the database for manual synchronisation tasks
-    // - check the database for synchronisation schedule tasks
-    // - check the database for data generation template tasks
-    // - create tasks for the jobs, keeping track of cancellation tokens
-    // - execute the tasks
+    // - Check the database for scheduled synchronisation tasks
+    // - Check the database for data generation template tasks
+    // - Create tasks for the jobs, keeping track of cancellation tokens
+    // - Execute the tasks
     //
     // The sync tasks will need to perform:
     // - Import data from connected systems via connectors
