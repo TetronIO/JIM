@@ -76,41 +76,41 @@ namespace JIM.Connectors.LDAP
             if (usingActiveDirectory && usingLdap)
             {
                 // cannot use both AD and LDAP settings
-                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = "Please supply EITHER values for Active Directory OR LDAP, not both.", IsValid = false });
+                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = "Please supply EITHER values for Active Directory or LDAP, not both", IsValid = false });
             }
             else if (!usingActiveDirectory && !usingLdap)
             {
                 // neither AD, nor LDAP setting values have been provided
-                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = "Please supply values for Active Directory OR LDAP.", IsValid = false });
+                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = "Please supply values for the Active Directory or LDAP sections", IsValid = false });
             }
             else if (usingActiveDirectory)
             {
                 // make sure all required AD setting values have been supplied
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdForestName).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdForestName}.", IsValid = false });
+                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdForestName}", IsValid = false });
 
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainName).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdDomainName}.", IsValid = false });
+                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdDomainName}", IsValid = false });
             }
             else if (usingLdap)
             {
                 // make sure all required LDAP setting values have been supplied
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapHostname).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapHostname}.", IsValid = false });
+                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapHostname}", IsValid = false });
 
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapPort).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapPort}.", IsValid = false });
+                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapPort}", IsValid = false });
             }
 
             // general required setting value validation
             foreach (var requiredSettingValue in settingValues.Where(q => q.Setting.Required))
             {
                 if (requiredSettingValue.Setting.Type == ConnectedSystemSettingType.String && string.IsNullOrEmpty(requiredSettingValue.StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}.", IsValid = false, SettingValue = requiredSettingValue });
+                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
 
                 // keeping this separate for now, as encrypted strings are going to have to improve their implementation at some point
                 if (requiredSettingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted && string.IsNullOrEmpty(requiredSettingValue.StringEncryptedValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}.", IsValid = false, SettingValue = requiredSettingValue });
+                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
             }
 
             return response;

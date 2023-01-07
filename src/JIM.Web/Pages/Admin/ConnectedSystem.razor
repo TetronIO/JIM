@@ -31,7 +31,7 @@
         <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
     </li>
 </ul>
-<div class="box-no-top">
+<div class="box-no-top mb-3">
 
     @if (connectedSystem != null && settingCategories != null)
     {
@@ -59,8 +59,9 @@
         {
             <p>Configure the connector for your environment by supplying values for the settings below.</p>
 
-            <EditForm EditContext="editSettingsContext" OnValidSubmit="HandleValidSettingsSubmit">
-                <ValidationSummary />
+            <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidSettingsSubmit">
+                <JimValidator @ref="connectedSystemSettingsValidator" />
+                
                 <div class="accordion mb-3">
                     @for (var i = 0; i < settingCategories.Count; i++)
                     {
@@ -173,6 +174,7 @@
                     <strong class="text-danger"> *</strong> Required setting
                 </p>
 
+                <ValidationSummary />
                 <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
             </EditForm>
         }
@@ -210,8 +212,7 @@
     private List<ConnectedSystemSettingCategory>? settingCategories;
     private bool settingsFormSubmitting = false;
     private bool settingsValidated = false;
-    private EditContext? editSettingsContext;
-    private ValidationMessageStore? editSettingsMessageStore;
+    private JimValidator? connectedSystemSettingsValidator;
 
     // ui helper
     private enum Tabs
@@ -235,10 +236,6 @@
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
         settingCategories = connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
-
-        // wire up the custom validation for the settings
-        editSettingsContext = new(connectedSystem);
-        editSettingsContext.OnValidationRequested += HandleSettingsValidationRequested;
     }
 
     private async Task HandleValidDetailsSubmit()
@@ -263,6 +260,26 @@
             return;
         }
 
+        // validate the form
+        connectedSystemSettingsValidator?.ClearErrors();
+        var errors = new Dictionary<string, List<string>>();
+        foreach (var result in Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem))
+        {
+            if (result.IsValid)
+                continue;
+
+            if (result.SettingValue != null && result.SettingValue.Setting != null && result.SettingValue.Setting.Name != null && !string.IsNullOrEmpty(result.ErrorMessage))
+                errors?.Add(result.SettingValue.Setting.Name, new() { result.ErrorMessage });
+            else if (result.SettingValue == null && !string.IsNullOrEmpty(result.ErrorMessage))
+                errors?.Add("General", new() { result.ErrorMessage });
+        }
+
+        if (errors.Any())
+        {
+            connectedSystemSettingsValidator?.DisplayErrors(errors);
+            return;
+        }
+
         settingsFormSubmitting = true;
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your setting changes have been saved."));
@@ -270,35 +287,11 @@
         settingsValidated = true;
     }
 
-    private void HandleSettingsValidationRequested(object? sender, ValidationRequestedEventArgs args)
-    {
-        if (connectedSystem == null)
-            return;
-
-        editSettingsMessageStore?.Clear();
-        foreach (var result in Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem))
-        {
-            if (result.IsValid)
-                continue;
-
-            if (result.SettingValue != null && !string.IsNullOrEmpty(result.ErrorMessage))
-                editSettingsMessageStore?.Add(() => result.SettingValue, result.ErrorMessage);
-            else if (result.SettingValue == null && !string.IsNullOrEmpty(result.ErrorMessage))
-                editSettingsMessageStore?.Add(() => null, result.ErrorMessage);
-        }
-    }
-
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
-        {
-            Type = toastType,
-            Title = title,
-            HelpText = $"{DateTime.Now}",
-            Message = message,
-        };
-
-    public void Dispose()
     {
-        if (editSettingsContext is not null)
-            editSettingsContext.OnValidationRequested -= HandleSettingsValidationRequested;
-    }
+        Type = toastType,
+        Title = title,
+        HelpText = $"{DateTime.Now}",
+        Message = message,
+    };
 }
