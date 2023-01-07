@@ -59,8 +59,7 @@
         {
             <p>Configure the connector for your environment by supplying values for the settings below.</p>
 
-            <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidSettingsSubmit">
-                <DataAnnotationsValidator />
+            <EditForm EditContext="editSettingsContext" OnValidSubmit="HandleValidSettingsSubmit">
                 <ValidationSummary />
                 <div class="accordion mb-3">
                     @for (var i = 0; i < settingCategories.Count; i++)
@@ -88,18 +87,38 @@
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
                                         {
                                             <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name</label>
+                                                <label for="@formElementName" class="col-sm-2 col-form-label">
+                                                    @settingValue.Setting.Name
+                                                    @if (settingValue.Setting.Required) 
+                                                    {
+                                                        <strong class="text-danger"> *</strong>
+                                                    }:
+                                                </label>
                                                 <div class="col-sm-10">
                                                     <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringValue" />
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
+                                                        <div class="form-text">@settingValue.Setting.Description</div>
+                                                    }
                                                 </div>
                                             </div>
                                         }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                         {
                                             <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name</label>
+                                                <label for="@formElementName" class="col-sm-2 col-form-label">
+                                                    @settingValue.Setting.Name
+                                                    @if (settingValue.Setting.Required)
+                                                    {
+                                                        <strong class="text-danger"> *</strong>
+                                                    }:
+                                                </label>
                                                 <div class="col-sm-10">
                                                     <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringEncryptedValue" type="password" />
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
+                                                        <div class="form-text">@settingValue.Setting.Description</div>
+                                                    }
                                                 </div>
                                             </div>
                                         }
@@ -109,13 +128,17 @@
                                                 <label for="@formElementName" class="col-sm-2 col-form-label"></label>
                                                 <div class="col-sm-10">
                                                     <Switch @bind-Value="settingValue.CheckboxValue" id="@formElementName" Label="@settingValue.Setting.Name" />
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
+                                                        <div class="form-text">@settingValue.Setting.Description</div>
+                                                    }
                                                 </div>
                                             </div>
                                         }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                         {
                                             <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name</label>
+                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name:</label>
                                                 <div class="col-sm-10">
                                                     <InputSelect @bind-Value="settingValue.StringValue" id="@formElementName">
                                                         @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
@@ -123,6 +146,10 @@
                                                             <option value="@dropDownValue">@dropDownValue</option>
                                                         }
                                                     </InputSelect>
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
+                                                        <div class="form-text">@settingValue.Setting.Description</div>
+                                                    }
                                                 </div>
                                             </div>
                                         }
@@ -141,6 +168,11 @@
                         </div>
                     }
                 </div>
+
+                <p class="small text-secondary">
+                    <strong class="text-danger"> *</strong> Required setting
+                </p>
+
                 <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
             </EditForm>
         }
@@ -171,12 +203,17 @@
 
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
     private List<ToastMessage> messages = new List<ToastMessage>();
-    private bool detailsFormSubmitting = false;
+    private bool detailsFormSubmitting = false;        
+    private Tabs activeTab = Tabs.Details;
+
+    // settings stuff
+    private List<ConnectedSystemSettingCategory>? settingCategories;
     private bool settingsFormSubmitting = false;
     private bool settingsValidated = false;
-    private Tabs activeTab = Tabs.Details;
-    private List<ConnectedSystemSettingCategory>? settingCategories;
+    private EditContext? editSettingsContext;
+    private ValidationMessageStore? editSettingsMessageStore;
 
+    // ui helper
     private enum Tabs
     {
         Details,
@@ -198,6 +235,10 @@
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
         settingCategories = connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
+
+        // wire up the custom validation for the settings
+        editSettingsContext = new(connectedSystem);
+        editSettingsContext.OnValidationRequested += HandleSettingsValidationRequested;
     }
 
     private async Task HandleValidDetailsSubmit()
@@ -229,6 +270,24 @@
         settingsValidated = true;
     }
 
+    private void HandleSettingsValidationRequested(object? sender, ValidationRequestedEventArgs args)
+    {
+        if (connectedSystem == null)
+            return;
+
+        editSettingsMessageStore?.Clear();
+        foreach (var result in Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem))
+        {
+            if (result.IsValid)
+                continue;
+
+            if (result.SettingValue != null && !string.IsNullOrEmpty(result.ErrorMessage))
+                editSettingsMessageStore?.Add(() => result.SettingValue, result.ErrorMessage);
+            else if (result.SettingValue == null && !string.IsNullOrEmpty(result.ErrorMessage))
+                editSettingsMessageStore?.Add(() => null, result.ErrorMessage);
+        }
+    }
+
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
         {
             Type = toastType,
@@ -236,4 +295,10 @@
             HelpText = $"{DateTime.Now}",
             Message = message,
         };
+
+    public void Dispose()
+    {
+        if (editSettingsContext is not null)
+            editSettingsContext.OnValidationRequested -= HandleSettingsValidationRequested;
+    }
 }

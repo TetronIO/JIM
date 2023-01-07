@@ -1,4 +1,5 @@
-﻿using JIM.Models.Interfaces;
+﻿using JIM.Connectors.LDAP;
+using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Dtos;
 using JIM.Models.Staging;
@@ -108,7 +109,9 @@ namespace JIM.Application.Servers
         /// <summary>
         /// Use this when a connector is being parsed for persistence as a connector definition to create the connector definition settings from the connector instance.
         /// </summary>
+        #pragma warning disable CA1822 // Mark members as static
         public void CopyConnectorSettingsToConnectorDefinition(IConnectorSettings connector, ConnectorDefinition connectorDefinition)
+        #pragma warning restore CA1822 // Mark members as static
         {
             foreach (var connectorSetting in connector.GetSettings())
             {
@@ -124,6 +127,31 @@ namespace JIM.Application.Servers
                     Required = connectorSetting.Required
                 });
             }
+        }
+
+        #pragma warning disable CA1822 // Mark members as static
+        public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
+        #pragma warning restore CA1822 // Mark members as static
+        {
+            if (connectedSystem == null)
+                throw new ArgumentNullException(nameof(connectedSystem));
+
+            if (connectedSystem.ConnectorDefinition == null)
+                throw new ArgumentException(nameof(connectedSystem), "The supplied ConnectedSystem doesn't have a valid ConnectorDefinition.");
+
+            if (connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0)
+                throw new ArgumentException(nameof(connectedSystem), "The supplied ConnectedSystem doesn't have any valid SettingValues.");
+
+            // work out what connector we need to instantiate, so that we can use its internal validation method
+            // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
+            // especially when we need to support uploaded connectors, not just built-in ones
+
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
+            {
+                return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues);
+            }
+
+            throw new NotImplementedException("Support for that connector definition has not been implemented.");
         }
         #endregion
 
