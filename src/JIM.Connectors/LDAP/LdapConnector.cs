@@ -173,7 +173,7 @@ namespace JIM.Connectors.LDAP
                 username == null || string.IsNullOrEmpty(username.StringValue) || 
                 password == null || string.IsNullOrEmpty(password.StringEncryptedValue))
                 return new ConnectorSettingValueValidationResult {
-                    ErrorMessage = "Cannot test connectivity due to missing forest, username and/or password values"
+                    ErrorMessage = "Unable to test connectivity due to missing forest, username and/or password values"
                 };
 
             try
@@ -184,7 +184,7 @@ namespace JIM.Connectors.LDAP
             {
                 return new ConnectorSettingValueValidationResult
                 {
-                    ErrorMessage = $"Could not connect to {forest.StringValue}. Message: {ex.Message}",
+                    ErrorMessage = $"Unable to connect to {forest.StringValue}. Message: {ex.Message}",
                     Exception = ex
                 };
             }
@@ -203,7 +203,7 @@ namespace JIM.Connectors.LDAP
                 password == null || string.IsNullOrEmpty(password.StringEncryptedValue))
                 return new ConnectorSettingValueValidationResult
                 {
-                    ErrorMessage = "Cannot test connectivity due to missing hostname, port, username and/or password values"
+                    ErrorMessage = "Unable to test connectivity due to missing hostname, port, username and/or password values"
                 };
 
             try
@@ -214,7 +214,7 @@ namespace JIM.Connectors.LDAP
             {
                 return new ConnectorSettingValueValidationResult
                 {
-                    ErrorMessage = $"Could not connect to {hostname.StringValue}:{port.StringValue}. Message: {ex.Message}",
+                    ErrorMessage = $"Unable to connect to {hostname.StringValue}:{port.StringValue}. Message: {ex.Message}",
                     Exception = ex
                 };
             }

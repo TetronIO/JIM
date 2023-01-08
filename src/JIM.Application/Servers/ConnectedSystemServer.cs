@@ -91,10 +91,18 @@ namespace JIM.Application.Servers
             // create the connected system setting value objects from the connected system definition settings
             foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
             {
-                connectedSystem.SettingValues.Add(new ConnectedSystemSettingValue
+                var settingValue = new ConnectedSystemSettingValue
                 {
                     Setting = connectedSystemDefinitionSetting
-                });
+                };
+
+                if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String && !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
+                    settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue;
+
+                if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.CheckBox && connectedSystemDefinitionSetting.DefaultCheckboxValue != null)
+                    settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
+
+                connectedSystem.SettingValues.Add(settingValue);
             }
 
             await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
