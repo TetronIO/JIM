@@ -106,7 +106,8 @@ namespace JIM.Application.Servers
                 throw new ArgumentNullException(nameof(connectedSystem));
 
             // are the settings valid?
-            connectedSystem.SettingValuesValid = !ValidateConnectedSystemSettings(connectedSystem).Any(q => q.IsValid == false);
+            var validationResults = await ValidateConnectedSystemSettingsAsync(connectedSystem);
+            connectedSystem.SettingValuesValid = !validationResults.Any(q => q.IsValid == false);
 
             connectedSystem.LastUpdated = DateTime.Now;
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -136,7 +137,7 @@ namespace JIM.Application.Servers
         }
 
         #pragma warning disable CA1822 // Mark members as static
-        public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
+        public async Task<IList<ConnectorSettingValueValidationResult>> ValidateConnectedSystemSettingsAsync(ConnectedSystem connectedSystem)
         #pragma warning restore CA1822 // Mark members as static
         {
             if (connectedSystem == null)
@@ -154,7 +155,7 @@ namespace JIM.Application.Servers
 
             if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
             {
-                return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues);
+                return await new LdapConnector().ValidateSettingValuesAsync(connectedSystem.SettingValues);
             }
 
             throw new NotImplementedException("Support for that connector definition has not been implemented.");

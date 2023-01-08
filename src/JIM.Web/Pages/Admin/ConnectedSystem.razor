@@ -262,15 +262,16 @@
         // validate the form
         connectedSystemSettingsValidator?.ClearErrors();
         var errors = new Dictionary<string, List<string>>();
-        foreach (var result in Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem))
+        var results = await Jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
+        for (var i = 0; i < results.Count; i++)
         {
-            if (result.IsValid)
+            if (results[i].IsValid)
                 continue;
 
-            if (result.SettingValue != null && result.SettingValue.Setting != null && result.SettingValue.Setting.Name != null && !string.IsNullOrEmpty(result.ErrorMessage))
-                errors?.Add(result.SettingValue.Setting.Name, new() { result.ErrorMessage });
-            else if (result.SettingValue == null && !string.IsNullOrEmpty(result.ErrorMessage))
-                errors?.Add("General", new() { result.ErrorMessage });
+            if (results[i].SettingValue != null && results[i].SettingValue.Setting != null && results[i].SettingValue.Setting.Name != null && !string.IsNullOrEmpty(results[i].ErrorMessage))
+                errors?.Add(results[i].SettingValue.Setting.Name, new() { results[i].ErrorMessage });
+            else if (results[i].SettingValue == null && !string.IsNullOrEmpty(results[i].ErrorMessage))
+                errors?.Add($"General issue {i}", new() { results[i].ErrorMessage });
         }
 
         if (errors.Any())

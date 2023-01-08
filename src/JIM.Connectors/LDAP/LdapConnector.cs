@@ -33,7 +33,7 @@ namespace JIM.Connectors.LDAP
 
         public IList<ConnectorSetting> GetSettings()
         {
-            var settings = new List<ConnectorSetting>
+            return new List<ConnectorSetting>
             {
                 new ConnectorSetting { Name = "Active Directory", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
                 new ConnectorSetting { Name = _settingAdForestName, Description = "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
@@ -54,14 +54,12 @@ namespace JIM.Connectors.LDAP
                 new ConnectorSetting { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
                 new ConnectorSetting { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
             };
-
-            return settings;
         }
 
         /// <summary>
         /// Validates LdapConnector setting values using custom business logic.
         /// </summary>
-        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSettingValue> settingValues)
+        public async Task<IList<ConnectorSettingValueValidationResult>> ValidateSettingValuesAsync(IList<ConnectedSystemSettingValue> settingValues)
         {
             var response = new List<ConnectorSettingValueValidationResult>();
 
@@ -92,7 +90,10 @@ namespace JIM.Connectors.LDAP
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainName).StringValue))
                     response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdDomainName}", IsValid = false });
 
-                //todo: validate connectivity
+                // validate that we can connect to AD with the supplied setting credentials
+                var connectivityTestResult = await TestActiveDirectoryConnectivityAsync(settingValues);
+                if (!connectivityTestResult.IsValid)
+                    response.Add(connectivityTestResult);
             }
             else if (usingLdap)
             {
@@ -103,7 +104,10 @@ namespace JIM.Connectors.LDAP
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapPort).StringValue))
                     response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapPort}", IsValid = false });
 
-                //todo: validate connectivity
+                // validate that we can connect to the LDAP directory service with the supplied setting credentials
+                var connectivityTestResult = await TestLdapConnectionAsync(settingValues);
+                if (!connectivityTestResult.IsValid)
+                    response.Add(connectivityTestResult);
             }
 
             // general required setting value validation
@@ -155,6 +159,65 @@ namespace JIM.Connectors.LDAP
         public void CloseImportConnection()
         {
             throw new NotImplementedException();
+        }
+        #endregion
+
+        #region private methods
+        private async Task<ConnectorSettingValueValidationResult> TestActiveDirectoryConnectivityAsync(IList<ConnectedSystemSettingValue> settingValues)
+        {
+            var forest = settingValues.SingleOrDefault(q => q.Setting.Name == _settingAdForestName);
+            var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
+            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
+
+            if (forest == null || string.IsNullOrEmpty(forest.StringValue) || 
+                username == null || string.IsNullOrEmpty(username.StringValue) || 
+                password == null || string.IsNullOrEmpty(password.StringEncryptedValue))
+                return new ConnectorSettingValueValidationResult {
+                    ErrorMessage = "Cannot test connectivity due to missing forest, username and/or password values"
+                };
+
+            try
+            {
+                throw new NotImplementedException();
+            }
+            catch (Exception ex)
+            {
+                return new ConnectorSettingValueValidationResult
+                {
+                    ErrorMessage = $"Could not connect to {forest.StringValue}. Message: {ex.Message}",
+                    Exception = ex
+                };
+            }
+        }
+
+        private async Task<ConnectorSettingValueValidationResult> TestLdapConnectionAsync(IList<ConnectedSystemSettingValue> settingValues)
+        {
+            var hostname = settingValues.SingleOrDefault(q => q.Setting.Name == _settingLdapHostname);
+            var port = settingValues.SingleOrDefault(q => q.Setting.Name == _settingLdapPort);
+            var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
+            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
+
+            if (hostname == null || string.IsNullOrEmpty(hostname.StringValue) ||
+                port == null || string.IsNullOrEmpty(port.StringValue) ||
+                username == null || string.IsNullOrEmpty(username.StringValue) ||
+                password == null || string.IsNullOrEmpty(password.StringEncryptedValue))
+                return new ConnectorSettingValueValidationResult
+                {
+                    ErrorMessage = "Cannot test connectivity due to missing hostname, port, username and/or password values"
+                };
+
+            try
+            {
+                throw new NotImplementedException();
+            }
+            catch (Exception ex)
+            {
+                return new ConnectorSettingValueValidationResult
+                {
+                    ErrorMessage = $"Could not connect to {hostname.StringValue}:{port.StringValue}. Message: {ex.Message}",
+                    Exception = ex
+                };
+            }
         }
         #endregion
     }
