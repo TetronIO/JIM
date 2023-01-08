@@ -28,7 +28,7 @@
         <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Attributes">Attributes</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
+        <a class="nav-link @(activeTab == Tabs.Containers ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
     </li>
 </ul>
 <div class="box-no-top mb-3">
