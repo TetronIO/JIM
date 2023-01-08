@@ -22,13 +22,13 @@
         <a class="nav-link @(activeTab == Tabs.Settings ? "active" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Settings">Settings</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.ObjectTypes ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.ObjectTypes">Object Types</a>
+        <a class="nav-link @(activeTab == Tabs.ObjectTypes ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.ObjectTypes">Object Types</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Attributes">Attributes</a>
+        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Attributes">Attributes</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(!settingsValidated ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
+        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
     </li>
 </ul>
 <div class="box-no-top mb-3">
@@ -211,7 +211,6 @@
     // settings stuff
     private List<ConnectedSystemSettingCategory>? settingCategories;
     private bool settingsFormSubmitting = false;
-    private bool settingsValidated = false;
     private JimValidator? connectedSystemSettingsValidator;
 
     // ui helper
@@ -284,7 +283,6 @@
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your setting changes have been saved."));
         settingsFormSubmitting = false;
-        settingsValidated = true;
     }
 
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage

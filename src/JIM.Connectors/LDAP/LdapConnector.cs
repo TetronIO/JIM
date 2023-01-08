@@ -91,6 +91,8 @@ namespace JIM.Connectors.LDAP
 
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainName).StringValue))
                     response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdDomainName}", IsValid = false });
+
+                //todo: validate connectivity
             }
             else if (usingLdap)
             {
@@ -100,6 +102,8 @@ namespace JIM.Connectors.LDAP
 
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapPort).StringValue))
                     response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapPort}", IsValid = false });
+
+                //todo: validate connectivity
             }
 
             // general required setting value validation

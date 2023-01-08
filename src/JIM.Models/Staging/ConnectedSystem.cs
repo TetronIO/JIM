@@ -18,6 +18,13 @@ namespace JIM.Models.Staging
         public List<ConnectedSystemSettingValue> SettingValues { get; set; }
 
         /// <summary>
+        /// We track whether or not setting values have been validated by the Connector so that we can prevent the user from navigating to configuration phases that are dependent upon valid setting values.
+        /// When a connected system is created, this will be false as there are no values supplied yet.
+        /// When any setting values are changed by the usre, this will be toggled to false until the settings are validated
+        /// </summary>
+        public bool SettingValuesValid { get; set; }
+
+        /// <summary>
         /// If the Connector implements partitions, then at least one partition is required, and containers may reside under those, if implemented by the Connector.
         /// Note: Connectors don't have to support partitions, or containers.
         /// </summary>

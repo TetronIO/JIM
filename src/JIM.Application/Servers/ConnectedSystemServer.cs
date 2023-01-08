@@ -102,6 +102,12 @@ namespace JIM.Application.Servers
 
         public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
         {
+            if (connectedSystem == null)
+                throw new ArgumentNullException(nameof(connectedSystem));
+
+            // are the settings valid?
+            connectedSystem.SettingValuesValid = !ValidateConnectedSystemSettings(connectedSystem).Any(q => q.IsValid == false);
+
             connectedSystem.LastUpdated = DateTime.Now;
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         }

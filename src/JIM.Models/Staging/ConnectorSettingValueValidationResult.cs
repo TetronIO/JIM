@@ -8,7 +8,14 @@
     public class ConnectorSettingValueValidationResult
     {
         public ConnectedSystemSettingValue? SettingValue { get; set; }
+        
         public bool IsValid { get; set; }
+
         public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// If an unhandled exception was encountered whilst validating the setting values, it can be made available here.
+        /// </summary>
+        public Exception? Exception { get; set; }
     }
 }
