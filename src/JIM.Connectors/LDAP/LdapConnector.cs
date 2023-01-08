@@ -71,7 +71,7 @@ namespace JIM.Connectors.LDAP
 
             var usingLdap = !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapHostname).StringValue) ||
                             !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapPort).StringValue) ||
-                            !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapUseEncryptedConnection).StringValue);
+                            settingValues.Single(q => q.Setting.Name == _settingLdapUseEncryptedConnection).CheckboxValue;
 
             if (usingActiveDirectory && usingLdap)
             {
