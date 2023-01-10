@@ -5,6 +5,11 @@ WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libldap-2.4-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
 COPY ["src/JIM.Web/JIM.Web.csproj", "src/JIM.Web/"]

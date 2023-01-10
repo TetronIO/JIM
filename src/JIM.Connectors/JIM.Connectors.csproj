@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\JIM.Models\JIM.Models.csproj" />
   </ItemGroup>
 
