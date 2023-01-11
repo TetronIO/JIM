@@ -24,7 +24,7 @@ namespace JIM.Connectors.LDAP
         #region IConnectorSettings members
         // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
         private readonly string _settingAdForestName = "Forest Name";
-        private readonly string _settingAdDomainName = "Domain Name";
+        //private readonly string _settingAdDomainName = "Domain Name";
         private readonly string _settingAdDomainController = "Domain Controller";
         private readonly string _settingLdapHostname = "Hostname";
         private readonly string _settingLdapPort = "Port";
@@ -39,7 +39,7 @@ namespace JIM.Connectors.LDAP
             {
                 new ConnectorSetting { Name = "Active Directory", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
                 new ConnectorSetting { Name = _settingAdForestName, Description = "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingAdDomainName, Description = "What's the name (aka NETBIOS name) for the domain you want to synchronise with in the forest? i.e. lab", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                //new ConnectorSetting { Name = _settingAdDomainName, Description = "What's the name (aka NETBIOS name) for the domain you want to synchronise with in the forest? i.e. lab", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new ConnectorSetting { Name = _settingAdDomainController, Description = "When connecting to an untrusted domain, supply a domain controller hostname or ip address here.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
@@ -68,7 +68,7 @@ namespace JIM.Connectors.LDAP
             var response = new List<ConnectorSettingValueValidationResult>();
 
             var usingActiveDirectory = !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdForestName).StringValue) ||
-                                       !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainName).StringValue) ||
+                                       //!string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainName).StringValue) ||
                                        !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainController).StringValue);
 
             var usingLdap = !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapHostname).StringValue) ||
@@ -91,8 +91,8 @@ namespace JIM.Connectors.LDAP
                 if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdForestName).StringValue))
                     response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdForestName}", IsValid = false });
 
-                if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainName).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdDomainName}", IsValid = false });
+                //if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainName).StringValue))
+                //    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdDomainName}", IsValid = false });
 
                 // validate that we can connect to AD with the supplied setting credentials
                 var connectivityTestResult = TestActiveDirectoryConnectivity(settingValues);
@@ -192,6 +192,8 @@ namespace JIM.Connectors.LDAP
 
                 var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
                 using var connection = new LdapConnection(identifier, credential);
+                connection.AuthType = AuthType.Basic;
+                connection.SessionOptions.ProtocolVersion = 3;
                 connection.Bind();
 
                 return new ConnectorSettingValueValidationResult
