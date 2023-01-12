@@ -96,9 +96,6 @@ namespace JIM.Application.Servers
                     Setting = connectedSystemDefinitionSetting
                 };
 
-                if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String && !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
-                    settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue;
-
                 if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.CheckBox && connectedSystemDefinitionSetting.DefaultCheckboxValue != null)
                     settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
 
