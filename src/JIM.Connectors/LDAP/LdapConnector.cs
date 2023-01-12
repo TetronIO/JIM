@@ -43,12 +43,13 @@ namespace JIM.Connectors.LDAP
 
                 new ConnectorSetting { Name = "LDAP", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
                 new ConnectorSetting { Name = _settingLdapHostname, Description = "The hostname to connect to the directory service with, i.e. addls-01.lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingLdapPort, Description = "The port to connect to the directory service on, i.e. 636", DefaultStringValue = "636", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingLdapUseEncryptedConnection, DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                new ConnectorSetting { Name = _settingLdapPort, Description = "The port to connect to the directory service on, i.e. 389", DefaultStringValue = "389", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                //new ConnectorSetting { Name = _settingLdapUseEncryptedConnection, DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                new ConnectorSetting { Name = _settingLdapUseEncryptedConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
                 new ConnectorSetting { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingUsername, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. svc-jimadc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String, Required = true },
+                new ConnectorSetting { Name = _settingUsername, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String, Required = true },
                 new ConnectorSetting { Name = _settingPassword, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted, Required = true },
 
                 new ConnectorSetting { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
