@@ -37,8 +37,8 @@ namespace JIM.Connectors.LDAP
             return new List<ConnectorSetting>
             {
                 new ConnectorSetting { Name = "Active Directory", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingAdForestName, Description = "What's the fully-qualified domain name of the Forest? i.e. lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingAdDomainController, Description = "When connecting to an untrusted domain, supply a domain controller hostname or ip address here.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingAdForestName, Description = "What's the fully-qualified name of the Forest? i.e. lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingAdDomainController, Description = "Supply a domain controller hostname or ip address here.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
                 new ConnectorSetting { Name = "LDAP", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
