@@ -122,7 +122,7 @@ namespace JIM.Connectors.LDAP
         }
         #endregion
 
-        #region ISchema members
+        #region IConnectorSchema members
         public async Task<ConnectorSchema> GetSchemaAsync()
         {
             throw new NotImplementedException();
