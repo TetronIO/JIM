@@ -22,10 +22,7 @@
         <a class="nav-link @(activeTab == Tabs.Settings ? "active" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Settings">Settings</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.ObjectTypes ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.ObjectTypes">Object Types</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Attributes ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Attributes">Attributes</a>
+        <a class="nav-link @(activeTab == Tabs.Schema ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Schema">Schema</a>
     </li>
     <li class="nav-item">
         <a class="nav-link @(activeTab == Tabs.Containers ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
@@ -178,13 +175,9 @@
                 <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
             </EditForm>
         }
-        else if (activeTab == Tabs.ObjectTypes)
+        else if (activeTab == Tabs.Schema)
         {
-            <p>object types tab...</p>
-        }
-        else if (activeTab == Tabs.Attributes)
-        {
-            <p>attributes tab...</p>
+            <p>schema tab...</p>
         }
         else if (activeTab == Tabs.Containers)
         {
@@ -218,8 +211,7 @@
     {
         Details,
         Settings,
-        ObjectTypes,
-        Attributes,
+        Schema,
         Containers
     }
 

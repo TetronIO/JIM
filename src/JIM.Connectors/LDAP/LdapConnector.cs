@@ -5,7 +5,7 @@ using System.Net;
 
 namespace JIM.Connectors.LDAP
 {
-    public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorPartitions, IConnectorContainers, IConnectorImportUsingCalls
+    public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorContainers, IConnectorImportUsingCalls
     {
         #region IConnector members
         public string Name => Constants.LdapConnectorName;
@@ -38,7 +38,7 @@ namespace JIM.Connectors.LDAP
             {
                 new ConnectorSetting { Name = "Active Directory", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
                 new ConnectorSetting { Name = _settingAdForestName, Description = "What's the fully-qualified name of the Forest? i.e. lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingAdDomainController, Description = "Supply a domain controller hostname or ip address here.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingAdDomainController, Description = "Supply a domain controller hostname or IP address here. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
                 new ConnectorSetting { Name = "LDAP", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
@@ -122,6 +122,13 @@ namespace JIM.Connectors.LDAP
         }
         #endregion
 
+        #region ISchema members
+        public async Task<ConnectorSchema> GetSchemaAsync()
+        {
+            throw new NotImplementedException();
+        }
+        #endregion
+
         #region IConnectorPartitions members
         public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSettingValue> settings)
         {
@@ -184,8 +191,7 @@ namespace JIM.Connectors.LDAP
                     identifier = new LdapDirectoryIdentifier(forest.StringValue);
 
                 var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
-                using var connection = new LdapConnection(identifier, credential);
-                connection.AuthType = AuthType.Basic;
+                using var connection = new LdapConnection(identifier, credential, AuthType.Basic);
                 connection.SessionOptions.ProtocolVersion = 3;
                 connection.Bind();
 
