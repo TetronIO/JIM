@@ -23,11 +23,9 @@ namespace JIM.Connectors.LDAP
 
         #region IConnectorSettings members
         // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
-        private readonly string _settingAdForestName = "Forest Name";
-        private readonly string _settingAdDomainController = "Domain Controller";
-        private readonly string _settingLdapHostname = "Hostname";
-        private readonly string _settingLdapPort = "Port";
-        private readonly string _settingLdapUseEncryptedConnection = "Use An Encrypted Connection?";
+        private readonly string _settingDirectoryServer = "Host";
+        private readonly string _settingDirectoryServerPort = "Port";
+        private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
         private readonly string _settingUsername = "Username";
         private readonly string _settingPassword = "Password";
         private readonly string _settingCreateContainersAsNeeded = "Create containers as needed?";
@@ -36,21 +34,16 @@ namespace JIM.Connectors.LDAP
         {
             return new List<ConnectorSetting>
             {
-                new ConnectorSetting { Name = "Active Directory", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingAdForestName, Description = "What's the fully-qualified name of the Forest? i.e. lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingAdDomainController, Description = "Supply a domain controller hostname or IP address here. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
-
-                new ConnectorSetting { Name = "LDAP", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingLdapHostname, Description = "The hostname to connect to the directory service with, i.e. addls-01.lab.tetron.io", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingLdapPort, Description = "The port to connect to the directory service on, i.e. 389", DefaultStringValue = "389", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                //new ConnectorSetting { Name = _settingLdapUseEncryptedConnection, DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
-                new ConnectorSetting { Name = _settingLdapUseEncryptedConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                new ConnectorSetting { Name = "Directory Server", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
+                new ConnectorSetting { Name = "Directory Server Info", Description = "Active Directory domain controller, or LDAP server details can be entered below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
+                new ConnectorSetting { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultStringValue = "389", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
                 new ConnectorSetting { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingUsername, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String, Required = true },
-                new ConnectorSetting { Name = _settingPassword, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted, Required = true },
+                new ConnectorSetting { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
+                new ConnectorSetting { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
 
                 new ConnectorSetting { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
                 new ConnectorSetting { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
@@ -64,48 +57,10 @@ namespace JIM.Connectors.LDAP
         {
             var response = new List<ConnectorSettingValueValidationResult>();
 
-            var usingActiveDirectory = !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdForestName).StringValue) ||
-                                       !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdDomainController).StringValue);
-
-            var usingLdap = !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapHostname).StringValue) ||
-                            !string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapPort).StringValue) ||
-                            settingValues.Single(q => q.Setting.Name == _settingLdapUseEncryptedConnection).CheckboxValue;
-
-            if (usingActiveDirectory && usingLdap)
-            {
-                // cannot use both AD and LDAP settings
-                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = "Please supply EITHER values for Active Directory or LDAP, not both", IsValid = false });
-            }
-            else if (!usingActiveDirectory && !usingLdap)
-            {
-                // neither AD, nor LDAP setting values have been provided
-                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = "Please supply values for the Active Directory or LDAP sections", IsValid = false });
-            }
-            else if (usingActiveDirectory)
-            {
-                // make sure all required AD setting values have been supplied
-                if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingAdForestName).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingAdForestName}", IsValid = false });
-
-                // validate that we can connect to AD with the supplied setting credentials
-                var connectivityTestResult = TestActiveDirectoryConnectivity(settingValues);
-                if (!connectivityTestResult.IsValid)
-                    response.Add(connectivityTestResult);
-            }
-            else if (usingLdap)
-            {
-                // make sure all required LDAP setting values have been supplied
-                if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapHostname).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapHostname}", IsValid = false });
-
-                if (string.IsNullOrEmpty(settingValues.Single(q => q.Setting.Name == _settingLdapPort).StringValue))
-                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {_settingLdapPort}", IsValid = false });
-
-                // validate that we can connect to the LDAP directory service with the supplied setting credentials
-                var connectivityTestResult = await TestLdapConnectionAsync(settingValues);
-                if (!connectivityTestResult.IsValid)
-                    response.Add(connectivityTestResult);
-            }
+            // validate that we can connect to the directory service with the supplied setting credentials
+            var connectivityTestResult = TestDirectoryConnectivity(settingValues);
+            if (!connectivityTestResult.IsValid)
+                response.Add(connectivityTestResult);
 
             // general required setting value validation
             foreach (var requiredSettingValue in settingValues.Where(q => q.Setting.Required))
@@ -167,29 +122,26 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region private methods
-        private ConnectorSettingValueValidationResult TestActiveDirectoryConnectivity(IList<ConnectedSystemSettingValue> settingValues)
+        private ConnectorSettingValueValidationResult TestDirectoryConnectivity(IList<ConnectedSystemSettingValue> settingValues)
         {
-            var forest = settingValues.SingleOrDefault(q => q.Setting.Name == _settingAdForestName);
             var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
             var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
-            var domainController = settingValues.SingleOrDefault(q => q.Setting.Name == _settingAdDomainController);
+            var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
+            var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
 
-            if (forest == null || string.IsNullOrEmpty(forest.StringValue) ||
-                username == null || string.IsNullOrEmpty(username.StringValue) ||
-                password == null || string.IsNullOrEmpty(password.StringEncryptedValue))
+            if (username == null || string.IsNullOrEmpty(username.StringValue) ||
+                password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
+                directoryServer == null || string.IsNullOrEmpty(directoryServer.StringValue) ||
+                directoryServerPort == null || string.IsNullOrEmpty(directoryServerPort.StringValue))
                 return new ConnectorSettingValueValidationResult
                 {
-                    ErrorMessage = "Unable to test connectivity due to missing forest, username and/or password values"
+                    ErrorMessage = "Unable to test connectivity due to missing diretory server, port, username and/or password values"
                 };
 
             try
             {
-                LdapDirectoryIdentifier identifier;
-                if (domainController != null && !string.IsNullOrEmpty(domainController.StringValue))
-                    identifier = new LdapDirectoryIdentifier(domainController.StringValue);
-                else
-                    identifier = new LdapDirectoryIdentifier(forest.StringValue);
-
+                //var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, int.Parse(directoryServerPort.StringValue));
+                var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue);
                 var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
                 using var connection = new LdapConnection(identifier, credential, AuthType.Basic);
                 connection.SessionOptions.ProtocolVersion = 3;
@@ -205,37 +157,7 @@ namespace JIM.Connectors.LDAP
             {
                 return new ConnectorSettingValueValidationResult
                 {
-                    ErrorMessage = $"Unable to connect to {forest.StringValue}. Message: {ex.Message}",
-                    Exception = ex
-                };
-            }
-        }
-
-        private async Task<ConnectorSettingValueValidationResult> TestLdapConnectionAsync(IList<ConnectedSystemSettingValue> settingValues)
-        {
-            var hostname = settingValues.SingleOrDefault(q => q.Setting.Name == _settingLdapHostname);
-            var port = settingValues.SingleOrDefault(q => q.Setting.Name == _settingLdapPort);
-            var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
-            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
-
-            if (hostname == null || string.IsNullOrEmpty(hostname.StringValue) ||
-                port == null || string.IsNullOrEmpty(port.StringValue) ||
-                username == null || string.IsNullOrEmpty(username.StringValue) ||
-                password == null || string.IsNullOrEmpty(password.StringEncryptedValue))
-                return new ConnectorSettingValueValidationResult
-                {
-                    ErrorMessage = "Unable to test connectivity due to missing hostname, port, username and/or password values"
-                };
-
-            try
-            {
-                throw new NotImplementedException();
-            }
-            catch (Exception ex)
-            {
-                return new ConnectorSettingValueValidationResult
-                {
-                    ErrorMessage = $"Unable to connect to {hostname.StringValue}:{port.StringValue}. Message: {ex.Message}",
+                    ErrorMessage = $"Unable to connect to {directoryServer.StringValue}:{directoryServerPort.StringValue}. Message: {ex.Message}",
                     Exception = ex
                 };
             }

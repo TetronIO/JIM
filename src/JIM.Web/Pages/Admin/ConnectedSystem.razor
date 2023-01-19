@@ -151,6 +151,12 @@
                                                 </div>
                                             </div>
                                         }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
+                                        {
+                                            <div class="mb-3">
+                                                @settingValue.Setting.Description
+                                            </div>
+                                        }
                                         else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
                                         {
                                             <p>Files not yet supported for settings.</p>
