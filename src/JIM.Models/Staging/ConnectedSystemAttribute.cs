@@ -7,6 +7,7 @@ namespace JIM.Models.Staging
         public int Id { get; set; }
         public DateTime Created { set; get; }
         public string Name { get; set; }
+        public string? Description { get; set; }
         public AttributeDataType Type { get; set; }
         public AttributePlurality AttributePlurality { get; set; }
 
