@@ -1,4 +1,5 @@
-﻿using JIM.Models.Interfaces;
+﻿using JIM.Models.Exceptions;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using System.DirectoryServices.Protocols;
 using System.Net;
@@ -7,6 +8,8 @@ namespace JIM.Connectors.LDAP
 {
     public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorContainers, IConnectorImportUsingCalls
     {
+        private LdapConnection? _connection;
+
         #region IConnector members
         public string Name => Constants.LdapConnectorName;
 
@@ -25,7 +28,8 @@ namespace JIM.Connectors.LDAP
         // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
         private readonly string _settingDirectoryServer = "Host";
         private readonly string _settingDirectoryServerPort = "Port";
-        private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
+        //private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
+        private readonly string _settingRootDn = "Root DN";
         private readonly string _settingUsername = "Username";
         private readonly string _settingPassword = "Password";
         private readonly string _settingCreateContainersAsNeeded = "Create containers as needed?";
@@ -38,7 +42,9 @@ namespace JIM.Connectors.LDAP
                 new ConnectorSetting { Name = "Directory Server Info", Description = "Active Directory domain controller, or LDAP server details can be entered below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
                 new ConnectorSetting { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new ConnectorSetting { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultStringValue = "389", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                //new ConnectorSetting { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                new ConnectorSetting { Name = _settingRootDn, Required = true, Description = "The forest/domain root in DN format, i.e. DC=corp,DC=subatomic,DC=com", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
                 new ConnectorSetting { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
@@ -78,9 +84,20 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorSchema members
-        public async Task<ConnectorSchema> GetSchemaAsync()
+        public async Task<ConnectorSchema> GetSchemaAsync(IList<ConnectedSystemSettingValue> settingValues)
         {
-            throw new NotImplementedException();
+            OpenImportConnection(settingValues);
+            if (_connection == null)
+                throw new Exception("No connection available to get schema with");
+
+            var rootDnSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRootDn);
+            if (rootDnSettingValue == null || string.IsNullOrEmpty(rootDnSettingValue.StringValue))
+                throw new InvalidSettingValuesException($"No setting value for {_settingRootDn}!");
+
+            var ldapConnectorSchema = new LdapConnectorSchema(_connection, rootDnSettingValue.StringValue);
+            var schema = await ldapConnectorSchema.GetSchemaAsync();
+            CloseImportConnection();
+            return schema;
         }
         #endregion
 
@@ -105,9 +122,24 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorImportUsingCalls members
-        public void OpenImportConnection(IList<ConnectedSystemSettingValue> settings)
+        public void OpenImportConnection(IList<ConnectedSystemSettingValue> settingValues)
         {
-            throw new NotImplementedException();
+            var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
+            var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
+            var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
+            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
+
+            if (username == null || string.IsNullOrEmpty(username.StringValue) ||
+                password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
+                directoryServer == null || string.IsNullOrEmpty(directoryServer.StringValue) ||
+                directoryServerPort == null || string.IsNullOrEmpty(directoryServerPort.StringValue))
+                throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingUsername}, or {_settingPassword}");
+
+            var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue);
+            var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
+            _connection = new LdapConnection(identifier, credential, AuthType.Basic);
+            _connection.SessionOptions.ProtocolVersion = 3;
+            _connection.Bind();
         }
 
         public ConnectedSystemImportResult Import(ConnectedSystemRunProfile runProfile)
@@ -117,47 +149,34 @@ namespace JIM.Connectors.LDAP
 
         public void CloseImportConnection()
         {
-            throw new NotImplementedException();
+            _connection?.Dispose();
         }
         #endregion
 
         #region private methods
         private ConnectorSettingValueValidationResult TestDirectoryConnectivity(IList<ConnectedSystemSettingValue> settingValues)
         {
-            var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
-            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
-            var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
-            var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
-
-            if (username == null || string.IsNullOrEmpty(username.StringValue) ||
-                password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
-                directoryServer == null || string.IsNullOrEmpty(directoryServer.StringValue) ||
-                directoryServerPort == null || string.IsNullOrEmpty(directoryServerPort.StringValue))
-                return new ConnectorSettingValueValidationResult
-                {
-                    ErrorMessage = "Unable to test connectivity due to missing diretory server, port, username and/or password values"
-                };
-
             try
             {
-                //var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, int.Parse(directoryServerPort.StringValue));
-                var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue);
-                var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
-                using var connection = new LdapConnection(identifier, credential, AuthType.Basic);
-                connection.SessionOptions.ProtocolVersion = 3;
-                connection.Bind();
-
+                OpenImportConnection(settingValues);
+                CloseImportConnection();
                 return new ConnectorSettingValueValidationResult
                 {
                     IsValid = true
                 };
-
+            }
+            catch (InvalidSettingValuesException)
+            {
+                return new ConnectorSettingValueValidationResult
+                {
+                    ErrorMessage = "Unable to test connectivity due to missing diretory server, port, username and/or password values"
+                };
             }
             catch (Exception ex)
             {
                 return new ConnectorSettingValueValidationResult
                 {
-                    ErrorMessage = $"Unable to connect to {directoryServer.StringValue}:{directoryServerPort.StringValue}. Message: {ex.Message}",
+                    ErrorMessage = $"Unable to connect. Message: {ex.Message}",
                     Exception = ex
                 };
             }

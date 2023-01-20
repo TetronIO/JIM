@@ -5,6 +5,8 @@ namespace JIM.Models.Staging
     public class ConnectorSchemaAttribute
     {
         public string Name { get; set; }
+
+        public string? Description { get; set; }
         
         /// <summary>
         /// What type of data is the attribute representing?
