@@ -68,8 +68,6 @@ namespace JIM.PostgresData
 
         public void Dispose()
         {
-            //if (Database != null)
-            //    Database.Dispose();
         }
     }
 }
