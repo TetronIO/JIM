@@ -121,13 +121,14 @@ namespace JIM.Application.Servers
             connectedSystem.LastUpdated = DateTime.Now;
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         }
+        #endregion
 
+        #region Connected System Settings
         /// <summary>
         /// Use this when a connector is being parsed for persistence as a connector definition to create the connector definition settings from the connector instance.
         /// </summary>
-        #pragma warning disable CA1822 // Mark members as static
+        /// <remarks>Do not make static, it needs to be available on the instance</remarks>
         public void CopyConnectorSettingsToConnectorDefinition(IConnectorSettings connector, ConnectorDefinition connectorDefinition)
-        #pragma warning restore CA1822 // Mark members as static
         {
             foreach (var connectorSetting in connector.GetSettings())
             {
@@ -146,18 +147,13 @@ namespace JIM.Application.Servers
             }
         }
 
-        #pragma warning disable CA1822 // Mark members as static
+        /// <summary>
+        /// Checks that all setting values are valid, according to business rules.
+        /// </summary>
+        /// <remarks>Do not make static, it needs to be available on the instance</remarks>
         public async Task<IList<ConnectorSettingValueValidationResult>> ValidateConnectedSystemSettingsAsync(ConnectedSystem connectedSystem)
-        #pragma warning restore CA1822 // Mark members as static
         {
-            if (connectedSystem == null)
-                throw new ArgumentNullException(nameof(connectedSystem));
-
-            if (connectedSystem.ConnectorDefinition == null)
-                throw new ArgumentException(nameof(connectedSystem), "The supplied ConnectedSystem doesn't have a valid ConnectorDefinition.");
-
-            if (connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0)
-                throw new ArgumentException(nameof(connectedSystem), "The supplied ConnectedSystem doesn't have any valid SettingValues.");
+            ValidateConnectedSystemParameter(connectedSystem);            
 
             // work out what connector we need to instantiate, so that we can use its internal validation method
             // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
@@ -168,7 +164,65 @@ namespace JIM.Application.Servers
                 return await new LdapConnector().ValidateSettingValuesAsync(connectedSystem.SettingValues);
             }
 
-            throw new NotImplementedException("Support for that connector definition has not been implemented.");
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+        }
+
+        private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)
+        {
+            if (connectedSystem == null)
+                throw new ArgumentNullException(nameof(connectedSystem));
+
+            if (connectedSystem.ConnectorDefinition == null)
+                throw new ArgumentException("The supplied ConnectedSystem doesn't have a valid ConnectorDefinition.", nameof(connectedSystem));
+
+            if (connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0)
+                throw new ArgumentException("The supplied ConnectedSystem doesn't have any valid SettingValues.", nameof(connectedSystem));
+        }
+        #endregion
+
+        #region Connected System Schema
+        /// <summary>
+        /// Causes the associated Connector to be instantiated and the schema imported from the connected system.
+        /// You will need update the ConnectedSystem after if happy with the changes.
+        /// </summary>
+        /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new schema.</returns>
+        /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+        public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
+        {
+            ValidateConnectedSystemParameter(connectedSystem);
+
+            // work out what connector we need to instantiate, so that we can use its internal validation method
+            // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
+            // especially when we need to support uploaded connectors, not just built-in ones
+
+            ConnectorSchema schema;
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
+            {
+                schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues);
+            }
+            else
+            {
+                throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+            }
+
+            // this point could potentially be a good point to check for data-loss if persisted and return a report object
+            // that the user could decide whether or not to take action upon, i.e. cancel or persist.
+
+            connectedSystem.ObjectTypes.Clear(); // super destructive at this point. this is for mvp only
+            foreach (var objectType in schema.ObjectTypes)
+            {
+                connectedSystem.ObjectTypes.Add(new ConnectedSystemObjectType
+                {
+                    Name = objectType.Name,
+                    Attributes = objectType.Attributes.Select(q => new ConnectedSystemAttribute
+                    {
+                        Name = q.Name,
+                        Description = q.Description,
+                        AttributePlurality = q.AttributePlurality,
+                        Type = q.Type
+                    }).ToList()
+                });
+            }
         }
         #endregion
 

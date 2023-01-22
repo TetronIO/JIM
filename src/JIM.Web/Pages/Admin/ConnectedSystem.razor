@@ -49,7 +49,7 @@
                     <label for="textAreaDescription" class="form-label">Description</label>
                     <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="connectedSystem.Description" />
                 </div>
-                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
+                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="@detailsBtnDisabled">Save Changes</Button>
             </EditForm>
         }
         else if (activeTab == Tabs.Settings)
@@ -197,7 +197,7 @@
                 </p>
 
                 <ValidationSummary />
-                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="detailsFormSubmitting">Save Changes</Button>
+                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="@settingsBtnDisabled">Save Changes</Button>
             </EditForm>
         }
         else if (activeTab == Tabs.Schema)
@@ -211,25 +211,25 @@
                     i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right 
                     permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     <div class="mt-3">
-                        <Button Color="ButtonColor.Warning" Size="Size.Small"><i class="bi bi-arrow-clockwise"></i> Import Schema</Button>
+                        <Button Color="ButtonColor.Warning" Size="Size.Small" @onclick="HandleImportSchema" Disabled="@importSchemaBtnDisabled"><i class="bi bi-arrow-clockwise"></i> Import Schema</Button>
                     </div>
                 </Callout>
             </div>
 
             @if (connectedSystem.ObjectTypes.Count > 0)
             {
-                <div class="accordion" id="accordionExample">
-                    @foreach (var objectType in connectedSystem.ObjectTypes)
+                <div class="accordion">
+                    @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
                     {
                         <div class="accordion-item">
-                            <h2 class="accordion-header" id="headingOne">
-                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
-                                    @objectType.Name
+                            <h2 class="accordion-header" id="ot-heading-@(i)">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#ot-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
+                                    @connectedSystem.ObjectTypes[i].Name
                                 </button>
                             </h2>
-                            <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+                            <div id="ot-collapse-@(i)" class="accordion-collapse collapse" aria-labelledby="ot-heading-@(i)">
                                 <div class="accordion-body">
-                                    @foreach (var attribute in objectType.Attributes)
+                                    @foreach (var attribute in connectedSystem.ObjectTypes[i].Attributes)
                                     {
                                         <div>@(attribute.Name) - @(attribute.Description)</div>
                                     }
@@ -267,13 +267,12 @@
 
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
     private List<ToastMessage> messages = new List<ToastMessage>();
-    private bool detailsFormSubmitting = false;        
+    private bool detailsBtnDisabled = false;
     private Tabs activeTab = Tabs.Details;
-
-    // settings stuff
     private List<ConnectedSystemSettingCategory>? settingCategories;
-    private bool settingsFormSubmitting = false;
     private JimValidator? connectedSystemSettingsValidator;
+    private bool settingsBtnDisabled = false;
+    private bool importSchemaBtnDisabled = false;
 
     // ui helper
     private enum Tabs
@@ -306,10 +305,10 @@
             return;
         }
 
-        detailsFormSubmitting = true;
+        detailsBtnDisabled = true;
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your details changes have been saved."));
-        detailsFormSubmitting = false;
+        detailsBtnDisabled = false;
     }
 
     private async Task HandleValidSettingsSubmit()
@@ -319,6 +318,8 @@
             Console.WriteLine($"{nameof(HandleValidSettingsSubmit)}: connectedSystem was null");
             return;
         }
+
+        settingsBtnDisabled = true;
 
         // validate the form
         connectedSystemSettingsValidator?.ClearErrors();
@@ -335,16 +336,26 @@
                 errors?.Add($"General issue {i}", new() { results[i].ErrorMessage });
         }
 
-        if (errors.Any())
+        if (errors != null && errors.Any())
         {
             connectedSystemSettingsValidator?.DisplayErrors(errors);
+            settingsBtnDisabled = false;
             return;
         }
 
-        settingsFormSubmitting = true;
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your setting changes have been saved."));
-        settingsFormSubmitting = false;
+        settingsBtnDisabled = false;
+    }
+
+    private async Task HandleImportSchema()
+    {
+        if (connectedSystem == null)
+            return;
+
+        importSchemaBtnDisabled = true;
+        await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem);
+        importSchemaBtnDisabled = false;
     }
 
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage

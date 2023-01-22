@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Staging;
+using Microsoft.Extensions.Logging;
 using System.DirectoryServices.Protocols;
 
 namespace JIM.Connectors.LDAP
@@ -43,16 +44,15 @@ namespace JIM.Connectors.LDAP
 
                 var objectType = new ConnectorSchemaObjectType(name);
 
-                // now go and work out what attributes the object type has and add them to the object type
-                AddObjectTypeAttributes(objectType);
-
-                _schema.ObjectTypes.Add(objectType);
+                // now go and work out which attributes the object type has and add them to the object type
+                if (AddObjectTypeAttributes(objectType))
+                    _schema.ObjectTypes.Add(objectType);
             }
 
             return _schema;
         }
 
-        private void AddObjectTypeAttributes(ConnectorSchemaObjectType objectType)
+        private bool AddObjectTypeAttributes(ConnectorSchemaObjectType objectType)
         {
             // walk up the parent object class tree
             var objectClassEntries = new List<SearchResultEntry>();
@@ -65,7 +65,10 @@ namespace JIM.Connectors.LDAP
             {
                 var objectClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={objectClassName})");
                 if (objectClassEntry == null)
-                    throw new Exception($"Couldn't find object class object: {objectClassName}");
+                {
+                    // some object classes do not have a schema entry, i.e. some system objects.
+                    return false;
+                }
 
                 ldapdisplayname = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname");
                 subclassof = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "subclassof");
@@ -83,6 +86,8 @@ namespace JIM.Connectors.LDAP
 
             // todo: it's possible there's some duplication of attributes going on due to attributes being specified on structural and auxiliary classes, so de-dupe before we return
             objectType.Attributes = objectType.Attributes.OrderBy(q => q.Name).ToList();
+
+            return true;
         }
 
         /// <summary>
