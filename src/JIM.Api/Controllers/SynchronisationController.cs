@@ -40,13 +40,6 @@ namespace JIM.Api.Controllers
             return await _application.ConnectedSystems.GetSynchronisationRunsAsync(csid);
         }
 
-        [HttpGet("/synchronisation/connected_systems/{csid}/attributes")]
-        public async Task<IEnumerable<ConnectedSystemAttribute>?> GetConnectedSystemAttributesAsync(int csid)
-        {
-            _logger.LogTrace($"Someone requested attributes for connected system: {csid}");
-            return await _application.ConnectedSystems.GetAttributesAsync(csid);
-        }
-
         [HttpGet("/synchronisation/connected_systems/{csid}/object_types")]
         public async Task<IEnumerable<ConnectedSystemObjectType>?> GetConnectedSystemObjectTypesAsync(int csid)
         {

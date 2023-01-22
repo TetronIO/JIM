@@ -11,7 +11,15 @@ namespace JIM.Models.Staging
         public AttributeDataType Type { get; set; }
         public AttributePlurality AttributePlurality { get; set; }
 
-        public ConnectedSystem ConnectedSystem { get; set; }
+        /// <summary>
+        /// The parent for this attribute.
+        /// </summary>
+        public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; }
+
+        /// <summary>
+        /// Whether or not an administrator has selected this attribute to be synchronised by JIM.
+        /// </summary>
+        public bool Selected { get; set; }
 
         public ConnectedSystemAttribute()
         {

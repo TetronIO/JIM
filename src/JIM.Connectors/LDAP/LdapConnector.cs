@@ -29,6 +29,7 @@ namespace JIM.Connectors.LDAP
         private readonly string _settingDirectoryServer = "Host";
         private readonly string _settingDirectoryServerPort = "Port";
         //private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
+        private readonly string _settingConnectionTimeout = "Connection Timeout";
         private readonly string _settingRootDn = "Root DN";
         private readonly string _settingUsername = "Username";
         private readonly string _settingPassword = "Password";
@@ -39,10 +40,11 @@ namespace JIM.Connectors.LDAP
             return new List<ConnectorSetting>
             {
                 new ConnectorSetting { Name = "Directory Server", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = "Directory Server Info", Description = "Active Directory domain controller, or LDAP server details can be entered below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
+                new ConnectorSetting { Name = "Directory Server Info", Description = "Enter Active Directory domain controller, or LDAP server details below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
                 new ConnectorSetting { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultStringValue = "389", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new ConnectorSetting { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultIntValue = 389, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
                 //new ConnectorSetting { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                new ConnectorSetting { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
                 new ConnectorSetting { Name = _settingRootDn, Required = true, Description = "The forest/domain root in DN format, i.e. DC=corp,DC=subatomic,DC=com", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
 
                 new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
@@ -76,6 +78,9 @@ namespace JIM.Connectors.LDAP
 
                 // keeping this separate for now, as encrypted strings are going to have to improve their implementation at some point
                 if (requiredSettingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted && string.IsNullOrEmpty(requiredSettingValue.StringEncryptedValue))
+                    response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
+
+                if (requiredSettingValue.Setting.Type == ConnectedSystemSettingType.Integer && !requiredSettingValue.IntValue.HasValue)
                     response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
             }
 
@@ -126,19 +131,22 @@ namespace JIM.Connectors.LDAP
         {
             var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
             var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
+            var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
             var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
-            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
+            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);            
 
             if (username == null || string.IsNullOrEmpty(username.StringValue) ||
                 password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
                 directoryServer == null || string.IsNullOrEmpty(directoryServer.StringValue) ||
-                directoryServerPort == null || string.IsNullOrEmpty(directoryServerPort.StringValue))
-                throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingUsername}, or {_settingPassword}");
+                directoryServerPort == null || !directoryServerPort.IntValue.HasValue ||
+                timeoutSeconds == null || !timeoutSeconds.IntValue.HasValue)
+                throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername}, or {_settingPassword}");
 
             var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue);
             var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
             _connection = new LdapConnection(identifier, credential, AuthType.Basic);
             _connection.SessionOptions.ProtocolVersion = 3;
+            _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. wrap this in a time-limited task instead
             _connection.Bind();
         }
 

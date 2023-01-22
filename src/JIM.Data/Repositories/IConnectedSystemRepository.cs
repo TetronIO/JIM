@@ -33,7 +33,6 @@ namespace JIM.Data.Repositories
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
         public Task<IList<ConnectedSystem>> GetConnectedSystemsAsync();
-        public Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id);
         public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
         public Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
         public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);

@@ -13,6 +13,7 @@ namespace JIM.Models.Staging
         public DateTime LastUpdated { get; set; }
         public List<ConnectedSystemRunProfile> RunProfiles { get; set; }
         public List<ConnectedSystemObject> Objects { get; set; }
+        public List<ConnectedSystemObjectType> ObjectTypes { get; set; }
         public List<PendingExport> PendingExports { get; set; }
         public ConnectorDefinition ConnectorDefinition { get; set; }
         public List<ConnectedSystemSettingValue> SettingValues { get; set; }
@@ -41,6 +42,7 @@ namespace JIM.Models.Staging
         {
             RunProfiles = new List<ConnectedSystemRunProfile>();
             Objects = new List<ConnectedSystemObject>();
+            ObjectTypes = new List<ConnectedSystemObjectType>();
             SettingValues = new List<ConnectedSystemSettingValue>();
             Created = DateTime.Now;
         }

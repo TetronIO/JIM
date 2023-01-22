@@ -39,6 +39,7 @@
     {
         String,
         StringEncrypted,
+        Integer,
         Heading,
         Label,
         Text,

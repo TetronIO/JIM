@@ -33,8 +33,6 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name);
         }
 
-
-
         public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
         {
             await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
@@ -99,6 +97,12 @@ namespace JIM.Application.Servers
                 if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.CheckBox && connectedSystemDefinitionSetting.DefaultCheckboxValue != null)
                     settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
 
+                if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String && !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
+                    settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue;
+
+                if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.Integer && connectedSystemDefinitionSetting.DefaultIntValue.HasValue)
+                    settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
+
                 connectedSystem.SettingValues.Add(settingValue);
             }
 
@@ -132,6 +136,7 @@ namespace JIM.Application.Servers
                     Category = connectorSetting.Category,
                     DefaultCheckboxValue = connectorSetting.DefaultCheckboxValue,
                     DefaultStringValue = connectorSetting.DefaultStringValue,
+                    DefaultIntValue = connectorSetting.DefaultIntValue,
                     Description = connectorSetting.Description,
                     DropDownValues = connectorSetting.DropDownValues,
                     Name = connectorSetting.Name,
@@ -164,13 +169,6 @@ namespace JIM.Application.Servers
             }
 
             throw new NotImplementedException("Support for that connector definition has not been implemented.");
-        }
-        #endregion
-
-        #region Connected Sytem Attributes
-        public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
-        {
-            return await Application.Repository.ConnectedSystems.GetAttributesAsync(id);
         }
         #endregion
 

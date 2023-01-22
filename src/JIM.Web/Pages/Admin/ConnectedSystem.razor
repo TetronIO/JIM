@@ -93,7 +93,7 @@
                                                     }:
                                                 </label>
                                                 <div class="col-sm-10">
-                                                    <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringValue" placeholder="@(!string.IsNullOrEmpty(settingValue.Setting.DefaultStringValue) ? settingValue.Setting.DefaultStringValue : null)" />
+                                                    <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringValue" />
                                                     @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
                                                     {
                                                         <div class="form-text">@settingValue.Setting.Description</div>
@@ -113,6 +113,25 @@
                                                 </label>
                                                 <div class="col-sm-10">
                                                     <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringEncryptedValue" type="password" />
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
+                                                        <div class="form-text">@settingValue.Setting.Description</div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
+                                        {
+                                            <div class="row mb-3">
+                                                <label for="@formElementName" class="col-sm-2 col-form-label">
+                                                    @settingValue.Setting.Name
+                                                    @if (settingValue.Setting.Required)
+                                                    {
+                                                        <strong class="text-danger"> *</strong>
+                                                    }:
+                                                </label>
+                                                <div class="col-sm-10">
+                                                    <NumberInput TValue="int?" @bind-Value="@settingValue.IntValue" />
                                                     @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
                                                     {
                                                         <div class="form-text">@settingValue.Setting.Description</div>
@@ -183,7 +202,51 @@
         }
         else if (activeTab == Tabs.Schema)
         {
-            <p>schema tab...</p>
+            <div class="mb-3">
+                <p>
+                    Manage which object types and which attributes for them are imported/exported by JIM. To maximise performance, only select those that need managing.
+                </p>
+                <Callout Type="CalloutType.Warning">
+                    <strong>Importing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM, 
+                    i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right 
+                    permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                    <div class="mt-3">
+                        <Button Color="ButtonColor.Warning" Size="Size.Small"><i class="bi bi-arrow-clockwise"></i> Import Schema</Button>
+                    </div>
+                </Callout>
+            </div>
+
+            @if (connectedSystem.ObjectTypes.Count > 0)
+            {
+                <div class="accordion" id="accordionExample">
+                    @foreach (var objectType in connectedSystem.ObjectTypes)
+                    {
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingOne">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                                    @objectType.Name
+                                </button>
+                            </h2>
+                            <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+                                <div class="accordion-body">
+                                    @foreach (var attribute in objectType.Attributes)
+                                    {
+                                        <div>@(attribute.Name) - @(attribute.Description)</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="p-5 bg-light rounded-3">
+                    <div class="container-fluid py-5 text-center text-secondary">
+                        Schema not yet imported
+                    </div>
+                </div>
+            }
         }
         else if (activeTab == Tabs.Containers)
         {

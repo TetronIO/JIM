@@ -119,13 +119,6 @@ namespace JIM.PostgresData.Repositories
         }
         #endregion
 
-        #region Connected System Attributes
-        public async Task<IList<ConnectedSystemAttribute>?> GetAttributesAsync(int id)
-        {
-            return await Repository.Database.ConnectedSystemAttributes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
-        }
-        #endregion
-
         #region Connected System Objects
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
         {
