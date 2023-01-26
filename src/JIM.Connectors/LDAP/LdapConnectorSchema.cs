@@ -158,7 +158,7 @@ namespace JIM.Connectors.LDAP
             var admindescription = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "admindescription");
             var isSingleValued = LdapConnectorUtilities.GetEntryAttributeBooleanValue(attributeEntry, "issinglevalued");
             var attributePlurality = (isSingleValued == true || isSingleValued == null) ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
-            var attribute = new ConnectorSchemaAttribute(attributeName, AttributeDataType.String, attributePlurality, required);
+            var attribute = new ConnectorSchemaAttribute(attributeName, AttributeDataType.String, attributePlurality, required, objectClass);
 
             if (!string.IsNullOrEmpty(description))
                 attribute.Description = description;

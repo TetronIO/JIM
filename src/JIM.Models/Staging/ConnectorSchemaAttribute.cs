@@ -7,6 +7,12 @@ namespace JIM.Models.Staging
         public string Name { get; set; }
 
         public string? Description { get; set; }
+
+        /// <summary>
+        /// Some types of connected systems have a concept of heirarchy where an attribute is inherited from a class that the object type inherits, i.e. an LDAP object class.
+        /// Storing this information in JIM and presenting it to the user when configuring a Connected System can help them with understanding what might or might not need managing, attribute wise.
+        /// </summary>
+        public string? ClassName { get; set; }
         
         /// <summary>
         /// What type of data is the attribute representing?
@@ -24,12 +30,13 @@ namespace JIM.Models.Staging
         /// </summary>
         public bool Required { get; set; }
 
-        public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false)
+        public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null)
         {
             Name = name;
             Type = type;
             Required = required;
             AttributePlurality = attributePlurality;
+            ClassName = className;
         }
     }
 }

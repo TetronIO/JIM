@@ -219,7 +219,8 @@ namespace JIM.Application.Servers
                         Name = q.Name,
                         Description = q.Description,
                         AttributePlurality = q.AttributePlurality,
-                        Type = q.Type
+                        Type = q.Type,
+                        ClassName = q.ClassName
                     }).ToList()
                 });
             }
