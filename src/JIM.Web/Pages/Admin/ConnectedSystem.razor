@@ -223,6 +223,7 @@
                 <div class="accordion" id="ot-accordion">
                     @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
                     {
+                        attributesForGrid = connectedSystem.ObjectTypes[i].Attributes;
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="ot-heading-@(i)">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ot-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
@@ -231,10 +232,33 @@
                             </h2>
                             <div id="ot-collapse-@(i)" class="accordion-collapse collapse" aria-labelledby="ot-heading-@(i)" data-bs-parent="#ot-accordion">
                                 <div class="accordion-body">
-                                    @foreach (var attribute in connectedSystem.ObjectTypes[i].Attributes)
+
+                                    Select the @connectedSystem.ObjectTypes[i].Name attributes you want to manage.
+
+                                    <div class="mt-3 mb-3">
+                                        <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-check-all"></i> Select All</Button>
+                                        <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Clear All</Button>
+                                    </div>
+
+@*                                    @foreach (var attribute in connectedSystem.ObjectTypes[i].Attributes)
                                     {
                                         <div>@(attribute.Name) - @(attribute.ClassName)</div>
-                                    }
+                                    }*@
+
+                                    <Grid TItem="ConnectedSystemAttribute" class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" AllowFiltering="true" Responsive="true">
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
+                                            @context.Name
+                                        </GridColumn>
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Class" PropertyName="ClassName">
+                                            @context.ClassName
+                                        </GridColumn>
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Plurality" PropertyName="AttributePlurality">
+                                            @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single Valued" : "Multi Valued")
+                                        </GridColumn>
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description">
+                                            @context.Description
+                                        </GridColumn>
+                                    </Grid>
                                 </div>
                             </div>
                         </div>
@@ -275,6 +299,7 @@
     private JimValidator? connectedSystemSettingsValidator;
     private bool settingsBtnDisabled = false;
     private bool importSchemaBtnDisabled = false;
+    private List<ConnectedSystemAttribute> attributesForGrid;
 
     // ui helper
     private enum Tabs
@@ -367,4 +392,9 @@
         HelpText = $"{DateTime.Now}",
         Message = message,
     };
+
+    private async Task<GridDataProviderResult<ConnectedSystemAttribute>> EmployeesDataProvider(GridDataProviderRequest<ConnectedSystemAttribute> request)
+    {
+        return await Task.FromResult(request.ApplyTo(attributesForGrid));
+    }
 }
