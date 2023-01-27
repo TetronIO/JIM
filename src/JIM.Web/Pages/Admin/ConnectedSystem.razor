@@ -216,18 +216,20 @@
                 </Callout>
             </div>
 
+
+
             @if (connectedSystem.ObjectTypes.Count > 0)
             {
-                <div class="accordion">
+                <div class="accordion" id="ot-accordion">
                     @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
                     {
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="ot-heading-@(i)">
-                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#ot-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ot-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
                                     @connectedSystem.ObjectTypes[i].Name
                                 </button>
                             </h2>
-                            <div id="ot-collapse-@(i)" class="accordion-collapse collapse" aria-labelledby="ot-heading-@(i)">
+                            <div id="ot-collapse-@(i)" class="accordion-collapse collapse" aria-labelledby="ot-heading-@(i)" data-bs-parent="#ot-accordion">
                                 <div class="accordion-body">
                                     @foreach (var attribute in connectedSystem.ObjectTypes[i].Attributes)
                                     {
