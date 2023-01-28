@@ -240,12 +240,7 @@
                                         <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Clear All</Button>
                                     </div>
 
-@*                                    @foreach (var attribute in connectedSystem.ObjectTypes[i].Attributes)
-                                    {
-                                        <div>@(attribute.Name) - @(attribute.ClassName)</div>
-                                    }*@
-
-                                    <Grid TItem="ConnectedSystemAttribute" class="table table-hover table-bordered table-striped" DataProvider="EmployeesDataProvider" AllowFiltering="true" Responsive="true">
+                                    <Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
                                         <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
                                             @context.Name
                                         </GridColumn>
