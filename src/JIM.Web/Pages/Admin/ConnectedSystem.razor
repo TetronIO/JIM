@@ -216,14 +216,11 @@
                 </Callout>
             </div>
 
-
-
             @if (connectedSystem.ObjectTypes.Count > 0)
             {
                 <div class="accordion" id="ot-accordion">
                     @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
                     {
-                        attributesForGrid = connectedSystem.ObjectTypes[i].Attributes;
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="ot-heading-@(i)">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ot-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
@@ -240,7 +237,7 @@
                                         <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Clear All</Button>
                                     </div>
 
-                                    <Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
+                                    <Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" DataSource="connectedSystem.ObjectTypes[i].Attributes" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
                                         <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
                                             @context.Name
                                         </GridColumn>
@@ -294,7 +291,6 @@
     private JimValidator? connectedSystemSettingsValidator;
     private bool settingsBtnDisabled = false;
     private bool importSchemaBtnDisabled = false;
-    private List<ConnectedSystemAttribute> attributesForGrid;
 
     // ui helper
     private enum Tabs
@@ -390,6 +386,6 @@
 
     private async Task<GridDataProviderResult<ConnectedSystemAttribute>> EmployeesDataProvider(GridDataProviderRequest<ConnectedSystemAttribute> request)
     {
-        return await Task.FromResult(request.ApplyTo(attributesForGrid));
+        return await Task.FromResult(request.ApplyTo(request.DataSource));
     }
 }

@@ -5,8 +5,10 @@
     <DockerTargetOS>Linux</DockerTargetOS>
     <ProjectGuid>aad33768-51e5-4689-a365-c3b292162318</ProjectGuid>
     <DockerLaunchAction>LaunchBrowser</DockerLaunchAction>
-    <DockerServiceUrl>{Scheme}://localhost:{ServicePort}/swagger</DockerServiceUrl>
-    <DockerServiceName>jim.api</DockerServiceName>
+    <DockerServiceUrl>{Scheme}://localhost:{ServicePort}</DockerServiceUrl>
+    <DockerServiceName>jim.web</DockerServiceName>
+    <Configurations>Debug;Release;staging;production</Configurations>
+    <DockerComposeBaseFilePath>.\docker-compose</DockerComposeBaseFilePath>
   </PropertyGroup>
   <ItemGroup>
     <None Include="db.yml" />
