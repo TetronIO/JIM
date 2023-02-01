@@ -7,8 +7,6 @@
     <DockerLaunchAction>LaunchBrowser</DockerLaunchAction>
     <DockerServiceUrl>{Scheme}://localhost:{ServicePort}</DockerServiceUrl>
     <DockerServiceName>jim.web</DockerServiceName>
-    <Configurations>Debug;Release;staging;production</Configurations>
-    <DockerComposeBaseFilePath>.\docker-compose</DockerComposeBaseFilePath>
   </PropertyGroup>
   <ItemGroup>
     <None Include="db.yml" />
