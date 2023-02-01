@@ -237,7 +237,7 @@
                                         <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Clear All</Button>
                                     </div>
 
-                                    <Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" DataSource="connectedSystem.ObjectTypes[i].Attributes" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
+@*                                    <Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" DataSource="connectedSystem.ObjectTypes[i].Attributes" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
                                         <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
                                             @context.Name
                                         </GridColumn>
@@ -250,7 +250,7 @@
                                         <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description">
                                             @context.Description
                                         </GridColumn>
-                                    </Grid>
+                                    </Grid>*@
                                 </div>
                             </div>
                         </div>
@@ -384,8 +384,8 @@
         Message = message,
     };
 
-    private async Task<GridDataProviderResult<ConnectedSystemAttribute>> EmployeesDataProvider(GridDataProviderRequest<ConnectedSystemAttribute> request)
-    {
-        return await Task.FromResult(request.ApplyTo(request.DataSource));
-    }
+    //private async Task<GridDataProviderResult<ConnectedSystemAttribute>> EmployeesDataProvider(GridDataProviderRequest<ConnectedSystemAttribute> request)
+    //{
+    //    return await Task.FromResult(request.ApplyTo(request.DataSource));
+    //}
 }

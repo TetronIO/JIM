@@ -32,8 +32,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Web", "src\JIM.Web\JIM.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Connectors", "src\JIM.Connectors\JIM.Connectors.csproj", "{0A5B45F2-8224-4EA3-A847-4F8AC3C79139}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlazorBootstrap", "..\GitHub\blazorbootstrap\blazorbootstrap\BlazorBootstrap.csproj", "{0224615C-BD6D-4571-A464-C18EAD7C5515}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -88,10 +86,6 @@ Global
 		{0A5B45F2-8224-4EA3-A847-4F8AC3C79139}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0A5B45F2-8224-4EA3-A847-4F8AC3C79139}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0A5B45F2-8224-4EA3-A847-4F8AC3C79139}.Release|Any CPU.Build.0 = Release|Any CPU
-		{0224615C-BD6D-4571-A464-C18EAD7C5515}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{0224615C-BD6D-4571-A464-C18EAD7C5515}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{0224615C-BD6D-4571-A464-C18EAD7C5515}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{0224615C-BD6D-4571-A464-C18EAD7C5515}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
