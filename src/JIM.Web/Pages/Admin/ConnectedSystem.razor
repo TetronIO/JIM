@@ -34,7 +34,7 @@
     {
         if (activeTab == Tabs.Details)
         {
-            <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidDetailsSubmit">
+            <EditForm Model="@connectedSystem" OnValidSubmit="async () => await HandleValidDetailsSubmitAsync()">
                 <DataAnnotationsValidator />
                 <ValidationSummary />
                 <div class="mb-3">
@@ -49,14 +49,14 @@
                     <label for="textAreaDescription" class="form-label">Description</label>
                     <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="connectedSystem.Description" />
                 </div>
-                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="@detailsBtnDisabled">Save Changes</Button>
+                <Button @ref="saveDetailsBtn" Color="ButtonColor.Primary" Type="ButtonType.Submit">Save Changes</Button>
             </EditForm>
         }
         else if (activeTab == Tabs.Settings)
         {
             <p>Configure the connector for your environment by supplying values for the settings below.</p>
 
-            <EditForm Model="@connectedSystem" OnValidSubmit="HandleValidSettingsSubmit">
+            <EditForm Model="@connectedSystem" OnValidSubmit="async () => await HandleValidSettingsSubmitAsync()">
                 <JimValidator @ref="connectedSystemSettingsValidator" />
                 
                 <div class="accordion mb-3">
@@ -197,7 +197,7 @@
                 </p>
 
                 <ValidationSummary />
-                <Button Color="ButtonColor.Primary" Type="ButtonType.Submit" Disabled="@settingsBtnDisabled">Save Changes</Button>
+                <Button @ref="saveSettingsBtn" Color="ButtonColor.Primary" Type="ButtonType.Submit">Save Changes</Button>
             </EditForm>
         }
         else if (activeTab == Tabs.Schema)
@@ -211,7 +211,7 @@
                     i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right 
                     permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     <div class="mt-3">
-                        <Button Color="ButtonColor.Warning" Size="Size.Small" @onclick="HandleImportSchema" Disabled="@importSchemaBtnDisabled"><i class="bi bi-arrow-clockwise"></i> Import Schema</Button>
+                        <Button @ref="importSchemaBtn" Color="ButtonColor.Warning" Size="Size.Small" @onclick="async () => await HandleImportSchemaAsync()">Import Schema</Button>
                     </div>
                 </Callout>
             </div>
@@ -259,8 +259,6 @@
                                             }
                                         </tbody>
                                     </table>
-
-
 
                                     @*<Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" DataSource="connectedSystem.ObjectTypes[i].Attributes" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
                                         <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
@@ -310,12 +308,12 @@
 
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
     private List<ToastMessage> messages = new List<ToastMessage>();
-    private bool detailsBtnDisabled = false;
     private Tabs activeTab = Tabs.Details;
     private List<ConnectedSystemSettingCategory>? settingCategories;
     private JimValidator? connectedSystemSettingsValidator;
-    private bool settingsBtnDisabled = false;
-    private bool importSchemaBtnDisabled = false;
+    private Button? saveDetailsBtn;
+    private Button? saveSettingsBtn;
+    private Button? importSchemaBtn;
 
     // ui helper
     private enum Tabs
@@ -340,29 +338,29 @@
         settingCategories = connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
     }
 
-    private async Task HandleValidDetailsSubmit()
+    private async Task HandleValidDetailsSubmitAsync()
     {
         if (connectedSystem == null)
         {
-            Console.WriteLine($"{nameof(HandleValidDetailsSubmit)}: connectedSystem was null");
+            Console.WriteLine($"{nameof(HandleValidDetailsSubmitAsync)}: connectedSystem was null");
             return;
         }
 
-        detailsBtnDisabled = true;
+        saveDetailsBtn?.ShowLoading("Saving changes...");
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your details changes have been saved."));
-        detailsBtnDisabled = false;
+        saveDetailsBtn?.HideLoading();
     }
 
-    private async Task HandleValidSettingsSubmit()
+    private async Task HandleValidSettingsSubmitAsync()
     {
         if (connectedSystem == null)
         {
-            Console.WriteLine($"{nameof(HandleValidSettingsSubmit)}: connectedSystem was null");
+            Console.WriteLine($"{nameof(HandleValidSettingsSubmitAsync)}: connectedSystem was null");
             return;
         }
 
-        settingsBtnDisabled = true;
+        saveSettingsBtn?.ShowLoading("Saving settings...");
 
         // validate the form
         connectedSystemSettingsValidator?.ClearErrors();
@@ -382,23 +380,23 @@
         if (errors != null && errors.Any())
         {
             connectedSystemSettingsValidator?.DisplayErrors(errors);
-            settingsBtnDisabled = false;
+            saveSettingsBtn?.HideLoading();
             return;
         }
 
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your setting changes have been saved."));
-        settingsBtnDisabled = false;
+        saveSettingsBtn?.HideLoading();
     }
 
-    private async Task HandleImportSchema()
+    private async Task HandleImportSchemaAsync()
     {
         if (connectedSystem == null)
             return;
 
-        importSchemaBtnDisabled = true;
+        importSchemaBtn?.ShowLoading("Retrieving schema...");
         await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem);
-        importSchemaBtnDisabled = false;
+        importSchemaBtn?.HideLoading();
     }
 
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
