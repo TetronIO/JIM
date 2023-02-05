@@ -308,3 +308,15 @@ thead {
 .callout-primary {
     border-left-color: aquamarine;
 }
+
+.jim-cs-s-selected {
+    display: inline-block;
+    margin-right: 10px;
+    height: 22px;
+}
+
+.jim-cs-s-not-selected {
+    display: inline-block;
+    margin-right: 26px;
+    height: 22px;
+}

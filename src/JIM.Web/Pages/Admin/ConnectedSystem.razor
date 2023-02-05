@@ -58,7 +58,7 @@
 
             <EditForm Model="@connectedSystem" OnValidSubmit="async () => await HandleValidSettingsSubmitAsync()">
                 <JimValidator @ref="connectedSystemSettingsValidator" />
-                
+
                 <div class="accordion mb-3">
                     @for (var i = 0; i < settingCategories.Count; i++)
                     {
@@ -87,7 +87,7 @@
                                             <div class="row mb-3">
                                                 <label for="@formElementName" class="col-sm-2 col-form-label">
                                                     @settingValue.Setting.Name
-                                                    @if (settingValue.Setting.Required) 
+                                                    @if (settingValue.Setting.Required)
                                                     {
                                                         <strong class="text-danger"> *</strong>
                                                     }:
@@ -207,8 +207,8 @@
                     Manage which object types and which attributes for them are imported/exported by JIM. To maximise performance, only select those that need managing.
                 </p>
                 <Callout Type="CalloutType.Warning">
-                    <strong>Importing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM, 
-                    i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right 
+                    <strong>Importing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
+                    i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right
                     permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     <div class="mt-3">
                         <Button @ref="importSchemaBtn" Color="ButtonColor.Warning" Size="Size.Small" @onclick="async () => await HandleImportSchemaAsync()">Import Schema</Button>
@@ -224,6 +224,14 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="ot-heading-@(i)">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ot-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
+                                    @if (connectedSystem.ObjectTypes[i].Attributes.Any(q => q.Selected))
+                                    {
+                                        <span class="jim-cs-s-selected"><i class="bi bi-check2-circle"></i></span>
+                                    }
+                                    else
+                                    {
+                                        <span class="jim-cs-s-not-selected"></span>
+                                    }
                                     @connectedSystem.ObjectTypes[i].Name
                                 </button>
                             </h2>
@@ -261,19 +269,19 @@
                                     </table>
 
                                     @*<Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" DataSource="connectedSystem.ObjectTypes[i].Attributes" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
-                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
-                                            @context.Name
-                                        </GridColumn>
-                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Class" PropertyName="ClassName">
-                                            @context.ClassName
-                                        </GridColumn>
-                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Plurality" PropertyName="AttributePlurality">
-                                            @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single Valued" : "Multi Valued")
-                                        </GridColumn>
-                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description">
-                                            @context.Description
-                                        </GridColumn>
-                                    </Grid>*@
+                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
+                    @context.Name
+                    </GridColumn>
+                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Class" PropertyName="ClassName">
+                    @context.ClassName
+                    </GridColumn>
+                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Plurality" PropertyName="AttributePlurality">
+                    @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single Valued" : "Multi Valued")
+                    </GridColumn>
+                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description">
+                    @context.Description
+                    </GridColumn>
+                    </Grid>*@
                                 </div>
                             </div>
                         </div>
@@ -400,12 +408,12 @@
     }
 
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
-    {
-        Type = toastType,
-        Title = title,
-        HelpText = $"{DateTime.Now}",
-        Message = message,
-    };
+        {
+            Type = toastType,
+            Title = title,
+            HelpText = $"{DateTime.Now}",
+            Message = message,
+        };
 
     //private async Task<GridDataProviderResult<ConnectedSystemAttribute>> EmployeesDataProvider(GridDataProviderRequest<ConnectedSystemAttribute> request)
     //{
