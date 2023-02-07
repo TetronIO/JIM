@@ -265,43 +265,29 @@
                                         <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Clear All</Button>
                                     </div>
 
-                                    <!-- temporary table, whilst we wait for Blazor.Bootstrap package update to support dynamic datasources -->
-                                    <table class="table">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col"></th>
-                                                <th scope="col">Attribute</th>
-                                                <th scope="col">Class</th>
-                                                <th scope="col">Description</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach (var csa in connectedSystem.ObjectTypes[i].Attributes)
-                                            {
-                                                <tr>
-                                                    <td><Switch @bind-Value="csa.Selected" /></td>
-                                                    <td>@csa.Name</td>
-                                                    <td>@csa.ClassName</td>
-                                                    <td>@csa.Description</td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
-
-                                    @*<Grid TItem="ConnectedSystemAttribute" DataProvider="EmployeesDataProvider" DataSource="connectedSystem.ObjectTypes[i].Attributes" AllowFiltering="true" Responsive="true" class="table table-hover table-bordered table-striped">
-                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name">
-                                    @context.Name
-                                    </GridColumn>
-                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Class" PropertyName="ClassName">
-                                    @context.ClassName
-                                    </GridColumn>
-                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Plurality" PropertyName="AttributePlurality">
-                                    @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single Valued" : "Multi Valued")
-                                    </GridColumn>
-                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description">
-                                    @context.Description
-                                    </GridColumn>
-                                    </Grid>*@
+                                    <Grid 
+                                            TItem="ConnectedSystemAttribute" 
+                                            Data="connectedSystem.ObjectTypes[i].Attributes" 
+                                            AllowFiltering="true" 
+                                            Responsive="true"
+                                            AllowSorting="true"
+                                            class="table table-hover table-bordered table-striped">
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Selected?" Filterable="false" SortKeySelector="item => item.Selected">
+                                            <Switch @bind-Value="context.Selected" />
+                                        </GridColumn>
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name" SortKeySelector="item => item.Name">
+                                            @context.Name
+                                        </GridColumn>
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Class" PropertyName="ClassName" SortKeySelector="item => item.ClassName">
+                                            @context.ClassName
+                                        </GridColumn>
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Plurality" PropertyName="AttributePlurality" Filterable="false" SortKeySelector="item => item.AttributePlurality">
+                                            @context.AttributePlurality
+                                        </GridColumn>
+                                        <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description" SortKeySelector="item => item.Description">
+                                            @context.Description
+                                        </GridColumn>
+                                    </Grid>
                                 </div>
                             </div>
                         </div>
@@ -519,9 +505,4 @@
             HelpText = $"{DateTime.Now}",
             Message = message,
         };
-
-    //private async Task<GridDataProviderResult<ConnectedSystemAttribute>> EmployeesDataProvider(GridDataProviderRequest<ConnectedSystemAttribute> request)
-    //{
-    //    return await Task.FromResult(request.ApplyTo(request.DataSource));
-    //}
 }
