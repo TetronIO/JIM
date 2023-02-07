@@ -210,21 +210,21 @@
                     @if (connectedSystem.ObjectTypes.Count == 0)
                     {
                         <text>
-                            Load the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.
+                            Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.
                         </text>
                     }
                     else
                     {
                         <text>
                             <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
-                            i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right
+                            i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right
                             permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                         </text>
                     }
                     <div class="mt-3">
                         <Button @ref="importSchemaBtn" Color="(connectedSystem.ObjectTypes.Count == 0 ? ButtonColor.Primary : ButtonColor.Warning)" Size="Size.Small" @onclick="async () => await HandleImportSchemaAsync()">
                             @if (connectedSystem.ObjectTypes.Count == 0) {
-                                <text>Load Schema</text>
+                                <text>Retrieve Schema</text>
                             } else {
                                 <text>Refresh Schema</text>
                             }
@@ -311,36 +311,63 @@
             {
                 <div class="p-5 bg-light rounded-3">
                     <div class="container-fluid py-5 text-center text-secondary">
-                        Schema not yet imported
+                        Schema not yet retrieved
                     </div>
                 </div>
             }
         }
         else if (activeTab == Tabs.Containers)
         {
-            <text>Containers go here</text>
-@*            <div class="mb-3">
+            <div class="mb-3">
                 <p>
-                    Select which partitions and containers are managed by JIM here. To maximise performance, only select those that contain objects that will be managed.
+                    Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.
                 </p>
-                <Callout Type="CalloutType.Warning">
-                    <strong>Importing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
-                    i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right
-                    permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                <Callout Type="(connectedSystem.ObjectTypes.Count > 0 ? CalloutType.Warning : CalloutType.Info)">
+                    @if (connectedSystem.ObjectTypes.Count == 0)
+                    {
+                        <text>
+                            Retrieve the partition and container hierarchy from the connected system, to be able to select which ones you want to manage with JIM.
+                        </text>
+                    }
+                    else
+                    {
+                        <text>
+                            <strong>Refreshing the partition and container heirarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted 
+                            from the Connected System, which depending on your configuration, could result in those objects being deprovisioned from the Metaverse and any downstream Connected Systems. Refresh with caution. 
+                            Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
+                        </text>
+                    }
                     <div class="mt-3">
-                        <Button @ref="importSchemaBtn" Color="ButtonColor.Warning" Size="Size.Small" @onclick="async () => await HandleImportSchemaAsync()">
-                            @if (connectedSystem.ObjectTypes.Count == 0)
+                        <Button @ref="importHierarchyBtn" Color="(connectedSystem.Partitions.Count == 0 ? ButtonColor.Primary : ButtonColor.Warning)" Size="Size.Small" @onclick="async () => await HandleImportHierarchyAsync()">
+                            @if (connectedSystem.Partitions?.Count == 0)
                             {
-                                <text>Load Schema</text>
+                                <text>Retrieve Hierarchy</text>
                             }
                             else
                             {
-                                <text>Refresh Schema</text>
+                                <text>Refresh Hierarchy</text>
                             }
                         </Button>
                     </div>
                 </Callout>
-            </div>*@
+            </div>
+
+            @if (connectedSystem?.Partitions?.Count > 0)
+            {
+                <div class="accordion mb-3" id="ot-accordion">
+                    hierarchy render to come...
+                </div>
+
+                @*<Button @ref="saveHierarchyBtn" Color="ButtonColor.Primary" Type="ButtonType.Submit" @onclick="async () => await  HandleAttributeSelectionSubmitAsync()">Save Changes</Button>*@
+            }
+            else
+            {
+                <div class="p-5 bg-light rounded-3">
+                    <div class="container-fluid py-5 text-center text-secondary">
+                        Hierarchy not yet retrieved
+                    </div>
+                </div>
+            }
         }
     }
 
@@ -364,6 +391,7 @@
     private Button? saveSettingsBtn;
     private Button? importSchemaBtn;
     private Button? saveAttributesBtn;
+    private Button? importHierarchyBtn;
 
     // ui helper
     private enum Tabs
@@ -455,11 +483,21 @@
             return;
 
         saveAttributesBtn?.ShowLoading("Saving changes...");
-        
+
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your attribute changes have been saved."));
 
         saveAttributesBtn?.HideLoading();
+    }
+
+    private async Task HandleImportHierarchyAsync()
+    {
+        if (connectedSystem == null)
+            return;
+
+        importHierarchyBtn?.ShowLoading("Retrieving hierarchy...");
+        //await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem);
+        importHierarchyBtn?.HideLoading();
     }
 
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
