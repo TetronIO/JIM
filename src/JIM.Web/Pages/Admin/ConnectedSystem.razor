@@ -340,12 +340,9 @@
                     }
                     <div class="mt-3">
                         <Button @ref="importHierarchyBtn" Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? ButtonColor.Primary : ButtonColor.Warning)" Size="Size.Small" @onclick="async () => await HandleImportHierarchyAsync()">
-                            @if (connectedSystem.Partitions?.Count == 0)
-                            {
+                            @if (connectedSystem.Partitions?.Count == 0) {
                                 <text>Retrieve Hierarchy</text>
-                            }
-                            else
-                            {
+                            } else {
                                 <text>Refresh Hierarchy</text>
                             }
                         </Button>
