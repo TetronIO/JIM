@@ -44,6 +44,17 @@
         /// It's recommended that a Connector does support exports though, to ensure that the system can be updated with attribute values it's not authoritative for, i.e. email-address, phone-numbers, etc in the case of HCM systems.
         /// </summary>
         public bool SupportsExport { get; set; }
+
+        /// <summary>
+        /// Does the Connector support the concept of partitions? Commonly, systems such as LDAP directories will. If a Connector does support Partitions, it may also support Containers, though it doesn't have to.
+        /// </summary>
+        public bool SupportsPartitions { get; set; }
+
+        /// <summary>
+        /// Does the Connector support the concept of containers? Containers are part of partitions.
+        /// If Partition Containers are supported, then Partitions must also be supported.
+        /// </summary>
+        public bool SupportsPartitionContainers { get; set; }
         #endregion
     }
 }

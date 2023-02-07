@@ -24,11 +24,6 @@
         /// A system that implements partitions may have the concept of a hierarchy of containers within the partition, i.e. as with an LDAP system.
         /// It's not required that a partition have containers though. If so, leave the Containers list empty.
         /// </summary>
-        public List<ConnectedSystemContainer> Containers { get; set; }
-
-        public ConnectedSystemPartition()
-        {
-            Containers = new List<ConnectedSystemContainer>();
-        }
+        public List<ConnectedSystemContainer>? Containers { get; set; }
     }
 }

@@ -6,7 +6,7 @@ using System.Net;
 
 namespace JIM.Connectors.LDAP
 {
-    public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorContainers, IConnectorImportUsingCalls
+    public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls
     {
         private LdapConnection? _connection;
 
@@ -22,6 +22,8 @@ namespace JIM.Connectors.LDAP
         public bool SupportsFullImport { get => true; }
         public bool SupportsDeltaImport { get => false; }
         public bool SupportsExport { get => false; }
+        public bool SupportsPartitions { get => true; }
+        public bool SupportsPartitionContainers { get => true; }
         #endregion
 
         #region IConnectorSettings members
@@ -109,19 +111,6 @@ namespace JIM.Connectors.LDAP
         #region IConnectorPartitions members
         public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSettingValue> settings)
         {
-            throw new NotImplementedException();
-        }
-        #endregion
-
-        #region IConnectorContainers members
-        public ConnectorContainer? GetContainers(IList<ConnectedSystemSettingValue> settingss)
-        {
-            throw new NotImplementedException();
-        }
-
-        public ConnectorContainer? GetContainers(IList<ConnectedSystemSettingValue> settings, ConnectorPartition connectorPartition)
-        {
-            // require connection setting values. validate for presence...
             throw new NotImplementedException();
         }
         #endregion

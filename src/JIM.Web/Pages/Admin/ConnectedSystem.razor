@@ -24,9 +24,12 @@
     <li class="nav-item">
         <a class="nav-link @(activeTab == Tabs.Schema ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Schema">Schema</a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Containers ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Containers">Partitions &amp; Containers</a>
-    </li>
+    @if (connectedSystem != null && connectedSystem.ConnectorDefinition.SupportsPartitions)
+    {
+        <li class="nav-item">
+            <a class="nav-link @(activeTab == Tabs.Hierarchy ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Hierarchy">Partitions &amp; Containers</a>
+        </li>
+    }
 </ul>
 <div class="box-no-top mb-3">
 
@@ -316,29 +319,27 @@
                 </div>
             }
         }
-        else if (activeTab == Tabs.Containers)
+        else if (activeTab == Tabs.Hierarchy && connectedSystem != null)
         {
             <div class="mb-3">
                 <p>
-                    Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.
+                    <text>Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</text>
                 </p>
-                <Callout Type="(connectedSystem.ObjectTypes.Count > 0 ? CalloutType.Warning : CalloutType.Info)">
+                <Callout Type="(connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0 ? CalloutType.Warning : CalloutType.Info)">
                     @if (connectedSystem.ObjectTypes.Count == 0)
                     {
-                        <text>
-                            Retrieve the partition and container hierarchy from the connected system, to be able to select which ones you want to manage with JIM.
-                        </text>
+                        <text>Retrieve the hierarchy @partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</text>
                     }
                     else
                     {
                         <text>
-                            <strong>Refreshing the partition and container heirarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted 
+                            <strong>Refreshing the @partitionAndHierarchyText heirarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted 
                             from the Connected System, which depending on your configuration, could result in those objects being deprovisioned from the Metaverse and any downstream Connected Systems. Refresh with caution. 
                             Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
                         </text>
                     }
                     <div class="mt-3">
-                        <Button @ref="importHierarchyBtn" Color="(connectedSystem.Partitions.Count == 0 ? ButtonColor.Primary : ButtonColor.Warning)" Size="Size.Small" @onclick="async () => await HandleImportHierarchyAsync()">
+                        <Button @ref="importHierarchyBtn" Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? ButtonColor.Primary : ButtonColor.Warning)" Size="Size.Small" @onclick="async () => await HandleImportHierarchyAsync()">
                             @if (connectedSystem.Partitions?.Count == 0)
                             {
                                 <text>Retrieve Hierarchy</text>
@@ -352,7 +353,7 @@
                 </Callout>
             </div>
 
-            @if (connectedSystem?.Partitions?.Count > 0)
+            @if (connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0)
             {
                 <div class="accordion mb-3" id="ot-accordion">
                     hierarchy render to come...
@@ -387,6 +388,8 @@
     private Tabs activeTab = Tabs.Details;
     private List<ConnectedSystemSettingCategory>? settingCategories;
     private JimValidator? connectedSystemSettingsValidator;
+    private string? partitionsAndHierarchiesText;
+    private string? partitionAndHierarchyText;
     private Button? saveDetailsBtn;
     private Button? saveSettingsBtn;
     private Button? importSchemaBtn;
@@ -399,7 +402,7 @@
         Details,
         Settings,
         Schema,
-        Containers
+        Hierarchy
     }
 
     protected override async Task OnInitializedAsync()
@@ -414,6 +417,18 @@
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
         settingCategories = connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
+
+        // to save us having to perform this comparison all over the view
+        if (connectedSystem.ConnectorDefinition.SupportsPartitions && connectedSystem.ConnectorDefinition.SupportsPartitionContainers)
+        {
+            partitionsAndHierarchiesText = "partitions and containers";
+            partitionAndHierarchyText = "partition and container";
+        }
+        else if (connectedSystem.ConnectorDefinition.SupportsPartitions)
+        {
+            partitionsAndHierarchiesText = "partitions";
+            partitionAndHierarchyText = "partition";
+        }
     }
 
     private async Task HandleValidDetailsSubmitAsync()

@@ -642,7 +642,9 @@ namespace JIM.Application.Servers
                 BuiltIn = true,
                 SupportsFullImport = connectorCapabilities.SupportsFullImport,
                 SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport,
-                SupportsExport = connectorCapabilities.SupportsExport
+                SupportsExport = connectorCapabilities.SupportsExport,
+                SupportsPartitions = connectorCapabilities.SupportsPartitions,
+                SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers
             };
 
             Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
