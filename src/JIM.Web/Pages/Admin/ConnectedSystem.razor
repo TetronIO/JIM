@@ -204,20 +204,28 @@
         {
             <div class="mb-3">
                 <p>
-                    Manage which object types and which attributes for them are imported/exported by JIM. To maximise performance, only select those that need managing.
+                    Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.
                 </p>
-                <Callout Type="CalloutType.Warning">
-                    <strong>Importing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
-                    i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right
-                    permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                <Callout Type="(connectedSystem.ObjectTypes.Count > 0 ? CalloutType.Warning : CalloutType.Info)">
+                    @if (connectedSystem.ObjectTypes.Count == 0)
+                    {
+                        <text>
+                            Load the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.
+                        </text>
+                    }
+                    else
+                    {
+                        <text>
+                            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
+                            i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right
+                            permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                        </text>
+                    }
                     <div class="mt-3">
-                        <Button @ref="importSchemaBtn" Color="ButtonColor.Warning" Size="Size.Small" @onclick="async () => await HandleImportSchemaAsync()">
-                            @if (connectedSystem.ObjectTypes.Count == 0)
-                            {
+                        <Button @ref="importSchemaBtn" Color="(connectedSystem.ObjectTypes.Count == 0 ? ButtonColor.Primary : ButtonColor.Warning)" Size="Size.Small" @onclick="async () => await HandleImportSchemaAsync()">
+                            @if (connectedSystem.ObjectTypes.Count == 0) {
                                 <text>Load Schema</text>
-                            }
-                            else
-                            {
+                            } else {
                                 <text>Refresh Schema</text>
                             }
                             </Button>
@@ -310,7 +318,29 @@
         }
         else if (activeTab == Tabs.Containers)
         {
-            <p>containers tab...</p>
+            <text>Containers go here</text>
+@*            <div class="mb-3">
+                <p>
+                    Select which partitions and containers are managed by JIM here. To maximise performance, only select those that contain objects that will be managed.
+                </p>
+                <Callout Type="CalloutType.Warning">
+                    <strong>Importing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
+                    i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Import with caution. Ensure the Connected System identity has the right
+                    permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                    <div class="mt-3">
+                        <Button @ref="importSchemaBtn" Color="ButtonColor.Warning" Size="Size.Small" @onclick="async () => await HandleImportSchemaAsync()">
+                            @if (connectedSystem.ObjectTypes.Count == 0)
+                            {
+                                <text>Load Schema</text>
+                            }
+                            else
+                            {
+                                <text>Refresh Schema</text>
+                            }
+                        </Button>
+                    </div>
+                </Callout>
+            </div>*@
         }
     }
 
