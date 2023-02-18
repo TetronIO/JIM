@@ -1,10 +1,12 @@
 {
   "profiles": {
     "JIM.Service": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "environmentVariables": {}
     },
     "Docker": {
-      "commandName": "Docker"
+      "commandName": "Docker",
+      "environmentVariables": {}
     }
   }
 }

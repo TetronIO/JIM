@@ -9,9 +9,12 @@ services:
       - "80"
       - "443"
     volumes:
+      # Windows
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
-
+      # macOS
+      #- ~/.aspnet/https:/root/.aspnet/https:ro
+      #- ~/.microsoft/usersecrets:/root/.microsoft/usersecrets:ro
   jim.api:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
@@ -20,5 +23,9 @@ services:
       - "80"
       - "443"
     volumes:
+      # Windows
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
+      # macOS
+      #- ~/.aspnet/https:/root/.aspnet/https:ro
+      #- ~/.microsoft/usersecrets:/root/.microsoft/usersecrets:ro

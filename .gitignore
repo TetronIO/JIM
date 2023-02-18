@@ -436,3 +436,4 @@ Vagrantfile
 .env
 
 *.exe
+env
