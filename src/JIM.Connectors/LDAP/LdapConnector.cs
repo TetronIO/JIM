@@ -63,7 +63,7 @@ namespace JIM.Connectors.LDAP
         /// <summary>
         /// Validates LdapConnector setting values using custom business logic.
         /// </summary>
-        public async Task<IList<ConnectorSettingValueValidationResult>> ValidateSettingValuesAsync(IList<ConnectedSystemSettingValue> settingValues)
+        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSettingValue> settingValues)
         {
             var response = new List<ConnectorSettingValueValidationResult>();
 
@@ -109,9 +109,20 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorPartitions members
-        public IList<ConnectorPartition> GetPartitions(IList<ConnectedSystemSettingValue> settings)
+        public async Task<List<ConnectorPartition>> GetPartitionsAsync(IList<ConnectedSystemSettingValue> settingValues)
         {
-            throw new NotImplementedException();
+            OpenImportConnection(settingValues);
+            if (_connection == null)
+                throw new Exception("No connection available to get partitions with");
+
+            var rootDnSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRootDn);
+            if (rootDnSettingValue == null || string.IsNullOrEmpty(rootDnSettingValue.StringValue))
+                throw new InvalidSettingValuesException($"No setting value for {_settingRootDn}!");
+
+            var ldapConnectorSchema = new LdapConnectorPartitions(_connection, rootDnSettingValue.StringValue);
+            var partitions = await ldapConnectorSchema.GetPartitionsAsync();
+            CloseImportConnection();
+            return partitions;
         }
         #endregion
 

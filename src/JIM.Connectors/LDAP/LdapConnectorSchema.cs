@@ -23,33 +23,35 @@ namespace JIM.Connectors.LDAP
             // future improvement: work out how to get the default naming context programatically, so we don't have to ask the
             // user for the root via a setting value.
 
-            // query: classes, structural, don't return hidden by default classes
-            var filter = "(&(objectClass=classSchema)(objectClassCategory=1)(defaultHidingValue=FALSE))";
-            var dn = $"CN=Schema,CN=Configuration,{_root}";
-            var request = new SearchRequest(dn, filter, SearchScope.Subtree);
-            var response = (SearchResponse)_connection.SendRequest(request);
+            return await Task.Run(() => { 
+                // query: classes, structural, don't return hidden by default classes
+                var filter = "(&(objectClass=classSchema)(objectClassCategory=1)(defaultHidingValue=FALSE))";
+                var dn = $"CN=Schema,CN=Configuration,{_root}";
+                var request = new SearchRequest(dn, filter, SearchScope.Subtree);
+                var response = (SearchResponse)_connection.SendRequest(request);
 
-            if (response.ResultCode != ResultCode.Success)
-                throw new Exception($"No success getting object types. Result code: {response.ResultCode}");
+                if (response.ResultCode != ResultCode.Success)
+                    throw new Exception($"No success getting object types. Result code: {response.ResultCode}");
 
-            if (response.Entries.Count == 0)
-                throw new Exception($"Couldn't get object types. Non returned from connected system. Result code: {response.ResultCode}");
+                if (response.Entries.Count == 0)
+                    throw new Exception($"Couldn't get object types. Non returned from connected system. Result code: {response.ResultCode}");
 
-            // enumerate each object class entry
-            foreach (SearchResultEntry entry in response.Entries)
-            {
-                var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name");
-                if (name == null)
-                    throw new Exception($"No name on object class entry: {entry.DistinguishedName}");
+                // enumerate each object class entry
+                foreach (SearchResultEntry entry in response.Entries)
+                {
+                    var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name");
+                    if (name == null)
+                        throw new Exception($"No name on object class entry: {entry.DistinguishedName}");
 
-                var objectType = new ConnectorSchemaObjectType(name);
+                    var objectType = new ConnectorSchemaObjectType(name);
 
-                // now go and work out which attributes the object type has and add them to the object type
-                if (AddObjectTypeAttributes(objectType))
-                    _schema.ObjectTypes.Add(objectType);
-            }
+                    // now go and work out which attributes the object type has and add them to the object type
+                    if (AddObjectTypeAttributes(objectType))
+                        _schema.ObjectTypes.Add(objectType);
+                }
 
-            return _schema;
+                return _schema;
+            });
         }
 
         private bool AddObjectTypeAttributes(ConnectorSchemaObjectType objectType)

@@ -5,6 +5,12 @@
     /// </summary>
     public class ConnectorPartition
     {
+        /// <summary>
+        /// The unique identifier for this partition in the connected system.
+        /// For example, with LDAP systems this would be the DN (Distinguished Name).
+        /// </summary>
+        public string Id { get; set; }
+
         public string Name { get; set; }
 
         /// <summary>

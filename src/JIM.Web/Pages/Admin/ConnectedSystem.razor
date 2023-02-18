@@ -262,7 +262,7 @@
 
                                     <div class="mt-3 mb-3">
                                         <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-check-all"></i> Select All</Button>
-                                        <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Clear All</Button>
+                                        <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Seclect None</Button>
                                     </div>
 
                                     <Grid 
@@ -338,11 +338,42 @@
 
             @if (connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0)
             {
-                <div class="accordion mb-3" id="ot-accordion">
-                    hierarchy render to come...
+                <div class="accordion mb-3" id="p-accordion">
+                    @for (var i = 0; i < connectedSystem.Partitions.Count; i++)
+                    {
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="p-heading-@(i)">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#p-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
+                                    @if (connectedSystem.Partitions[i].Selected)
+                                    {
+                                        <span class="jim-cs-s-selected"><i class="bi bi-check2-circle"></i></span>
+                                    }
+                                    else
+                                    {
+                                        <span class="jim-cs-s-not-selected"></span>
+                                    }
+                                    @connectedSystem.Partitions[i].Name
+                                </button>
+                            </h2>
+                            <div id="p-collapse-@(i)" class="accordion-collapse collapse" aria-labelledby="p-heading-@(i)" data-bs-parent="#p-accordion">
+                                <div class="accordion-body">
+
+                                    Select the @connectedSystem.Partitions[i].Name containers you want to manage.
+
+                                    <div class="mt-3 mb-3">
+                                        <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-check-all"></i> Select All</Button>
+                                        <Button Color="ButtonColor.Secondary" Outline="true" Size="Size.Small"><i class="bi bi-x-circle"></i> Select None</Button>
+                                    </div>
+
+                                    <!-- container heirarchy to go here -->
+
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
 
-                @*<Button @ref="saveHierarchyBtn" Color="ButtonColor.Primary" Type="ButtonType.Submit" @onclick="async () => await  HandleAttributeSelectionSubmitAsync()">Save Changes</Button>*@
+                <Button @ref="saveHierarchyBtn" Color="ButtonColor.Primary" Type="ButtonType.Submit" @onclick="async () => await  HandleHierarchySelectionSubmitAsync()">Save Changes</Button>
             }
             else
             {
@@ -378,6 +409,7 @@
     private Button? importSchemaBtn;
     private Button? saveAttributesBtn;
     private Button? importHierarchyBtn;
+    private Button? saveHierarchyBtn;
 
     // ui helper
     private enum Tabs
@@ -441,7 +473,7 @@
         // validate the form
         connectedSystemSettingsValidator?.ClearErrors();
         var errors = new Dictionary<string, List<string>>();
-        var results = await Jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
+        var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
         for (var i = 0; i < results.Count; i++)
         {
             if (results[i].IsValid)
@@ -494,15 +526,28 @@
             return;
 
         importHierarchyBtn?.ShowLoading("Retrieving hierarchy...");
-        //await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem);
+        await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem);
         importHierarchyBtn?.HideLoading();
     }
 
+    private async Task HandleHierarchySelectionSubmitAsync()
+    {
+        if (connectedSystem == null)
+            return;
+
+        saveHierarchyBtn?.ShowLoading("Saving changes...");
+
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        messages.Add(CreateToastMessage(ToastType.Success, "Success", "Your hierarchy changes have been saved."));
+
+        saveHierarchyBtn?.HideLoading();
+    }
+
     private ToastMessage CreateToastMessage(ToastType toastType, string title, string message) => new ToastMessage
-        {
-            Type = toastType,
-            Title = title,
-            HelpText = $"{DateTime.Now}",
-            Message = message,
-        };
+    {
+        Type = toastType,
+        Title = title,
+        HelpText = $"{DateTime.Now}",
+        Message = message,
+    };
 }

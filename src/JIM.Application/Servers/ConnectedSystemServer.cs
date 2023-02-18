@@ -115,7 +115,7 @@ namespace JIM.Application.Servers
                 throw new ArgumentNullException(nameof(connectedSystem));
 
             // are the settings valid?
-            var validationResults = await ValidateConnectedSystemSettingsAsync(connectedSystem);
+            var validationResults = ValidateConnectedSystemSettings(connectedSystem);
             connectedSystem.SettingValuesValid = !validationResults.Any(q => q.IsValid == false);
 
             connectedSystem.LastUpdated = DateTime.Now;
@@ -151,7 +151,7 @@ namespace JIM.Application.Servers
         /// Checks that all setting values are valid, according to business rules.
         /// </summary>
         /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-        public async Task<IList<ConnectorSettingValueValidationResult>> ValidateConnectedSystemSettingsAsync(ConnectedSystem connectedSystem)
+        public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
         {
             ValidateConnectedSystemParameter(connectedSystem);            
 
@@ -161,7 +161,7 @@ namespace JIM.Application.Servers
 
             if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
             {
-                return await new LdapConnector().ValidateSettingValuesAsync(connectedSystem.SettingValues);
+                return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues);
             }
 
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
@@ -224,6 +224,63 @@ namespace JIM.Application.Servers
                     }).ToList()
                 });
             }
+        }
+        #endregion
+
+        #region Connected System Hierarchy
+        /// <summary>
+        /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the connected system.
+        /// You will need update the ConnectedSystem after if happy with the changes, to persist them.
+        /// </summary>
+        /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
+        /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+        public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem)
+        {
+            ValidateConnectedSystemParameter(connectedSystem);
+
+            // work out what connector we need to instantiate, so that we can use its internal validation method
+            // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
+            // especially when we need to support uploaded connectors, not just built-in ones
+
+            List<ConnectorPartition> partitions;
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
+            {
+                partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues);
+            }
+            else
+            {
+                throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+            }
+
+            // this point could potentially be a good point to check for data-loss if persisted and return a report object
+            // that the user could decide whether or not to take action upon, i.e. cancel or persist.
+
+            connectedSystem.Partitions = new List<ConnectedSystemPartition>(); // super destructive at this point. this is for mvp only
+            foreach (var partition in partitions)
+            {
+                connectedSystem.Partitions.Add(new ConnectedSystemPartition
+                {
+                    Name = partition.Name,
+                    ExternalId = partition.Id,
+                    Containers = partition.Containers.Select(cc => BuildConnectedSystemContainerTree(cc)).ToList()
+                });
+            }
+        }
+
+        private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
+        {
+            var connectedSystemContainer = new ConnectedSystemContainer
+            {
+                ExternalId = connectorContainer.Id,
+                Name = connectorContainer.Name,
+                Description = connectorContainer.Description,
+                Hidden = connectorContainer.Hidden
+            };
+
+            foreach (var childContainer in connectorContainer.ChildContainers)
+                connectedSystemContainer.ChildContainers.Add(BuildConnectedSystemContainerTree(childContainer));
+
+            return connectedSystemContainer;
         }
         #endregion
 

@@ -32,6 +32,17 @@
         public string? Description { get; set; }
 
         /// <summary>
+        /// Some systems enable containers to be hidden by default, to reduce the risk of exposing internal objects to end-users.
+        /// </summary>
+        public bool Hidden { get; set; }
+
+        /// <summary>
+        /// Indicates whether or not the container has been selected to be managed, i.e. whether or not objects are
+        /// imported from here or not.
+        /// </summary>
+        public bool Selected { get; set; }
+
+        /// <summary>
         /// Containers can container children containers.
         /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
         /// </summary>

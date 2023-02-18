@@ -17,6 +17,6 @@ namespace JIM.Models.Interfaces
         /// Validates that all required combinations of settings values have been provided by an administrator, and optionally if the values themselves are valid, i.e. can the system be contacted with the supplied credentials.
         /// </summary>
         /// <returns>Whether or not the setting values are valid.</returns>
-        public Task<IList<ConnectorSettingValueValidationResult>> ValidateSettingValuesAsync(IList<ConnectedSystemSettingValue> settings);
+        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSettingValue> settings);
     }
 }
