@@ -1,9 +1,10 @@
-using BlazorBootstrap;
 using JIM.Application;
 using JIM.Data;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using Microsoft.AspNetCore.Authentication;
+using MudBlazor;
+using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
 using System.Security.Claims;
@@ -82,8 +83,11 @@ try
     // now setup logging with the web framework
     builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
 
-    // blazor component helpers
-    builder.Services.AddBlazorBootstrap();
+    // MudBlazor
+    builder.Services.AddMudServices(config =>
+    {
+        config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.TopCenter;
+    });
 
     var app = builder.Build();
 

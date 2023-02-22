@@ -1,17 +1,47 @@
 ﻿@inherits LayoutComponentBase
 
+<MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
 <PageTitle>JIM</PageTitle>
 
-<div class="page">
+<MudLayout>
+    <MudAppBar Elevation=" 1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        JIM
+        <MudSpacer />
 
-    <div class="sidebar">
+        <MudTooltip Text="@(IsDarkMode ? _lightModeText : _darkModeText)">
+            <MudToggleIconButton @bind-Toggled="@IsDarkMode"
+                                 Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
+                                 ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
+        </MudTooltip>
+
+
+    </MudAppBar>
+    <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
         <NavMenu />
-    </div>
-
-    <main>
-        <TopBar />
-        <article class="content px-4">
+    </MudDrawer>
+    <MudMainContent>
+        <MudContainer>
             @Body
-        </article>
-    </main>
-</div>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code
+{
+    private MudTheme _theme = new();
+    private string _lightModeText = "Light Mode";
+    private string _darkModeText = "Dark Mode";
+
+    private bool IsDrawerOpen { get; set; } = true;
+    private bool IsDarkMode { get; set; }
+    private bool DarkModeControlText { get; set; }
+
+    void DrawerToggle()
+    {
+        IsDrawerOpen = !IsDrawerOpen;
+    }
+}
