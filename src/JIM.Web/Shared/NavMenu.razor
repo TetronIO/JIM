@@ -8,13 +8,9 @@
     </div>
 </div>*@
 
-<MudNavMenu Rounded="true" Color="Color.Primary" Class="pa-2">
-    <MudNavGroup Title="Home" Expanded="false" Icon="@Icons.Material.Filled.Home">
-        <MudNavLink Href="/" Match="NavLinkMatch.All">Overview</MudNavLink>
-        <AuthorizeView Roles="Administrators">
-            <MudNavLink Href="/requests" Match="NavLinkMatch.All">Requests</MudNavLink>
-        </AuthorizeView>
-    </MudNavGroup>
+<MudNavMenu Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Class="pa-2">
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+    <MudNavLink Href="/requests" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Requests</MudNavLink>
 
     <MudNavGroup Title="Users" Expanded="true" Icon="@Icons.Material.Filled.Person">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All">All Users</MudNavLink>
