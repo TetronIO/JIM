@@ -8,28 +8,28 @@
     </div>
 </div>*@
 
-<MudNavMenu>
-    <MudNavGroup Title="Home" Expanded="true">
+<MudNavMenu Rounded="true" Color="Color.Primary" Class="pa-2">
+    <MudNavGroup Title="Home" Expanded="false" Icon="@Icons.Material.Filled.Home">
         <MudNavLink Href="/" Match="NavLinkMatch.All">Overview</MudNavLink>
         <AuthorizeView Roles="Administrators">
             <MudNavLink Href="/requests" Match="NavLinkMatch.All">Requests</MudNavLink>
         </AuthorizeView>
     </MudNavGroup>
 
-    <MudNavGroup Title="Users" Expanded="true">
+    <MudNavGroup Title="Users" Expanded="true" Icon="@Icons.Material.Filled.Person">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All">All Users</MudNavLink>
         <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix">People</MudNavLink>
         <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix">Service Principals</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Groups" Expanded="true">
+    <MudNavGroup Title="Groups" Expanded="true" Icon="@Icons.Material.Filled.Groups">
         <MudNavLink Href="/t/groups" Match="NavLinkMatch.All">All Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix">Security Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix">Distribution Groups</MudNavLink>
     </MudNavGroup>
 
     <AuthorizeView Roles="Administrators">
-        <MudNavGroup Title="Dashboard" Expanded="false">
+        <MudNavGroup Title="Dashboard" Expanded="false" Icon="@Icons.Material.Filled.Dashboard">
             <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All">Daily</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All">Weekly</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All">Monthly</MudNavLink>
@@ -38,7 +38,7 @@
     </AuthorizeView>
 
     <AuthorizeView Roles="Administrators">
-        <MudNavGroup Title="Admin" Expanded="true">
+        <MudNavGroup Title="Admin" Expanded="false" Icon="@Icons.Material.Filled.Settings">
             <MudNavLink Href="/admin/schema" Match="NavLinkMatch.Prefix">Schema</MudNavLink>
             <MudNavLink Href="/admin/predefined-searches" Match="NavLinkMatch.Prefix">Predefined Searches</MudNavLink>
             <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.Prefix">Connected Systems</MudNavLink>

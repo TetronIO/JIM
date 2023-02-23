@@ -1,5 +1,5 @@
 /* overriding bootstrap fonts */
-body {
+/*body {
     font-family: 
         -apple-system, 
         "Segoe UI Variable Display", 
@@ -77,10 +77,10 @@ a, .btn-link {
 
     .blazor-error-boundary::after {
         content: "An error has occurred."
-    }
+    }*/
 
 /* Bootstrap Docs */
-::deep .bd-links {
+/*::deep .bd-links {
     overflow: auto;
     font-weight: 600
 }
@@ -163,10 +163,10 @@ a, .btn-link {
 .bd-links .active {
     font-weight: 600;
     color: rgba(0,0,0,0.85)
-}
+}*/
 
 /* BOOTSTRAP COLLAPSABLE NAV */
-.bi {
+/*.bi {
     vertical-align: -.125em;
     pointer-events: none;
     fill: currentColor;
@@ -235,10 +235,10 @@ a, .btn-link {
 
 .lh-tight {
     line-height: 1.25;
-}
+}*/
 
 /* JIM CUSTOMISATIONS */
-.code {
+/*.code {
     color: #4d7a25;
     font-family: Consolas,Andale Mono;
     background-color: #e2f3d3;
@@ -319,4 +319,4 @@ thead {
     display: inline-block;
     margin-right: 26px;
     height: 22px;
-}
+}*/
