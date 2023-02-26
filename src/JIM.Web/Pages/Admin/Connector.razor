@@ -10,93 +10,65 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Connector: @connector?.Name</PageTitle>
-<h1><span class="text-muted">Connector:</span> @connector?.Name</h1>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Connector:</span> @connector?.Name</MudText>
 
 @if (connector != null)
 {
-    <div class="box">
-        <h2>Details</h2>
-        <table>
-            <tr>
-                <td class="light pe-3">Description:</td>
-                <td><span class="font-monospace">@connector.Description</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Url:</td>
-                <td><span class="font-monospace"><a href="@connector.Url" target="_blank">@connector.Url</a></span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Built-In:</td>
-                <td><span class="font-monospace">@(connector.BuiltIn ? "Yes" : "No")</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Created:</td>
-                <td><span class="font-monospace">@connector.Created</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Last Updated:</td>
-                <td><span class="font-monospace">@(connector.LastUpdated.HasValue ? connector.LastUpdated : "-")</span></td>
-            </tr>
-        </table>
-    </div>
+    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Description" Variant="Variant.Text">@connector.Description</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Url" Variant="Variant.Text"><MudLink Href="@connector.Url">@connector.Url</MudLink></MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Built-in?" Variant="Variant.Text">@(connector.BuiltIn ? "Yes" : "No")</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Created" Variant="Variant.Text">@connector.Created</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Last Updated" Variant="Variant.Text">@(connector.LastUpdated.HasValue ? connector.LastUpdated : "-")</MudField>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
-    <div class="box mt-3">
-        <h2>Capabilities</h2>
-        <table>
-            <tr>
-                <td class="light pe-3">Supports Full Import?</td>
-                <td><span class="font-monospace">@(connector.SupportsFullImport ? "Yes" : "No")</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Supports Delta-Import?</td>
-                <td><span class="font-monospace">@(connector.SupportsDeltaImport ? "Yes" : "No")</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Supports Export?</td>
-                <td><span class="font-monospace">@(connector.SupportsExport ? "Yes" : "No")</span></td>
-            </tr>
-        </table>
-    </div>
+    <MudText Typo="Typo.h5" Class="mt-5">Capabilities</MudText>
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudSwitch @bind-Checked="connector.SupportsFullImport" Label="Supports full import?" Color="Color.Primary" Disabled="true" />
+        <MudSwitch @bind-Checked="connector.SupportsDeltaImport" Label="Supports delta import?" Color="Color.Primary" Disabled="true" />
+        <MudSwitch @bind-Checked="connector.SupportsExport" Label="Supports export?" Color="Color.Primary" Disabled="true" />
+    </MudPaper>
 
-    <div class="box mt-3">
-        <h2>Files</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th scope="col">Filename</th>
-                    <th scope="col">Filesize (kb)</th>
-                    <th scope="col">Interfaces</th>
-                    <th scope="col">Version</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (connector.Files.Count > 0)
-                {
-                    foreach (var file in connector.Files)
-                    {
-                        <tr>
-                            <td>@file.Filename</td>
-                            <td>@(file.FileSizeBytes/1024)</td>
-                            <td>@GetFileInterfaces(file)</td>
-                            <td>@file.Version</td>
-                        </tr>
-                    }
-                }
-                else if (connector.Files.Count == 0 && connector.BuiltIn)
-                {
-                    <tr>
-                        <td colspan="4" class="light text-center">No files due to it being a built-in connector</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="4" class="light text-center">No files. Upload some.</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
+    <MudTable Items="@connector.Files" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6">Files</MudText>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Filename)">Filename</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.FileSizeBytes)">Filesize (kb)</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => GetFileInterfaces(x))">Interfaces</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Version)">Version</MudTableSortLabel></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Filename">@context.Filename</MudTd>
+            <MudTd DataLabel="Filesize (kb)">@(context.FileSizeBytes/1000)</MudTd>
+            <MudTd DataLabel="Interfaces">@GetFileInterfaces(context)</MudTd>
+            <MudTd DataLabel="Version">@context.Version</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            @if (connector.BuiltIn)
+            {
+                <MudText>No files due to it being a built-in connector</MudText>
+            }
+            else
+            {
+                <MudText>No files. Upload some to make this connector functional</MudText>
+            }
+        </NoRecordsContent>
+    </MudTable>
 }
 
 @code {

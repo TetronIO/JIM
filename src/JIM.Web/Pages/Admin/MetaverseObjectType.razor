@@ -6,31 +6,31 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Metaverse Object Type: @metaverseObjectType?.Name</PageTitle>
-<h1><span class="text-muted">Metaverse Object Type:</span> @metaverseObjectType?.Name</h1>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Metaverse Object Type:</span> @metaverseObjectType?.Name</MudText>
 
 @if (metaverseObjectType != null)
 {
-    <div class="box">
-        <table>
-            <tr>
-                <td class="light pe-3">Created:</td>
-                <td><span class="font-monospace">@metaverseObjectType.Created</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Built-in?</td>
-                <td><span class="font-monospace">@(metaverseObjectType.BuiltIn ? "Yes" : "No")</span></td>
-            </tr>
-        </table>
-    </div>
+    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Created" Variant="Variant.Text">@metaverseObjectType.Created</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Built-in?" Variant="Variant.Text">@(metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
-    <div class="box mt-3">
-        <h6>Attributes:</h6>
-        <div class="light mb-3">These are the attributes bound to the type:</div>
+    <MudText Typo="Typo.h5" Class="mt-5">Attributes</MudText>
+    <MudText Typo="Typo.subtitle1">These are the attributes bound to the metaverse object type:</MudText>
+
+    <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
         @foreach (var metaverseAttribute in metaverseObjectType.Attributes)
         {
-            <span class="badge badge-outline badge-bigger bg-light text-dark">@metaverseAttribute.Name</span>
+            <MudChip Variant="Variant.Text" Color="Color.Primary">@metaverseAttribute.Name</MudChip>
         }
-    </div>
+    </MudPaper>
 }
 
 @code {

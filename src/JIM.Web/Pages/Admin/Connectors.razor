@@ -7,62 +7,61 @@
 @inject JimApplication Jim
 
 <PageTitle>Connectors</PageTitle>
-<h1>Connectors</h1>
-<p class="light">
-    JIM uses connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors. 
+<MudText Typo="Typo.h4" Class="mt-5">Connectors</MudText>
+<MudText Typo="Typo.subtitle1">
+    JIM uses connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors.
     From here you can see which are installed and if any have updates that can be applied.
-</p>
+</MudText>
 
-<div class="box mt-3">
+<br />
+<MudButton Variant="Variant.Filled" Href="/admin/connected-systems" Size="Size.Small" Color="Color.Primary">Connected Systems</MudButton>
+<MudButton Variant="Variant.Filled" Href="/admin/connected-systems/connectors" Size="Size.Small" Color="Color.Primary" Disabled="true">Connectors</MudButton>
 
-    <div class="btn-group btn-group-sm" role="group" aria-label="Navigation options">
-        <a class="btn btn-outline-secondary" href="/admin/connected-systems">Connected Systems</a>
-        <a class="btn btn-outline-secondary active" aria-current="page" href="/admin/connected-systems/connectors">Connectors</a>
-    </div>
+<MudTable Items="@headers" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Connectors</MudText>
+        <MudSpacer />
+        <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.BuiltIn)">Built-in?</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Versions)">Version(s)</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.InUse)">In-use?</MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Version(s)">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudTd>
+        <MudTd DataLabel="In-use?">@(context.InUse ? "Yes" : "No")</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        There are no connectors
+    </NoRecordsContent>
+</MudTable>
 
-    <table class="table mt-2">
-        <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Description</th>
-                <th scope="col">Built-in?</th>
-@*                <th scope="col">Created</th>
-                <th scope="col">Last Updated</th>*@
-                <th scope="col">Version(s)</th>
-                <th scope="col">In Use?</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if (headers != null && headers.Count > 0)
-            {
-                foreach (var header in headers)
-                {
-                    <tr>
-                        <td><a href="/admin/connected-systems/connectors/@(header.Id)">@header.Name</a></td>
-                        <td>@header.Description</td>
-                        <td>@(header.BuiltIn ? "Yes" : "No")</td>
-@*                        <td>@header.Created</td>
-                        <td>@header.LastUpdated</td>*@
-                        <td>@(!string.IsNullOrEmpty(header.Versions) ? header.Versions :"-")</td>
-                        <td>@(header.InUse ? "Yes" : "No")</td>
-                    </tr>
-                }
-            }
-            else
-            {
-                <tr>
-                    <td colspan="6" class="light text-center">No connectors to show.</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-</div>
 
 @code {
     private IList<ConnectorDefinitionHeader>? headers;
+    private string searchString = "";
 
     protected override async Task OnInitializedAsync()
     {
         headers = await Jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+    }
+
+    private bool FilterFunc1(ConnectorDefinitionHeader element) => FilterFunc(element, searchString);
+
+    private bool FilterFunc(ConnectorDefinitionHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }

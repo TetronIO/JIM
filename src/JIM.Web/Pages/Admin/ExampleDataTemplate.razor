@@ -9,66 +9,61 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Data Generation Template: @template?.Name</PageTitle>
-<h1><span class="text-muted">Data Generation Template:</span> @template?.Name</h1>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Data Generation Template:</span> @template?.Name</MudText>
 
 @if (template != null)
 {
     foreach (var objectType in template.ObjectTypes)
     {
-        <div class="box mt-3">
-            <h3>@objectType.MetaverseObjectType.Name</h3>
-            <p class="light">Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
-
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th scope="col">Attribute</th>
-                        <th scope="col">Type</th>
-                        <th scope="col">Population %</th>
-                        <th scope="col">Rule(s)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var ta in objectType.TemplateAttributes)
-                    {
-                        <tr>
-                            <td>@ta.MetaverseAttribute?.Name</td>
-                            <td>@ta.MetaverseAttribute?.Type</td>
-                            <td>@ta.PopulatedValuesPercentage</td>
-                            <td>@((MarkupString)SimplifyAttributeConstraints(ta))</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+        <MudTable Items="@objectType.TemplateAttributes" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">@objectType.MetaverseObjectType.Name</MudText>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute.Name)">Attribute</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute.Type)">Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.PopulatedValuesPercentage)">Population %</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => SimplifyAttributeConstraints(x))">Rules</MudTableSortLabel></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Attribute">@context.MetaverseAttribute?.Name</MudTd>
+                <MudTd DataLabel="Type">@context.MetaverseAttribute?.Type</MudTd>
+                <MudTd DataLabel="Population &">@context.PopulatedValuesPercentage</MudTd>
+                <MudTd DataLabel="Rules">@((MarkupString)SimplifyAttributeConstraints(context))</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                No template attributes
+            </NoRecordsContent>
+        </MudTable>
     }
 }
 
-<div class="alert alert-warning mt-3" role="alert">
-    <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Warning!</h4>
-    <p>
+<MudAlert Severity="Severity.Warning" Class="mb-5">
+    <MudText Typo="Typo.h6">Warning</MudText>
+    <MudText>
         Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised.
         This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.
-    </p>
-    <hr>
-    <button type="submit" class="btn btn-warning" @onclick="ExecuteTemplateAsync" disabled="@(status != null)">
+    </MudText>
+    <MudButton Class="mt-5"
+               Variant="Variant.Filled"
+               StartIcon="@Icons.Material.Filled.BuildCircle"
+               Color="Color.Warning"
+               Disabled="@(status != null)"
+               OnClick="ExecuteTemplateAsync">
         @if (status != null && status == ServiceTaskStatus.Processing)
         {
-            <div class="spinner-border spinner-border-sm me-2 text-warning-dark" role="status"></div>
             <text>Processing...</text>
         }
         else if (status != null && status == ServiceTaskStatus.Queued)
         {
-            <i class="bi bi-hourglass me-2"></i>
             <text>Queued...</text>
         }
         else
         {
             <text>Execute Template</text>
         }
-    </button>
-</div>
-
+    </MudButton>
+</MudAlert>
 
 @code {
     [Parameter]

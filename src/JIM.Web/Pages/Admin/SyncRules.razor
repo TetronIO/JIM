@@ -8,64 +8,66 @@
 @inject JimApplication Jim
 
 <PageTitle>Synchronisation Rules</PageTitle>
-<h1>Synchronisation Rules</h1>
-<p class="light">
-    Synchronisation Rules are used to define the flow of information between JIM and connected systems.
-</p>
+<MudText Typo="Typo.h4" Class="mt-5">Synchronisation Rules</MudText>
+<MudText Typo="Typo.subtitle1">Synchronisation Rules are used to define the flow of information between JIM and connected systems.</MudText>
 
-<div class="box mt-3">
-
-    <table class="table mt-2">
-        <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Direction</th>
-                <th scope="col">Connected System</th>
-                <th scope="col">Metaverse Object Type</th>
-                <th scope="col">Connected System Object Type</th>
-                <th scope="col">Provision?</th>
-                <th scope="col">Project?</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if (syncRuleHeaders != null && syncRuleHeaders.Count > 0)
+<MudTable Items="@syncRuleHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<SyncRuleHeader,bool>(FilterFunc1)">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Synchronisation Rules</MudText>
+        <MudSpacer />
+        <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction)">Direction</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemName)">Connected System</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.MetaverseObjectTypeName)">Metaverse Object Type</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemObjectTypeName)">Connected System Object Type</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem)">Provision?</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse)">Project?</MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Direction">
+            @if (context.Direction == SyncRuleDirection.Import)
             {
-                foreach (var syncRuleHeader in syncRuleHeaders)
-                {
-                    <tr>
-                        <td><a href="/admin/connected-systems/sync-rules/@syncRuleHeader.Id">@syncRuleHeader.Name</a></td>
-                        <td title="@syncRuleHeader.Direction">
-                            @if (syncRuleHeader.Direction == SyncRuleDirection.Import)
-                            {
-                                <i class="bi bi-arrow-left"></i>
-                            }
-                            else
-                            {
-                                <i class="bi bi-arrow-right"></i>
-                            }
-                        </td>
-                        <td>@syncRuleHeader.ConnectedSystemName</td>
-                        <td>@syncRuleHeader.MetaverseObjectTypeName</td>
-                        <td>@(syncRuleHeader.ProvisionToConnectedSystem.HasValue && syncRuleHeader.ProvisionToConnectedSystem.Value ? "Yes" : "No")</td>
-                        <td>@(syncRuleHeader.ProjectToMetaverse.HasValue && syncRuleHeader.ProjectToMetaverse.Value ? "Yes" : "No")</td>
-                    </tr>
-                }
+                <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowLeft" />
             }
             else
             {
-                    <tr>
-                        <td colspan="7" class="light text-center">No sync rules yet</td>
-                    </tr>
+                <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowRight" />
             }
-        </tbody>
-    </table>
-</div>
+        </MudTd>
+        <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
+        <MudTd DataLabel="Metaverse Object Type">@context.MetaverseObjectTypeName</MudTd>
+        <MudTd DataLabel="Connected System Object Type">@context.ConnectedSystemObjectTypeName</MudTd>
+        <MudTd DataLabel="Provision?">@(context.ProvisionToConnectedSystem.HasValue && context.ProvisionToConnectedSystem.Value ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Project?">@(context.ProjectToMetaverse.HasValue && context.ProjectToMetaverse.Value ? "Yes" : "No")</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        There are no synchronisation rules
+    </NoRecordsContent>
+</MudTable>
 
 @code {
     private IList<SyncRuleHeader>? syncRuleHeaders;
+    private string searchString = "";
 
     protected override async Task OnInitializedAsync()
     {
         syncRuleHeaders = await Jim.ConnectedSystems.GetSyncRuleHeadersAsync();
+    }
+
+    private bool FilterFunc1(SyncRuleHeader element) => FilterFunc(element, searchString);
+
+    private bool FilterFunc(SyncRuleHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }

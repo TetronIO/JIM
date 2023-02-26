@@ -11,20 +11,17 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
         JIM
         <MudSpacer />
-
         <MudTooltip Text="@(IsDarkMode ? _lightModeText : _darkModeText)">
             <MudToggleIconButton @bind-Toggled="@IsDarkMode"
                                  Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
                                  ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
         </MudTooltip>
-
-
     </MudAppBar>
     <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
         <NavMenu />
     </MudDrawer>
     <MudMainContent>
-        <MudContainer>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge">
             @Body
         </MudContainer>
     </MudMainContent>

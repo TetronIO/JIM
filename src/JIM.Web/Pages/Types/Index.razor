@@ -10,54 +10,47 @@
 @inject NavigationManager NavManager
 
 <PageTitle>@PageTitle</PageTitle>
-<h1>@PageTitle</h1>
-<p class="light">
-    Search, or browse for @PageTitle
-</p>
+
+<MudText Typo="Typo.h4" Class="mt-5">@PageTitle</MudText>
+<MudText Typo="Typo.subtitle1">Search, or browse for @ObjectTypeName</MudText>
 
 @if (PredefinedSearch != null)
 {
-    <div>
-        <MetaverseObjectHeaderPaginator Results="@MetaverseObjectHeaders" />
-    </div>
-
-    <div class="box mt-3">
-        <table class="table mt-2">
-            <thead>
-                <tr>
-                    @foreach (PredefinedSearchAttribute psa in PredefinedSearch.Attributes)
-                    {
-                        <th scope="col">@psa.MetaverseAttribute.Name</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @if (MetaverseObjectHeaders != null && MetaverseObjectHeaders.Results.Count > 0)
+    <MetaverseObjectHeaderPaginator Results="@MetaverseObjectHeaders" />
+    
+    <MudSimpleTable Style="overflow-x: auto;" Hover="true" Bordered="false" Striped="false" Class="mt-5">
+        <thead>
+            <tr>
+                @foreach (PredefinedSearchAttribute psa in PredefinedSearch.Attributes)
                 {
-                    foreach (var mo in MetaverseObjectHeaders.Results)
-                    {
-                        <tr>
-                            <td><a href="/t/@(MetaverseObjectType?.Name.ToLower())/v/@mo.Id">@mo.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue</a></td>
-                            @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
-                            {
-                                <td>@mo.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</td>
-                            }
-                        </tr>
-                    }
+                    <th>@psa.MetaverseAttribute.Name</th>
                 }
-                else
+            </tr>
+        </thead>
+        <tbody>
+            @if (MetaverseObjectHeaders != null && MetaverseObjectHeaders.Results.Count > 0)
+            {
+                foreach (var mo in MetaverseObjectHeaders.Results)
                 {
                     <tr>
-                        <td colspan="@PredefinedSearch.Attributes.Count" class="light text-center">No results</td>
+                        <td><MudLink Href="@("/t/"+MetaverseObjectType?.Name.ToLower()+"/v/"+mo.Id)">@mo.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue</MudLink></td>
+                        @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
+                        {
+                            <td>@mo.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</td>
+                        }
                     </tr>
                 }
-            </tbody>
-        </table>
-    </div>
-
-    <div class="mt-3">
-        <MetaverseObjectHeaderPaginator Results="@MetaverseObjectHeaders" />
-    </div>
+            }
+            else
+            {
+                <tr>
+                    <td colspan="@PredefinedSearch.Attributes.Count" class="light text-center">No results</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+    
+    <MetaverseObjectHeaderPaginator Results="@MetaverseObjectHeaders" />
 }
 else
 {
@@ -85,7 +78,8 @@ else
     private PagedResultSet<MetaverseObjectHeader>? MetaverseObjectHeaders { get; set; }
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private PredefinedSearch? PredefinedSearch { get; set; }
-    private string PageTitle { get; set; }
+    private string? PageTitle { get; set; }
+    private string? ObjectTypeName { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -119,6 +113,7 @@ else
             // get a page of results for the metaverse objects matching this type...
             MetaverseObjectHeaders = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(PredefinedSearch, Page.Value, 20, 500);
             PageTitle = PredefinedSearch.Name;
+            ObjectTypeName = PredefinedSearch.Name.ToLower();
         }
     }
 }

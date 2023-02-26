@@ -1,8 +1,8 @@
 ﻿@page "/"
 @attribute [Authorize(Roles = "Users")]
-
 <PageTitle>JIM Home</PageTitle>
 
-<h1>Hello, world!</h1>
-
-Welcome to Junctional Identity Manager (JIM)
+<MudPaper Class="pa-5 mt-5" Outlined="true">
+    <MudText Typo="Typo.h2">Hello World!</MudText>
+    <MudText Typo="Typo.body1">Welcome to Junctional Identity Manager (JIM)</MudText>
+</MudPaper>

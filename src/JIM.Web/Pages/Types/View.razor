@@ -6,51 +6,54 @@
 @inject NavigationManager NavManager
 
 <PageTitle>@MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1): @displayName</PageTitle>
-<h1><span class="text-muted">@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1)):</span> @displayName</h1>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length - 1)):</span> @displayName</MudText>
 
-<div class="box mt-3">
-    
+<MudPaper Class="pa-5 mt-5" Outlined="true">
     @if (MetaverseObject != null)
     {
-        @foreach (var attributeValue in MetaverseObject.AttributeValues)
-        {
-            <div class="mb-3 row">
-                <label for="staticEmail" class="col-sm-2 col-form-label">@attributeValue.Attribute.Name</label>
-                <div class="col-sm-10">
-                    @if (attributeValue.Attribute.Type == AttributeDataType.String)
-                    {
-                        if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue)) {
-                            <a href="mailto:@attributeValue.StringValue">@attributeValue.StringValue</a>
-                        } else {
-                            <input type="text" readonly class="form-control-plaintext" value="@attributeValue.StringValue">
+        <MudGrid>
+            @foreach (var attributeValue in MetaverseObject.AttributeValues)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Text">
+                        @if (attributeValue.Attribute.Type == AttributeDataType.String)
+                        {
+                            if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
+                            {
+                                <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
+                            }
+                            else
+                            {
+                                @attributeValue.StringValue
+                            }
                         }
-                    } 
-                    else if (attributeValue.Attribute.Type == AttributeDataType.Number)
-                    {
-                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.IntValue">
-                    }
-                    else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
-                    {
-                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.DateTimeValue">
-                    }
-                    else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
-                    {
-                        <input type="text" readonly class="form-control-plaintext" value="@attributeValue.GuidValue.ToString()">
-                    }
-                    else if (attributeValue.Attribute.Type == AttributeDataType.Bool && attributeValue.BoolValue.HasValue)
-                    {
-                        <input type="text" readonly class="form-control-plaintext" value="@(attributeValue.BoolValue.Value ? "true" : "false")">
-                    }
-                    else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
-                    {
-                        <a href="@Utilities.GetMetaverseObjectUrl(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</a>
-                    }
-                </div>
-            </div>
-        }    
+                        else if (attributeValue.Attribute.Type == AttributeDataType.Number)
+                        {
+                            @attributeValue.IntValue
+                        }
+                        else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
+                        {
+                            <!-- change this to a mud date time control! -->
+                            @attributeValue.DateTimeValue
+                        }
+                        else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
+                        {
+                            @attributeValue.GuidValue.ToString()
+                        }
+                        else if (attributeValue.Attribute.Type == AttributeDataType.Bool && attributeValue.BoolValue.HasValue)
+                        {
+                            @(attributeValue.BoolValue.Value ? "true" : "false")
+                        }
+                        else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
+                        {
+                            <MudLink Href="@Utilities.GetMetaverseObjectUrl(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</MudLink>
+                        }
+                    </MudField>
+                </MudItem>
+            }
+        </MudGrid>
     }
-
-</div>
+</MudPaper>
 
 @code {
     [Parameter]
@@ -59,11 +62,11 @@
     [Parameter]
     public int IdParam { get; set; }
 
-    private MetaverseObject MetaverseObject { get; set; }
+    private MetaverseObject? MetaverseObject { get; set; }
 
-    private MetaverseObjectType MetaverseObjectType { get; set; }
+    private MetaverseObjectType? MetaverseObjectType { get; set; }
 
-    string displayName;
+    private string? displayName;
 
     protected override async Task OnParametersSetAsync()
     {

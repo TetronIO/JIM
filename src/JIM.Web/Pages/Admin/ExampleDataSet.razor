@@ -9,37 +9,35 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Example Data Set: @exampleDataSet?.Name</PageTitle>
-<h1><span class="text-muted">Example Data Set:</span> @exampleDataSet?.Name</h1>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Example Data Sets:</span> @exampleDataSet?.Name</MudText>
 
 @if (exampleDataSet != null)
 {
-    <div class="box">
-        <table>
-            <tr>
-                <td class="light pe-3">Created:</td>
-                <td><span class="font-monospace">@exampleDataSet.Created</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Built-in?</td>
-                <td><span class="font-monospace">@builtIn</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Culture:</td>
-                <td><span class="font-monospace">@exampleDataSet.Culture</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Values:</td>
-                <td><span class="font-monospace">@exampleDataSet.Values.Count</span></td>
-            </tr>
-        </table>
-    </div>
+    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Created" Variant="Variant.Text">@exampleDataSet.Created</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Built-in?" Variant="Variant.Text">@(exampleDataSet.BuiltIn ? "Yes" : "No")</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Culture" Variant="Variant.Text">@exampleDataSet.Culture</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Values" Variant="Variant.Text">@exampleDataSet.Values.Count.ToString("N0")</MudField>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
-    <div class="box mt-3">
+    <MudText Typo="Typo.h5" Class="mt-5">Values</MudText>
+    <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
         @foreach (var val in exampleDataSet.Values)
         {
-            <span class="badge badge-outline badge-bigger bg-light text-dark">@val.StringValue</span>
+            <MudChip Variant="Variant.Text" Color="Color.Primary">@val.StringValue</MudChip>
         }
-    </div>
+    </MudPaper>
 }
 
 @code {

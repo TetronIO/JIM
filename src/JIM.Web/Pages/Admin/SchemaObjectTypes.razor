@@ -6,45 +6,29 @@
 @inject JimApplication Jim
 
 <PageTitle>Schema: Object Types</PageTitle>
-<h1><span class="text-muted">Schema:</span> Object Types</h1>
-<p class="light">
-    Manage metaverse object types and their attributes.
-</p>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Schema:</span> Object Types</MudText>
+<MudText Typo="Typo.subtitle1">Manage metaverse object types and their attributes.</MudText>
 
-<div class="box mt-3">
+<br />
+<MudButton Variant="Variant.Filled" Href="/admin/schema" Disabled="true" Size="Size.Small" Color="Color.Primary">Object Types</MudButton>
+<MudButton Variant="Variant.Filled" Href="/admin/schema/attributes" Size="Size.Small" Color="Color.Primary">Attributes</MudButton>
 
-    <div class="btn-group btn-group-sm" role="group" aria-label="Schema navigation options">
-        <NavLink class="btn btn-outline-secondary active" aria-current="page" href="/admin/schema">Object Types</NavLink>
-        <NavLink class="btn btn-outline-secondary" href="/admin/schema/attributes">Attributes</NavLink>
-    </div>
-
-    <table class="table mt-2">
-        <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Attributes</th>
-                <th scope="col">Has Predefined Searches?</th>
-                <th scope="col">Built-in?</th>
-                <th scope="col">Created</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if (metaverseObjectTypeHeaders != null)
-            {
-                foreach (var metaverseObjectTypeHeader in metaverseObjectTypeHeaders)
-                {
-                    <tr>
-                        <td><a href="/admin/schema/object-types/@(metaverseObjectTypeHeader.Id)">@metaverseObjectTypeHeader.Name</a></td>
-                        <td>@metaverseObjectTypeHeader.AttributesCount</td>
-                        <td>@(metaverseObjectTypeHeader.HasPredefinedSearches ? "Yes" : "No")</td>
-                        <td>@(metaverseObjectTypeHeader.BuiltIn ? "Yes" : "No")</td>
-                        <td>@metaverseObjectTypeHeader.Created</td>
-                    </tr>
-                }
-            }
-        </tbody>
-    </table>
-</div>
+<MudTable Items="@metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" Class="mt-5" SortLabel="Sort By">
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.AttributesCount)">Attributes</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.HasPredefinedSearches)">Has Predefined Searches?</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.BuiltIn)">Built-in?</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name"><MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
+        <MudTd DataLabel="Has Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Created">@context.Created</MudTd>
+    </RowTemplate>
+</MudTable>
 
 @code {
     private IList<MetaverseObjectTypeHeader>? metaverseObjectTypeHeaders;
