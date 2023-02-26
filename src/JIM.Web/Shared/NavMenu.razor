@@ -10,7 +10,6 @@
 
 <MudNavMenu Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Class="pa-2">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
-    <MudNavLink Href="/requests" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Requests</MudNavLink>
 
     <MudNavGroup Title="Users" Expanded="true" Icon="@Icons.Material.Filled.Person">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All">All Users</MudNavLink>
@@ -23,6 +22,8 @@
         <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix">Security Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix">Distribution Groups</MudNavLink>
     </MudNavGroup>
+
+    <MudNavLink Href="/requests" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Requests</MudNavLink>
 
     <AuthorizeView Roles="Administrators">
         <MudNavGroup Title="Dashboard" Expanded="false" Icon="@Icons.Material.Filled.Dashboard">
