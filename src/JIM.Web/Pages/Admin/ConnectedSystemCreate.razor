@@ -10,43 +10,37 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Create a Connected System</PageTitle>
-<h1>Create a Connected System</h1>
-<p class="light">
-    Provide some basic details here, and then we'll move on to configuring the Connected System.
-</p>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-text-secondary">Connected Systems:</span> New</MudText>
+<MudText Typo="Typo.subtitle1">Provide some basic details here, and then we'll move on to configuring the Connected System.</MudText>
 
-<div class="box mt-3">
-    <EditForm Model="@model" OnValidSubmit="HandleValidSubmit">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
-        <div class="mb-3">
-            <label for="selectConnector" class="form-label">Connector</label>
-            <InputSelect id="selectConnector" class="form-select" aria-label="Connector options" @bind-Value="model.ConnectorId">
-                <option selected>Select a connector...</option>
-                @if (connectorDefinitionHeaders != null)
+
+<MudPaper Class="pa-4" Outlined="true">
+    <MudForm @bind-IsValid="@isFormValid" @bind-Errors="@formErrors">
+
+        <MudSelect T="string" Label="Connector" Placeholder="Please select a connector..." Required="true" @bind-Value="model.ConnectorId" AdornmentIcon="@Icons.Material.Filled.Power">
+            @if (connectorDefinitionHeaders != null)
+            {
+                foreach (var header in connectorDefinitionHeaders)
                 {
-                    foreach (var header in connectorDefinitionHeaders)
-                    {
-                        <option value="@header.Id">@header.Name</option>
-                    }        
+                    <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
                 }
-            </InputSelect>
-        </div>
-        <div class="mb-3">
-            <label for="inputName" class="form-label">Name</label>
-            <InputText class="form-control" id="inputName" @bind-Value="model.Name" />
-        </div>
-        <div class="mb-3">
-            <label for="textAreaDescription" class="form-label">Description</label>
-            <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="model.Description" />
-        </div>
-        <button type="submit" class="btn btn-primary">Submit</button>
-    </EditForm>
-</div>
+            }
+        </MudSelect>
+        
+        <MudTextField T="string" Label="Name" Required="true" RequiredError="A name is required" @bind-Value="model.Name" />
+
+        <MudTextField T="string" Label="Description" Required="false" @bind-Value="model.Description" Lines="5" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isFormValid)" Class="mt-5" OnClick="HandleValidSubmit">Create Connected System</MudButton>
+    </MudForm>
+</MudPaper>
 
 @code {
     private IList<ConnectorDefinitionHeader>? connectorDefinitionHeaders;
     private ConnectedSystemCreateViewModel model = new ConnectedSystemCreateViewModel();
+
+    private bool isFormValid;
+    private string[] formErrors = { };
 
     protected override async Task OnInitializedAsync()
     {
@@ -56,11 +50,11 @@
     private async Task HandleValidSubmit()
     {
         var connectedSystem = new JIM.Models.Staging.ConnectedSystem
-            {
-                Name = model.Name,
-                Description = model.Description,
-                ConnectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId))
-            };
+        {
+            Name = model.Name,
+            Description = model.Description,
+            ConnectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId))
+        };
 
         await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
         NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}/{Utilities.ConvertToUrlParam(connectedSystem.Name)}");
