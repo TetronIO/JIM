@@ -1,14 +1,4 @@
-﻿@*<div class="logo-box navbar navbar-light">
-    <div class="container-fluid">
-        <img src="/images/identity-badge.png" height="50" alt="Identity Badge" />
-        <a class="navbar-brand" href="/">JIM (PRE-ALPHA)</a>
-        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-    </div>
-</div>*@
-
-<MudNavMenu Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Class="pa-2">
+﻿<MudNavMenu Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Class="pa-2">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
 
     <MudNavGroup Title="Users" Expanded="true" Icon="@Icons.Material.Filled.Person">
@@ -38,8 +28,8 @@
         <MudNavGroup Title="Admin" Expanded="false" Icon="@Icons.Material.Filled.Settings">
             <MudNavLink Href="/admin/schema" Match="NavLinkMatch.Prefix">Schema</MudNavLink>
             <MudNavLink Href="/admin/predefined-searches" Match="NavLinkMatch.Prefix">Predefined Searches</MudNavLink>
-            <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.Prefix">Connected Systems</MudNavLink>
-            <MudNavLink Href="/admin/connected-systems/sync-rules" Match="NavLinkMatch.Prefix">Synchronisation Rules</MudNavLink>
+            <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.All">Connected Systems</MudNavLink>
+            <MudNavLink Href="/admin/connected-systems/sync-rules" Match="NavLinkMatch.All">Synchronisation Rules</MudNavLink>
             <MudNavLink Href="/admin/example-data" Match="NavLinkMatch.Prefix">Example Data</MudNavLink>
             <MudNavLink Href="/admin/settings" Match="NavLinkMatch.Prefix">Settings</MudNavLink>
         </MudNavGroup>
