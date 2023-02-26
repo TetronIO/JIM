@@ -40,7 +40,9 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)">Connector</MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Name">
+            <MudLink Href="@($"/admin/connected-systems/{context.Id}/{Utilities.ConvertToUrlParam(context.Name)}")">@context.Name</MudLink>
+        </MudTd>
         <MudTd DataLabel="Description">@context.Description</MudTd>
         <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>
         <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
