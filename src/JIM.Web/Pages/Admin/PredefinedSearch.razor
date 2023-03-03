@@ -40,7 +40,7 @@
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         @foreach (var psa in predefinedSearch.Attributes)
         {
-            <MudChip Variant="Variant.Text" Color="Color.Primary">@psa.MetaverseAttribute.Name</MudChip>
+            <MudChip Color="Color.Primary">@psa.MetaverseAttribute.Name</MudChip>
         }
     </MudPaper>
 
@@ -58,9 +58,9 @@
                     <br />
                     @foreach (var criteria in criteriaGroup.Criteria)
                     {
-                        <MudChip Variant="Variant.Text" Color="Color.Primary">@criteria.MetaverseAttribute.Name</MudChip>
-                        <MudChip Variant="Variant.Text" Color="Color.Primary">@criteria.ComparisonType</MudChip>
-                        <MudChip Variant="Variant.Text" Color="Color.Primary">@criteria.StringValue</MudChip>
+                        <MudChip Color="Color.Primary">@criteria.MetaverseAttribute.Name</MudChip>
+                        <MudChip Color="Color.Primary">@criteria.ComparisonType</MudChip>
+                        <MudChip Color="Color.Primary">@criteria.StringValue</MudChip>
                     }
                 </MudPaper>
             }
