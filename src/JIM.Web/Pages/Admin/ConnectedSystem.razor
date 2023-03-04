@@ -11,27 +11,28 @@
 @inject ISnackbar Snackbar
 
 <PageTitle>Connected System: @connectedSystem?.Name</PageTitle>
-<h1><span class="text-muted">Connected System:</span> @connectedSystem?.Name</h1>
+<MudText Typo="Typo.h4"><span class="mud-text-secondary">Connected System:</span> @connectedSystem?.Name</MudText>
+<MudText Typo="Typo.subtitle1">Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</MudText>
 
-<p>Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</p>
-
-<ul class="nav nav-tabs mt-3">
-    <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Details ? "active" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Details">Details</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Settings ? "active" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Settings">Settings</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link @(activeTab == Tabs.Schema ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Schema">Schema</a>
-    </li>
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-5" Class="mt-5">
+    <MudTabPanel Text="Details">
+        <MudText>Details content...</MudText>
+    </MudTabPanel>
+    <MudTabPanel Text="Settings">
+        <MudText>Settings Content...</MudText>
+    </MudTabPanel>
+    <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
+        <MudText>Schema Content...</MudText>
+    </MudTabPanel>
     @if (connectedSystem != null && connectedSystem.ConnectorDefinition.SupportsPartitions)
     {
-        <li class="nav-item">
-            <a class="nav-link @(activeTab == Tabs.Hierarchy ? "active" : "") @(connectedSystem != null && !connectedSystem.SettingValuesValid ? "disabled" : "")" href="javascript:void(0)" @onclick="() => activeTab = Tabs.Hierarchy">Partitions &amp; Containers</a>
-        </li>
+        <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
+            <MudText>Contents &amp; Partitions Content...</MudText>
+        </MudTabPanel>
     }
-</ul>
+</MudTabs>
+
+
 <div class="box-no-top mb-3">
 
     @if (connectedSystem != null && settingCategories != null)
@@ -136,7 +137,8 @@
                                                 </label>
                                                 <div class="col-sm-10">
                                                     <MudNumericField @bind-Value="@settingValue.IntValue" />
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description)) {
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
                                                         <div class="form-text">@settingValue.Setting.Description</div>
                                                     }
                                                 </div>
@@ -148,7 +150,8 @@
                                                 <label for="@formElementName" class="col-sm-2 col-form-label"></label>
                                                 <div class="col-sm-10">
                                                     <MudSwitch @bind-Checked="settingValue.CheckboxValue" id="@formElementName" Label="@settingValue.Setting.Name" />
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description)) {
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
                                                         <div class="form-text">@settingValue.Setting.Description</div>
                                                     }
                                                 </div>
@@ -160,11 +163,13 @@
                                                 <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name:</label>
                                                 <div class="col-sm-10">
                                                     <MudSelect @bind-Value="settingValue.StringValue" id="@formElementName">
-                                                        @foreach (var dropDownValue in settingValue.Setting.DropDownValues) {
+                                                        @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
+                                                        {
                                                             <option value="@dropDownValue">@dropDownValue</option>
                                                         }
                                                     </MudSelect>
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description)) {
+                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                                    {
                                                         <div class="form-text">@settingValue.Setting.Description</div>
                                                     }
                                                 </div>
@@ -452,6 +457,16 @@
             partitionsAndHierarchiesText = "partitions";
             partitionAndHierarchyText = "partition";
         }
+    }
+
+    private bool AreSettingDependentTabsDisabled()
+    {
+        if (connectedSystem == null)
+            return true;
+        else if (connectedSystem.SettingValuesValid)
+            return false;
+        else
+            return true;
     }
 
     private async Task HandleValidDetailsSubmitAsync()
