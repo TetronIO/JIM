@@ -14,295 +14,176 @@
 <MudText Typo="Typo.h4"><span class="mud-text-secondary">Connected System:</span> @connectedSystem?.Name</MudText>
 <MudText Typo="Typo.subtitle1">Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</MudText>
 
-<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-5" Class="mt-5">
-    <MudTabPanel Text="Details">
-        <MudText>Details content...</MudText>
-    </MudTabPanel>
-    <MudTabPanel Text="Settings">
-        <MudText>Settings Content...</MudText>
-    </MudTabPanel>
-    <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
-        <MudText>Schema Content...</MudText>
-    </MudTabPanel>
-    @if (connectedSystem != null && connectedSystem.ConnectorDefinition.SupportsPartitions)
-    {
-        <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
-            <MudText>Contents &amp; Partitions Content...</MudText>
+@if (connectedSystem != null)
+{
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-5" Class="mt-5">
+
+        <MudTabPanel Text="Details">
+            <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
+                <MudTextField T="string" Label="Connector" @bind-Value="connectedSystem.ConnectorDefinition.Name" Disabled="true" />
+                <MudTextField T="string" Label="Name" @bind-Value="connectedSystem.Name" Required="true" RequiredError="A name is required" />
+                <MudTextField T="string" Label="Description" Required="false" @bind-Value="connectedSystem.Description" Lines="5" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync">Save Changes</MudButton>
+            </MudForm>
         </MudTabPanel>
-    }
-</MudTabs>
 
-
-<div class="box-no-top mb-3">
-
-    @if (connectedSystem != null && settingCategories != null)
-    {
-        if (activeTab == Tabs.Details)
-        {
-            <EditForm Model="@connectedSystem" OnValidSubmit="async () => await HandleValidDetailsSubmitAsync()">
-                <DataAnnotationsValidator />
-                <ValidationSummary />
-                <div class="mb-3">
-                    <label for="inputConnector" class="form-label">Connector</label>
-                    <InputText class="form-control" id="inputConnector" @bind-Value="connectedSystem.ConnectorDefinition.Name" disabled />
-                </div>
-                <div class="mb-3">
-                    <label for="inputName" class="form-label">Name</label>
-                    <InputText class="form-control" id="inputName" @bind-Value="connectedSystem.Name" DisplayName="Name" />
-                </div>
-                <div class="mb-3">
-                    <label for="textAreaDescription" class="form-label">Description</label>
-                    <InputTextArea class="form-control" id="textAreaDescription" rows="3" @bind-Value="connectedSystem.Description" />
-                </div>
-                <MudButton Color="Color.Primary">Save Changes</MudButton>
-            </EditForm>
-        }
-        else if (activeTab == Tabs.Settings)
-        {
-            <p>Configure the connector for your environment by supplying values for the settings below.</p>
-
-            <EditForm Model="@connectedSystem" OnValidSubmit="async () => await HandleValidSettingsSubmitAsync()">
-                <JimValidator @ref="connectedSystemSettingsValidator" />
-
-                <div class="accordion mb-3">
-                    @for (var i = 0; i < settingCategories.Count; i++)
-                    {
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="panelsStayOpen-heading@(i)">
-                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#panelsStayOpen-collapse@(i)" aria-expanded="true" aria-controls="panelsStayOpen-collapse@(i)">
-                                    @settingCategories[i]
-                                </button>
-                            </h2>
-                            <div id="panelsStayOpen-collapse@(i)" class="accordion-collapse collapse show" aria-labelledby="panelsStayOpen-heading@(i)">
-                                <div class="accordion-body">
-
-                                    @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == @settingCategories[i]))
+        <MudTabPanel Text="Settings">
+            <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
+            <MudForm @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
+                @if (settingCategories != null)
+                {
+                    <MudExpansionPanels MultiExpansion="true">
+                        @for (var i = 0; i < settingCategories.Count; i++)
+                        {
+                            var formElementName = "something-" + i;
+                            var settingCategory = @settingCategories[i];
+                            <MudExpansionPanel Text="@settingCategory.ToString()">
+                                @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == settingCategory))
+                                {
+                                    if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
                                     {
-                                        var formElementName = $"setting-el-{i}";
-                                        @if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
-                                        {
-                                            <strong>@settingValue.Setting.Name</strong>
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
-                                        {
-                                            <hr />
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
-                                        {
-                                            <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label">
-                                                    @settingValue.Setting.Name
-                                                    @if (settingValue.Setting.Required)
-                                                    {
-                                                        <strong class="text-danger"> *</strong>
-                                                    }:
-                                                </label>
-                                                <div class="col-sm-10">
-                                                    <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringValue" />
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
-                                                    {
-                                                        <div class="form-text">@settingValue.Setting.Description</div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
-                                        {
-                                            <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label">
-                                                    @settingValue.Setting.Name
-                                                    @if (settingValue.Setting.Required)
-                                                    {
-                                                        <strong class="text-danger"> *</strong>
-                                                    }:
-                                                </label>
-                                                <div class="col-sm-10">
-                                                    <InputText class="form-control" id="@formElementName" @bind-Value="settingValue.StringEncryptedValue" type="password" />
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
-                                                    {
-                                                        <div class="form-text">@settingValue.Setting.Description</div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
-                                        {
-                                            <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label">
-                                                    @settingValue.Setting.Name
-                                                    @if (settingValue.Setting.Required)
-                                                    {
-                                                        <strong class="text-danger"> *</strong>
-                                                    }:
-                                                </label>
-                                                <div class="col-sm-10">
-                                                    <MudNumericField @bind-Value="@settingValue.IntValue" />
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
-                                                    {
-                                                        <div class="form-text">@settingValue.Setting.Description</div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
-                                        {
-                                            <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label"></label>
-                                                <div class="col-sm-10">
-                                                    <MudSwitch @bind-Checked="settingValue.CheckboxValue" id="@formElementName" Label="@settingValue.Setting.Name" />
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
-                                                    {
-                                                        <div class="form-text">@settingValue.Setting.Description</div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
-                                        {
-                                            <div class="row mb-3">
-                                                <label for="@formElementName" class="col-sm-2 col-form-label">@settingValue.Setting.Name:</label>
-                                                <div class="col-sm-10">
-                                                    <MudSelect @bind-Value="settingValue.StringValue" id="@formElementName">
-                                                        @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
-                                                        {
-                                                            <option value="@dropDownValue">@dropDownValue</option>
-                                                        }
-                                                    </MudSelect>
-                                                    @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
-                                                    {
-                                                        <div class="form-text">@settingValue.Setting.Description</div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
-                                        {
-                                            <div class="mb-3">
-                                                @settingValue.Setting.Description
-                                            </div>
-                                        }
-                                        else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
-                                        {
-                                            <p>Files not yet supported for settings.</p>
-                                        }
-                                        else
-                                        {
-                                            <p>Oops. Unknown setting type!</p>
-                                        }
+                                        <MudText Typo="Typo.h6" Class="mt-5">@settingValue.Setting.Name</MudText>
                                     }
-
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-
-                <p class="small text-secondary">
-                    <strong class="text-danger"> *</strong> Required setting
-                </p>
-
-                <ValidationSummary />
-                <MudButton Color="Color.Primary">Save Changes</MudButton>
-            </EditForm>
-        }
-        else if (activeTab == Tabs.Schema)
-        {
-            <div class="mb-3">
-                <p>
-                    Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.
-                </p>
-                <MudAlert Severity="(connectedSystem.ObjectTypes.Count > 0 ? Severity.Warning : Severity.Info)">
-                    @if (connectedSystem.ObjectTypes.Count == 0)
-                    {
-                        <text>
-                            Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.
-                        </text>
-                    }
-                    else
-                    {
-                        <text>
-                            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
-                            i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right
-                            permissions needed to retrieve the schema, and consider a database backup before proceeeding.
-                        </text>
-                    }
-                    <div class="mt-3">
-                        <MudButton Color="(connectedSystem.ObjectTypes.Count == 0 ? Color.Primary : Color.Warning)" Size="Size.Small" Onclick="HandleImportSchemaAsync">
-                            @if (connectedSystem.ObjectTypes.Count == 0)
-                            {
-                                <text>Retrieve Schema</text>
-                            }
-                            else
-                            {
-                                <text>Refresh Schema</text>
-                            }
-                        </MudButton>
-                    </div>
-                </MudAlert>
-            </div>
-
-            @if (connectedSystem.ObjectTypes.Count > 0)
-            {
-                <div class="accordion mb-3" id="ot-accordion">
-                    @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
-                    {
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="ot-heading-@(i)">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ot-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
-                                    @if (connectedSystem.ObjectTypes[i].Attributes.Any(q => q.Selected))
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
                                     {
-                                        <span class="jim-cs-s-selected"><i class="bi bi-check2-circle"></i></span>
+                                        <hr />
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
+                                    {
+                                        <MudTextField T="string"
+                                                      Label="@settingValue.Setting.Name"
+                                                      @bind-Value="settingValue.StringValue"
+                                                      Required="@settingValue.Setting.Required"
+                                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                      HelperText="@settingValue.Setting.Description" />
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
+                                    {
+                                        <MudTextField T="string"
+                                                      Label="@settingValue.Setting.Name"
+                                                      @bind-Value="settingValue.StringEncryptedValue"
+                                                      Required="@settingValue.Setting.Required"
+                                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                      HelperText="@settingValue.Setting.Description"
+                                                      InputType="InputType.Password" />
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
+                                    {
+                                        <MudTextField T="int?"
+                                                      Label="@settingValue.Setting.Name"
+                                                      @bind-Value="settingValue.IntValue"
+                                                      Required="@settingValue.Setting.Required"
+                                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                      HelperText="@settingValue.Setting.Description"
+                                                      InputType="InputType.Number" />
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
+                                    {
+                                        <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" />
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
+                                    {
+                                        <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name">
+                                            @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
+                                            {
+                                                <option value="@dropDownValue">@dropDownValue</option>
+                                            }
+                                        </MudSelect>
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
+                                    {
+                                        <MudText Class="mt-5">
+                                            @settingValue.Setting.Description
+                                        </MudText>
+                                    }
+                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
+                                    {
+                                        <MudText>Files not yet supported for settings.</MudText>
                                     }
                                     else
                                     {
-                                        <span class="jim-cs-s-not-selected"></span>
+                                        <MudText>Oops. Unknown setting type!</MudText>
                                     }
-                                    @connectedSystem.ObjectTypes[i].Name
-                                </button>
-                            </h2>
-                            <div id="ot-collapse-@(i)" class="accordion-collapse collapse" aria-labelledby="ot-heading-@(i)" data-bs-parent="#ot-accordion">
-                                <div class="accordion-body">
+                                }
+                            </MudExpansionPanel>
+                        }
+                    </MudExpansionPanels>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync">Save Changes</MudButton>
+            </MudForm>
+        </MudTabPanel>
 
-                                    Select the @connectedSystem.ObjectTypes[i].Name attributes you want to manage.
-
-                                    <div class="mt-3 mb-3">
-                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.SelectAll">Select All</MudButton>
-                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.ClearAll">Select None</MudButton>
-                                    </div>
-
-                                    Mud Grid alternative to come...
-
-                                    @*<Grid
-                                                TItem="ConnectedSystemAttribute"
-                                                Data="connectedSystem.ObjectTypes[i].Attributes"
-                                                AllowFiltering="true"
-                                                Responsive="true"
-                                                AllowSorting="true"
-                                                class="table table-hover table-bordered table-striped">
-                                            <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Selected?" Filterable="false" SortKeySelector="item => item.Selected">
-                                                <Switch @bind-Value="context.Selected" />
-                                            </GridColumn>
-                                            <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name" SortKeySelector="item => item.Name">
-                                                @context.Name
-                                            </GridColumn>
-                                            <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Class" PropertyName="ClassName" SortKeySelector="item => item.ClassName">
-                                                @context.ClassName
-                                            </GridColumn>
-                                            <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Plurality" PropertyName="AttributePlurality" Filterable="false" SortKeySelector="item => item.AttributePlurality">
-                                                @context.AttributePlurality
-                                            </GridColumn>
-                                            <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description" SortKeySelector="item => item.Description">
-                                                @context.Description
-                                            </GridColumn>
-                                        </Grid>*@
-
-                                </div>
-                            </div>
-                        </div>
+        <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
+            <MudText>Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.</MudText>
+            <MudAlert Severity="(connectedSystem.ObjectTypes.Count > 0 ? Severity.Warning : Severity.Info)">
+                @if (connectedSystem.ObjectTypes.Count == 0)
+                {
+                    <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
+                }
+                else
+                {
+                    <MudText>
+                        <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
+                        i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right
+                        permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                    </MudText>
+                }
+                <MudButton Color="(connectedSystem.ObjectTypes.Count == 0 ? Color.Primary : Color.Warning)" Size="Size.Small" Onclick="HandleImportSchemaAsync" Class="mt-5">
+                    @if (connectedSystem.ObjectTypes.Count == 0)
+                    {
+                        <text>Retrieve Schema</text>
                     }
-                </div>
+                    else
+                    {
+                        <text>Refresh Schema</text>
+                    }
+                </MudButton>
+            </MudAlert>
 
-                <MudButton Color="Color.Primary" OnClick="HandleAttributeSelectionSubmitAsync">Save Changes</MudButton>
+
+            @if (connectedSystem.ObjectTypes.Count > 0)
+            {
+                <MudExpansionPanels MultiExpansion="true">
+                    @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
+                    {
+                        <MudExpansionPanel Text="@connectedSystem.ObjectTypes[i].Name">
+                            <MudText>Select the @connectedSystem.ObjectTypes[i].Name attributes you want to manage.</MudText>
+                            <div class="mt-5 mb-5">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.SelectAll">Select All</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.ClearAll">Select None</MudButton>
+                            </div>
+
+                            Mud Grid alternative to come...
+
+                            @*<Grid
+                                        TItem="ConnectedSystemAttribute"
+                                        Data="connectedSystem.ObjectTypes[i].Attributes"
+                                        AllowFiltering="true"
+                                        Responsive="true"
+                                        AllowSorting="true"
+                                        class="table table-hover table-bordered table-striped">
+                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Selected?" Filterable="false" SortKeySelector="item => item.Selected">
+                                        <Switch @bind-Value="context.Selected" />
+                                    </GridColumn>
+                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Name" PropertyName="Name" SortKeySelector="item => item.Name">
+                                        @context.Name
+                                    </GridColumn>
+                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Class" PropertyName="ClassName" SortKeySelector="item => item.ClassName">
+                                        @context.ClassName
+                                    </GridColumn>
+                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Plurality" PropertyName="AttributePlurality" Filterable="false" SortKeySelector="item => item.AttributePlurality">
+                                        @context.AttributePlurality
+                                    </GridColumn>
+                                    <GridColumn TItem="ConnectedSystemAttribute" HeaderText="Description" PropertyName="Description" SortKeySelector="item => item.Description">
+                                        @context.Description
+                                    </GridColumn>
+                                </Grid>*@
+
+                         
+                        </MudExpansionPanel>
+                    }
+                </MudExpansionPanels>
+                <MudButton Color="Color.Primary" OnClick="HandleAttributeSelectionSubmitAsync" Class="mt-5">Save Changes</MudButton>
             }
             else
             {
@@ -312,6 +193,24 @@
                     </div>
                 </div>
             }
+
+        </MudTabPanel>
+        @if (connectedSystem.ConnectorDefinition.SupportsPartitions)
+        {
+            <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
+                <MudText>Contents &amp; Partitions Content...</MudText>
+            </MudTabPanel>
+        }
+    </MudTabs>
+}
+
+<div class="box-no-top mb-3">
+
+    @if (connectedSystem != null && settingCategories != null)
+    {
+        if (activeTab == Tabs.Schema)
+        {
+
         }
         else if (activeTab == Tabs.Hierarchy && connectedSystem != null)
         {
@@ -424,6 +323,11 @@
     private bool schemaBeingRetrieved;
     private bool hierarchyBeingRetrieved;
 
+    private bool IsDetailsFormValid { get; set; }
+    private string[] DetailsFormErrors { get; set; } = { };
+    private bool IsSettingsFormValid { get; set; }
+    private string[] SettingsFormErrors { get; set; } = { };
+
     // ui helper
     private enum Tabs
     {
@@ -435,6 +339,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+
         connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(Id);
         if (connectedSystem == null)
         {
