@@ -109,6 +109,20 @@
                         }
                     </MudExpansionPanels>
                 }
+
+                @if (SettingsFormCustomErrors.Any())
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-5">
+                        <MudText>There are issues with the settings:</MudText>
+                        <ul class="mt-5">
+                            @foreach (var error in SettingsFormCustomErrors)
+                            {
+                                <li>@error.Key: @error.Value</li>
+                            }
+                        </ul>
+                    </MudAlert>
+                }
+           
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync">Save Changes</MudButton>
             </MudForm>
         </MudTabPanel>
@@ -317,7 +331,6 @@
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
     private Tabs activeTab = Tabs.Details;
     private List<ConnectedSystemSettingCategory>? settingCategories;
-    private JimValidator? connectedSystemSettingsValidator;
     private string? partitionsAndHierarchiesText;
     private string? partitionAndHierarchyText;
     private bool schemaBeingRetrieved;
@@ -327,6 +340,7 @@
     private string[] DetailsFormErrors { get; set; } = { };
     private bool IsSettingsFormValid { get; set; }
     private string[] SettingsFormErrors { get; set; } = { };
+    private Dictionary<string, string> SettingsFormCustomErrors { get; set; } = new Dictionary<string,string>();
 
     // ui helper
     private enum Tabs
@@ -339,7 +353,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-
         connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(Id);
         if (connectedSystem == null)
         {
@@ -395,25 +408,22 @@
         }
 
         // validate the form
-        connectedSystemSettingsValidator?.ClearErrors();
-        var errors = new Dictionary<string, List<string>>();
+        SettingsFormCustomErrors.Clear();
         var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
         for (var i = 0; i < results.Count; i++)
         {
-            if (results[i].IsValid)
+            var result = results[i];
+            if (result.IsValid)
                 continue;
 
-            if (results[i].SettingValue != null && results[i].SettingValue.Setting != null && results[i].SettingValue.Setting.Name != null && !string.IsNullOrEmpty(results[i].ErrorMessage))
-                errors?.Add(results[i].SettingValue.Setting.Name, new() { results[i].ErrorMessage });
-            else if (results[i].SettingValue == null && !string.IsNullOrEmpty(results[i].ErrorMessage))
-                errors?.Add($"General issue {i}", new() { results[i].ErrorMessage });
+            if (result.SettingValue != null && result.SettingValue.Setting != null && result.SettingValue.Setting.Name != null && !string.IsNullOrEmpty(result.ErrorMessage))
+                SettingsFormCustomErrors.Add(result.SettingValue.Setting.Name, result.ErrorMessage);
+            else if (result.SettingValue == null && !string.IsNullOrEmpty(result.ErrorMessage))
+                SettingsFormCustomErrors.Add($"General issue {i+1}", result.ErrorMessage);
         }
 
-        if (errors != null && errors.Any())
-        {
-            connectedSystemSettingsValidator?.DisplayErrors(errors);
+        if (SettingsFormCustomErrors.Any())
             return;
-        }
 
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);

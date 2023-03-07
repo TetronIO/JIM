@@ -146,7 +146,7 @@ namespace JIM.Connectors.LDAP
             var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
             _connection = new LdapConnection(identifier, credential, AuthType.Basic);
             _connection.SessionOptions.ProtocolVersion = 3;
-            _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. wrap this in a time-limited task instead
+            _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. consider wrapping this in a time-limited, cancellable task instead
             _connection.Bind();
         }
 
