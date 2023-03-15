@@ -30,7 +30,7 @@
 @code
 {
     private MudTheme _theme = new();
-    private MudThemeProvider _mudThemeProvider;
+    private MudThemeProvider? _mudThemeProvider;
     private string _lightModeText = "Light Mode";
     private string _darkModeText = "Dark Mode";
 
@@ -40,7 +40,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && _mudThemeProvider != null)
         {
             IsDarkMode = await _mudThemeProvider.GetSystemPreference();
             StateHasChanged();
