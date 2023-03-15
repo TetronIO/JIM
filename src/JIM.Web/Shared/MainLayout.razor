@@ -29,7 +29,23 @@
 
 @code
 {
-    private MudTheme _theme = new();
+    private MudTheme _theme = new()
+        {
+            Typography = new Typography()
+            {
+                Default = new Default()
+                {
+                    FontFamily = new[] {
+                        "-apple-system",
+                        "Segoe UI Variable Display",
+                        "Roboto",
+                        "Helvetica Neue",
+                        "Arial"
+                    }
+                }
+            }
+        };
+
     private MudThemeProvider? _mudThemeProvider;
     private string _lightModeText = "Light Mode";
     private string _darkModeText = "Dark Mode";
