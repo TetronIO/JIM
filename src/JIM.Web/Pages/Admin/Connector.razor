@@ -30,16 +30,16 @@
                     <MudField Label="Created" Variant="Variant.Outlined">@connector.Created</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Last Updated" Variant="Variant.Outlined">@(connector.LastUpdated.HasValue ? connector.LastUpdated : "-")</MudField>
+                    <MudField Label="Last Updated" Variant="Variant.Outlined">@(connector.LastUpdated.HasValue ? connector.LastUpdated : "-")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
 
     <MudText Typo="Typo.h5" Class="mt-5">Capabilities</MudText>
     <MudPaper Class="pa-5 mt-5" Outlined="true">
-        <MudSwitch @bind-Checked="connector.SupportsFullImport" Label="Supports full import?" Color="Color.Primary" Disabled="true" />
-        <MudSwitch @bind-Checked="connector.SupportsDeltaImport" Label="Supports delta import?" Color="Color.Primary" Disabled="true" />
-        <MudSwitch @bind-Checked="connector.SupportsExport" Label="Supports export?" Color="Color.Primary" Disabled="true" />
+        <MudCheckBox @bind-Checked="@connector.SupportsFullImport" Disabled="true">Supports full import?</MudCheckBox>
+        <MudCheckBox @bind-Checked="@connector.SupportsDeltaImport" Disabled="true">Supports delta import?</MudCheckBox>
+        <MudCheckBox @bind-Checked="@connector.SupportsExport" Disabled="true">Supports export?</MudCheckBox>
     </MudPaper>
 
     <MudTable Items="@connector.Files" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By">
