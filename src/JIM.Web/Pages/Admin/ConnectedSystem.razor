@@ -16,13 +16,13 @@
 
 @if (connectedSystem != null)
 {
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-5" Class="mt-5">
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-5">
 
         <MudTabPanel Text="Details">
             <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
-                <MudTextField T="string" Label="Connector" @bind-Value="connectedSystem.ConnectorDefinition.Name" Disabled="true" />
-                <MudTextField T="string" Label="Name" @bind-Value="connectedSystem.Name" Required="true" RequiredError="A name is required" />
-                <MudTextField T="string" Label="Description" Required="false" @bind-Value="connectedSystem.Description" Lines="5" />
+                <MudTextField T="string" Label="Connector" @bind-Value="connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
+                <MudTextField T="string" Label="Name" @bind-Value="connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
+                <MudTextField T="string" Label="Description" Required="false" @bind-Value="connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync">Save Changes</MudButton>
             </MudForm>
         </MudTabPanel>
@@ -51,39 +51,45 @@
                                     else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
                                     {
                                         <MudTextField T="string"
-                                  Label="@settingValue.Setting.Name"
-                                  @bind-Value="settingValue.StringValue"
-                                  Required="@settingValue.Setting.Required"
-                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                  HelperText="@settingValue.Setting.Description" />
+                                          Label="@settingValue.Setting.Name"
+                                          @bind-Value="settingValue.StringValue"
+                                          Required="@settingValue.Setting.Required"
+                                          RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                          HelperText="@settingValue.Setting.Description"
+                                          Variant="Variant.Outlined"
+                                          Class="mt-5" />
                                     }
                                     else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                     {
                                         <MudTextField T="string"
-                                  Label="@settingValue.Setting.Name"
-                                  @bind-Value="settingValue.StringEncryptedValue"
-                                  Required="@settingValue.Setting.Required"
-                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                  HelperText="@settingValue.Setting.Description"
-                                  InputType="InputType.Password" />
+                                          Label="@settingValue.Setting.Name"
+                                          @bind-Value="settingValue.StringEncryptedValue"
+                                          Required="@settingValue.Setting.Required"
+                                          RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                          HelperText="@settingValue.Setting.Description"
+                                          InputType="InputType.Password"
+                                          Variant="Variant.Outlined"
+                                          Class="mt-5" />
                                     }
                                     else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
                                     {
                                         <MudTextField T="int?"
-                                  Label="@settingValue.Setting.Name"
-                                  @bind-Value="settingValue.IntValue"
-                                  Required="@settingValue.Setting.Required"
-                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                  HelperText="@settingValue.Setting.Description"
-                                  InputType="InputType.Number" />
+                                          Label="@settingValue.Setting.Name"
+                                          @bind-Value="settingValue.IntValue"
+                                          Required="@settingValue.Setting.Required"
+                                          RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                          HelperText="@settingValue.Setting.Description"
+                                          InputType="InputType.Number"
+                                          Variant="Variant.Outlined"
+                                          Class="mt-5" />
                                     }
                                     else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                     {
-                                        <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" />
+                                        <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mt-5" />
                                     }
                                     else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                     {
-                                        <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name">
+                                        <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name" Variant="Variant.Outlined" Class="mt-5">
                                             @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
                                             {
                                                 <option value="@dropDownValue">@dropDownValue</option>
@@ -98,11 +104,11 @@
                                     }
                                     else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
                                     {
-                                        <MudText>Files not yet supported for settings.</MudText>
+                                        <MudText Class="mt-5">Files not yet supported for settings.</MudText>
                                     }
                                     else
                                     {
-                                        <MudText>Oops. Unknown setting type!</MudText>
+                                        <MudText Class="mt-5">Oops. Unknown setting type!</MudText>
                                     }
                                 }
                             </MudExpansionPanel>
