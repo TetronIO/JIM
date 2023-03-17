@@ -1,3 +1,13 @@
+/* MUDBLAZOR CUSTOMISATIONS */
+/*.mud-link:hover {
+    transition: color 0.3s;
+}*/
+
+/* JIM CUSTOM */
+.header-title {
+    font-weight: 300;
+}
+
 /* overriding bootstrap fonts */
 /*body {
     font-family: 
