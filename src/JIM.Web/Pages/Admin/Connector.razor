@@ -18,19 +18,19 @@
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Description" Variant="Variant.Text">@connector.Description</MudField>
+                <MudField Label="Description" Variant="Variant.Outlined">@connector.Description</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Url" Variant="Variant.Text"><MudLink Href="@connector.Url">@connector.Url</MudLink></MudField>
+                <MudField Label="Url" Variant="Variant.Outlined"><MudLink Href="@connector.Url">@connector.Url</MudLink></MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Text">@(connector.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="Built-in?" Variant="Variant.Outlined">@(connector.BuiltIn ? "Yes" : "No")</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Created" Variant="Variant.Text">@connector.Created</MudField>
+                    <MudField Label="Created" Variant="Variant.Outlined">@connector.Created</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Last Updated" Variant="Variant.Text">@(connector.LastUpdated.HasValue ? connector.LastUpdated : "-")</MudField>
+                <MudField Label="Last Updated" Variant="Variant.Outlined">@(connector.LastUpdated.HasValue ? connector.LastUpdated : "-")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>

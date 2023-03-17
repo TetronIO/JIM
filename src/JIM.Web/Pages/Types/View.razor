@@ -15,7 +15,7 @@
             @foreach (var attributeValue in MetaverseObject.AttributeValues)
             {
                 <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Text">
+                    <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Outlined">
                         @if (attributeValue.Attribute.Type == AttributeDataType.String)
                         {
                             if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))

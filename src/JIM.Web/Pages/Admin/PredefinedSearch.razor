@@ -17,19 +17,19 @@
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Name" Variant="Variant.Text">@predefinedSearch.Name</MudField>
+                <MudField Label="Name" Variant="Variant.Outlined">@predefinedSearch.Name</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Uri" Variant="Variant.Text">@predefinedSearch.Uri</MudField>
+                <MudField Label="Uri" Variant="Variant.Outlined">@predefinedSearch.Uri</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Object Type" Variant="Variant.Text">@predefinedSearch.MetaverseObjectType.Name</MudField>
+                <MudField Label="Object Type" Variant="Variant.Outlined">@predefinedSearch.MetaverseObjectType.Name</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Is default for Object Type?" Variant="Variant.Text">@(predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudField>
+                <MudField Label="Is default for Object Type?" Variant="Variant.Outlined">@(predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Text">@(predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
+                    <MudField Label="Built-in?" Variant="Variant.Outlined">@(predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
