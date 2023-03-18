@@ -1,5 +1,5 @@
 ﻿@inherits LayoutComponentBase
-
+@using MudBlazor.Utilities
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -7,7 +7,7 @@
 <PageTitle>JIM</PageTitle>
 
 <MudLayout>
-    <MudAppBar Elevation=" 1">
+    <MudAppBar Elevation="1">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
         <MudText Typo="Typo.h6" Class="header-title">Junctional Identity Manager</MudText>
         <MudSpacer />
@@ -17,7 +17,7 @@
                                  ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
         </MudTooltip>
     </MudAppBar>
-    <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+    <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0">
         <NavMenu />
     </MudDrawer>
     <MudMainContent>
@@ -35,7 +35,7 @@
 @code
 {
     private MudTheme _theme = new()
-    {
+        {
             Typography = new Typography()
             {
                 Default = new Default()
@@ -53,9 +53,47 @@
             },
             Palette = new Palette()
             {
-                Background = new MudBlazor.Utilities.MudColor("#f6f9fc"),
-                DrawerBackground = new MudBlazor.Utilities.MudColor("#eef2f6")
-            }            
+                Primary = new MudColor("rgb(60,148,255)"),
+                Background = new MudColor("#f6f9fc"),
+                DrawerBackground = new MudColor("#eef2f6"),
+                AppbarBackground = new MudColor("rgb(60,148,255)")
+            },
+            PaletteDark = new Palette()
+            {
+                Primary = new MudColor("rgb(60,148,255)"),
+                Background = new MudColor("#0e1420"),
+                DrawerBackground = new MudColor("#111926"),
+                AppbarBackground = new MudColor("#1a273b"),
+                DrawerText = new MudColor("#acb0b3"),
+                TextPrimary = new MudColor("#acb0b3"),
+                Surface = new MudColor("#121826"),
+                TableLines = new MudColor("#2a303c"),
+                ActionDefault = new MudColor("#acb0b3"), // pagination arrow link text
+                ActionDisabled = new MudColor("#2c3441"),
+                TableHover = new MudColor("#151b2b"),
+                LinesDefault = new MudColor("#2a303c"),
+                LinesInputs = new MudColor("#595d68"),
+                DrawerIcon = new MudColor("#46545f"),
+                TextDisabled = new MudColor("#535861"),
+
+                // experiments, trying to find what controls the colour of things...
+                //BackgroundGrey = new MudColor("#f73838"), // red
+                //ActionDisabledBackground = new MudColor("#f73838"), // red
+                Dark = new MudColor("#f73838"), // red
+                Black = new MudColor("#f73838"), // red
+                Divider = new MudColor("#f73838"), // red
+                DividerLight = new MudColor("#f73838"), // red                                
+                //PrimaryContrastText = new MudColor("#f73838"), // red
+                //TextSecondary=new MudColor("#f73838"), // red
+                //Secondary = new MudColor("#f73838"), // red
+                //SecondaryContrastText = new MudColor("#f73838"), // red
+                //GrayDefault = "#f73838", // red
+                //HoverOpacity = 0.40
+            },
+            LayoutProperties = new LayoutProperties()
+            {
+                DefaultBorderRadius = "4px"
+            }         
         };
 
     private MudThemeProvider? _mudThemeProvider;
