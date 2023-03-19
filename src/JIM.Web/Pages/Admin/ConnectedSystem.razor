@@ -204,12 +204,14 @@
             }
 
         </MudTabPanel>
+
         @if (connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
             <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
                 <MudText>Contents &amp; Partitions Content...</MudText>
             </MudTabPanel>
         }
+
     </MudTabs>
 }
 
