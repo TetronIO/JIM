@@ -16,7 +16,7 @@
 
 @if (connectedSystem != null)
 {
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-5">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-5" Outlined="true">
 
         <MudTabPanel Text="Details">
             <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
@@ -32,88 +32,87 @@
             <MudForm @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
                 @if (settingCategories != null)
                 {
-                    <MudExpansionPanels MultiExpansion="true">
-                        @for (var i = 0; i < settingCategories.Count; i++)
-                        {
-                            var formElementName = "something-" + i;
-                            var settingCategory = @settingCategories[i];
-                            <MudExpansionPanel Text="@settingCategory.ToString()">
-                                @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == settingCategory))
+                    @for (var i = 0; i < settingCategories.Count; i++)
+                    {
+                        var formElementName = "something-" + i;
+                        var settingCategory = @settingCategories[i];
+                        <MudText Typo="Typo.h5" Class="mt-5">@settingCategory.ToString()</MudText>
+                        <MudPaper Class="pa-4 mt-5" Outlined="true">
+                            @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == settingCategory))
+                            {
+                                if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
                                 {
-                                    if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
-                                    {
-                                        <MudText Typo="Typo.h6" Class="mt-5">@settingValue.Setting.Name</MudText>
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
-                                    {
-                                        <hr />
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
-                                    {
-                                        <MudTextField T="string"
-                                          Label="@settingValue.Setting.Name"
-                                          @bind-Value="settingValue.StringValue"
-                                          Required="@settingValue.Setting.Required"
-                                          RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                          HelperText="@settingValue.Setting.Description"
-                                          Variant="Variant.Outlined"
-                                          Class="mt-5" />
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
-                                    {
-                                        <MudTextField T="string"
-                                          Label="@settingValue.Setting.Name"
-                                          @bind-Value="settingValue.StringEncryptedValue"
-                                          Required="@settingValue.Setting.Required"
-                                          RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                          HelperText="@settingValue.Setting.Description"
-                                          InputType="InputType.Password"
-                                          Variant="Variant.Outlined"
-                                          Class="mt-5" />
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
-                                    {
-                                        <MudTextField T="int?"
-                                          Label="@settingValue.Setting.Name"
-                                          @bind-Value="settingValue.IntValue"
-                                          Required="@settingValue.Setting.Required"
-                                          RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                          HelperText="@settingValue.Setting.Description"
-                                          InputType="InputType.Number"
-                                          Variant="Variant.Outlined"
-                                          Class="mt-5" />
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
-                                    {
-                                        <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mt-5" />
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
-                                    {
-                                        <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name" Variant="Variant.Outlined" Class="mt-5">
-                                            @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
-                                            {
-                                                <option value="@dropDownValue">@dropDownValue</option>
-                                            }
-                                        </MudSelect>
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
-                                    {
-                                        <MudText Class="mt-5">
-                                            @settingValue.Setting.Description
-                                        </MudText>
-                                    }
-                                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
-                                    {
-                                        <MudText Class="mt-5">Files not yet supported for settings.</MudText>
-                                    }
-                                    else
-                                    {
-                                        <MudText Class="mt-5">Oops. Unknown setting type!</MudText>
-                                    }
+                                    <MudText Typo="Typo.h6" Class="mb-5">@settingValue.Setting.Name</MudText>
                                 }
-                            </MudExpansionPanel>
-                        }
-                    </MudExpansionPanels>
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
+                                {
+                                    <hr />
+                                }
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
+                                {
+                                    <MudTextField T="string"
+                                        Label="@settingValue.Setting.Name"
+                                        @bind-Value="settingValue.StringValue"
+                                        Required="@settingValue.Setting.Required"
+                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                        HelperText="@settingValue.Setting.Description"
+                                        Variant="Variant.Outlined"
+                                        Class="mb-5" />
+                                }
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
+                                {
+                                    <MudTextField T="string"
+                                        Label="@settingValue.Setting.Name"
+                                        @bind-Value="settingValue.StringEncryptedValue"
+                                        Required="@settingValue.Setting.Required"
+                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                        HelperText="@settingValue.Setting.Description"
+                                        InputType="InputType.Password"
+                                        Variant="Variant.Outlined"
+                                        Class="mb-5" />
+                                }
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
+                                {
+                                    <MudTextField T="int?"
+                                        Label="@settingValue.Setting.Name"
+                                        @bind-Value="settingValue.IntValue"
+                                        Required="@settingValue.Setting.Required"
+                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                        HelperText="@settingValue.Setting.Description"
+                                        InputType="InputType.Number"
+                                        Variant="Variant.Outlined"
+                                        Class="mb-5" />
+                                }
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
+                                {
+                                    <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
+                                }
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
+                                {
+                                    <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name" Variant="Variant.Outlined" Class="mb-5">
+                                        @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
+                                        {
+                                            <option value="@dropDownValue">@dropDownValue</option>
+                                        }
+                                    </MudSelect>
+                                }
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
+                                {
+                                    <MudText Class="mb-5">
+                                        @settingValue.Setting.Description
+                                    </MudText>
+                                }
+                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
+                                {
+                                    <MudText Class="mt-b">Files not yet supported for settings.</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Class="mt-b">Oops. Unknown setting type!</MudText>
+                                }
+                            }
+                        </MudPaper>
+                    }                    
                 }
 
                 @if (SettingsFormCustomErrors.Any())
@@ -170,7 +169,7 @@
                             <MudText>Select the @objectType.Name attributes you want to manage.</MudText>
                             <div class="mt-5 mb-5">
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined">Select All</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined">Clear Selection</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined">Clear All</MudButton>
                             </div>
 
                             <MudTable Items="@objectType.Attributes" Hover="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemAttribute,bool>(SchemaFilterFuncHandler)">
