@@ -6,7 +6,7 @@
 @inject NavigationManager NavManager
 
 <PageTitle>@MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1): @displayName</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length - 1)):</span> @displayName</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length - 1)):</span> @displayName</MudText>
 
 <MudPaper Class="pa-5 mt-5" Outlined="true">
     @if (MetaverseObject != null)
