@@ -9,66 +9,176 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Data Generation Template: @template?.Name</PageTitle>
-<h1><span class="text-muted">Data Generation Template:</span> @template?.Name</h1>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Data Generation Template:</span> @template?.Name</MudText>
 
 @if (template != null)
 {
     foreach (var objectType in template.ObjectTypes)
     {
-        <div class="box mt-3">
-            <h3>@objectType.MetaverseObjectType.Name</h3>
-            <p class="light">Objects to be created: @objectType.ObjectsToCreate.ToString("N0")</p>
-
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th scope="col">Attribute</th>
-                        <th scope="col">Type</th>
-                        <th scope="col">Population %</th>
-                        <th scope="col">Rule(s)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var ta in objectType.TemplateAttributes)
+        <MudTable Items="@objectType.TemplateAttributes" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">@objectType.MetaverseObjectType.Name</MudText>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute.Name)">Attribute</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute.Type)">Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.PopulatedValuesPercentage)">Population %</MudTableSortLabel></MudTh>
+                <MudTh>Rules</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Attribute">@context.MetaverseAttribute?.Name</MudTd>
+                <MudTd DataLabel="Type">@context.MetaverseAttribute?.Type</MudTd>
+                <MudTd DataLabel="Population &">@context.PopulatedValuesPercentage</MudTd>
+                <MudTd DataLabel="Rules">
+                    @if (context.MetaverseAttribute?.Type == AttributeDataType.String)
                     {
-                        <tr>
-                            <td>@ta.MetaverseAttribute?.Name</td>
-                            <td>@ta.MetaverseAttribute?.Type</td>
-                            <td>@ta.PopulatedValuesPercentage</td>
-                            <td>@((MarkupString)SimplifyAttributeConstraints(ta))</td>
-                        </tr>
+                        if (!string.IsNullOrEmpty(context.Pattern))
+                        {
+                            <MudChip Color="Color.Primary"><b>Pattern:</b>&nbsp;@context.Pattern</MudChip>
+                        }
+
+                        if (context.ExampleDataSetInstances != null && context.ExampleDataSetInstances.Count > 0)
+                        {
+                            var setValues = "";
+                            foreach (var set in context.ExampleDataSetInstances)
+                                setValues += set.ExampleDataSet.Name + ", ";
+
+                            if (setValues.EndsWith(", "))
+                                setValues = setValues.Substring(0, setValues.Length - 2);
+
+                            <MudChip Color="Color.Primary"><b>Data set(s):</b>&nbsp;@setValues</MudChip>
+                        }
+
+                        if (context.MinNumber.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
+                        }
+
+                        if (context.MaxNumber.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
+                        }
+
+                        if (context.WeightedStringValues != null && context.WeightedStringValues.Count > 0)
+                        {
+                            string weightedStringValues = "";
+                            foreach (var wsv in context.WeightedStringValues)
+                                weightedStringValues += $"{wsv.Value}: {wsv.Weight}, ";
+
+                            weightedStringValues = weightedStringValues.Substring(0, weightedStringValues.Length - 2);
+                            <MudChip Color="Color.Primary"><b>Weighted Values:</b>&nbsp;@weightedStringValues</MudChip>
+                        }
                     }
-                </tbody>
-            </table>
-        </div>
+                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Number)
+                    {
+                        if (context.MinNumber.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
+                        }
+
+                        if (context.MaxNumber.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
+                        }
+
+                        if (context.SequentialNumbers.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Sequential:</b>&nbsp;@context.SequentialNumbers.Value.ToString()</MudChip>
+                        }
+
+                        if (context.RandomNumbers.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Random numbers:</b>&nbsp;@context.RandomNumbers.Value.ToString()</MudChip>
+                        }
+                    }
+                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Bool)
+                    {
+                        if (context.BoolShouldBeRandom.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Random:</b>&nbsp;@context.BoolShouldBeRandom.Value.ToString()</MudChip>
+                        }
+
+                        if (context.BoolTrueDistribution.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>True distribution:</b>&nbsp;@context.BoolTrueDistribution.Value.ToString("N0")</MudChip>
+                        }
+                    }
+                    else if (context.MetaverseAttribute?.Type == AttributeDataType.DateTime && (context.MinDate.HasValue || context.MaxDate.HasValue))
+                    {
+                        if (context.MinDate.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinDate.Value.ToShortDateString()</MudChip>
+                        }
+
+                        if (context.MaxDate.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MaxDate.Value.ToShortDateString()</MudChip>
+                        }
+                    }
+                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Reference)
+                    {
+                        if (context.MvaRefMinAssignments.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>MVA min assignments:</b>&nbsp;@context.MvaRefMinAssignments.Value.ToString("N0")</MudChip>
+                        }
+
+                        if (context.MvaRefMaxAssignments.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>MVA max assignments:</b>&nbsp;@context.MvaRefMaxAssignments.Value.ToString("N0")</MudChip>
+                        }
+
+                        if (context.ReferenceMetaverseObjectTypes != null && context.ReferenceMetaverseObjectTypes.Count > 0)
+                        {
+                            var refTypes = "";
+                            foreach (var refType in context.ReferenceMetaverseObjectTypes)
+                                refTypes += refType.Name + ", ";
+
+                            if (refTypes.EndsWith(", "))
+                                refTypes = refTypes.Substring(0, refTypes.Length - 2);
+
+                            <MudChip Color="Color.Primary"><b>Reference type(s):</b>&nbsp;@refTypes</MudChip>
+                        }
+
+                        if (context.ManagerDepthPercentage.HasValue)
+                        {
+                            <MudChip Color="Color.Primary"><b>Manager depth:</b>&nbsp;@(context.ManagerDepthPercentage + "%")</MudChip>
+                        }
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                No template attributes
+            </NoRecordsContent>
+        </MudTable>
     }
 }
 
-<div class="alert alert-warning mt-3" role="alert">
-    <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Warning!</h4>
-    <p>
+<MudAlert Severity="Severity.Warning">
+    <MudText Typo="Typo.h6">Warning</MudText>
+    <MudText>
         Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised.
         This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.
-    </p>
-    <hr>
-    <button type="submit" class="btn btn-warning" @onclick="ExecuteTemplateAsync" disabled="@(status != null)">
+    </MudText>
+    <MudButton Class="mt-5"
+               Variant="Variant.Filled"
+               StartIcon="@Icons.Material.Filled.BuildCircle"
+               Color="Color.Warning"
+               Disabled="@(status != null)"
+               OnClick="ExecuteTemplateAsync">
         @if (status != null && status == ServiceTaskStatus.Processing)
         {
-            <div class="spinner-border spinner-border-sm me-2 text-warning-dark" role="status"></div>
             <text>Processing...</text>
         }
         else if (status != null && status == ServiceTaskStatus.Queued)
         {
-            <i class="bi bi-hourglass me-2"></i>
             <text>Queued...</text>
         }
         else
         {
             <text>Execute Template</text>
         }
-    </button>
-</div>
-
+    </MudButton>
+</MudAlert>
 
 @code {
     [Parameter]
@@ -112,104 +222,6 @@
                 StateHasChanged();
             });
         }), null, 2000, 2000);
-    }
-
-    private string SimplifyAttributeConstraints(DataGenerationTemplateAttribute dgta)
-    {
-        string response = "";
-        if (dgta.MetaverseAttribute?.Type == AttributeDataType.String)
-        {
-            if (!string.IsNullOrEmpty(dgta.Pattern))
-                response += CreateBadgeHtml("Pattern", dgta.Pattern);
-
-            if (dgta.ExampleDataSetInstances != null && dgta.ExampleDataSetInstances.Count > 0)
-            {
-                var setValues = "";
-                foreach (var set in dgta.ExampleDataSetInstances)
-                    setValues += set.ExampleDataSet.Name + ", ";
-
-                if (setValues.EndsWith(", "))
-                    setValues = setValues.Substring(0, setValues.Length - 2);
-
-                response += CreateBadgeHtml("Data set(s)", setValues);
-            }
-
-            if (dgta.MinNumber.HasValue)
-                response += CreateBadgeHtml("Min", dgta.MinNumber.Value.ToString("N0"));
-
-            if (dgta.MaxNumber.HasValue)
-                response += CreateBadgeHtml("Max", dgta.MaxNumber.Value.ToString("N0"));
-
-            if (dgta.WeightedStringValues != null && dgta.WeightedStringValues.Count > 0)
-            {
-                string weightedStringValues = "";
-                foreach (var wsv in dgta.WeightedStringValues)
-                    weightedStringValues += $"{wsv.Value}: {wsv.Weight}, ";
-
-                weightedStringValues = weightedStringValues.Substring(0, weightedStringValues.Length -2);
-                response += CreateBadgeHtml("Weighted Values", weightedStringValues);
-            }
-        }
-        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Number)
-        {
-            if (dgta.MinNumber.HasValue)
-                response += CreateBadgeHtml("Min", dgta.MinNumber.Value.ToString("N0"));
-
-            if (dgta.MaxNumber.HasValue)
-                response += CreateBadgeHtml("Max", dgta.MaxNumber.Value.ToString("N0"));
-
-            if (dgta.SequentialNumbers.HasValue)
-                response += CreateBadgeHtml("Sequential", dgta.SequentialNumbers.Value.ToString());
-
-            if (dgta.RandomNumbers.HasValue)
-                response += CreateBadgeHtml("Random", dgta.RandomNumbers.Value.ToString());
-        }
-        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Bool)
-        {
-            if (dgta.BoolShouldBeRandom.HasValue)
-                response += CreateBadgeHtml("Random", dgta.BoolShouldBeRandom.Value.ToString());
-
-            if (dgta.BoolTrueDistribution.HasValue)
-                response += CreateBadgeHtml("True distribution", dgta.BoolTrueDistribution.Value.ToString("N0"));
-        }
-        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.DateTime && (dgta.MinDate.HasValue || dgta.MaxDate.HasValue))
-        {
-            if (dgta.MinDate.HasValue)
-                response += CreateBadgeHtml("Min", dgta.MinDate.Value.ToShortDateString());
-
-            if (dgta.MaxDate.HasValue)
-                response += CreateBadgeHtml("Min", dgta.MaxDate.Value.ToShortDateString());
-        }
-        else if (dgta.MetaverseAttribute?.Type == AttributeDataType.Reference)
-        {
-            if (dgta.MvaRefMinAssignments.HasValue)
-                response += CreateBadgeHtml("MVA min assignments", dgta.MvaRefMinAssignments.Value.ToString("N0"));
-
-            if (dgta.MvaRefMaxAssignments.HasValue)
-                response += CreateBadgeHtml("MVA max assignments", dgta.MvaRefMaxAssignments.Value.ToString("N0"));
-
-            if (dgta.ReferenceMetaverseObjectTypes != null && dgta.ReferenceMetaverseObjectTypes.Count > 0)
-            {
-                var refTypes = "";
-                foreach (var refType in dgta.ReferenceMetaverseObjectTypes)
-                    refTypes += refType.Name + ", ";
-
-                if (refTypes.EndsWith(", "))
-                    refTypes = refTypes.Substring(0, refTypes.Length - 2);
-
-                response += CreateBadgeHtml("Reference type(s)", refTypes);
-            }
-
-            if (dgta.ManagerDepthPercentage.HasValue)
-                response += CreateBadgeHtml("Manager depth", dgta.ManagerDepthPercentage + "%");
-        }
-
-        return response;
-    }
-
-    private string CreateBadgeHtml(string prefix, string value)
-    {
-        return "<span class=\"badge badge-bigger bg-secondary inline me-2\"><span class=\"fw-normal\">" + prefix + ":</span> " + value + "</span>";
     }
 
     private async Task ExecuteTemplateAsync()

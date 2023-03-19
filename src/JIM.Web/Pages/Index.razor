@@ -1,8 +1,11 @@
 ﻿@page "/"
 @attribute [Authorize(Roles = "Users")]
-
 <PageTitle>JIM Home</PageTitle>
 
-<h1>Hello, world!</h1>
-
-Welcome to Junctional Identity Manager (JIM)
+<MudPaper Class="pa-5" Outlined="true">
+    <MudText Typo="Typo.h2">Welcome</MudText>
+    <MudText Typo="Typo.body1">
+        Junctional Identity Manager (JIM) is a modern Identity &amp; Access Management system for organisations that need to manage 
+        identities and entitlements across business systems and applications.
+    </MudText>
+</MudPaper>

@@ -6,49 +6,31 @@
 @inject JimApplication Jim
 
 <PageTitle>Example Data Templates</PageTitle>
-<h1>Example Data Templates</h1>
-<p class="light">
-    You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly configure JIM with Connected Systems, Rules Extensions and wait for data to be imported and synchronised etc.
-</p>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Example Data:</span> Templates</MudText>
+<MudText Typo="Typo.subtitle1">
+    You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
+    configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.
+    <br />
+    <br />
+    Templates define example data to be created in JIM. They consist of one or more object types, with data sets being used to generate values for the object attributes.
+</MudText>
 
-<div class="box mt-3">
+<br />
+<MudButton Variant="Variant.Filled" Href="/admin/example-data" Size="Size.Small" Color="Color.Primary" Disabled="true">Templates</MudButton>
+<MudButton Variant="Variant.Filled" Href="/admin/example-data/datasets" Size="Size.Small" Color="Color.Primary">Data Sets</MudButton>
 
-    <div class="btn-group btn-group-sm" role="group" aria-label="Navigation options">
-        <a class="btn btn-outline-secondary active" aria-current="page" href="/admin/example-data">Templates</a>
-        <a class="btn btn-outline-secondary" href="/admin/example-data/datasets">Data Sets</a>
-    </div>
-
-    <p class="mt-3">
-        Templates define example data to be created in JIM. They consist of one or more object types, with data sets being used to generate values for the object attributes.
-    </p>
-
-    <table class="table mt-2">
-        <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Built-in?</th>
-                <th scope="col">Created</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if (templates != null)
-            {
-                foreach (var template in templates)
-                {
-                    <tr>
-                        <td>
-                            <a href="/admin/example-data/templates/@(template.Id)">@template.Name</a>
-                        </td>
-                        <td>@(template.BuiltIn ? "Yes" : "No")</td>
-                        <td>@template.Created</td>
-                    </tr>
-                }
-            }
-        </tbody>
-    </table>
-</div>
-
-
+<MudTable Items="@templates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By">
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.BuiltIn)">Built-in?</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name"><MudLink Href="@("admin/example-data/templates/"+context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Created">@context.Created</MudTd>
+    </RowTemplate>
+</MudTable>
 
 @code {
     private List<DataGenerationTemplateHeader>? templates;

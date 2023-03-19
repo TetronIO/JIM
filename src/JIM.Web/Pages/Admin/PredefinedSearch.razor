@@ -9,72 +9,68 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Predefined Search: @predefinedSearch?.Name</PageTitle>
-<h1><span class="text-muted">Predefined Search:</span> @predefinedSearch?.Name</h1>
+<MudText Typo="Typo.h4" Class="mt-3"><span class="mud-secondary-text">Predefined Search:</span> @predefinedSearch?.Name</MudText>
 
 @if (predefinedSearch != null)
 {
-    <div class="box">
-        <table>
-            <tr>
-                <td class="light pe-3">Name:</td>
-                <td><span class="font-monospace">@predefinedSearch.Name</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Uri:</td>
-                <td><span class="font-monospace">@predefinedSearch.Uri</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Object Type</td>
-                <td><span class="font-monospace">@predefinedSearch.MetaverseObjectType.Name</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Is default for Object Type?</td>
-                <td><span class="font-monospace">@(predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</span></td>
-            </tr>
-            <tr>
-                <td class="light pe-3">Built-in?</td>
-                <td><span class="font-monospace">@(predefinedSearch.BuiltIn ? "Yes" : "No")</span></td>
-            </tr>
-        </table>
-    </div>
+    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Name" Variant="Variant.Outlined">@predefinedSearch.Name</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Uri" Variant="Variant.Outlined">@predefinedSearch.Uri</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Object Type" Variant="Variant.Outlined">@predefinedSearch.MetaverseObjectType.Name</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Is default for Object Type?" Variant="Variant.Outlined">@(predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                    <MudField Label="Built-in?" Variant="Variant.Outlined">@(predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
-    <div class="box mt-3">
-        <h6>Metaverse Attributes</h6>
-        <div class="light mb-3">These will be the attributes shown in the search results.</div>
+    <MudText Typo="Typo.h5" Class="mt-5">Metaverse Attributes</MudText>
+    <MudText Typo="Typo.subtitle1">These will be the attributes shown in the search results:</MudText>
+
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
         @foreach (var psa in predefinedSearch.Attributes)
         {
-            <span class="badge badge-outline badge-bigger bg-light text-dark">@psa.MetaverseAttribute.Name</span>
+            <MudChip Color="Color.Primary">@psa.MetaverseAttribute.Name</MudChip>
         }
-    </div>
+    </MudPaper>
 
     @if (predefinedSearch.CriteriaGroups.Count > 0)
     {
-        <div class="box mt-3">
-            <h6>Criteria</h6>
-            <div class="light mb-3">This search has criteria to filter the results:</div>
+        <MudText Typo="Typo.h5" Class="mt-5">Criteria</MudText>
+        <MudText Typo="Typo.subtitle1">This search has criteria to filter the results:</MudText>
+
+
+        <MudStack Class="mt-5">
             @foreach (var criteriaGroup in predefinedSearch.CriteriaGroups)
             {
-                <div class="callout callout-primary">
-                    <div class="light">
-                        Type: @criteriaGroup.Type
-                    </div>
+                <MudPaper Class="pa-5" Outlined="true">
+                    <MudText Typo="Typo.subtitle1">Type: @criteriaGroup.Type</MudText>
+                    <br />
                     @foreach (var criteria in criteriaGroup.Criteria)
                     {
-                        <div class="mt-3">
-                            <span class="badge badge-outline badge-bigger bg-light text-dark">@criteria.MetaverseAttribute.Name</span>
-                            <span class="badge badge-outline badge-bigger bg-light text-dark">@criteria.ComparisonType</span>
-                            <span class="badge badge-outline badge-bigger bg-light text-dark">@criteria.StringValue</span>
-                        </div>
+                        <MudChip Color="Color.Primary">@criteria.MetaverseAttribute.Name</MudChip>
+                        <MudChip Color="Color.Primary">@criteria.ComparisonType</MudChip>
+                        <MudChip Color="Color.Primary">@criteria.StringValue</MudChip>
                     }
-                </div>
+                </MudPaper>
             }
-        </div>
+        </MudStack>
     }
 }
 
 @code {
     [Parameter]
-    public string Uri { get; set; }
+    public string? Uri { get; set; }
 
     private JIM.Models.Search.PredefinedSearch? predefinedSearch;
 

@@ -6,64 +6,65 @@
 @inject JimApplication Jim
 
 <PageTitle>Schema: Attributes</PageTitle>
-<h1><span class="text-muted">Schema:</span> Attributes</h1>
-<p class="light">
-    Manage metaverse object types and their attributes.
-</p>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Schema:</span> Attributes</MudText>
+<MudText Typo="Typo.subtitle1">Manage metaverse object types and their attributes.</MudText>
 
-<div class="box mt-3">
+<br />
+<MudButton Variant="Variant.Filled" Href="/admin/schema" Size="Size.Small" Color="Color.Primary">Object Types</MudButton>
+<MudButton Variant="Variant.Filled" Href="/admin/schema/attributes" Disabled="true" Size="Size.Small" Color="Color.Primary">Attributes</MudButton>
 
-    <div class="btn-group btn-group-sm" role="group" aria-label="Schema navigation options">
-        <a class="btn btn-outline-secondary" href="/admin/schema">Object Types</a>
-        <a class="btn btn-outline-secondary active" aria-current="page"  href="/admin/schema/attributes">Attributes</a>
-    </div>
-
-    <table class="table mt-2">
-        <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Type</th>
-                <th scope="col">Plurality</th>
-                <th scope="col">Built-in?</th>
-                <th scope="col">Created</th>
-                <th scope="col">Object Types</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if (attributeHeaders != null)
+<MudTable Items="@attributeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<MetaverseAttributeHeader,bool>(FilterFunc1)">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Attributes</MudText>
+        <MudSpacer />
+        <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Type)">Type</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.BuiltIn)">Built-in?</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
+        <MudTh>Object Types</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Type">@context.Type.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Plurality">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Created">@context.Created</MudTd>
+        <MudTd DataLabel="Object Types">
+            @if (context.MetaverseObjectTypes != null)
             {
-                foreach (var attributeHeader in attributeHeaders)
+                foreach (var stub in context.MetaverseObjectTypes)
                 {
-                    <tr>
-                        <td>@attributeHeader.Name</td>
-                        <td>@attributeHeader.Type.ToString().SplitOnCapitalLetters()</td>
-                        <td title="@(attributeHeader.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")">
-                            @if (attributeHeader.AttributePlurality == AttributePlurality.SingleValued) {
-                                <i class="bi bi-dot"></i>
-                            } else {
-                                <i class="bi bi-three-dots"></i>
-                            }
-                        </td>
-                        <td>@(attributeHeader.BuiltIn ? "Yes" : "No")</td>
-                        <td>@attributeHeader.Created</td>
-                        <td>
-                            @foreach (var stub in attributeHeader.MetaverseObjectTypes)
-                            {
-                                <span class="badge badge-outline badge-bigger bg-light text-dark"><a href="/admin/schema/object-types/@stub.Key">@stub.Value</a></span>
-                            }
-                        </td>
-                    </tr>
+                    var attributeUrl = $"/admin/schema/object-types/{stub.Key}";
+                    <MudChip Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
                 }
             }
-        </tbody>
-    </table>
-</div>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
 
 @code {
     private IList<MetaverseAttributeHeader>? attributeHeaders;
+    private string searchString = "";
 
     protected override async Task OnInitializedAsync()
     {
         attributeHeaders = await Jim.Metaverse.GetMetaverseAttributeHeadersAsync();
+    }
+
+    private bool FilterFunc1(MetaverseAttributeHeader element) => FilterFunc(element, searchString);
+
+    private bool FilterFunc(MetaverseAttributeHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }

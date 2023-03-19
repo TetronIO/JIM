@@ -5,7 +5,6 @@ using JIM.Models.Utility;
 using Serilog;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
-using System.Linq;
 
 namespace JIM.Application.Servers
 {
@@ -260,7 +259,14 @@ namespace JIM.Application.Servers
                     var valueIndex = random.Next(0, valueIndexMaxValue);
 
                     // for some reason, Firstnames Female sometimes loads with zero values and an exception is thrown
-                    // no idea why. need to spend time trying to diagnose this
+                    // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
+
+                    if (dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count == 0)
+                    {
+                        Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count was zero!");
+                        return;
+                    }
+
                     output = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values[valueIndex].StringValue;
                 }
                 else if (!string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern))

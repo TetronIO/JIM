@@ -7,67 +7,56 @@
 @inject JimApplication Jim
 
 <PageTitle>Connected Systems</PageTitle>
-<h1>Connected Systems</h1>
-<p class="light">
-    JIM imports from and exports data to connected systems using connectors. 
-    @if(connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
+<MudText Typo="Typo.h4">Connected Systems</MudText>
+<MudText Typo="Typo.subtitle1">
+    JIM imports from and exports data to connected systems using connectors.
+    @if (connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
     {
-     <span>Configure at least one connected system to get going.</span>
+        <span>Configure at least one connected system to get going.</span>
     }
-</p>
+</MudText>
 
-<div class="box mt-3">
+<MudGrid Class="mt-5">
+    <MudItem xs="6">
+        <MudButton Variant="Variant.Filled" Href="/admin/connected-systems" Size="Size.Small" Color="Color.Primary" Disabled="true">Connected Systems</MudButton>
+        <MudButton Variant="Variant.Filled" Href="/admin/connected-systems/connectors" Size="Size.Small" Color="Color.Primary">Connectors</MudButton>
+    </MudItem>
+    <MudItem xs="6" Class="d-flex justify-end">
+        <MudButton StartIcon="@Icons.Material.Filled.AddBox" Variant="Variant.Filled" Href="/admin/connected-systems/create" Size="Size.Small" Color="Color.Primary">Create Connected System</MudButton>
+    </MudItem>
+</MudGrid>
 
-    <div class="row">
-        <div class="col">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Navigation options">
-                <a class="btn btn-outline-secondary active" aria-current="page" href="/admin/connected-systems">Connected Systems</a>
-                <a class="btn btn-outline-secondary" href="/admin/connected-systems/connectors">Connectors</a>
-            </div>
-        </div>
-        <div class="col text-end">
-            <a class="btn btn-outline-primary btn-sm" href="/admin/connected-systems/create"><i class="bi bi-node-plus"></i> Create Connected System</a>
-        </div>
-    </div>
-
-    <table class="table mt-2">
-        <thead>
-            <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Description</th>
-                <th scope="col">Objects</th>
-                <th scope="col">Connected Objects (%)</th>
-                <th scope="col">Pending Exports (%)</th>
-                <th scope="col">Connector</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if (connectedSystemHeaders != null && connectedSystemHeaders.Count > 0)
-            {
-                foreach (var header in connectedSystemHeaders)
-                {
-                    <tr>
-                        <td><a href="/admin/connected-systems/@(header.Id)/@(Utilities.ConvertToUrlParam(header.Name))">@header.Name</a></td>
-                        <td>@header.Description</td>
-                        <td>@header.ObjectCount.ToString("N0")</td>
-                        <td>@header.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.ConnectorsCount))</td>
-                        <td>@header.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(header.ObjectCount, header.PendingExportObjectsCount))</td>
-                        <td>@header.ConnectorName</td>
-                    </tr>
-                }
-            }
-            else
-            {
-                <tr>
-                    <td colspan="6" class="light text-center">No connected systems yet</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-</div>
+<MudTable Items="@connectedSystemHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)">
+    <ToolBarContent>
+        <MudSpacer />
+        <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ObjectCount)">Objects</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorsCount)">Connected Objects (%)</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.PendingExportObjectsCount)">Pending Exports (%)</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)">Connector</MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">
+            <MudLink Href="@($"/admin/connected-systems/{context.Id}/{Utilities.ConvertToUrlParam(context.Name)}")">@context.Name</MudLink>
+        </MudTd>
+        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>
+        <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
+        <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
+        <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        There are no connected systems
+    </NoRecordsContent>
+</MudTable>
 
 @code {
     private IList<ConnectedSystemHeader>? connectedSystemHeaders;
+    private string searchString = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -81,5 +70,18 @@
 
         var percentage = 100 / bigNumber * smallNumber;
         return $"({percentage}%)";
+    }
+
+    private bool FilterFunc1(ConnectedSystemHeader element) => FilterFunc(element, searchString);
+
+    private bool FilterFunc(ConnectedSystemHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }
