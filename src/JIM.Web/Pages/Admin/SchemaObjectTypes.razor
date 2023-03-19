@@ -13,7 +13,7 @@
 <MudButton Variant="Variant.Filled" Href="/admin/schema" Disabled="true" Size="Size.Small" Color="Color.Primary">Object Types</MudButton>
 <MudButton Variant="Variant.Filled" Href="/admin/schema/attributes" Size="Size.Small" Color="Color.Primary">Attributes</MudButton>
 
-<MudTable Items="@metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" Class="mt-5" SortLabel="Sort By">
+<MudTable Items="@metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.AttributesCount)">Attributes</MudTableSortLabel></MudTh>

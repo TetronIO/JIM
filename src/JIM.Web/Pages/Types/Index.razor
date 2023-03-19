@@ -10,7 +10,6 @@
 @inject NavigationManager NavManager
 
 <PageTitle>@PageTitle</PageTitle>
-
 <MudText Typo="Typo.h4" Class="mt-5">@PageTitle</MudText>
 <MudText Typo="Typo.subtitle1">Search, or browse for @ObjectTypeName</MudText>
 
@@ -18,7 +17,7 @@
 {
     <MetaverseObjectHeaderPaginator Results="@MetaverseObjectHeaders" />
     
-    <MudSimpleTable Style="overflow-x: auto;" Hover="true" Bordered="false" Striped="false" Class="mt-5">
+    <MudSimpleTable Style="overflow-x: auto;" Hover="true" Bordered="false" Striped="false" Class="mt-5" Outlined="true" Elevation="0">
         <thead>
             <tr>
                 @foreach (PredefinedSearchAttribute psa in PredefinedSearch.Attributes)

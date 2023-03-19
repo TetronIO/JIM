@@ -6,7 +6,7 @@
 @inject JimApplication Jim
 
 <PageTitle>Example Data Sets</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Example Data:</span> Data Sets</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Example Data:</span> Data Sets</MudText>
 <MudText Typo="Typo.subtitle1">
     You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
     configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.
@@ -19,7 +19,7 @@
 <MudButton Variant="Variant.Filled" Href="/admin/example-data" Size="Size.Small" Color="Color.Primary">Templates</MudButton>
 <MudButton Variant="Variant.Filled" Href="/admin/example-data/datasets" Size="Size.Small" Color="Color.Primary" Disabled="true">Data Sets</MudButton>
 
-<MudTable Items="@datasets" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ExampleDataSetHeader,bool>(FilterFunc1)">
+<MudTable Items="@datasets" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ExampleDataSetHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <MudText Typo="Typo.h6">Data Sets</MudText>
         <MudSpacer />

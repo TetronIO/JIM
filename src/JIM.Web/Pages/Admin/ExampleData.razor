@@ -6,7 +6,7 @@
 @inject JimApplication Jim
 
 <PageTitle>Example Data Templates</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Example Data:</span> Templates</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Example Data:</span> Templates</MudText>
 <MudText Typo="Typo.subtitle1">
     You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
     configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.
@@ -19,7 +19,7 @@
 <MudButton Variant="Variant.Filled" Href="/admin/example-data" Size="Size.Small" Color="Color.Primary" Disabled="true">Templates</MudButton>
 <MudButton Variant="Variant.Filled" Href="/admin/example-data/datasets" Size="Size.Small" Color="Color.Primary">Data Sets</MudButton>
 
-<MudTable Items="@templates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By">
+<MudTable Items="@templates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.BuiltIn)">Built-in?</MudTableSortLabel></MudTh>

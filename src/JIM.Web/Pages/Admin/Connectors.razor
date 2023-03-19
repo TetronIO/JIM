@@ -17,7 +17,7 @@
 <MudButton Variant="Variant.Filled" Href="/admin/connected-systems" Size="Size.Small" Color="Color.Primary">Connected Systems</MudButton>
 <MudButton Variant="Variant.Filled" Href="/admin/connected-systems/connectors" Size="Size.Small" Color="Color.Primary" Disabled="true">Connectors</MudButton>
 
-<MudTable Items="@headers" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)">
+<MudTable Items="@headers" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <MudText Typo="Typo.h6">Connectors</MudText>
         <MudSpacer />
