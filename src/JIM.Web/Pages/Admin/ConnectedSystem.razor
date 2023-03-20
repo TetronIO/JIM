@@ -208,7 +208,79 @@
         @if (connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
             <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
-                <MudText>Contents &amp; Partitions Content...</MudText>
+                <MudText>Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
+                <MudAlert Severity="(connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0 ? Severity.Warning : Severity.Info)" Class="mt-5">
+                    @if (connectedSystem.ObjectTypes.Count == 0)
+                    {
+                        <MudText>Retrieve the hierarchy @partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
+                    }
+                    else
+                    {
+                        <MudText>
+                            <strong>Refreshing the @partitionAndHierarchyText heirarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted
+                            from the Connected System, which depending on your configuration, could result in those objects being deprovisioned from the Metaverse and any downstream Connected Systems. Refresh with caution.
+                            Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
+                        </MudText>
+                    }
+                    <MudButton 
+                        Disabled="@hierarchyBeingRetrieved" 
+                        Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)" 
+                        Size="Size.Small" 
+                        OnClick="HandleImportHierarchyAsync"
+                        Variant="Variant.Filled"
+                        Class="mt-5">
+                        @if (hierarchyBeingRetrieved)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudText Class="ms-2">Processing</MudText>
+                        }
+                        else
+                        {
+                            if (connectedSystem.Partitions?.Count == 0)
+                            {
+                                <text>Retrieve Hierarchy</text>
+                            }
+                            else
+                            {
+                                <text>Refresh Hierarchy</text>
+                            }
+                        }
+                    </MudButton>
+                </MudAlert>
+
+                @if (connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0)
+                {
+                    @for (var i = 0; i < connectedSystem.Partitions.Count; i++)
+                    {
+                        var partition = connectedSystem.Partitions[i];
+                        <MudText Typo="Typo.h5" Class="mt-5">@partition.Name</MudText>
+                        <MudPaper Class="pa-4 mt-5" Outlined="true">
+                            <MudText>Select the containers you want to manage in this partition.</MudText>
+                            <div class="mt-5 mb-5">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.SelectAll">Select All</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.ClearAll">Clear All</MudButton>
+                            </div>
+
+                            <!-- container heirarchy to go here -->
+                            MudTree to go here...
+
+                            @* <MudTreeView Items="@TreeItems">
+                            <ItemTemplate>
+                            <MudTreeViewItem @bind-Expanded="@context.IsExpanded" Items="@context.TreeItems">
+                            <Content>
+                            <MudTreeViewItemToggleButton @bind-Expanded="@context.IsExpanded" Visible="@context.HasChild" />
+                            <MudCheckBox T="bool?" Checked="@(context.HasPartialChildSelection() ? null : context.IsChecked)" CheckedChanged="@((e) => CheckedChanged(context))"></MudCheckBox>
+                            <MudText>@context.Text</MudText>
+                            </Content>
+                            </MudTreeViewItem>
+                            </ItemTemplate>
+                            </MudTreeView>*@
+
+                        </MudPaper>
+                    }
+
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5">Save Changes</MudButton>
+                }
             </MudTabPanel>
         }
 
@@ -225,94 +297,7 @@
         }
         else if (activeTab == Tabs.Hierarchy && connectedSystem != null)
         {
-            <div class="mb-3">
-                <p>
-                    <text>Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</text>
-                </p>
-
-                <MudAlert Severity="(connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0 ? Severity.Warning : Severity.Info)">
-                    @if (connectedSystem.ObjectTypes.Count == 0)
-                    {
-                        <text>Retrieve the hierarchy @partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</text>
-                    }
-                    else
-                    {
-                        <text>
-                            <strong>Refreshing the @partitionAndHierarchyText heirarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted
-                            from the Connected System, which depending on your configuration, could result in those objects being deprovisioned from the Metaverse and any downstream Connected Systems. Refresh with caution.
-                            Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
-                        </text>
-                    }
-                    <div class="mt-3">
-                        <MudButton Disabled="@hierarchyBeingRetrieved" Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)" Size="Size.Small" Onclick="HandleImportHierarchyAsync">
-                            @if (hierarchyBeingRetrieved)
-                            {
-                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                                <MudText Class="ms-2">Processing</MudText>
-                            }
-                            else
-                            {
-                                if (connectedSystem.Partitions?.Count == 0)
-                                {
-                                    <MudText>Retrieve Hierarchy</MudText>
-                                }
-                                else
-                                {
-                                    <MudText>Refresh Hierarchy</MudText>
-                                }
-                            }
-                        </MudButton>
-                    </div>
-                </MudAlert>
-            </div>
-
-            @if (connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0)
-            {
-                <div class="accordion mb-3" id="p-accordion">
-                    @for (var i = 0; i < connectedSystem.Partitions.Count; i++)
-                    {
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="p-heading-@(i)">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#p-collapse-@(i)" aria-expanded="true" aria-controls="ot-collapse-@(i)">
-                                    @if (connectedSystem.Partitions[i].Selected)
-                                    {
-                                        <span class="jim-cs-s-selected"><i class="bi bi-check2-circle"></i></span>
-                                    }
-                                    else
-                                    {
-                                        <span class="jim-cs-s-not-selected"></span>
-                                    }
-                                    @connectedSystem.Partitions[i].Name
-                                </button>
-                            </h2>
-                            <div id="p-collapse-@(i)" class="accordioncollapse collapse" aria-labelledby="p-heading-@(i)" data-bs-parent="#p-accordion">
-                                <div class="accordion-body">
-
-                                    Select the @connectedSystem.Partitions[i].Name containers you want to manage.
-
-                                    <div class="mt-3 mb-3">
-                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.SelectAll">Select All</MudButton>
-                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.ClearAll">Select None</MudButton>
-                                    </div>
-
-                                    <!-- container heirarchy to go here -->
-
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-
-                <MudButton Color="Color.Primary" Onclick="HandleHierarchySelectionSubmitAsync">Save Changes</MudButton>
-            }
-            else
-            {
-                <div class="p-5 bg-light rounded-3">
-                    <div class="container-fluid py-5 text-center text-secondary">
-                        Hierarchy not yet retrieved
-                    </div>
-                </div>
-            }
+           
         }
     }
 
