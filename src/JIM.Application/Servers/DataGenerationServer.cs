@@ -248,6 +248,9 @@ namespace JIM.Application.Servers
                     // single example-data set based
                     var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count);
 
+
+                    // for some reason, this sometimes loads with zero values and an exception is thrown
+                    // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
                     if (dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count == 0)
                     {
                         Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count was zero!");
