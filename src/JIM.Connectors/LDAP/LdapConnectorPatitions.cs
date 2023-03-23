@@ -1,9 +1,5 @@
 ﻿using CPI.DirectoryServices;
-using JIM.Models.Core;
 using JIM.Models.Staging;
-using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
-using System.ComponentModel;
 using System.DirectoryServices.Protocols;
 
 namespace JIM.Connectors.LDAP
@@ -11,13 +7,11 @@ namespace JIM.Connectors.LDAP
     internal class LdapConnectorPartitions
     {
         private readonly LdapConnection _connection;
-        private readonly List<ConnectorPartition> _partitions;
         private readonly string _root;
 
         internal LdapConnectorPartitions(LdapConnection ldapConnection, string rootDistinguishedName) 
         {
             _connection = ldapConnection;
-            _partitions = new List<ConnectorPartition>();
             _root = rootDistinguishedName;
         }
 
@@ -31,20 +25,23 @@ namespace JIM.Connectors.LDAP
 
                 foreach (SearchResultEntry entry in response.Entries)
                 {
-                    partitions.Add(new ConnectorPartition
+                    var partition = new ConnectorPartition
                     {
                         Name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname"),
                         //DnsNames = GetEntryAttributeStringValues(entry, "dnsroot"),
                         //NetbiosName = GetEntryAttributeStringValue(entry, "netbiosname"),
-                        Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags") != "3" // domain
-                    });
+                        Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags") != "3", // domain
+                    };
+
+                    partition.Containers = GetPartitionContainers(partition);
+                    partitions.Add(partition);
                 }
 
                 return partitions;
             });
         }
 
-        private List<ConnectorContainer> GetPartitionContainers(LdapConnection connection, ConnectorPartition partition)
+        private List<ConnectorContainer> GetPartitionContainers(ConnectorPartition partition)
         {
             // get all containers
             // work out which ones are the root containers by their DN
@@ -52,7 +49,7 @@ namespace JIM.Connectors.LDAP
             // recurse, finding children of the container
 
             var request = new SearchRequest(partition.Name, "(|(objectClass=organizationalUnit)(objectClass=container))", SearchScope.Subtree);
-            var response = (SearchResponse)connection.SendRequest(request);
+            var response = (SearchResponse)_connection.SendRequest(request);
             var containers = new List<ConnectorContainer>();
 
             // copy the search result entries to a list we can manipulate
@@ -79,7 +76,7 @@ namespace JIM.Connectors.LDAP
 
         private static void ProcessContainerNodeForHierarchyRecursively(List<SearchResultEntry> entries, ConnectorContainer containerToLookForChildrenFor, ref int entriesProcessedCounter)
         {
-            foreach (var entry in entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(containerToLookForChildrenFor.Name, StringComparison.CurrentCultureIgnoreCase)))
+            foreach (var entry in entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(containerToLookForChildrenFor.Id, StringComparison.CurrentCultureIgnoreCase)))
             {
                 var newChildContainer = new ConnectorContainer(entry.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name"));
                 containerToLookForChildrenFor.ChildContainers.Add(newChildContainer);

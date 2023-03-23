@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20230323202647_ContainerParent")]
+    partial class ContainerParent
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -971,6 +973,9 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ConnectedSystemContainerId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ConnectedSystemId")
                         .HasColumnType("integer");
 
@@ -988,9 +993,6 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("ParentContainerId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("PartitionId")
                         .HasColumnType("integer");
 
@@ -999,9 +1001,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ConnectedSystemId");
+                    b.HasIndex("ConnectedSystemContainerId");
 
-                    b.HasIndex("ParentContainerId");
+                    b.HasIndex("ConnectedSystemId");
 
                     b.HasIndex("PartitionId");
 
@@ -1907,21 +1909,19 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>
                 {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemContainer", null)
+                        .WithMany("ChildContainers")
+                        .HasForeignKey("ConnectedSystemContainerId");
+
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
                         .WithMany()
                         .HasForeignKey("ConnectedSystemId");
-
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemContainer", "ParentContainer")
-                        .WithMany("ChildContainers")
-                        .HasForeignKey("ParentContainerId");
 
                     b.HasOne("JIM.Models.Staging.ConnectedSystemPartition", "Partition")
                         .WithMany("Containers")
                         .HasForeignKey("PartitionId");
 
                     b.Navigation("ConnectedSystem");
-
-                    b.Navigation("ParentContainer");
 
                     b.Navigation("Partition");
                 });

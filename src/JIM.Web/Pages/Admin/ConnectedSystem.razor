@@ -261,20 +261,17 @@
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.ClearAll">Clear All</MudButton>
                             </div>
 
-                            <!-- container heirarchy to go here -->
-                            MudTree to go here...
-
-                            @* <MudTreeView Items="@TreeItems">
-                            <ItemTemplate>
-                            <MudTreeViewItem @bind-Expanded="@context.IsExpanded" Items="@context.TreeItems">
-                            <Content>
-                            <MudTreeViewItemToggleButton @bind-Expanded="@context.IsExpanded" Visible="@context.HasChild" />
-                            <MudCheckBox T="bool?" Checked="@(context.HasPartialChildSelection() ? null : context.IsChecked)" CheckedChanged="@((e) => CheckedChanged(context))"></MudCheckBox>
-                            <MudText>@context.Text</MudText>
-                            </Content>
-                            </MudTreeViewItem>
-                            </ItemTemplate>
-                            </MudTreeView>*@
+                            <MudTreeView Items="@partition.Containers">
+                                <ItemTemplate>
+                                    <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.ChildContainers">
+                                        <Content>
+                                            <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.ChildContainers.Count > 0)" />
+                                            <MudCheckBox T="bool?" Checked="@(context.HasPartialChildContainersSelection() ? null : context.Selected)" CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"></MudCheckBox>
+                                            <MudText>@context.Name</MudText>
+                                        </Content>
+                                    </MudTreeViewItem>
+                                </ItemTemplate>
+                            </MudTreeView>
 
                         </MudPaper>
                     }
@@ -287,22 +284,6 @@
     </MudTabs>
 }
 
-<div class="box-no-top mb-3">
-
-    @if (connectedSystem != null && settingCategories != null)
-    {
-        if (activeTab == Tabs.Schema)
-        {
-
-        }
-        else if (activeTab == Tabs.Hierarchy && connectedSystem != null)
-        {
-           
-        }
-    }
-
-</div>
-
 @code {
     [Parameter]
     public int Id { get; set; }
@@ -311,7 +292,6 @@
     public string? Name { get; set; }
 
     private JIM.Models.Staging.ConnectedSystem? connectedSystem;
-    private Tabs activeTab = Tabs.Details;
     private List<ConnectedSystemSettingCategory>? settingCategories;
     private string? partitionsAndHierarchiesText;
     private string? partitionAndHierarchyText;
@@ -324,15 +304,6 @@
     private string[] SettingsFormErrors { get; set; } = { };
     private Dictionary<string, string> SettingsFormCustomErrors { get; set; } = new Dictionary<string, string>();
     private string schemaSearchString = "";
-
-    // ui helper
-    private enum Tabs
-    {
-        Details,
-        Settings,
-        Schema,
-        Hierarchy
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -469,5 +440,30 @@
             return true;
 
         return false;
+    }
+
+    private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
+    {
+        container.Selected = !container.Selected;
+
+        // checked status on any child containers should mirrror this parent container
+        foreach (ConnectedSystemContainer child in container.ChildContainers)
+        {
+            child.Selected = container.Selected;
+            ApplyContainerSelectedDownBranch(child);
+        }
+
+        // if there's a parent and all children are selected/not-selected, parent should match
+        if (container.ParentContainer != null)
+            container.ParentContainer.Selected = !container.ParentContainer.ChildContainers.Any(i => !i.Selected);
+    }
+
+    private void ApplyContainerSelectedDownBranch(ConnectedSystemContainer container)
+    {
+        foreach (ConnectedSystemContainer child in container.ChildContainers)
+        {
+            child.Selected = container.Selected;
+            ApplyContainerSelectedDownBranch(child);
+        }
     }
 }

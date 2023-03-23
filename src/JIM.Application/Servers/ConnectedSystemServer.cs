@@ -262,9 +262,11 @@ namespace JIM.Application.Servers
                 {
                     Name = partition.Name,
                     ExternalId = partition.Id,
-                    Containers = partition.Containers.Select(cc => BuildConnectedSystemContainerTree(cc)).ToList()
+                    Containers = partition.Containers.Select(cc => BuildConnectedSystemContainerTree(cc)).ToHashSet()
                 });
             }
+
+            var x = 1;
         }
 
         private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
@@ -278,7 +280,7 @@ namespace JIM.Application.Servers
             };
 
             foreach (var childContainer in connectorContainer.ChildContainers)
-                connectedSystemContainer.ChildContainers.Add(BuildConnectedSystemContainerTree(childContainer));
+                connectedSystemContainer.AddChildContainer(BuildConnectedSystemContainerTree(childContainer));
 
             return connectedSystemContainer;
         }

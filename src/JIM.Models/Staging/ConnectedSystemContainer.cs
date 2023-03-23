@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Staging
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace JIM.Models.Staging
 {
     public class ConnectedSystemContainer
     {
@@ -46,11 +48,56 @@
         /// Containers can container children containers.
         /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
         /// </summary>
-        public List<ConnectedSystemContainer> ChildContainers { get; }
+        public HashSet<ConnectedSystemContainer> ChildContainers { get; }
+
+        #region For MudBlazor TreeView
+        public ConnectedSystemContainer? ParentContainer { get; set; }
+
+        [NotMapped]
+        public bool Expanded { get; set; }
+        #endregion
 
         public ConnectedSystemContainer()
         {
-            ChildContainers = new List<ConnectedSystemContainer>();
+            ChildContainers = new HashSet<ConnectedSystemContainer>();
+        }
+
+        public void AddChildContainer(ConnectedSystemContainer container)
+        {
+            container.ParentContainer = this;
+            ChildContainers.Add(container);
+        }
+
+        public bool HasPartialChildContainersSelection()
+        {
+            var childrenSelectedCount = GetChildrenSelectedCount(this);
+            return ChildContainers.Count > 0 && childrenSelectedCount > 0 && childrenSelectedCount < GetChildrenCount(this);
+        }
+
+        private int GetChildrenSelectedCount(ConnectedSystemContainer connectedSystemContainer)
+        {
+            var count = 0;
+            foreach (var childContainer in connectedSystemContainer.ChildContainers)
+            {
+                if (childContainer.Selected)
+                    count++;
+
+                count += GetChildrenSelectedCount(childContainer);
+            }
+
+            return count;
+        }
+
+        private int GetChildrenCount(ConnectedSystemContainer connectedSystemContainer)
+        {
+            var count = 0;
+            foreach (var childContainer in connectedSystemContainer.ChildContainers)
+            {
+                count++;
+                count += GetChildrenCount(childContainer);
+            }
+
+            return count;
         }
     }
 }
