@@ -210,9 +210,9 @@
         @if (connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
             <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
-                <MudText>Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
-                <MudAlert Severity="(connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0 ? Severity.Warning : Severity.Info)" Class="mt-5">
-                    @if (connectedSystem.ObjectTypes.Count == 0)
+                
+                <MudAlert Severity="(connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0 ? Severity.Warning : Severity.Info)">
+                    @if (connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0)
                     {
                         <MudText>Retrieve the hierarchy @partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
                     }
@@ -249,14 +249,16 @@
                         }
                     </MudButton>
                 </MudAlert>
+                <MudText Class="mt-5">Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
 
                 @if (connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0)
                 {
                     @for (var i = 0; i < connectedSystem.Partitions.Count; i++)
                     {
                         var partition = connectedSystem.Partitions[i];
-                        <MudText Typo="Typo.h5" Class="mt-5">@partition.Name</MudText>
+                        
                         <MudPaper Class="pa-4 mt-5" Outlined="true">
+                            <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
                             <MudText>Select the containers you want to manage in this partition.</MudText>
 
                             <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5">
