@@ -34,7 +34,10 @@ namespace JIM.Connectors.LDAP
                     };
 
                     partition.Containers = GetPartitionContainers(partition);
-                    partitions.Add(partition);
+
+                    // only return partitions that have containers. Discard the rest.
+                    if (partition.Containers.Count > 0)
+                        partitions.Add(partition);
                 }
 
                 return partitions;

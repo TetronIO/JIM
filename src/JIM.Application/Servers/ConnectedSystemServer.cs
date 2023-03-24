@@ -234,7 +234,9 @@ namespace JIM.Application.Servers
         /// </summary>
         /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
         /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+        #pragma warning disable CA1822 // Mark members as static
         public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem)
+        #pragma warning restore CA1822 // Mark members as static
         {
             ValidateConnectedSystemParameter(connectedSystem);
 
@@ -265,8 +267,6 @@ namespace JIM.Application.Servers
                     Containers = partition.Containers.Select(cc => BuildConnectedSystemContainerTree(cc)).ToHashSet()
                 });
             }
-
-            var x = 1;
         }
 
         private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
