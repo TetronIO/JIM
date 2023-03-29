@@ -27,6 +27,7 @@ namespace JIM.Connectors.LDAP
                 {
                     var partition = new ConnectorPartition
                     {
+                        Id = entry.DistinguishedName,
                         Name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname"),
                         //DnsNames = GetEntryAttributeStringValues(entry, "dnsroot"),
                         //NetbiosName = GetEntryAttributeStringValue(entry, "netbiosname"),

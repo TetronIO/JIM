@@ -108,6 +108,7 @@ namespace JIM.PostgresData.Repositories
                 .ThenInclude(ot => ot.Attributes)
                 .Include(cs => cs.Partitions)
                 .ThenInclude(p => p.Containers)
+                .ThenInclude(c=>c.ChildContainers)
                 .SingleOrDefaultAsync(x => x.Id == id);
         }
 

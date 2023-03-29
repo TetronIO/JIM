@@ -255,7 +255,7 @@ namespace JIM.Application.Servers
             }
 
             // this point could potentially be a good point to check for data-loss if persisted and return a report object
-            // that the user could decide whether or not to take action upon, i.e. cancel or persist.
+            // that the user could decide whether or not to take action against, i.e. cancel or persist.
 
             connectedSystem.Partitions = new List<ConnectedSystemPartition>(); // super destructive at this point. this is for mvp only
             foreach (var partition in partitions)
@@ -267,6 +267,9 @@ namespace JIM.Application.Servers
                     Containers = partition.Containers.Select(cc => BuildConnectedSystemContainerTree(cc)).ToHashSet()
                 });
             }
+
+            // for now though, we will just persist and let the user select containers later
+            await UpdateConnectedSystemAsync(connectedSystem);
         }
 
         private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
