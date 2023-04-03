@@ -53,37 +53,37 @@
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
                                 {
                                     <MudTextField T="string"
-                                        Label="@settingValue.Setting.Name"
-                                        @bind-Value="settingValue.StringValue"
-                                        Required="@settingValue.Setting.Required"
-                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                        HelperText="@settingValue.Setting.Description"
-                                        Variant="Variant.Outlined"
-                                        Class="mb-5" />
+                              Label="@settingValue.Setting.Name"
+                              @bind-Value="settingValue.StringValue"
+                              Required="@settingValue.Setting.Required"
+                              RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                              HelperText="@settingValue.Setting.Description"
+                              Variant="Variant.Outlined"
+                              Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                 {
                                     <MudTextField T="string"
-                                        Label="@settingValue.Setting.Name"
-                                        @bind-Value="settingValue.StringEncryptedValue"
-                                        Required="@settingValue.Setting.Required"
-                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                        HelperText="@settingValue.Setting.Description"
-                                        InputType="InputType.Password"
-                                        Variant="Variant.Outlined"
-                                        Class="mb-5" />
+                              Label="@settingValue.Setting.Name"
+                              @bind-Value="settingValue.StringEncryptedValue"
+                              Required="@settingValue.Setting.Required"
+                              RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                              HelperText="@settingValue.Setting.Description"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined"
+                              Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
                                 {
                                     <MudTextField T="int?"
-                                        Label="@settingValue.Setting.Name"
-                                        @bind-Value="settingValue.IntValue"
-                                        Required="@settingValue.Setting.Required"
-                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                        HelperText="@settingValue.Setting.Description"
-                                        InputType="InputType.Number"
-                                        Variant="Variant.Outlined"
-                                        Class="mb-5" />
+                              Label="@settingValue.Setting.Name"
+                              @bind-Value="settingValue.IntValue"
+                              Required="@settingValue.Setting.Required"
+                              RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                              HelperText="@settingValue.Setting.Description"
+                              InputType="InputType.Number"
+                              Variant="Variant.Outlined"
+                              Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
@@ -114,7 +114,7 @@
                                 }
                             }
                         </MudPaper>
-                    }                    
+                    }
                 }
 
                 @if (SettingsFormCustomErrors.Any())
@@ -210,7 +210,7 @@
         @if (connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
             <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
-                
+
                 <MudAlert Severity="(connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0 ? Severity.Warning : Severity.Info)">
                     @if (connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0)
                     {
@@ -224,13 +224,12 @@
                             Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
                         </MudText>
                     }
-                    <MudButton 
-                        Disabled="@hierarchyBeingRetrieved" 
-                        Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)" 
-                        Size="Size.Small" 
-                        OnClick="HandleImportHierarchyAsync"
-                        Variant="Variant.Filled"
-                        Class="mt-5">
+                    <MudButton Disabled="@hierarchyBeingRetrieved"
+                       Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
+                       Size="Size.Small"
+                       OnClick="HandleImportHierarchyAsync"
+                       Variant="Variant.Filled"
+                       Class="mt-5">
                         @if (hierarchyBeingRetrieved)
                         {
                             <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -256,7 +255,7 @@
                     @for (var i = 0; i < connectedSystem.Partitions.Count; i++)
                     {
                         var partition = connectedSystem.Partitions[i];
-                        
+
                         <MudPaper Class="pa-4 mt-5" Outlined="true">
                             <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
                             <MudText>Select the containers you want to manage in this partition.</MudText>
@@ -271,7 +270,24 @@
                                     <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.ChildContainers">
                                         <Content>
                                             <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.ChildContainers.Count > 0)" />
-                                            <MudCheckBox T="bool?" Checked="@(context.HasPartialChildContainersSelection() ? null : context.Selected)" CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"></MudCheckBox>
+
+                                            @if (context.Included)
+                                            {
+                                                <MudCheckBox T="bool?"
+                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
+                                                 UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                 TriState="true"
+                                                 title="Included" />
+                                            }
+                                            else
+                                            {
+                                                <MudCheckBox T="bool?"
+                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
+                                                 TriState="true" />
+                                            }
+
                                             <MudText>@context.Name</MudText>
                                         </Content>
                                     </MudTreeViewItem>
@@ -334,6 +350,8 @@
             partitionsAndHierarchiesText = "partitions";
             partitionAndHierarchyText = "partition";
         }
+
+        ApplyContainerIncludedToPartitions(connectedSystem);
     }
 
     private bool AreSettingDependentTabsDisabled()
@@ -403,8 +421,6 @@
         if (connectedSystem == null)
             return;
 
-
-
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
     }
@@ -449,26 +465,93 @@
 
     private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
     {
+        // toggle the current setting
         container.Selected = !container.Selected;
 
-        // checked status on any child containers should mirrror this parent container
-        foreach (ConnectedSystemContainer child in container.ChildContainers)
+        // set the right selected/included values for all children
+        if (container.Selected)
         {
-            child.Selected = container.Selected;
-            ApplyContainerSelectedDownBranch(child);
+            // all children should be included and not selected
+            foreach (ConnectedSystemContainer child in container.ChildContainers)
+            {
+                child.Included = true;
+                child.Selected = false;
+                ApplyContainerStatusDownBranch(child, false, true);
+            }
+        }
+        else
+        {
+            // all children should be not selected and not included
+            foreach (ConnectedSystemContainer child in container.ChildContainers)
+            {
+                child.Included = false;
+                child.Selected = false;                
+                ApplyContainerStatusDownBranch(child, false, false);
+            }
         }
 
-        // if there's a parent and all children are selected/not-selected, parent should match
+        // set the parent(s) if necessary
         if (container.ParentContainer != null)
-            container.ParentContainer.Selected = !container.ParentContainer.ChildContainers.Any(i => !i.Selected);
+        {
+            // go up a level. if all children are selected, then make parent selected and all children (resursively) included.
+            CorrectUpwardContainerStatus(container.ParentContainer);
+        }
     }
 
-    private void ApplyContainerSelectedDownBranch(ConnectedSystemContainer container)
+    private void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
     {
         foreach (ConnectedSystemContainer child in container.ChildContainers)
         {
-            child.Selected = container.Selected;
-            ApplyContainerSelectedDownBranch(child);
+            child.Included = included;
+            child.Selected = selected;
+            ApplyContainerStatusDownBranch(child, selected, included);
         }
+    }
+
+    private void ApplyContainerIncludedToPartitions(JIM.Models.Staging.ConnectedSystem connectedSystem)
+    {
+        if (connectedSystem.Partitions == null)
+            return;
+
+        foreach (var partition in connectedSystem.Partitions.Where(p => p.Containers != null))
+            foreach (var container in partition.Containers)
+                ApplyContainerIncludedRecursively(container, container.Selected);
+    }
+
+    private void ApplyContainerIncludedRecursively(ConnectedSystemContainer connectedSystemContainer, bool aParentWasSelected)
+    {
+        foreach (var childContainer in connectedSystemContainer.ChildContainers)
+        {
+            var shouldChildBeIncluded = aParentWasSelected;
+
+            // parent was selected, so this child container should be marked as included
+            if (aParentWasSelected)
+                childContainer.Included = true;
+
+            // if this child container is selected, then it's children should be marked as included
+            if (childContainer.Selected)
+                shouldChildBeIncluded = true;
+
+            ApplyContainerIncludedRecursively(childContainer, shouldChildBeIncluded);
+        }
+    }
+
+    private void CorrectUpwardContainerStatus(ConnectedSystemContainer parentContainer)
+    {
+        if (parentContainer.ChildContainers.All(q => q.Selected))
+        {
+            parentContainer.Selected = true;
+            parentContainer.Included = false;
+
+            foreach (var childContainer in parentContainer.ChildContainers)
+            {
+                childContainer.Selected = false;
+                childContainer.Included = true;
+                ApplyContainerStatusDownBranch(childContainer, false, true);
+            }
+        }
+
+        if (parentContainer.ParentContainer != null)
+            CorrectUpwardContainerStatus(parentContainer.ParentContainer);
     }
 }

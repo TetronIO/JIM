@@ -55,6 +55,9 @@ namespace JIM.Models.Staging
 
         [NotMapped]
         public bool Expanded { get; set; }
+
+        [NotMapped]
+        public bool Included { get; set; }
         #endregion
 
         public ConnectedSystemContainer()
@@ -68,36 +71,38 @@ namespace JIM.Models.Staging
             ChildContainers.Add(container);
         }
 
-        public bool HasPartialChildContainersSelection()
+        public bool AreAnyChildContainersSelected()
         {
-            var childrenSelectedCount = GetChildrenSelectedCount(this);
-            return ChildContainers.Count > 0 && childrenSelectedCount > 0 && childrenSelectedCount < GetChildrenCount(this);
+            if (ChildContainers.Count == 0)
+                return false;
+
+            if (ChildContainers.Any(c => c.Selected))
+                return true;
+
+            // look further down the tree
+            foreach (var childContainer in ChildContainers)
+                if (DetermineIfAnyChildrenAreSelected(childContainer))
+                    return true;
+
+            return false;
         }
 
-        private int GetChildrenSelectedCount(ConnectedSystemContainer connectedSystemContainer)
+        private bool DetermineIfAnyChildrenAreSelected(ConnectedSystemContainer connectedSystemContainer)
         {
-            var count = 0;
+            if (connectedSystemContainer.ChildContainers.Any(c => c.Selected))
+                return true;
+
+            // look further down the tree
             foreach (var childContainer in connectedSystemContainer.ChildContainers)
             {
                 if (childContainer.Selected)
-                    count++;
+                    return true;
 
-                count += GetChildrenSelectedCount(childContainer);
+                if (DetermineIfAnyChildrenAreSelected(childContainer))
+                    return true;
             }
 
-            return count;
-        }
-
-        private int GetChildrenCount(ConnectedSystemContainer connectedSystemContainer)
-        {
-            var count = 0;
-            foreach (var childContainer in connectedSystemContainer.ChildContainers)
-            {
-                count++;
-                count += GetChildrenCount(childContainer);
-            }
-
-            return count;
+            return false;
         }
     }
 }
