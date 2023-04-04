@@ -275,17 +275,17 @@
                                             {
                                                 <MudCheckBox T="bool?"
                                                  Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
+                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
                                                  UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                 TriState="true"
-                                                 title="Included" />
+                                                 title="Included"
+                                                 Disabled="true"/>
                                             }
                                             else
                                             {
                                                 <MudCheckBox T="bool?"
                                                  Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
-                                                 TriState="true" />
+                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                 title="@(context.Selected ? "Selected" : "")"/>
                                             }
 
                                             <MudText>@context.Name</MudText>
@@ -463,10 +463,20 @@
         return false;
     }
 
-    private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
+    private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container, bool? newCheckboxValue)
     {
-        // toggle the current setting
-        container.Selected = !container.Selected;
+        // if included and clicked, change to not included, not selected
+        if (container.Included)
+        {
+            container.Selected = false;
+            container.Included = false;
+        }
+        else
+        {
+            // toggle the current setting
+            container.Selected = !container.Selected;
+            container.Included = false;
+        }
 
         // set the right selected/included values for all children
         if (container.Selected)
