@@ -248,10 +248,11 @@
                         }
                     </MudButton>
                 </MudAlert>
-                <MudText Class="mt-5">Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
 
                 @if (connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0)
                 {
+                    <MudText Class="mt-5">Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
+
                     @for (var i = 0; i < connectedSystem.Partitions.Count; i++)
                     {
                         var partition = connectedSystem.Partitions[i];
