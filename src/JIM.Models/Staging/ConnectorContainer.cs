@@ -32,7 +32,7 @@
         /// Containers can container children containers.
         /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
         /// </summary>
-        public List<ConnectorContainer> ChildContainers { get; }
+        public List<ConnectorContainer> ChildContainers { get; set; }
 
         public ConnectorContainer(string id, string name, bool hidden = false)
         {

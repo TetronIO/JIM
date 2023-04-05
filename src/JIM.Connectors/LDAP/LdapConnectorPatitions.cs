@@ -72,6 +72,7 @@ namespace JIM.Connectors.LDAP
             var entriesProcessedCounter = containers.Count;
 
             // loop over the higher-level containers we've already moved into the hierarchy, so we can look for children of them
+            containers = containers.OrderBy(q => q.Name).ToList();
             foreach (var container in containers)
                 ProcessContainerNodeForHierarchyRecursively(entries, container, ref entriesProcessedCounter);
 
@@ -86,6 +87,7 @@ namespace JIM.Connectors.LDAP
                 containerToLookForChildrenFor.ChildContainers.Add(newChildContainer);
                 entriesProcessedCounter++;
                 ProcessContainerNodeForHierarchyRecursively(entries, newChildContainer, ref entriesProcessedCounter);
+                containerToLookForChildrenFor.ChildContainers = containerToLookForChildrenFor.ChildContainers.OrderBy(q => q.Name).ToList();
             }
         }
     }
