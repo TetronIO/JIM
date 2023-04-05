@@ -439,7 +439,8 @@ namespace JIM.Application.Servers
             // debug point. q was null in the query below for some reason. haven't been able to catch it yet
             if (metaverseObjects == null)
             {
-                int x = 1;
+                
+                return;
             }
 
             // is this going to be slow?
