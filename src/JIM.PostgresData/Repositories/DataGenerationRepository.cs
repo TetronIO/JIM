@@ -115,7 +115,7 @@ namespace JIM.PostgresData.Repositories
             return templates;
         }
 
-        public async Task<DataGenerationTemplate?> GetTemplateAsync(string name, bool retrieveValues)
+        public async Task<DataGenerationTemplate?> GetTemplateAsync(string name)
         {
             var q = Repository.Database.DataGenerationTemplates.
                 Include(t => t.ObjectTypes).
@@ -138,9 +138,6 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.ExampleDataSetInstances).
                 ThenInclude(edsi => edsi.ExampleDataSet);
 
-            if (retrieveValues)
-                q.ThenInclude(eds => eds.Values);
-
             var t = await q.SingleOrDefaultAsync(t => t.Name == name);
             if (t == null)
                 return null;
@@ -149,7 +146,7 @@ namespace JIM.PostgresData.Repositories
             return t;
         }
 
-        public async Task<DataGenerationTemplate?> GetTemplateAsync(int id, bool retrieveValues)
+        public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
         {
             var q = Repository.Database.DataGenerationTemplates.
                 Include(t => t.ObjectTypes).
@@ -174,9 +171,6 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).
                 ThenInclude(edsi => edsi.ExampleDataSet);
-
-            if (retrieveValues)
-                q.ThenInclude(eds => eds.Values);
 
             var t = await q.SingleOrDefaultAsync(t => t.Id == id);
             if (t == null)

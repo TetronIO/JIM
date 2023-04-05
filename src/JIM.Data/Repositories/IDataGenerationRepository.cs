@@ -20,14 +20,12 @@ namespace JIM.Data.Repositories
         /// Retrieves a Data Generation Template.
         /// </summary>
         /// <param name="name">The name of the template to retrieve</param>
-        /// <param name="retrieveValues">Control whether or not example data set values are returned as well. This is normally only needed when executing the template</param>
-        public Task<DataGenerationTemplate?> GetTemplateAsync(string name, bool retrieveValues);
+        public Task<DataGenerationTemplate?> GetTemplateAsync(string name);
         /// <summary>
         /// Retrieves a Data Generation Template.
         /// </summary>
         /// <param name="id">The id of the template to retrieve</param>
-        /// <param name="retrieveValues">Control whether or not example data set values are returned as well. This is normally only needed when executing the template</param>
-        public Task<DataGenerationTemplate?> GetTemplateAsync(int id, bool retrieveValues);
+        public Task<DataGenerationTemplate?> GetTemplateAsync(int id);
         public Task CreateTemplateAsync(DataGenerationTemplate template);
         public Task UpdateTemplateAsync(DataGenerationTemplate template);
         public Task DeleteTemplateAsync(int templateId);

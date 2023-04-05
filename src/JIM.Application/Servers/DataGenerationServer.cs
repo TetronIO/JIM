@@ -3,7 +3,9 @@ using JIM.Models.DataGeneration;
 using JIM.Models.DataGeneration.Dto;
 using JIM.Models.Utility;
 using Serilog;
+using System.Data;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace JIM.Application.Servers
@@ -67,14 +69,14 @@ namespace JIM.Application.Servers
             return await Application.Repository.DataGeneration.GetTemplateHeadersAsync();
         }
 
-        public async Task<DataGenerationTemplate?> GetTemplateAsync(int id, bool retrieveValues)
+        public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
         {
-            return await Application.Repository.DataGeneration.GetTemplateAsync(id, retrieveValues);
+            return await Application.Repository.DataGeneration.GetTemplateAsync(id);
         }
 
-        public async Task<DataGenerationTemplate?> GetTemplateAsync(string name, bool retrieveValues)
+        public async Task<DataGenerationTemplate?> GetTemplateAsync(string name)
         {
-            return await Application.Repository.DataGeneration.GetTemplateAsync(name, retrieveValues);
+            return await Application.Repository.DataGeneration.GetTemplateAsync(name);
         }
 
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
@@ -106,7 +108,7 @@ namespace JIM.Application.Servers
             objectPreparationStopwatch.Start();
             var totalObjectsCreated = 0;
             var getTemplateStopwatch = Stopwatch.StartNew();
-            var template = await GetTemplateAsync(templateId, true);
+            var template = await GetTemplateAsync(templateId);
             getTemplateStopwatch.Stop();
             Log.Verbose($"ExecuteTemplateAsync: get template took: {getTemplateStopwatch.Elapsed}");
 
@@ -122,13 +124,22 @@ namespace JIM.Application.Servers
             var random = new Random();
             var metaverseObjectsToCreate = new List<MetaverseObject>();
             var dataGenerationValueTrackers = new List<DataGenerationValueTracker>();
+            
+            // we've had issues with EF not returning values for example datasets when retrieving the template
+            // so we're going to get all the example datasets referenced in a template separately and passing them in as needed.
+            var exampleDataSets = new List<ExampleDataSet>();
+            foreach (var objectType in template.ObjectTypes)
+                foreach (var templateAttribute in objectType.TemplateAttributes)
+                    foreach (var datasetInstance in templateAttribute.ExampleDataSetInstances)
+                        if (datasetInstance.ExampleDataSet != null && !exampleDataSets.Any(q=>q.Id == datasetInstance.ExampleDataSet.Id))
+                            exampleDataSets.Add(await GetExampleDataSetAsync(datasetInstance.ExampleDataSet.Id));
 
             foreach (var objectType in template.ObjectTypes)
             {
                 var objectTypeStopWatch = Stopwatch.StartNew();
                 Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
                 Parallel.For(0, objectType.ObjectsToCreate,
-                index =>
+                async index =>
                 {
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
                     // make sure we process attributes with no depedencies first
@@ -169,7 +180,7 @@ namespace JIM.Application.Servers
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.String:
-                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
+                                    await GenerateMetaverseStringValueAsync(metaverseObject, templateAttribute, exampleDataSets, random, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
@@ -226,9 +237,10 @@ namespace JIM.Application.Servers
         #endregion
 
         #region Attribute Generation
-        private static void GenerateMetaverseStringValue(
+        private async Task GenerateMetaverseStringValueAsync(
             MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
+            List<ExampleDataSet> exampleDataSets,
             Random random,
             List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
@@ -245,18 +257,18 @@ namespace JIM.Application.Servers
                 string output;
                 if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSetInstances.Count == 1)
                 {
-                    // single example-data set based
-                    var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count);
-
-
                     // for some reason, this sometimes loads with zero values and an exception is thrown
                     // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
                     if (dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count == 0)
                     {
-                        Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count was zero!");
-                        return;
+                        //Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count was zero!");
+                        //return;
+
+                        dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet = exampleDataSets.Single(q => q.Id == dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Id);
                     }
 
+                    // single example-data set based
+                    var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count);
                     output = dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values[valueIndex].StringValue;
                 }
                 else if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSetInstances.Count > 1)
@@ -265,17 +277,19 @@ namespace JIM.Application.Servers
                     // just choose randomly a value from across the datasets. simplest for now
                     // would prefer to end up with an even distribution of values from across the datasets, but as the kids say: "that's long bruv"                    
                     var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count);
-                    var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count;
-                    var valueIndex = random.Next(0, valueIndexMaxValue);
 
                     // for some reason, Firstnames Female sometimes loads with zero values and an exception is thrown
                     // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
-
                     if (dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count == 0)
                     {
-                        Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count was zero!");
-                        return;
+                        //Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count was zero!");
+                        //return;
+
+                        dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet = exampleDataSets.Single(q => q.Id == dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Id);
                     }
+
+                    var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count;
+                    var valueIndex = random.Next(0, valueIndexMaxValue);
 
                     output = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values[valueIndex].StringValue;
                 }
@@ -421,6 +435,13 @@ namespace JIM.Application.Servers
             if (metaverseObject.Type.Name == Constants.BuiltInObjectTypes.Users && templateAttribute.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager)
                 return;
 
+
+            // debug point. q was null in the query below for some reason. haven't been able to catch it yet
+            if (metaverseObjects == null)
+            {
+                int x = 1;
+            }
+
             // is this going to be slow?
             var metaverseObjectsOfTypes = metaverseObjects.Where(q => templateAttribute.ReferenceMetaverseObjectTypes != null && templateAttribute.ReferenceMetaverseObjectTypes.Contains(q.Type)).ToList();
             if (templateAttribute.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued)
@@ -438,8 +459,8 @@ namespace JIM.Application.Servers
             {
                 // multi-valued attribute
                 // determine how many values to pick
-                var min = templateAttribute.MvaRefMinAssignments.HasValue ? templateAttribute.MvaRefMinAssignments.Value : 0;
-                var max = templateAttribute.MvaRefMaxAssignments.HasValue ? templateAttribute.MvaRefMaxAssignments.Value : metaverseObjectsOfTypes.Count;
+                var min = templateAttribute.MvaRefMinAssignments ?? 0;
+                var max = templateAttribute.MvaRefMaxAssignments ?? metaverseObjectsOfTypes.Count;
                 var attributeValuesToCreate = random.Next(min, max);
 
                 for (int i = 0; i < attributeValuesToCreate; i++)
@@ -580,7 +601,7 @@ namespace JIM.Application.Servers
             // enumerate, process
             var regex = new Regex(@"(\[.*?\])", RegexOptions.Compiled);
             var systemVars = regex.Matches(textToProcess);
-            foreach (Match match in systemVars)
+            foreach (Match match in systemVars.Cast<Match>())
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
                 var variableName = match.Value[1..^1];

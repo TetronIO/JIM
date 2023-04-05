@@ -190,7 +190,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        template = await Jim.DataGeneration.GetTemplateAsync(Id, false);
+        template = await Jim.DataGeneration.GetTemplateAsync(Id);
         if (template == null)
         {
             // template not found, redirect to index page
