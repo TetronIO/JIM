@@ -180,7 +180,7 @@ namespace JIM.Application.Servers
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.String:
-                                    await GenerateMetaverseStringValueAsync(metaverseObject, templateAttribute, exampleDataSets, random, dataGenerationValueTrackers);
+                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, exampleDataSets, random, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
@@ -237,7 +237,7 @@ namespace JIM.Application.Servers
         #endregion
 
         #region Attribute Generation
-        private async Task GenerateMetaverseStringValueAsync(
+        private static void GenerateMetaverseStringValue(
             MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
             List<ExampleDataSet> exampleDataSets,
@@ -439,7 +439,6 @@ namespace JIM.Application.Servers
             // debug point. q was null in the query below for some reason. haven't been able to catch it yet
             if (metaverseObjects == null)
             {
-                
                 return;
             }
 
@@ -576,16 +575,13 @@ namespace JIM.Application.Servers
             // match attribute variables (that do not contain numbers)
             // enumerate, find their value and replace
             var regex = new Regex(@"({.*?[^\d]})", RegexOptions.Compiled);
-            foreach (Match match in regex.Matches(textToProcess))
+            foreach (Match match in regex.Matches(textToProcess).Cast<Match>())
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
                 var attributeName = match.Value[1..^1];
 
                 // find the attribute value on the Metaverse Object:
-                var attribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Name == attributeName);
-                if (attribute == null)
-                    throw new InvalidDataException($"AttributeValue not found for Attribute: {attributeName}. Check your pattern. Check that you have added the DataGenerationTemplateAttribute before the pattern is defined.");
-
+                var attribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Name == attributeName) ?? throw new InvalidDataException($"AttributeValue not found for Attribute: {attributeName}. Check your pattern. Check that you have added the DataGenerationTemplateAttribute before the pattern is defined.");
                 textToProcess = textToProcess.Replace(match.Value, attribute.StringValue);
             }
 
@@ -675,7 +671,7 @@ namespace JIM.Application.Servers
             while (!isGeneratedValueUnique)
             {
                 var completeGeneratedValue = textToProcess;
-                foreach (Match match in exampleDataSetVariables)
+                foreach (Match match in exampleDataSetVariables.Cast<Match>())
                 {
                     // snip off the brackets: {} to get the variable, then test if it's an ExampleDataSet index, i.e. {0}
                     var variable = match.Value[1..^1];
