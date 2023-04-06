@@ -100,25 +100,54 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
         {
-            return await Repository.Database.ConnectedSystems
-                .Include(cs => cs.ConnectorDefinition)
-                .Include(cs => cs.SettingValues)
-                .ThenInclude(sv => sv.Setting)
-                .Include(cs => cs.ObjectTypes)
-                .ThenInclude(ot => ot.Attributes)
-                .Include(cs => cs.Partitions)
-                .ThenInclude(p => p.Containers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .ThenInclude(c => c.ChildContainers)
-                .SingleOrDefaultAsync(x => x.Id == id);
+            // retrieve a complex connected system object. break the query down into three parts for optimal performance.
+            // (doing it in one giant include tree query will make it timeout.
+            ConnectedSystem? connectedSystem = null;
+            List<ConnectedSystemObjectType>? types = null;
+            List<ConnectedSystemPartition>? partitions = null;
+            var tasks = new List<Task>
+            {
+                Task.Run(async () =>
+                {
+                    using var dbc1 = new JimDbContext();
+                    connectedSystem = await dbc1.ConnectedSystems
+                    .Include(cs => cs.ConnectorDefinition)
+                    .Include(cs => cs.SettingValues)
+                    .ThenInclude(sv => sv.Setting)
+                    .SingleOrDefaultAsync(x => x.Id == id);
+                }),
+                Task.Run(async () =>
+                {
+                    using var dbc2 = new JimDbContext();
+                    types = await dbc2.ConnectedSystemObjectTypes.Include(ot => ot.Attributes).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+                }),
+                Task.Run(async () =>
+                {
+                    using var dbc3 = new JimDbContext();
+                    partitions = await dbc3.ConnectedSystemPartitions
+                    .Include(p => p.Containers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .ThenInclude(c => c.ChildContainers)
+                    .Where(p => p.ConnectedSystem.Id == id).ToListAsync();
+                })
+            };
+
+            // collect and merge data
+            await Task.WhenAll(tasks);
+            if (connectedSystem == null)
+                return null;
+
+            connectedSystem.ObjectTypes = types;
+            connectedSystem.Partitions = partitions;
+            return connectedSystem;
         }
 
         public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)
