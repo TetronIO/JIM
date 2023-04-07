@@ -135,6 +135,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
+
             <MudAlert Severity="(connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0 ? Severity.Warning : Severity.Info)">
                 @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
                 {
@@ -162,7 +163,17 @@
 
             @if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0)
             {
-                <MudText Class="mt-5">Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.</MudText>
+                <MudPaper Outlined="true" Class="pa-4 mt-5">
+                    <MudText Typo="Typo.caption" Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which object types you would like to manage with JIM.</MudText>
+                    <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                    @foreach (var objectType in connectedSystem.ObjectTypes)
+                    {
+                        <MudCheckBox @bind-Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" />
+                    }
+                    </div>
+                </MudPaper>
+
+                <MudText Class="mt-5">Select which attributes you would like to manage for this object type. To maximise performance, only select those that need managing.</MudText>
                 <MudExpansionPanels MultiExpansion="true" Class="mt-5">
                     @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
                     {
@@ -202,7 +213,7 @@
                         </MudExpansionPanel>
                     }
                 </MudExpansionPanels>
-                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleAttributeSelectionSubmitAsync" Class="mt-5">Save Changes</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" Class="mt-5">Save Changes</MudButton>
             }
 
         </MudTabPanel>
@@ -417,7 +428,7 @@
         schemaBeingRetrieved = false;
     }
 
-    private async Task HandleAttributeSelectionSubmitAsync()
+    private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
     {
         if (connectedSystem == null)
             return;

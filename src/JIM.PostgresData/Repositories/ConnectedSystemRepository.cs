@@ -110,11 +110,7 @@ namespace JIM.PostgresData.Repositories
                 Task.Run(async () =>
                 {
                     using var dbc1 = new JimDbContext();
-                    connectedSystem = await dbc1.ConnectedSystems
-                    .Include(cs => cs.ConnectorDefinition)
-                    .Include(cs => cs.SettingValues)
-                    .ThenInclude(sv => sv.Setting)
-                    .SingleOrDefaultAsync(x => x.Id == id);
+                    connectedSystem = await dbc1.ConnectedSystems.Include(cs => cs.ConnectorDefinition).Include(cs => cs.SettingValues).ThenInclude(sv => sv.Setting).SingleOrDefaultAsync(x => x.Id == id);
                 }),
                 Task.Run(async () =>
                 {
@@ -158,6 +154,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
         {
+            Repository.Database.Update(connectedSystem);
             await Repository.Database.SaveChangesAsync();
         }
         #endregion
