@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace JIM.Models.Staging
 {
-    public partial class ConnectedSystem
+    public class ConnectedSystem
     {
         public int Id { get; set; }
         [Required(ErrorMessage = "Please provide a name for the connected system")]

@@ -313,7 +313,7 @@
     [Parameter]
     public string? Name { get; set; }
 
-    private JIM.Models.Staging.ConnectedSystem? connectedSystem;
+    private ConnectedSystem? connectedSystem;
     private List<ConnectedSystemSettingCategory>? settingCategories;
     private string? partitionsAndHierarchiesText;
     private string? partitionAndHierarchyText;
@@ -519,7 +519,7 @@
         }
     }
 
-    private void ApplyContainerIncludedToPartitions(JIM.Models.Staging.ConnectedSystem connectedSystem)
+    private void ApplyContainerIncludedToPartitions(ConnectedSystem connectedSystem)
     {
         if (connectedSystem.Partitions == null)
             return;
