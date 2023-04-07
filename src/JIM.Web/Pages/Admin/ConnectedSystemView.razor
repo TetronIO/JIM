@@ -166,53 +166,57 @@
                 <MudPaper Outlined="true" Class="pa-4 mt-5">
                     <MudText Typo="Typo.caption" Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which object types you would like to manage with JIM.</MudText>
                     <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                    @foreach (var objectType in connectedSystem.ObjectTypes)
-                    {
-                        <MudCheckBox @bind-Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" />
-                    }
+                        @foreach (var objectType in connectedSystem.ObjectTypes)
+                        {
+                            <MudCheckBox T="Boolean" Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" CheckedChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                        }
                     </div>
                 </MudPaper>
 
-                <MudText Class="mt-5">Select which attributes you would like to manage for this object type. To maximise performance, only select those that need managing.</MudText>
-                <MudExpansionPanels MultiExpansion="true" Class="mt-5">
-                    @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
-                    {
-                        var objectType = connectedSystem.ObjectTypes[i];
-                        <MudExpansionPanel Text="@objectType.Name">
-                            <MudText>Select the @objectType.Name attributes you want to manage.</MudText>
-                            <div class="mt-5 mb-5">
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined">Select All</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined">Clear All</MudButton>
-                            </div>
+                <MudPaper Outlined="true" Class="pa-4 mt-5">                    
+                    <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                        @if (connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
+                        {
+                            <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
+                                @foreach (var objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
+                                {
+                                    <MudButton OnClick="@((e) => HandleActiveObjectTypeClick(objectType))" Disabled="@(selectedObjectType != null && selectedObjectType.Id == objectType.Id)">@objectType.Name</MudButton>
+                                }
+                            </MudButtonGroup>
+                        }
+                    </div>                    
 
-                            <MudTable Items="@objectType.Attributes" Hover="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemAttribute,bool>(SchemaFilterFuncHandler)">
-                                <ToolBarContent>
-                                    <MudSpacer />
-                                    <MudTextField @bind-Value="schemaSearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
-                                </ToolBarContent>
-                                <HeaderContent>
-                                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
-                                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
-                                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.ClassName)">Class</MudTableSortLabel></MudTh>
-                                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
-                                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
-                                </HeaderContent>
-                                <RowTemplate>
-                                    <MudTd DataLabel="Selected">
-                                        <MudSwitch @bind-Checked="@context.Selected" Color="@Color.Primary"></MudSwitch>
-                                    </MudTd>
-                                    <MudTd DataLabel="Name">@context.Name</MudTd>
-                                    <MudTd DataLabel="Class">@context.ClassName</MudTd>
-                                    <MudTd DataLabel="Plurality">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
-                                    <MudTd DataLabel="Description">@context.Description</MudTd>
-                                </RowTemplate>
-                                <NoRecordsContent>
-                                    There are no attributes
-                                </NoRecordsContent>
-                            </MudTable>
-                        </MudExpansionPanel>
+                    @if (selectedObjectType != null)
+                    {
+                        <MudText Typo="Typo.caption" Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which attributes you would like to manage for this object type. To maximise performance, only select those that you need.</MudText>
+                        <MudTable Items="@selectedObjectType.Attributes" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" SortLabel="Sort By" Filter="new Func<ConnectedSystemAttribute,bool>(SchemaFilterFuncHandler)" Class="mt-5">
+                            <ToolBarContent>
+                                <MudText Typo="Typo.h6">@selectedObjectType.Name</MudText>
+                                <MudSpacer />
+                                <MudTextField @bind-Value="schemaSearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                            </ToolBarContent>
+                            <HeaderContent>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.ClassName)">Class</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Selected">
+                                    <MudSwitch @bind-Checked="@context.Selected" Color="@Color.Primary"></MudSwitch>
+                                </MudTd>
+                                <MudTd DataLabel="Name">@context.Name</MudTd>
+                                <MudTd DataLabel="Class">@context.ClassName</MudTd>
+                                <MudTd DataLabel="Plurality">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
+                                <MudTd DataLabel="Description">@context.Description</MudTd>
+                            </RowTemplate>
+                            <NoRecordsContent>
+                                There are no attributes
+                            </NoRecordsContent>
+                        </MudTable>
                     }
-                </MudExpansionPanels>
+                </MudPaper>
                 <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" Class="mt-5">Save Changes</MudButton>
             }
 
@@ -286,18 +290,18 @@
                                             @if (context.Included)
                                             {
                                                 <MudCheckBox T="bool?"
-                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                 UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                 title="Included"
-                                                 Disabled="true"/>
+                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                             title="Included"
+                                         Disabled="true" />
                                             }
                                             else
                                             {
                                                 <MudCheckBox T="bool?"
-                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                 title="@(context.Selected ? "Selected" : "")"/>
+                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                             title="@(context.Selected ? "Selected" : "")" />
                                             }
 
                                             <MudText>@context.Name</MudText>
@@ -329,8 +333,8 @@
     private string? partitionsAndHierarchiesText;
     private string? partitionAndHierarchyText;
     private bool schemaBeingRetrieved;
+    private ConnectedSystemObjectType? selectedObjectType;
     private bool hierarchyBeingRetrieved;
-
     private bool IsDetailsFormValid { get; set; }
     private string[] DetailsFormErrors { get; set; } = { };
     private bool IsSettingsFormValid { get; set; }
@@ -362,6 +366,10 @@
             partitionsAndHierarchiesText = "partitions";
             partitionAndHierarchyText = "partition";
         }
+
+        // show the first selected object type attribute table
+        if (connectedSystem.ObjectTypes != null)
+            selectedObjectType = connectedSystem.ObjectTypes.FirstOrDefault(q => q.Selected);
 
         ApplyContainerIncludedToPartitions(connectedSystem);
     }
@@ -426,6 +434,31 @@
         schemaBeingRetrieved = true;
         await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem);
         schemaBeingRetrieved = false;
+    }
+
+    private void HandleSelectedObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType, bool isObjectTypeChecked)
+    {
+        if (connectedSystem == null)
+            return;
+
+        // actuate the state change
+        connectedSystemObjectType.Selected = isObjectTypeChecked;
+
+        // now cascacde
+        // if only one type is selected, make that the selected object type
+        // if none are selected, clear selected object type
+        // if the selected type is being de-selected, null the selected type
+        if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count(q => q.Selected) == 1)
+            selectedObjectType = connectedSystem.ObjectTypes.Single(q => q.Selected);
+        else if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count(q => q.Selected) == 0)
+            selectedObjectType = null;
+        else if (selectedObjectType != null && selectedObjectType.Id == connectedSystemObjectType.Id && !isObjectTypeChecked)
+            selectedObjectType = null;
+    }
+
+    private void HandleActiveObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        selectedObjectType = connectedSystemObjectType;
     }
 
     private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
@@ -507,7 +540,7 @@
             foreach (ConnectedSystemContainer child in container.ChildContainers)
             {
                 child.Included = false;
-                child.Selected = false;                
+                child.Selected = false;
                 ApplyContainerStatusDownBranch(child, false, false);
             }
         }
