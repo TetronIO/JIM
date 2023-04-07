@@ -135,9 +135,8 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
-            <MudText>Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.</MudText>
-            <MudAlert Severity="(connectedSystem.ObjectTypes.Count > 0 ? Severity.Warning : Severity.Info)" Class="mt-5">
-                @if (connectedSystem.ObjectTypes.Count == 0)
+            <MudAlert Severity="(connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0 ? Severity.Warning : Severity.Info)">
+                @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
                 {
                     <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
                 }
@@ -149,8 +148,8 @@
                         permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     </MudText>
                 }
-                <MudButton Color="(connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)" Variant="Variant.Filled" Size="Size.Small" OnClick="HandleImportSchemaAsync" Class="mt-5">
-                    @if (connectedSystem.ObjectTypes.Count == 0)
+                <MudButton Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)" Variant="Variant.Filled" Size="Size.Small" OnClick="HandleImportSchemaAsync" Class="mt-5">
+                    @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
                     {
                         <text>Retrieve Schema</text>
                     }
@@ -161,8 +160,9 @@
                 </MudButton>
             </MudAlert>
 
-            @if (connectedSystem.ObjectTypes.Count > 0)
+            @if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0)
             {
+                <MudText Class="mt-5">Select which object types and which attributes for them are managed by JIM here. To maximise performance, only select those that need managing.</MudText>
                 <MudExpansionPanels MultiExpansion="true" Class="mt-5">
                     @for (var i = 0; i < connectedSystem.ObjectTypes.Count; i++)
                     {
