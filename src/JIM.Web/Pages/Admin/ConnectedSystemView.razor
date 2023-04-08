@@ -24,7 +24,7 @@
                     <MudTextField T="string" Label="Connector" @bind-Value="connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
                     <MudTextField T="string" Label="Name" @bind-Value="connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
                     <MudTextField T="string" Label="Description" Required="false" @bind-Value="connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync">Save Changes</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DisableElevation="true">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
         </MudTabPanel>
@@ -130,7 +130,7 @@
                     </MudAlert>
                 }
 
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync">Save Settings</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync" DisableElevation="true">Save Settings</MudButton>
             </MudForm>
         </MudTabPanel>
 
@@ -149,7 +149,7 @@
                         permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     </MudText>
                 }
-                <MudButton Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)" Variant="Variant.Filled" Size="Size.Small" OnClick="HandleImportSchemaAsync" Class="mt-5">
+                <MudButton Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)" Variant="Variant.Filled" Size="Size.Small" OnClick="HandleImportSchemaAsync" Class="mt-5" DisableElevation="true">
                     @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
                     {
                         <text>Retrieve Schema</text>
@@ -180,7 +180,7 @@
                             <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
                                 @foreach (var objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
                                 {
-                                    <MudButton OnClick="@((e) => HandleActiveObjectTypeClick(objectType))" Disabled="@(selectedObjectType != null && selectedObjectType.Id == objectType.Id)">@objectType.Name</MudButton>
+                                    <MudButton OnClick="@((e) => HandleActiveObjectTypeClick(objectType))" Disabled="@(selectedObjectType != null && selectedObjectType.Id == objectType.Id)" DisableElevation="true">@objectType.Name</MudButton>
                                 }
                             </MudButtonGroup>
                         }
@@ -217,7 +217,7 @@
                         </MudTable>
                     }
                 </MudPaper>
-                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" Class="mt-5">Save Changes</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" Class="mt-5" DisableElevation="true">Save Changes</MudButton>
             }
 
         </MudTabPanel>
@@ -244,7 +244,8 @@
                        Size="Size.Small"
                        OnClick="HandleImportHierarchyAsync"
                        Variant="Variant.Filled"
-                       Class="mt-5">
+                       Class="mt-5"
+                       DisableElevation="true">
                         @if (hierarchyBeingRetrieved)
                         {
                             <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -276,7 +277,7 @@
                             <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
                             <MudText>Select the containers you want to manage in this partition.</MudText>
 
-                            <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5">
+                            <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5" DisableElevation="true">
                                 <MudButton>Select All</MudButton>
                                 <MudButton>Clear All</MudButton>
                             </MudButtonGroup>
@@ -313,7 +314,7 @@
                         </MudPaper>
                     }
 
-                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5">Save Changes</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5" DisableElevation="true">Save Changes</MudButton>
                 }
             </MudTabPanel>
         }

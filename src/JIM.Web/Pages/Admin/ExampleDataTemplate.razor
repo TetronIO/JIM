@@ -164,7 +164,8 @@
                StartIcon="@Icons.Material.Filled.BuildCircle"
                Color="Color.Warning"
                Disabled="@(status != null)"
-               OnClick="ExecuteTemplateAsync">
+               OnClick="ExecuteTemplateAsync"
+               DisableElevation="true">
         @if (status != null && status == ServiceTaskStatus.Processing)
         {
             <text>Processing...</text>

@@ -26,7 +26,7 @@
         </MudSelect>
         <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="model.Name" Variant="Variant.Outlined" />
         <MudTextField Label="Description" @bind-Value="model.Description" Lines="5" Variant="Variant.Outlined" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isFormValid)" Class="mt-5" OnClick="HandleValidSubmit">Create Connected System</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isFormValid)" Class="mt-5" OnClick="HandleValidSubmit" DisableElevation="true">Create Connected System</MudButton>
     </MudForm>
 </MudPaper>
 
