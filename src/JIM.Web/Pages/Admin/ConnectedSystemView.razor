@@ -273,43 +273,50 @@
                     {
                         var partition = connectedSystem.Partitions[i];
 
-                        <MudPaper Class="pa-4 mt-5" Outlined="true">
-                            <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
-                            <MudText>Select the containers you want to manage in this partition.</MudText>
+                        <MudPaper Class="mt-5" Outlined="true">
+                            <div class="pa-4">
+                                <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
+                                <MudSwitch @bind-Checked="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
+                            </div>
+                            <MudDivider />
 
-                            <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5" DisableElevation="true">
-                                <MudButton>Select All</MudButton>
-                                <MudButton>Clear All</MudButton>
-                            </MudButtonGroup>
+                            <div class="pa-4">
+                                <MudText>Select the containers you want to manage in this partition.</MudText>
+                                <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5">
+                                    <MudButton>Select All</MudButton>
+                                    <MudButton>Clear All</MudButton>
+                                </MudButtonGroup>
 
-                            <MudTreeView Items="@partition.Containers">
-                                <ItemTemplate>
-                                    <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.ChildContainers">
-                                        <Content>
-                                            <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.ChildContainers.Count > 0)" />
+                                <MudTreeView Items="@partition.Containers">
+                                    <ItemTemplate>
+                                        <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.ChildContainers">
+                                            <Content>
+                                                <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.ChildContainers.Count > 0)" />
 
-                                            @if (context.Included)
-                                            {
-                                                <MudCheckBox T="bool?"
-                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                             title="Included"
-                                         Disabled="true" />
-                                            }
-                                            else
-                                            {
-                                                <MudCheckBox T="bool?"
-                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                             title="@(context.Selected ? "Selected" : "")" />
-                                            }
+                                                @if (context.Included)
+                                                {
+                                                    <MudCheckBox T="bool?"
+                                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                         Disabled="true"
+                                                         title="Included"/>
+                                                }
+                                                else
+                                                {
+                                                    <MudCheckBox T="bool?"
+                                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                         title="@(context.Selected ? "Selected" : "")" />
+                                                }
 
-                                            <MudText>@context.Name</MudText>
-                                        </Content>
-                                    </MudTreeViewItem>
-                                </ItemTemplate>
-                            </MudTreeView>
+                                                <MudText>@context.Name</MudText>
+                                            </Content>
+                                        </MudTreeViewItem>
+                                    </ItemTemplate>
+                                </MudTreeView>
+
+                            </div>
 
                         </MudPaper>
                     }
