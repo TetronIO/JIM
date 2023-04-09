@@ -104,23 +104,33 @@ namespace JIM.PostgresData.Repositories
             // (doing it in one giant include tree query will make it timeout.
             ConnectedSystem? connectedSystem = null;
             List<ConnectedSystemObjectType>? types = null;
+            List<ConnectedSystemRunProfile>? runProfiles = null;
             List<ConnectedSystemPartition>? partitions = null;
             var tasks = new List<Task>
             {
                 Task.Run(async () =>
                 {
                     using var dbc1 = new JimDbContext();
-                    connectedSystem = await dbc1.ConnectedSystems.Include(cs => cs.ConnectorDefinition).Include(cs => cs.SettingValues).ThenInclude(sv => sv.Setting).SingleOrDefaultAsync(x => x.Id == id);
+                    connectedSystem = await dbc1.ConnectedSystems.
+                    Include(cs => cs.ConnectorDefinition).
+                    Include(cs => cs.SettingValues).
+                    ThenInclude(sv => sv.Setting).
+                    SingleOrDefaultAsync(x => x.Id == id);
                 }),
                 Task.Run(async () =>
                 {
                     using var dbc2 = new JimDbContext();
-                    types = await dbc2.ConnectedSystemObjectTypes.Include(ot => ot.Attributes).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+                    runProfiles = await dbc2.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
                 }),
                 Task.Run(async () =>
                 {
                     using var dbc3 = new JimDbContext();
-                    partitions = await dbc3.ConnectedSystemPartitions
+                    types = await dbc3.ConnectedSystemObjectTypes.Include(ot => ot.Attributes).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+                }),
+                Task.Run(async () =>
+                {
+                    using var dbc4 = new JimDbContext();
+                    partitions = await dbc4.ConnectedSystemPartitions
                     .Include(p => p.Containers)
                     .ThenInclude(c => c.ChildContainers)
                     .ThenInclude(c => c.ChildContainers)
@@ -141,6 +151,7 @@ namespace JIM.PostgresData.Repositories
             if (connectedSystem == null)
                 return null;
 
+            connectedSystem.RunProfiles = runProfiles;
             connectedSystem.ObjectTypes = types;
             connectedSystem.Partitions = partitions;
             return connectedSystem;

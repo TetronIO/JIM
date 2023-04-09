@@ -5,6 +5,7 @@
 @using JIM.Models.Core.Dto
 @using JIM.Models.Staging.Dtos
 @using JIM.Models.Staging;
+@using JIM.Models.Transactional;
 @using JIM.Web.Models;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -173,7 +174,7 @@
                     </div>
                 </MudPaper>
 
-                <MudPaper Outlined="true" Class="pa-4 mt-5">                    
+                <MudPaper Outlined="true" Class="pa-4 mt-5">
                     <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                         @if (connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
                         {
@@ -184,7 +185,7 @@
                                 }
                             </MudButtonGroup>
                         }
-                    </div>                    
+                    </div>
 
                     @if (selectedObjectType != null)
                     {
@@ -296,18 +297,18 @@
                                                 @if (context.Included)
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                         Disabled="true"
-                                                         title="Included"/>
+                                             Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                             CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                             UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                             Disabled="true"
+                                                                 title="Included" />
                                                 }
                                                 else
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                         Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                         CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                         title="@(context.Selected ? "Selected" : "")" />
+                                             Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                             CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                                 title="@(context.Selected ? "Selected" : "")" />
                                                 }
 
                                                 <MudText>@context.Name</MudText>
@@ -325,6 +326,51 @@
                 }
             </MudTabPanel>
         }
+
+        <MudTabPanel Text="Run Profiles" Disabled="@IsRunProfilesTabDisabled()">
+            <MudAlert Severity="Severity.Info">Run profiles define what operations can be performed on a Connector, i.e. import, export and synchronisation, with any required settings.</MudAlert>
+
+            <MudPaper Outlined="true" Class="pa-4 mt-5">
+                <MudText Typo="Typo.h6">Create a New Run Profile</MudText>
+
+                <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
+                    <MudTextField T="string" @bind-Value="newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
+                    <MudSelect T="SyncRunType" @bind-Value="newRunProfile.RunType" Label="Run Type" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="A run profile type is required">
+                        @foreach (SyncRunType runType in Enum.GetValues(typeof(SyncRunType)))
+                        {
+                            <MudSelectItem Value="@runType">@runType.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (connectedSystem.ConnectorDefinition.SupportsPartitions && connectedSystem.Partitions != null)
+                    {
+                        <MudSelect T="ConnectedSystemPartition" @bind-Value="newRunProfile.Partition" Label="Partition" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="@connectedSystem.ConnectorDefinition.SupportsPartitions" RequiredError="A run profile partition is required">
+                            @foreach (ConnectedSystemPartition partition in connectedSystem.Partitions)
+                            {
+                                <MudSelectItem Value="@partition" />
+                            }
+                        </MudSelect>
+                    }
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DisableElevation="true">Create Run Profile</MudButton>
+                </MudForm>
+            </MudPaper>
+
+            <MudTable Items="@connectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)">Run Type</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition.Name)">Partition</MudTableSortLabel></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
+                    <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    There are no run profiles. Create your first.
+                </NoRecordsContent>
+            </MudTable>
+
+        </MudTabPanel>
 
     </MudTabs>
 }
@@ -349,6 +395,8 @@
     private string[] SettingsFormErrors { get; set; } = { };
     private Dictionary<string, string> SettingsFormCustomErrors { get; set; } = new Dictionary<string, string>();
     private string schemaSearchString = "";
+    private bool IsNewRunProfileFormValid { get; set; }
+    private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile();
 
     protected override async Task OnInitializedAsync()
     {
@@ -616,5 +664,33 @@
 
         if (parentContainer.ParentContainer != null)
             CorrectUpwardContainerStatus(parentContainer.ParentContainer);
+    }
+
+    private bool IsRunProfilesTabDisabled()
+    {
+        if (connectedSystem == null)
+            return true;
+
+        if (connectedSystem.ConnectorDefinition.SupportsPartitions && (connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0))
+            return true;
+
+        return false;
+    }
+
+    private async Task HandleNewRunProfileFormSubmitAsync()
+    {
+        if (connectedSystem == null)
+            return;
+
+        connectedSystem.RunProfiles.Add(new ConnectedSystemRunProfile { 
+            ConnectedSystem = connectedSystem,
+            Name = newRunProfile.Name,
+            RunType = newRunProfile.RunType,
+            Partition = newRunProfile.Partition,
+        });
+
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        Snackbar.Add("New run profile added.", Severity.Success);
+        newRunProfile = new ConnectedSystemRunProfile();
     }
 }

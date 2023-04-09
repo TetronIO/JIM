@@ -25,6 +25,7 @@
         /// the human-readable name for this partition.
         /// </summary>
         public string Name { get; set; }
+        public override string ToString() => Name;
 
         /// <summary>
         /// Indicates whether or not this partition has been selected to be managed, i.e. whether or not objects will be imported from it.
