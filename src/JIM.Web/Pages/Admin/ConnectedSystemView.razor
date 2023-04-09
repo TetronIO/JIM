@@ -297,18 +297,18 @@
                                                 @if (context.Included)
                                                 {
                                                     <MudCheckBox T="bool?"
-                                             Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                             CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                             UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                             Disabled="true"
-                                                                 title="Included" />
+                                                        Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                        CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                        UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                        Disabled="true"
+                                                        title="Included" />
                                                 }
                                                 else
                                                 {
                                                     <MudCheckBox T="bool?"
-                                             Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                             CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                                 title="@(context.Selected ? "Selected" : "")" />
+                                                        Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                        CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                        title="@(context.Selected ? "Selected" : "")" />
                                                 }
 
                                                 <MudText>@context.Name</MudText>
