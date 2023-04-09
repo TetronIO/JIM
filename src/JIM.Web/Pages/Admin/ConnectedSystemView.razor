@@ -356,11 +356,17 @@
 
             <MudTable Items="@connectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
                 <HeaderContent>
+                    <MudTh></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)">Run Type</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition.Name)">Partition</MudTableSortLabel></MudTh>
                 </HeaderContent>
                 <RowTemplate>
+                    <MudTd>
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert">
+                            <MudMenuItem OnClick="((e) => HandleRunProfileDeleteAsync(context))">Delete</MudMenuItem>
+                        </MudMenu>
+                    </MudTd>
                     <MudTd DataLabel="Name">@context.Name</MudTd>
                     <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
                     <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
@@ -679,7 +685,7 @@
 
     private async Task HandleNewRunProfileFormSubmitAsync()
     {
-        if (connectedSystem == null)
+        if (connectedSystem == null || connectedSystem.RunProfiles == null)
             return;
 
         connectedSystem.RunProfiles.Add(new ConnectedSystemRunProfile { 
@@ -692,5 +698,15 @@
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         Snackbar.Add("New run profile added.", Severity.Success);
         newRunProfile = new ConnectedSystemRunProfile();
+    }
+
+    private async Task HandleRunProfileDeleteAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+    {
+        if (connectedSystem == null || connectedSystem.RunProfiles == null)
+            return;
+
+        connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
+        await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        Snackbar.Add("Run profile removed.", Severity.Success);
     }
 }

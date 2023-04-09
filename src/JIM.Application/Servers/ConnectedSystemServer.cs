@@ -378,7 +378,7 @@ namespace JIM.Application.Servers
             await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         }
 
-        public async Task DeleteConnectedSystemRunProfile(ConnectedSystemRunProfile connectedSystemRunProfile)
+        public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
         {
             if (connectedSystemRunProfile == null)
                 return;
