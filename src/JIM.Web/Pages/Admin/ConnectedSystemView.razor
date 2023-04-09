@@ -54,37 +54,37 @@
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
                                 {
                                     <MudTextField T="string"
-                              Label="@settingValue.Setting.Name"
-                              @bind-Value="settingValue.StringValue"
-                              Required="@settingValue.Setting.Required"
-                              RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                              HelperText="@settingValue.Setting.Description"
-                              Variant="Variant.Outlined"
-                              Class="mb-5" />
+                                        Label="@settingValue.Setting.Name"
+                                        @bind-Value="settingValue.StringValue"
+                                        Required="@settingValue.Setting.Required"
+                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                        HelperText="@settingValue.Setting.Description"
+                                        Variant="Variant.Outlined"
+                                        Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                 {
                                     <MudTextField T="string"
-                              Label="@settingValue.Setting.Name"
-                              @bind-Value="settingValue.StringEncryptedValue"
-                              Required="@settingValue.Setting.Required"
-                              RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                              HelperText="@settingValue.Setting.Description"
-                              InputType="InputType.Password"
-                              Variant="Variant.Outlined"
-                              Class="mb-5" />
+                                        Label="@settingValue.Setting.Name"
+                                        @bind-Value="settingValue.StringEncryptedValue"
+                                        Required="@settingValue.Setting.Required"
+                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                        HelperText="@settingValue.Setting.Description"
+                                        InputType="InputType.Password"
+                                        Variant="Variant.Outlined"
+                                        Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
                                 {
                                     <MudTextField T="int?"
-                              Label="@settingValue.Setting.Name"
-                              @bind-Value="settingValue.IntValue"
-                              Required="@settingValue.Setting.Required"
-                              RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                              HelperText="@settingValue.Setting.Description"
-                              InputType="InputType.Number"
-                              Variant="Variant.Outlined"
-                              Class="mb-5" />
+                                        Label="@settingValue.Setting.Name"
+                                        @bind-Value="settingValue.IntValue"
+                                        Required="@settingValue.Setting.Required"
+                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                        HelperText="@settingValue.Setting.Description"
+                                        InputType="InputType.Number"
+                                        Variant="Variant.Outlined"
+                                        Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
