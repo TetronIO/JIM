@@ -29,7 +29,7 @@
                 <MudField Label="Is default for Object Type?" Variant="Variant.Outlined">@(predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="Built-in?" Variant="Variant.Outlined">@(predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="Built-in?" Variant="Variant.Outlined">@(predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -49,7 +49,6 @@
         <MudText Typo="Typo.h5" Class="mt-5">Criteria</MudText>
         <MudText Typo="Typo.subtitle1">This search has criteria to filter the results:</MudText>
 
-
         <MudStack Class="mt-5">
             @foreach (var criteriaGroup in predefinedSearch.CriteriaGroups)
             {
@@ -59,7 +58,7 @@
                     @foreach (var criteria in criteriaGroup.Criteria)
                     {
                         <MudChip Color="Color.Primary">@criteria.MetaverseAttribute.Name</MudChip>
-                        <MudChip Color="Color.Primary">@criteria.ComparisonType</MudChip>
+                        <MudChip Color="Color.Default">@criteria.ComparisonType</MudChip>
                         <MudChip Color="Color.Primary">@criteria.StringValue</MudChip>
                     }
                 </MudPaper>
@@ -76,6 +75,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (string.IsNullOrEmpty(Uri))
+        {
+            // no predefined search parameter passed in, redirect to index page
+            NavManager.NavigateTo("../");
+            return;
+        }
+
         predefinedSearch = await Jim.Search.GetPredefinedSearchAsync(Uri);
         if (predefinedSearch == null)
         {
