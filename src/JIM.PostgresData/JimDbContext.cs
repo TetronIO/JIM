@@ -86,6 +86,12 @@ namespace JIM.PostgresData
 
             modelBuilder.Entity<MetaverseObjectType>()
                 .HasMany(mot => mot.Attributes);
+
+            // reduce the chance of concurrency issues by using a system attribute to identify row versions
+            // for our most heavily updated objects.
+            // https://www.npgsql.org/efcore/modeling/concurrency.html?tabs=data-annotations
+            // https://learn.microsoft.com/en-us/ef/core/saving/concurrency?tabs=data-annotations
+            modelBuilder.Entity<MetaverseObject>().UseXminAsConcurrencyToken();
         }
     }
 }
