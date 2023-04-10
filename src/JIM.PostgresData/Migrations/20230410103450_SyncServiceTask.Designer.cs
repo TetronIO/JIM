@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20230410103450_SyncServiceTask")]
+    partial class SyncServiceTask
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1545,11 +1547,10 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasBaseType("JIM.Models.Tasking.ServiceTask");
 
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("ConnectedSystemRunProfileId")
                         .HasColumnType("integer");
+
+                    b.HasIndex("ConnectedSystemRunProfileId");
 
                     b.HasDiscriminator().HasValue("SynchronisationServiceTask");
                 });
@@ -2147,6 +2148,17 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("StaticMembersId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Tasking.SynchronisationServiceTask", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemRunProfile", "ConnectedSystemRunProfile")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemRunProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystemRunProfile");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>

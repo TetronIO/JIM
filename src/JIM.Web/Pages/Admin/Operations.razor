@@ -2,6 +2,7 @@
 @using JIM.Application;
 @using JIM.Models.Staging;
 @using JIM.Models.Staging.Dtos;
+@using JIM.Models.Tasking;
 @attribute [Authorize(Roles = "Administrators")]
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
@@ -27,7 +28,7 @@
             </MudSelect>
             @if (connectedSystemRunProfiles != null)
             {
-                <MudSelect T="ConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="A run profile is required">
+                <MudSelect T="ConnectedSystemRunProfile" @bind-Value="selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="A run profile is required">
                     @foreach (ConnectedSystemRunProfile runProfile in connectedSystemRunProfiles)
                     {
                         <MudSelectItem Value="@runProfile" />
@@ -48,6 +49,8 @@ Table to go here...
 @code {
     private List<ConnectedSystemHeader>? connectedSystemHeaders;
     private List<ConnectedSystemRunProfile>? connectedSystemRunProfiles;
+    private ConnectedSystemHeader? selectedConnectedSystemHeader;
+    private ConnectedSystemRunProfile? selectedConnectedSystemRunProfile;
 
     protected override async Task OnInitializedAsync()
     {
@@ -56,12 +59,17 @@ Table to go here...
 
     private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
     {
+        selectedConnectedSystemHeader = connectedSystemHeader;
         connectedSystemRunProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
     }
 
     private async Task HandleExecuteRunProfileSubmitAsync()
     {
-        //await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
-        Snackbar.Add("Synchronisation run executed.", Severity.Success);
+        if (selectedConnectedSystemHeader == null || selectedConnectedSystemRunProfile == null)
+            return;
+
+        var task = new SynchronisationServiceTask(selectedConnectedSystemHeader.Id, selectedConnectedSystemRunProfile.Id);
+        await Jim.Tasking.CreateServiceTaskAsync(task);
+        Snackbar.Add("Synchronisation task added.", Severity.Success);
     }
 }

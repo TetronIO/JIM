@@ -9,7 +9,6 @@
 
 		public DataGenerationTemplateServiceTask()
         {
-
         }
 
 		public DataGenerationTemplateServiceTask(int templateId)

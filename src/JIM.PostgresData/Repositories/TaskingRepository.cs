@@ -16,9 +16,14 @@ namespace JIM.PostgresData.Repositories
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
         {
-            if (serviceTask is DataGenerationTemplateServiceTask task)
+            if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
             {
-                Repository.Database.DataGenerationTemplateServiceTasks.Add(task);
+                Repository.Database.DataGenerationTemplateServiceTasks.Add(dataGenerationTemplateServiceTask);
+                await Repository.Database.SaveChangesAsync();
+            }
+            else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
+            {
+                Repository.Database.SynchronisationServiceTasks.Add(synchronisationServiceTask);
                 await Repository.Database.SaveChangesAsync();
             }
             else
@@ -29,7 +34,10 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ServiceTask?> GetNextServiceTaskAsync()
         {
-            return await Repository.Database.ServiceTasks.Where(q => q.Status == ServiceTaskStatus.Queued).OrderByDescending(q => q.Timestamp).FirstOrDefaultAsync();
+            return await Repository.Database.ServiceTasks.
+                Where(q => q.Status == ServiceTaskStatus.Queued).
+                OrderByDescending(q => q.Timestamp).
+                FirstOrDefaultAsync();
         }
 
         public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)

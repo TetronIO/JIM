@@ -25,6 +25,7 @@ namespace JIM.PostgresData
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
         internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
+        internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
         internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
         internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }

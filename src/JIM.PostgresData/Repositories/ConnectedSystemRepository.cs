@@ -261,7 +261,9 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId)
         {
-            return await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == connectedSystemId).ToListAsync();
+            return await Repository.Database.ConnectedSystemRunProfiles.
+                Include(q => q.Partition).
+                Where(q => q.ConnectedSystem.Id == connectedSystemId).ToListAsync();
         }
         #endregion
 

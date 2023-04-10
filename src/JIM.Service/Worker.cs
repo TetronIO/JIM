@@ -64,6 +64,10 @@ namespace JIM.Service
                         Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenerationTemplateServiceTask.TemplateId);
                         await outerJim.DataGeneration.ExecuteTemplateAsync(dataGenerationTemplateServiceTask.TemplateId);
                     }
+                    else if (task is SynchronisationServiceTask synchronisationServiceTask)
+                    {
+                        Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + synchronisationServiceTask.ConnectedSystemRunProfileId);
+                    }
 
                     // very importamt: we must delete the task once it's completed so we know it's complete
                     await outerJim.Tasking.DeleteServiceTaskAsync(task);
