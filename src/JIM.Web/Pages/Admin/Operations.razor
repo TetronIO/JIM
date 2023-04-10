@@ -1,0 +1,12 @@
+﻿@page "/admin/operations"
+@attribute [Authorize(Roles = "Administrators")]
+
+<PageTitle>Operations</PageTitle>
+<MudText Typo="Typo.h4">Operations</MudText>
+<MudText Typo="Typo.subtitle1">
+    JIM executes tasks on a queue. You can see what tasks are queued here. Tasks are made up of different types of operations within JIM, i.e. Synchronisation Tasks and Data Generation Tasks.
+</MudText>
+
+@code {
+
+}

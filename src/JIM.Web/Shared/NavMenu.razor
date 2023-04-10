@@ -26,10 +26,11 @@
 
     <AuthorizeView Roles="Administrators">
         <MudNavGroup Title="Admin" Expanded="true" Icon="@Icons.Material.Filled.Settings">
-            <MudNavLink Href="/admin/schema" Match="NavLinkMatch.Prefix">Schema</MudNavLink>
-            <MudNavLink Href="/admin/predefined-searches" Match="NavLinkMatch.Prefix">Predefined Searches</MudNavLink>
+            <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix">Operations</MudNavLink>
             <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.All">Connected Systems</MudNavLink>
             <MudNavLink Href="/admin/connected-systems/sync-rules" Match="NavLinkMatch.All">Synchronisation Rules</MudNavLink>
+            <MudNavLink Href="/admin/schema" Match="NavLinkMatch.Prefix">Schema</MudNavLink>
+            <MudNavLink Href="/admin/predefined-searches" Match="NavLinkMatch.Prefix">Predefined Searches</MudNavLink>
             <MudNavLink Href="/admin/example-data" Match="NavLinkMatch.Prefix">Example Data</MudNavLink>
             <MudNavLink Href="/admin/settings" Match="NavLinkMatch.Prefix">Settings</MudNavLink>
         </MudNavGroup>
