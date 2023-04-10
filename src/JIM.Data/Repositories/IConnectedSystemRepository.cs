@@ -32,13 +32,13 @@ namespace JIM.Data.Repositories
         public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id);
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
-        public Task<IList<ConnectedSystem>> GetConnectedSystemsAsync();
+        public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
+        public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
         public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
-        public Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
         public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
         public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
-        public Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
-        public Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
+        public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
+        public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
         public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
         public Task<IList<SyncRule>> GetSyncRulesAsync();
         public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();

@@ -11,5 +11,6 @@
         public string ConnectorName { get; set; }
         public int ConnectorId { get; set; }
 
+        public override string ToString() => Name;
     }
 }

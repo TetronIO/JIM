@@ -60,12 +60,12 @@ namespace JIM.Application.Servers
         #endregion
 
         #region Connected Systems
-        public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
+        public async Task<List<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync();
         }
 
-        public async Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
+        public async Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemHeadersAsync();
         }
@@ -394,12 +394,12 @@ namespace JIM.Application.Servers
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         }
 
-        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
+        public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
         {
             return await GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
         }
 
-        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId)
+        public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         }

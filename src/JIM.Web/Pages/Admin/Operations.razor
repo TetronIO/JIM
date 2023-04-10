@@ -1,5 +1,10 @@
 ﻿@page "/admin/operations"
+@using JIM.Application;
+@using JIM.Models.Staging;
+@using JIM.Models.Staging.Dtos;
 @attribute [Authorize(Roles = "Administrators")]
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
 
 <PageTitle>Operations</PageTitle>
 <MudText Typo="Typo.h4">Operations</MudText>
@@ -7,6 +12,56 @@
     JIM executes tasks on a queue. You can see what tasks are queued here. Tasks are made up of different types of operations within JIM, i.e. Synchronisation Tasks and Data Generation Tasks.
 </MudText>
 
-@code {
+<MudPaper Outlined="true" Class="pa-4 mt-5">
+    <MudText Typo="Typo.h6">Execute a Run Profile</MudText>
+    <MudText>Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
 
+    @if (connectedSystemHeaders != null && connectedSystemHeaders.Count > 0)
+    {
+        <MudForm>
+            <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="Please select a Connected System">
+                @foreach (ConnectedSystemHeader connectedSystem in connectedSystemHeaders)
+                {
+                    <MudSelectItem Value="@connectedSystem" />
+                }
+            </MudSelect>
+            @if (connectedSystemRunProfiles != null)
+            {
+                <MudSelect T="ConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="A run profile is required">
+                    @foreach (ConnectedSystemRunProfile runProfile in connectedSystemRunProfiles)
+                    {
+                        <MudSelectItem Value="@runProfile" />
+                    }
+                </MudSelect>
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" Class="mt-5" DisableElevation="true">Execute</MudButton>
+        </MudForm>
+    }
+    else
+    {
+        <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
+    }
+</MudPaper>
+
+Table to go here...
+
+@code {
+    private List<ConnectedSystemHeader>? connectedSystemHeaders;
+    private List<ConnectedSystemRunProfile>? connectedSystemRunProfiles;
+
+    protected override async Task OnInitializedAsync()
+    {
+        connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+    }
+
+    private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
+    {
+        connectedSystemRunProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
+    }
+
+    private async Task HandleExecuteRunProfileSubmitAsync()
+    {
+        //await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        Snackbar.Add("Synchronisation run executed.", Severity.Success);
+    }
 }

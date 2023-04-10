@@ -16,5 +16,7 @@ namespace JIM.Models.Staging
         public ConnectedSystemPartition? Partition { get; set; }
 
         public SyncRunType RunType { get; set; }
+
+        public override string ToString() => Name;
     }
 }

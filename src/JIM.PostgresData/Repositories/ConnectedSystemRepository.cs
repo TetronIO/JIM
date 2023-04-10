@@ -78,12 +78,12 @@ namespace JIM.PostgresData.Repositories
         #endregion
 
         #region Connected Systems
-        public async Task<IList<ConnectedSystem>> GetConnectedSystemsAsync()
+        public async Task<List<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             return await Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToListAsync();
         }
 
-        public async Task<IList<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
+        public async Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
         {
             return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
             {
@@ -254,12 +254,12 @@ namespace JIM.PostgresData.Repositories
             await Repository.Database.SaveChangesAsync();
         }
 
-        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
+        public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
         {
             return await GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
         }
 
-        public async Task<IList<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId)
+        public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId)
         {
             return await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == connectedSystemId).ToListAsync();
         }
