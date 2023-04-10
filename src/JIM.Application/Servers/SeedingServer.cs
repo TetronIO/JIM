@@ -317,7 +317,7 @@ namespace JIM.Application.Servers
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
-                            StringValue = "Person"
+                            StringValue = "Human"
                         }
                     }
                 });
@@ -349,7 +349,7 @@ namespace JIM.Application.Servers
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
-                            StringValue = "service principal"
+                            StringValue = "Service"
                         }
                     }
                 });
@@ -765,7 +765,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Type),
-                    Pattern = "Person",
+                    Pattern = "Human",
                     PopulatedValuesPercentage = 100
                 });
             }

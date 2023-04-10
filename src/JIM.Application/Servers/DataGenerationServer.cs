@@ -5,7 +5,6 @@ using JIM.Models.Utility;
 using Serilog;
 using System.Data;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace JIM.Application.Servers
@@ -131,15 +130,19 @@ namespace JIM.Application.Servers
             foreach (var objectType in template.ObjectTypes)
                 foreach (var templateAttribute in objectType.TemplateAttributes)
                     foreach (var datasetInstance in templateAttribute.ExampleDataSetInstances)
-                        if (datasetInstance.ExampleDataSet != null && !exampleDataSets.Any(q=>q.Id == datasetInstance.ExampleDataSet.Id))
-                            exampleDataSets.Add(await GetExampleDataSetAsync(datasetInstance.ExampleDataSet.Id));
+                        if (datasetInstance != null && datasetInstance.ExampleDataSet != null && !exampleDataSets.Any(q => q.Id == datasetInstance.ExampleDataSet.Id))
+                        {
+                            var exampleDataSet = await GetExampleDataSetAsync(datasetInstance.ExampleDataSet.Id);
+                            if (exampleDataSet != null)
+                                exampleDataSets.Add(exampleDataSet);
+                        }
 
             foreach (var objectType in template.ObjectTypes)
             {
                 var objectTypeStopWatch = Stopwatch.StartNew();
                 Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
                 Parallel.For(0, objectType.ObjectsToCreate,
-                async index =>
+                index =>
                 {
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
                     // make sure we process attributes with no depedencies first
