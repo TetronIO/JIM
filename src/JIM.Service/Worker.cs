@@ -1,7 +1,7 @@
 using JIM.Application;
+using JIM.Models.Tasking;
 using JIM.PostgresData;
 using Serilog;
-using JIM.Models.Tasking;
 
 namespace JIM.Service
 {
@@ -67,9 +67,12 @@ namespace JIM.Service
                     else if (task is SynchronisationServiceTask synchronisationServiceTask)
                     {
                         Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + synchronisationServiceTask.ConnectedSystemRunProfileId);
+
+                        // temporary, to simulate processing a sync task
+                        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     }
 
-                    // very importamt: we must delete the task once it's completed so we know it's complete
+                    // very important: we must delete the task once it's completed so we know it's complete
                     await outerJim.Tasking.DeleteServiceTaskAsync(task);
                 }
             }
