@@ -6,8 +6,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=https://+:443;http://+:80
     ports:
-      - "80"
-      - "443"
+      - "5200:80"
+      - "5201:443"
     volumes:
       # Windows
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro

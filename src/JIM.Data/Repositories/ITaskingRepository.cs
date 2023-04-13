@@ -4,6 +4,8 @@ namespace JIM.Data.Repositories
 {
     public interface ITaskingRepository
     {
+        public Task<List<ServiceTask>> GetServiceTasksAsync();
+
         public Task CreateServiceTaskAsync(ServiceTask serviceTask);
 
         public Task<ServiceTask?> GetNextServiceTaskAsync();

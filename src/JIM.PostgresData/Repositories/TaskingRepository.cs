@@ -13,6 +13,10 @@ namespace JIM.PostgresData.Repositories
         {
             Repository = dataRepository;
         }
+        public async Task<List<ServiceTask>> GetServiceTasksAsync()
+        {
+            return await Repository.Database.ServiceTasks.ToListAsync();
+        }
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
         {

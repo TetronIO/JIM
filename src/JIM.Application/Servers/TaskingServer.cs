@@ -11,6 +11,11 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
+        public async Task<List<ServiceTask>> GetServiceTasksAsync()
+        {
+            return await Application.Repository.Tasking.GetServiceTasksAsync();
+        }
+
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
         {
             await Application.Repository.Tasking.CreateServiceTaskAsync(serviceTask);

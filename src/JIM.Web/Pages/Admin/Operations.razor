@@ -44,17 +44,41 @@
     }
 </MudPaper>
 
-Table to go here...
+<MudTable Items="@serviceTasks" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+    <HeaderContent>
+        <MudTh>Action</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Created</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert">
+                <MudMenuItem OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
+            </MudMenu>
+        </MudTd>
+        <MudTd DataLabel="Type">@GetServiceTaskType(context)</MudTd>
+        <MudTd DataLabel="Name">Task Name to come...</MudTd>
+        <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Created">@context.Timestamp</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        There are no service tasks queued.
+    </NoRecordsContent>
+</MudTable>
 
 @code {
     private List<ConnectedSystemHeader>? connectedSystemHeaders;
     private List<ConnectedSystemRunProfile>? connectedSystemRunProfiles;
     private ConnectedSystemHeader? selectedConnectedSystemHeader;
     private ConnectedSystemRunProfile? selectedConnectedSystemRunProfile;
+    private List<ServiceTask> serviceTasks = new List<ServiceTask>();
 
     protected override async Task OnInitializedAsync()
     {
         connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        serviceTasks = await Jim.Tasking.GetServiceTasksAsync();
     }
 
     private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
@@ -71,5 +95,25 @@ Table to go here...
         var task = new SynchronisationServiceTask(selectedConnectedSystemHeader.Id, selectedConnectedSystemRunProfile.Id);
         await Jim.Tasking.CreateServiceTaskAsync(task);
         Snackbar.Add("Synchronisation task added.", Severity.Success);
+    }
+
+    private string GetServiceTaskType(ServiceTask serviceTask)
+    {
+        if (serviceTask is DataGenerationTemplateServiceTask)
+            return "Data Generation Template Task";
+        else if (serviceTask is SynchronisationServiceTask)
+            return "Synchronisation Task";
+        else
+            return "Unknown Task";
+    }
+
+    private async Task HandleTaskDeleteAsync(ServiceTask serviceTask)
+    {
+        //if (connectedSystem == null || connectedSystem.RunProfiles == null)
+        //    return;
+
+        //connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
+        //await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        //Snackbar.Add("Run profile removed.", Severity.Success);
     }
 }
