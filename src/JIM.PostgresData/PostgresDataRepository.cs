@@ -20,7 +20,6 @@ namespace JIM.PostgresData
 
         internal JimDbContext Database { get; }
 
-
         public PostgresDataRepository()
         {
             // needed to enable DateTime.Now assignments to work. Without it, the database will
@@ -34,7 +33,7 @@ namespace JIM.PostgresData
             Search = new SearchRepository(this);
             Seeding = new SeedingRepository(this);
             ServiceSettings = new ServiceSettingsRepository(this);
-            Tasking = new TaskingRepository(this);
+            Tasking = new TaskingRepository();
             Database = new JimDbContext();
         }
 

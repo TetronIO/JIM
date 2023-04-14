@@ -7,28 +7,28 @@ namespace JIM.PostgresData.Repositories
 {
     public class TaskingRepository : ITaskingRepository
     {
-        private PostgresDataRepository Repository { get; }
-
-        internal TaskingRepository(PostgresDataRepository dataRepository)
+        internal TaskingRepository()
         {
-            Repository = dataRepository;
         }
+
         public async Task<List<ServiceTask>> GetServiceTasksAsync()
         {
-            return await Repository.Database.ServiceTasks.ToListAsync();
+            using var db = new JimDbContext();
+            return await db.ServiceTasks.ToListAsync();
         }
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
         {
+            using var db = new JimDbContext();
             if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
             {
-                Repository.Database.DataGenerationTemplateServiceTasks.Add(dataGenerationTemplateServiceTask);
-                await Repository.Database.SaveChangesAsync();
+                db.DataGenerationTemplateServiceTasks.Add(dataGenerationTemplateServiceTask);
+                await db.SaveChangesAsync();
             }
             else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
             {
-                Repository.Database.SynchronisationServiceTasks.Add(synchronisationServiceTask);
-                await Repository.Database.SaveChangesAsync();
+                db.SynchronisationServiceTasks.Add(synchronisationServiceTask);
+                await db.SaveChangesAsync();
             }
             else
             {
@@ -38,7 +38,8 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ServiceTask?> GetNextServiceTaskAsync()
         {
-            return await Repository.Database.ServiceTasks.
+            using var db = new JimDbContext();
+            return await db.ServiceTasks.
                 Where(q => q.Status == ServiceTaskStatus.Queued).
                 OrderByDescending(q => q.Timestamp).
                 FirstOrDefaultAsync();
@@ -46,12 +47,14 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)
         {
-            return await Repository.Database.DataGenerationTemplateServiceTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
+            using var db = new JimDbContext();
+            return await db.DataGenerationTemplateServiceTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
         }
 
         public async Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId)
         {
-            var result = await Repository.Database.DataGenerationTemplateServiceTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
+            using var db = new JimDbContext();
+            var result = await db.DataGenerationTemplateServiceTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
             if (result != null && result.Count == 1)
                return result[0];
 
@@ -59,9 +62,10 @@ namespace JIM.PostgresData.Repositories
         }
         public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)
         {
+            using var db = new JimDbContext();
             if (serviceTask is DataGenerationTemplateServiceTask task)
             {
-                var dbDataGenerationTemplateServiceTask = await Repository.Database.DataGenerationTemplateServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
+                var dbDataGenerationTemplateServiceTask = await db.DataGenerationTemplateServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
                 if (dbDataGenerationTemplateServiceTask == null)
                 {
                     Log.Error("UpdateServiceTaskAsync: Could not retrieve a DataGenerationTemplateServiceTask object to update.");
@@ -69,16 +73,17 @@ namespace JIM.PostgresData.Repositories
                 }
 
                 // map scalar value updates to the db version of the object
-                Repository.Database.Entry(dbDataGenerationTemplateServiceTask).CurrentValues.SetValues(task);
+                db.Entry(dbDataGenerationTemplateServiceTask).CurrentValues.SetValues(task);
             }
 
-            await Repository.Database.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
 
         public async Task DeleteServiceTaskAsync(ServiceTask serviceTask)
         {
-            Repository.Database.ServiceTasks.Remove(serviceTask);
-            await Repository.Database.SaveChangesAsync();
+            using var db = new JimDbContext();
+            db.ServiceTasks.Remove(serviceTask);
+            await db.SaveChangesAsync();
         }
     }
 }

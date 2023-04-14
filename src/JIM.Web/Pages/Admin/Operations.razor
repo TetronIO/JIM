@@ -6,6 +6,7 @@
 @attribute [Authorize(Roles = "Administrators")]
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
+@implements IDisposable
 
 <PageTitle>Operations</PageTitle>
 <MudText Typo="Typo.h4">Operations</MudText>
@@ -44,7 +45,7 @@
     }
 </MudPaper>
 
-<MudTable Items="@serviceTasks" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+<MudTable T="ServiceTask" Items="@serviceTasks" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
     <HeaderContent>
         <MudTh>Action</MudTh>
         <MudTh>Type</MudTh>
@@ -54,8 +55,8 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert">
-                <MudMenuItem OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
             </MudMenu>
         </MudTd>
         <MudTd DataLabel="Type">@GetServiceTaskType(context)</MudTd>
@@ -74,11 +75,92 @@
     private ConnectedSystemHeader? selectedConnectedSystemHeader;
     private ConnectedSystemRunProfile? selectedConnectedSystemRunProfile;
     private List<ServiceTask> serviceTasks = new List<ServiceTask>();
+    private CancellationTokenSource pollingCancellationTokenSource = new CancellationTokenSource();
 
     protected override async Task OnInitializedAsync()
     {
         connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-        serviceTasks = await Jim.Tasking.GetServiceTasksAsync();
+
+        // dev tool - show some dummy tasks:
+        var g1 = Guid.NewGuid();
+        var g2 = Guid.NewGuid();
+        var g3 = Guid.NewGuid();
+        //serviceTasks = new List<ServiceTask>
+        //{
+        //    new DataGenerationTemplateServiceTask { Id = g1, TemplateId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now },
+        //        new SynchronisationServiceTask { Id = g2, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(1) },
+        //        new SynchronisationServiceTask { Id = g3, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 2, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(2) }
+        //    };
+        //return;
+
+        //serviceTasks = await Jim.Tasking.GetServiceTasksAsync();
+
+        // setup polling for service task updates
+        var token = pollingCancellationTokenSource.Token;
+        var listener = await Task.Factory.StartNew(async () =>
+        {
+            while (true)
+            {
+                var stateHasChanged = false;
+                Console.WriteLine("Polling for service tasks...");
+
+                //var newServiceTasks = new List<ServiceTask>
+                //{
+                //    new DataGenerationTemplateServiceTask { Id = g1, TemplateId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now },
+                //    new SynchronisationServiceTask { Id = g2, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(1) },
+                //    new SynchronisationServiceTask { Id = g3, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 2, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(2) }
+                //};
+
+                var newServiceTasks = await Jim.Tasking.GetServiceTasksAsync();
+
+                // look for additions or updates...
+                foreach (var newServiceTask in newServiceTasks)
+                {
+                    var serviceTask = serviceTasks.SingleOrDefault(q => q.Id == newServiceTask.Id);
+                    if (serviceTask == null)
+                    {
+                        // newServiceTask is new, add it
+                        Console.WriteLine("ST-POLLING: Adding service task: " + newServiceTask.Id);
+                        serviceTasks.Add(newServiceTask);
+                        stateHasChanged = true;
+                    }
+                    else
+                    {
+                        // existing service task, so it's either unchanged, or an update
+                        if (serviceTask.Status != newServiceTask.Status)
+                        {
+                            Console.WriteLine("ST-POLLING: Updating service task: " + newServiceTask.Id);
+                            var position = serviceTasks.IndexOf(serviceTask);
+                            serviceTasks.Remove(serviceTask);
+                            serviceTasks.Insert(position, newServiceTask);                            
+                            stateHasChanged = true;
+                        }
+                    }
+                }
+
+                // look for removals, i.e. serviceTasks items not in newServiceTasks
+                var serviceTasksToRemove = serviceTasks.Where(p => newServiceTasks.All(p2 => p2.Id != p.Id));
+                foreach (var serviceTaskToRemove in serviceTasksToRemove)
+                {
+                    Console.WriteLine("ST-POLLING: Removing service task: " + serviceTaskToRemove.Id);
+                    serviceTasks.Remove(serviceTaskToRemove);
+                    stateHasChanged = true;
+                }
+
+                if (stateHasChanged)
+                    await InvokeAsync(StateHasChanged);
+
+                Thread.Sleep(TimeSpan.FromSeconds(2));
+                if (token.IsCancellationRequested)
+                    break;
+            }
+        }, token);
+    }
+
+    void IDisposable.Dispose()
+    {
+        // make sure we cancel the polling task
+        pollingCancellationTokenSource.Cancel();
     }
 
     private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
