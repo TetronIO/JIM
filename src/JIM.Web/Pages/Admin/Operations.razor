@@ -81,19 +81,8 @@
     {
         connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
-        // dev tool - show some dummy tasks:
-        //var g1 = Guid.NewGuid();
-        //var g2 = Guid.NewGuid();
-        //var g3 = Guid.NewGuid();
-        //serviceTasks = new List<ServiceTask>
-        //{
-        //    new DataGenerationTemplateServiceTask { Id = g1, TemplateId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now },
-        //        new SynchronisationServiceTask { Id = g2, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(1) },
-        //        new SynchronisationServiceTask { Id = g3, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 2, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(2) }
-        //    };
-        //return;
-
-        //serviceTasks = await Jim.Tasking.GetServiceTasksAsync();
+        // get initial data for service task table rendering
+        serviceTasks = await Jim.Tasking.GetServiceTasksAsync();
 
         // setup polling for service task updates
         var token = pollingCancellationTokenSource.Token;
@@ -103,14 +92,6 @@
             {
                 var stateHasChanged = false;
                 Console.WriteLine("Polling for service tasks...");
-
-                //var newServiceTasks = new List<ServiceTask>
-                //{
-                //    new DataGenerationTemplateServiceTask { Id = g1, TemplateId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now },
-                //    new SynchronisationServiceTask { Id = g2, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 1, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(1) },
-                //    new SynchronisationServiceTask { Id = g3, ConnectedSystemId = 1, ConnectedSystemRunProfileId = 2, Status = ServiceTaskStatus.Queued, Timestamp = DateTime.Now.AddMinutes(2) }
-                //};
-
                 var newServiceTasks = await Jim.Tasking.GetServiceTasksAsync();
 
                 // look for additions or updates...
