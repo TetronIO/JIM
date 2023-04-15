@@ -58,6 +58,7 @@ namespace JIM.PostgresData.Repositories
 
             return null;
         }
+
         public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)
         {
             if (serviceTask is DataGenerationTemplateServiceTask task)
