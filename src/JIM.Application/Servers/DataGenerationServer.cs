@@ -78,6 +78,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.DataGeneration.GetTemplateAsync(name);
         }
 
+        public async Task<DataGenerationTemplateHeader?> GetTemplateHeaderAsync(int id)
+        {
+            return await Application.Repository.DataGeneration.GetTemplateHeaderAsync(id);
+        }
+
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
         {
             await Application.Repository.DataGeneration.CreateTemplateAsync(template);

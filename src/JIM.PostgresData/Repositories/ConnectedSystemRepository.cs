@@ -265,6 +265,17 @@ namespace JIM.PostgresData.Repositories
                 Include(q => q.Partition).
                 Where(q => q.ConnectedSystem.Id == connectedSystemId).ToListAsync();
         }
+        
+        public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
+        {
+            using var db = new JimDbContext();
+            return await db.ConnectedSystemRunProfiles.Select(rph => new ConnectedSystemRunProfileHeader
+            {
+                Id = rph.Id,
+                ConnectedSystemName = rph.ConnectedSystem.Name,
+                ConnectedSystemRunProfileName = rph.Name
+            }).SingleOrDefaultAsync(q => q.Id == connectedSystemRunProfileId);
+        }
         #endregion
 
         #region Sync Rules

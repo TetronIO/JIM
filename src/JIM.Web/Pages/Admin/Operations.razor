@@ -54,15 +54,41 @@
         <MudTh>Created</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
-            </MudMenu>
-        </MudTd>
-        <MudTd DataLabel="Type">@GetServiceTaskType(context)</MudTd>
-        <MudTd DataLabel="Name">Task Name to come...</MudTd>
-        <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Created">@context.Timestamp</MudTd>
+        @if (context is DataGenerationTemplateServiceTask)
+        {
+            var dataGenTask = (DataGenerationTemplateServiceTask)context;
+            var template = Jim.DataGeneration.GetTemplateHeaderAsync(dataGenTask.TemplateId).GetAwaiter().GetResult();
+            if (template != null)
+            {
+                <MudTd>
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                        <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
+                    </MudMenu>
+                </MudTd>
+                <MudTd DataLabel="Type">Data Generation Template</MudTd>
+                <MudTd DataLabel="Name">@template.Name</MudTd>
+                <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
+                <MudTd DataLabel="Created">@context.Timestamp</MudTd>
+            }
+        }
+        else
+        {
+            // sync task
+            var syncTask = (SynchronisationServiceTask)context;
+            var runProfileHeader = Jim.ConnectedSystems.GetConnectedSystemRunProfileHeaderAsync(syncTask.ConnectedSystemRunProfileId).GetAwaiter().GetResult();
+            if (runProfileHeader != null)
+            {
+                <MudTd>
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                        <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
+                    </MudMenu>
+                </MudTd>
+                <MudTd DataLabel="Type">Synchronisation Task</MudTd>
+                <MudTd DataLabel="Name">@runProfileHeader.ToString()</MudTd>
+                <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
+                <MudTd DataLabel="Created">@context.Timestamp</MudTd>
+            }
+        }
     </RowTemplate>
     <NoRecordsContent>
         There are no service tasks queued.

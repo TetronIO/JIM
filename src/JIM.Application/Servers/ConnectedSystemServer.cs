@@ -403,6 +403,11 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         }
+
+        public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfileHeaderAsync(connectedSystemRunProfileId);
+        }
         #endregion
 
         #region Synchronisation Runs

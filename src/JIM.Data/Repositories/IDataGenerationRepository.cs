@@ -26,6 +26,7 @@ namespace JIM.Data.Repositories
         /// </summary>
         /// <param name="id">The id of the template to retrieve</param>
         public Task<DataGenerationTemplate?> GetTemplateAsync(int id);
+        public Task<DataGenerationTemplateHeader?> GetTemplateHeaderAsync(int id);
         public Task CreateTemplateAsync(DataGenerationTemplate template);
         public Task UpdateTemplateAsync(DataGenerationTemplate template);
         public Task DeleteTemplateAsync(int templateId);

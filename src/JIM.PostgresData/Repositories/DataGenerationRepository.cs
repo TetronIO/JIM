@@ -4,6 +4,7 @@ using JIM.Models.DataGeneration;
 using JIM.Models.DataGeneration.Dto;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace JIM.PostgresData.Repositories
 {
@@ -180,6 +181,18 @@ namespace JIM.PostgresData.Repositories
             return t;
         }
 
+        public async Task<DataGenerationTemplateHeader?> GetTemplateHeaderAsync(int id)
+        {
+            using var db = new JimDbContext();
+            return await db.DataGenerationTemplates.Select(dgt => new DataGenerationTemplateHeader
+            {
+                Name = dgt.Name,
+                BuiltIn = dgt.BuiltIn,
+                Created = dgt.Created,
+                Id = dgt.Id
+            }).SingleOrDefaultAsync(q => q.Id == id);
+        }
+
         public async Task CreateTemplateAsync(DataGenerationTemplate template)
         {
             Repository.Database.DataGenerationTemplates.Add(template);
@@ -212,14 +225,6 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.DataGenerationTemplates.Remove(template);
             await Repository.Database.SaveChangesAsync();
         }
-
-        private static void SortExampleDataSetInstances(DataGenerationTemplate template)
-        {
-            foreach (var ot in template.ObjectTypes)
-                foreach (var ta in ot.TemplateAttributes)
-                    if (ta.ExampleDataSetInstances != null && ta.ExampleDataSetInstances.Count > 0)
-                        ta.ExampleDataSetInstances = ta.ExampleDataSetInstances.OrderBy(q => q.Order).ToList();
-        }
         #endregion
 
         public async Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects)
@@ -232,5 +237,15 @@ namespace JIM.PostgresData.Repositories
             await Repository.Database.SaveChangesAsync();
             Log.Verbose("CreateMetaverseObjectsAsync: Done");
         }
+
+        #region private methods
+        private static void SortExampleDataSetInstances(DataGenerationTemplate template)
+        {
+            foreach (var ot in template.ObjectTypes)
+                foreach (var ta in ot.TemplateAttributes)
+                    if (ta.ExampleDataSetInstances != null && ta.ExampleDataSetInstances.Count > 0)
+                        ta.ExampleDataSetInstances = ta.ExampleDataSetInstances.OrderBy(q => q.Order).ToList();
+        }
+        #endregion
     }
 }

@@ -39,6 +39,7 @@ namespace JIM.Data.Repositories
         public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
         public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
         public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
+        public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
         public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
         public Task<IList<SyncRule>> GetSyncRulesAsync();
         public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
