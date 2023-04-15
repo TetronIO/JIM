@@ -33,7 +33,7 @@ namespace JIM.PostgresData
             Search = new SearchRepository(this);
             Seeding = new SeedingRepository(this);
             ServiceSettings = new ServiceSettingsRepository(this);
-            Tasking = new TaskingRepository();
+            Tasking = new TaskingRepository(this);
             Database = new JimDbContext();
         }
 

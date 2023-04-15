@@ -102,14 +102,15 @@ namespace JIM.Application
             if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType) || serviceSettings.SSOUniqueIdentifierClaimType != uniqueIdentifierClaimType)
             {
                 serviceSettings.SSOUniqueIdentifierClaimType = uniqueIdentifierClaimType;
+                Log.Information($"InitialiseSSOAsync: Updating ServiceSettings.SSOUniqueIdentifierClaimType to: {uniqueIdentifierClaimType}");
                 await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
-                Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOUniqueIdentifierClaimType to: {uniqueIdentifierClaimType}");
             }
+
             if (serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null || serviceSettings.SSOUniqueIdentifierMetaverseAttribute.Id != uniqueIdentifierMetaverseAttribute.Id)
             {
                 serviceSettings.SSOUniqueIdentifierMetaverseAttribute = uniqueIdentifierMetaverseAttribute;
+                Log.Information($"InitialiseSSOAsync: Updating ServiceSettings.SSOUniqueIdentifierMetaverseAttribute to: {uniqueIdentifierMetaverseAttribute.Name}");
                 await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
-                Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOUniqueIdentifierMetaverseAttribute to: {uniqueIdentifierMetaverseAttribute.Name}");
             }
 
             // check for a matching user, if not create, and check admin role assignment
@@ -147,9 +148,9 @@ namespace JIM.Application
                     StringValue = "Person"
                 });
 
+                Log.Information($"InitialiseSSOAsync: Creating metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigning the {Constants.BuiltInRoles.Administrators} role.");
                 await Metaverse.CreateMetaverseObjectAsync(user);
                 await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrators);
-                Log.Information($"InitialiseSSOAsync: Created metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigned the {Constants.BuiltInRoles.Administrators} role.");
             }
         }
 
