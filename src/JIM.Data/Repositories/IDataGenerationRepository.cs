@@ -1,6 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.DataGeneration;
-using JIM.Models.DataGeneration.Dto;
+using JIM.Models.DataGeneration.DTOs;
 
 namespace JIM.Data.Repositories
 {

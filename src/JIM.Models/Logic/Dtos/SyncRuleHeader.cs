@@ -1,4 +1,4 @@
-﻿namespace JIM.Models.Logic.Dtos
+﻿namespace JIM.Models.Logic.DTOs
 {
     public class SyncRuleHeader
     {

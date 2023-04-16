@@ -1,6 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Search;
-using JIM.Models.Search.Dto;
+using JIM.Models.Search.DTOs;
 using System;
 
 namespace JIM.Application.Search

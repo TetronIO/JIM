@@ -1,4 +1,4 @@
-﻿namespace JIM.Models.Staging.Dtos
+﻿namespace JIM.Models.Staging.DTOs
 {
     public class ConnectorDefinitionHeader
     {

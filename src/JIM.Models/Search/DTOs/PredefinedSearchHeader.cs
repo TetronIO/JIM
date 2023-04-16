@@ -1,4 +1,4 @@
-﻿namespace JIM.Models.Search.Dto
+﻿namespace JIM.Models.Search.DTOs
 {
     public class PredefinedSearchHeader
     {

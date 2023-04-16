@@ -1,7 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Search;
-using JIM.Models.Search.Dto;
+using JIM.Models.Search.DTOs;
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories

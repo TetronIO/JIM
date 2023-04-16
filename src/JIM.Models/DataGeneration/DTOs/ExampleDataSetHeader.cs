@@ -1,4 +1,4 @@
-﻿namespace JIM.Models.DataGeneration.Dto
+﻿namespace JIM.Models.DataGeneration.DTOs
 {
     public class ExampleDataSetHeader
     {

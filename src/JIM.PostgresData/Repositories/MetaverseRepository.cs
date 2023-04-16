@@ -1,6 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
-using JIM.Models.Core.Dto;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Search;
 using JIM.Models.Utility;

@@ -1,7 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
-using JIM.Models.DataGeneration.Dto;
+using JIM.Models.DataGeneration.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using static System.Net.Mime.MediaTypeNames;

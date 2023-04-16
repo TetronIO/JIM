@@ -1,8 +1,8 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Logic;
-using JIM.Models.Logic.Dtos;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
-using JIM.Models.Staging.Dtos;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
 

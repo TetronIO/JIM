@@ -1,4 +1,4 @@
-﻿namespace JIM.Models.Core.Dto
+﻿namespace JIM.Models.Core.DTOs
 {
     public class MetaverseAttributeHeader
     {
