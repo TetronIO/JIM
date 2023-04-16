@@ -87,7 +87,7 @@ else
         if (Page == null || Page < 1)
             Page = 1;
 
-        var typeName = Utilities.ConvertFromUrlParam(TypeNameUrlParam);
+        var typeName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(typeName, false);
         if (MetaverseObjectType == null)
         {

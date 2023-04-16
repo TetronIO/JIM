@@ -45,7 +45,7 @@
                         }
                         else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
                         {
-                            <MudLink Href="@Utilities.GetMetaverseObjectUrl(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</MudLink>
+                            <MudLink Href="@Helpers.GetMetaverseObjectUrl(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</MudLink>
                         }
                     </MudField>
                 </MudItem>
@@ -69,7 +69,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        var typeName = Utilities.ConvertFromUrlParam(TypeNameUrlParam);
+        var typeName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(typeName, false);
         if (MetaverseObjectType == null)
         {

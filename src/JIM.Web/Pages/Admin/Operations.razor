@@ -3,6 +3,8 @@
 @using JIM.Models.Staging;
 @using JIM.Models.Staging.Dtos;
 @using JIM.Models.Tasking;
+@using JIM.Models.Tasking.DTOs;
+@using JIM.Utilities;
 @attribute [Authorize(Roles = "Administrators")]
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
@@ -45,50 +47,24 @@
     }
 </MudPaper>
 
-<MudTable T="ServiceTask" Items="@serviceTasks" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+<MudTable T="ServiceTaskHeader" Items="@serviceTaskHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
     <HeaderContent>
-        <MudTh>Action</MudTh>
+        <MudTh>Actions</MudTh>
         <MudTh>Type</MudTh>
         <MudTh>Name</MudTh>
         <MudTh>Status</MudTh>
         <MudTh>Created</MudTh>
     </HeaderContent>
     <RowTemplate>
-        @if (context is DataGenerationTemplateServiceTask)
-        {
-            var dataGenTask = (DataGenerationTemplateServiceTask)context;
-            var template = Jim.DataGeneration.GetTemplateHeaderAsync(dataGenTask.TemplateId).GetAwaiter().GetResult();
-            if (template != null)
-            {
-                <MudTd>
-                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
-                    </MudMenu>
-                </MudTd>
-                <MudTd DataLabel="Type">Data Generation Template</MudTd>
-                <MudTd DataLabel="Name">@template.Name</MudTd>
-                <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
-                <MudTd DataLabel="Created">@context.Timestamp</MudTd>
-            }
-        }
-        else
-        {
-            // sync task
-            var syncTask = (SynchronisationServiceTask)context;
-            var runProfileHeader = Jim.ConnectedSystems.GetConnectedSystemRunProfileHeaderAsync(syncTask.ConnectedSystemRunProfileId).GetAwaiter().GetResult();
-            if (runProfileHeader != null)
-            {
-                <MudTd>
-                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
-                    </MudMenu>
-                </MudTd>
-                <MudTd DataLabel="Type">Synchronisation Task</MudTd>
-                <MudTd DataLabel="Name">@runProfileHeader.ToString()</MudTd>
-                <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
-                <MudTd DataLabel="Created">@context.Timestamp</MudTd>
-            }
-        }
+        <MudTd>
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
+            </MudMenu>
+        </MudTd>
+        <MudTd DataLabel="Type">@context.Type</MudTd>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Created">@context.Timestamp</MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no service tasks queued.
@@ -100,7 +76,7 @@
     private List<ConnectedSystemRunProfile>? connectedSystemRunProfiles;
     private ConnectedSystemHeader? selectedConnectedSystemHeader;
     private ConnectedSystemRunProfile? selectedConnectedSystemRunProfile;
-    private List<ServiceTask> serviceTasks = new List<ServiceTask>();
+    private List<ServiceTaskHeader> serviceTaskHeaders = new List<ServiceTaskHeader>();
     private CancellationTokenSource pollingCancellationTokenSource = new CancellationTokenSource();
 
     protected override async Task OnInitializedAsync()
@@ -108,49 +84,46 @@
         connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
         // get initial data for service task table rendering
-        serviceTasks = await Jim.Tasking.GetServiceTasksAsync();
+        serviceTaskHeaders = await Jim.Tasking.GetServiceTaskHeadersAsync();
 
-        // setup polling for service task updates
+        // setup polling for service task header updates
         var token = pollingCancellationTokenSource.Token;
         var listener = await Task.Factory.StartNew(async () =>
         {
             while (true)
             {
                 var stateHasChanged = false;
-                Console.WriteLine("Polling for service tasks...");
-                var newServiceTasks = await Jim.Tasking.GetServiceTasksAsync();
+                Console.WriteLine("Polling for service task headers...");
+                var newServiceTaskHeaders = await Jim.Tasking.GetServiceTaskHeadersAsync();
 
                 // look for additions or updates...
-                foreach (var newServiceTask in newServiceTasks)
+                foreach (var newServiceTaskHeader in newServiceTaskHeaders)
                 {
-                    var serviceTask = serviceTasks.SingleOrDefault(q => q.Id == newServiceTask.Id);
-                    if (serviceTask == null)
+                    var serviceTaskHeader = serviceTaskHeaders.SingleOrDefault(q => q.Id == newServiceTaskHeader.Id);
+                    if (serviceTaskHeader == null)
                     {
                         // newServiceTask is new, add it
-                        Console.WriteLine("ST-POLLING: Adding service task: " + newServiceTask.Id);
-                        serviceTasks.Add(newServiceTask);
+                        Console.WriteLine("ST-POLLING: Adding service task header: " + newServiceTaskHeader.Id);
+                        serviceTaskHeaders.Add(newServiceTaskHeader);
                         stateHasChanged = true;
                     }
-                    else
+                    else if (serviceTaskHeader.Status != newServiceTaskHeader.Status)
                     {
                         // existing service task, so it's either unchanged, or an update
-                        if (serviceTask.Status != newServiceTask.Status)
-                        {
-                            Console.WriteLine("ST-POLLING: Updating service task: " + newServiceTask.Id);
-                            var position = serviceTasks.IndexOf(serviceTask);
-                            serviceTasks.Remove(serviceTask);
-                            serviceTasks.Insert(position, newServiceTask);                            
-                            stateHasChanged = true;
-                        }
+                        Console.WriteLine("ST-POLLING: Updating service task header: " + newServiceTaskHeader.Id);
+                        var position = serviceTaskHeaders.IndexOf(serviceTaskHeader);
+                        serviceTaskHeaders.Remove(serviceTaskHeader);
+                        serviceTaskHeaders.Insert(position, newServiceTaskHeader);
+                        stateHasChanged = true;
                     }
                 }
 
                 // look for removals, i.e. serviceTasks items not in newServiceTasks
-                var serviceTasksToRemove = serviceTasks.Where(p => newServiceTasks.All(p2 => p2.Id != p.Id));
-                foreach (var serviceTaskToRemove in serviceTasksToRemove)
+                var serviceTaskHeadersToRemove = serviceTaskHeaders.Where(sth => newServiceTaskHeaders.All(sth2 => sth2.Id != sth.Id));
+                foreach (var serviceTaskHeaderToRemove in serviceTaskHeadersToRemove)
                 {
-                    Console.WriteLine("ST-POLLING: Removing service task: " + serviceTaskToRemove.Id);
-                    serviceTasks.Remove(serviceTaskToRemove);
+                    Console.WriteLine("ST-POLLING: Removing service task header: " + serviceTaskHeaderToRemove.Id);
+                    serviceTaskHeaders.Remove(serviceTaskHeaderToRemove);
                     stateHasChanged = true;
                 }
 
@@ -196,7 +169,7 @@
             return "Unknown Task";
     }
 
-    private async Task HandleTaskDeleteAsync(ServiceTask serviceTask)
+    private async Task HandleTaskDeleteAsync(ServiceTaskHeader serviceTaskHeader)
     {
         //if (connectedSystem == null || connectedSystem.RunProfiles == null)
         //    return;

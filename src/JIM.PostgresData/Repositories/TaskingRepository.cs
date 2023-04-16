@@ -1,5 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Tasking;
+using JIM.Models.Tasking.DTOs;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -17,6 +19,23 @@ namespace JIM.PostgresData.Repositories
         public async Task<List<ServiceTask>> GetServiceTasksAsync()
         {
             return await Repository.Database.ServiceTasks.ToListAsync();
+        }
+
+        public async Task<List<ServiceTaskHeader>> GetServiceTaskHeadersAsync()
+        {
+            var serviceTaskHeaders = new List<ServiceTaskHeader>();
+            foreach (var serviceTask in Repository.Database.ServiceTasks.OrderByDescending(q => q.Timestamp))
+            {
+                serviceTaskHeaders.Add(new ServiceTaskHeader
+                {
+                    Id = serviceTask.Id,
+                    Status = serviceTask.Status,
+                    Timestamp = serviceTask.Timestamp,
+                    Name = await GetServiceTaskHeaderNameAync(serviceTask),
+                    Type = GetServiceTaskType(serviceTask)
+                });
+            }
+            return serviceTaskHeaders;
         }
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
@@ -54,7 +73,7 @@ namespace JIM.PostgresData.Repositories
         {
             var result = await Repository.Database.DataGenerationTemplateServiceTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
             if (result != null && result.Count == 1)
-               return result[0];
+                return result[0];
 
             return null;
         }
@@ -82,5 +101,44 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.ServiceTasks.Remove(serviceTask);
             await Repository.Database.SaveChangesAsync();
         }
+
+        #region private methods
+        private async Task<string> GetServiceTaskHeaderNameAync(ServiceTask serviceTask)
+        {
+            using var db = new JimDbContext();
+            if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
+            {
+                var templatePart = await db.DataGenerationTemplates.Select(q => new { q.Id, q.Name }).SingleOrDefaultAsync(q => q.Id == dataGenerationTemplateServiceTask.TemplateId);
+                if (templatePart != null)
+                    return templatePart.Name;
+                else
+                    return "template not found!";
+            }
+            else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
+            {
+                var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = q.ConnectedSystem.Name }).
+                    SingleOrDefaultAsync(q => q.Id == synchronisationServiceTask.ConnectedSystemRunProfileId);
+
+                if (runProfilePart != null)
+                    return $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}";
+                else
+                    return "run profile not found!";
+            }
+            else
+            {
+                return "Unknown ServiceTask type";
+            }
+        }
+
+        private string GetServiceTaskType(ServiceTask serviceTask)
+        {
+            if (serviceTask is DataGenerationTemplateServiceTask)
+                return nameof(DataGenerationTemplateServiceTask).SplitOnCapitalLetters();
+            else if (serviceTask is SynchronisationServiceTask)
+                return nameof(SynchronisationServiceTask).SplitOnCapitalLetters();
+            else
+                return "Unknown Service Task Type";
+        }
+        #endregion
     }
 }

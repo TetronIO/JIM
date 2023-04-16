@@ -1,10 +1,13 @@
 ﻿using JIM.Models.Tasking;
+using JIM.Models.Tasking.DTOs;
 
 namespace JIM.Data.Repositories
 {
     public interface ITaskingRepository
     {
         public Task<List<ServiceTask>> GetServiceTasksAsync();
+
+        public Task<List<ServiceTaskHeader>> GetServiceTaskHeadersAsync();
 
         public Task CreateServiceTaskAsync(ServiceTask serviceTask);
 

@@ -1,9 +1,8 @@
 ﻿using JIM.Models.Core;
-using System.Text.RegularExpressions;
 
 namespace JIM.Web
 {
-    public static class Utilities
+    public static class Helpers
     {
         /// <summary>
         /// Converts a string to a format that can be used as a Url parameter.
@@ -25,16 +24,9 @@ namespace JIM.Web
         public static string GetMetaverseObjectUrl(MetaverseObject metaverseObject)
         {
             if (metaverseObject == null)
-                return String.Empty;
+                return string.Empty;
 
             return $"/t/{ConvertToUrlParam(metaverseObject.Type.Name)}/v/{metaverseObject.Id}";
-        }
-
-        public static string SplitOnCapitalLetters(this string inputString)
-        {
-            var words = Regex.Matches(inputString, @"([A-Z][a-z]+)").Cast<Match>().Select(m => m.Value);
-            var withSpaces = string.Join(" ", words);
-            return withSpaces;
         }
     }
 }

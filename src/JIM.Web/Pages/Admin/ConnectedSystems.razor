@@ -41,7 +41,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name">
-            <MudLink Href="@($"/admin/connected-systems/{context.Id}/{Utilities.ConvertToUrlParam(context.Name)}")">@context.Name</MudLink>
+            <MudLink Href="@($"/admin/connected-systems/{context.Id}/{Helpers.ConvertToUrlParam(context.Name)}")">@context.Name</MudLink>
         </MudTd>
         <MudTd DataLabel="Description">@context.Description</MudTd>
         <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>

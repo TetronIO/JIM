@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Tasking;
+using JIM.Models.Tasking.DTOs;
 
 namespace JIM.Application.Servers
 {
@@ -14,6 +15,15 @@ namespace JIM.Application.Servers
         public async Task<List<ServiceTask>> GetServiceTasksAsync()
         {
             return await Application.Repository.Tasking.GetServiceTasksAsync();
+        }
+
+        /// <summary>
+        /// Retrieves a list of the current tasks, with any inherited task information formatted into the name, 
+        /// i.e. connected system name and connected system run profile name for a SynchronisationServiceTask.
+        /// </summary>
+        public async Task<List<ServiceTaskHeader>> GetServiceTaskHeadersAsync()
+        {
+            return await Application.Repository.Tasking.GetServiceTaskHeadersAsync();
         }
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
