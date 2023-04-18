@@ -13,14 +13,14 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20221222094259_ConnectorDefinitions")]
-    partial class ConnectorDefinitions
+    [Migration("20230418074247_Initial")]
+    partial class Initial
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "6.0.7")
+                .HasAnnotation("ProductVersion", "6.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -90,6 +90,11 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("TypeId")
                         .HasColumnType("integer");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid");
 
                     b.HasKey("Id");
 
@@ -195,6 +200,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<bool>("IsServiceInMaintenanceMode")
                         .HasColumnType("boolean");
+
+                    b.Property<TimeSpan>("RunHistoryRetentionPeriod")
+                        .HasColumnType("interval");
 
                     b.Property<string>("SSOAuthority")
                         .HasColumnType("text");
@@ -879,6 +887,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("SettingValuesValid")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectorDefinitionId");
@@ -897,25 +908,29 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributePlurality")
                         .HasColumnType("integer");
 
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
+                    b.Property<string>("ClassName")
+                        .HasColumnType("text");
 
-                    b.Property<int?>("ConnectedSystemObjectTypeId")
+                    b.Property<int>("ConnectedSystemObjectTypeId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("Selected")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ConnectedSystemId");
 
                     b.HasIndex("ConnectedSystemObjectTypeId");
 
@@ -956,6 +971,51 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectId");
 
                     b.ToTable("ConnectedSystemAttributeValue");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ParentContainerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PartitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Selected")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId");
+
+                    b.HasIndex("ParentContainerId");
+
+                    b.HasIndex("PartitionId");
+
+                    b.ToTable("ConnectedSystemContainers");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObject", b =>
@@ -1024,11 +1084,43 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("Selected")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemId");
 
                     b.ToTable("ConnectedSystemObjectTypes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Selected")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId");
+
+                    b.ToTable("ConnectedSystemPartitions");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
@@ -1042,6 +1134,13 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("PartitionId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("RunType")
                         .HasColumnType("integer");
 
@@ -1049,51 +1148,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemId");
 
-                    b.ToTable("ConnectedSystemRunProfile");
-                });
+                    b.HasIndex("PartitionId");
 
-            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("Category")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool?>("DefaultCheckboxValue")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("DefaultStringValue")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<List<string>>("DropDownValues")
-                        .HasColumnType("text[]");
-
-                    b.Property<string>("Name")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ValueId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConnectedSystemId");
-
-                    b.HasIndex("ValueId");
-
-                    b.ToTable("ConnectedSystemSetting");
+                    b.ToTable("ConnectedSystemRunProfiles");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemSettingValue", b =>
@@ -1104,8 +1161,17 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<bool?>("CheckboxValue")
+                    b.Property<bool>("CheckboxValue")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IntValue")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SettingId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("StringEncryptedValue")
                         .HasColumnType("text");
@@ -1114,6 +1180,10 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId");
+
+                    b.HasIndex("SettingId");
 
                     b.ToTable("ConnectedSystemSettingValue");
                 });
@@ -1150,6 +1220,15 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<bool>("SupportsFullImport")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsPartitionContainers")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsPartitions")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Url")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -1213,7 +1292,52 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectorDefinitionId");
 
-                    b.ToTable("ConnectorDefinitionsFile");
+                    b.ToTable("ConnectorDefinitionFiles");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinitionSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ConnectorDefinitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("DefaultCheckboxValue")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("DefaultIntValue")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DefaultStringValue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<List<string>>("DropDownValues")
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Required")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectorDefinitionId");
+
+                    b.ToTable("ConnectorDefinitionSetting");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.ServiceTask", b =>
@@ -1420,6 +1544,19 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue("DataGenerationTemplateServiceTask");
+                });
+
+            modelBuilder.Entity("JIM.Models.Tasking.SynchronisationServiceTask", b =>
+                {
+                    b.HasBaseType("JIM.Models.Tasking.ServiceTask");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConnectedSystemRunProfileId")
+                        .HasColumnType("integer");
+
+                    b.HasDiscriminator().HasValue("SynchronisationServiceTask");
                 });
 
             modelBuilder.Entity("DataGenerationTemplateAttributeMetaverseObjectType", b =>
@@ -1767,17 +1904,13 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemAttribute", b =>
                 {
-                    b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
-                        .WithMany()
-                        .HasForeignKey("ConnectedSystemId")
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "ConnectedSystemObjectType")
+                        .WithMany("Attributes")
+                        .HasForeignKey("ConnectedSystemObjectTypeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", null)
-                        .WithMany("Attributes")
-                        .HasForeignKey("ConnectedSystemObjectTypeId");
-
-                    b.Navigation("ConnectedSystem");
+                    b.Navigation("ConnectedSystemObjectType");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemAttributeValue", b =>
@@ -1793,6 +1926,27 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ConnectedSystemObjectId");
 
                     b.Navigation("Attribute");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId");
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemContainer", "ParentContainer")
+                        .WithMany("ChildContainers")
+                        .HasForeignKey("ParentContainerId");
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemPartition", "Partition")
+                        .WithMany("Containers")
+                        .HasForeignKey("PartitionId");
+
+                    b.Navigation("ConnectedSystem");
+
+                    b.Navigation("ParentContainer");
+
+                    b.Navigation("Partition");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObject", b =>
@@ -1831,7 +1985,18 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectType", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
-                        .WithMany()
+                        .WithMany("ObjectTypes")
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystem");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
+                        .WithMany("Partitions")
                         .HasForeignKey("ConnectedSystemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1847,24 +2012,32 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemPartition", "Partition")
+                        .WithMany()
+                        .HasForeignKey("PartitionId");
+
                     b.Navigation("ConnectedSystem");
+
+                    b.Navigation("Partition");
                 });
 
-            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemSetting", b =>
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemSettingValue", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
-                        .WithMany("Settings")
+                        .WithMany("SettingValues")
                         .HasForeignKey("ConnectedSystemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemSettingValue", "Value")
-                        .WithMany()
-                        .HasForeignKey("ValueId");
+                    b.HasOne("JIM.Models.Staging.ConnectorDefinitionSetting", "Setting")
+                        .WithMany("Values")
+                        .HasForeignKey("SettingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("ConnectedSystem");
 
-                    b.Navigation("Value");
+                    b.Navigation("Setting");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinitionFile", b =>
@@ -1876,6 +2049,13 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
 
                     b.Navigation("ConnectorDefinition");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinitionSetting", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectorDefinition", null)
+                        .WithMany("Settings")
+                        .HasForeignKey("ConnectorDefinitionId");
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>
@@ -2044,13 +2224,22 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystem", b =>
                 {
+                    b.Navigation("ObjectTypes");
+
                     b.Navigation("Objects");
+
+                    b.Navigation("Partitions");
 
                     b.Navigation("PendingExports");
 
                     b.Navigation("RunProfiles");
 
-                    b.Navigation("Settings");
+                    b.Navigation("SettingValues");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>
+                {
+                    b.Navigation("ChildContainers");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObject", b =>
@@ -2063,11 +2252,23 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Attributes");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
+                {
+                    b.Navigation("Containers");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinition", b =>
                 {
                     b.Navigation("ConnectedSystems");
 
                     b.Navigation("Files");
+
+                    b.Navigation("Settings");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinitionSetting", b =>
+                {
+                    b.Navigation("Values");
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>
