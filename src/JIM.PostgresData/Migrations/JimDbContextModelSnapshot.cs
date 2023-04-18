@@ -196,11 +196,11 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<TimeSpan>("HistoryRetentionPeriod")
+                        .HasColumnType("interval");
+
                     b.Property<bool>("IsServiceInMaintenanceMode")
                         .HasColumnType("boolean");
-
-                    b.Property<TimeSpan>("RunHistoryRetentionPeriod")
-                        .HasColumnType("interval");
 
                     b.Property<string>("SSOAuthority")
                         .HasColumnType("text");

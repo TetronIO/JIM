@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20230418074247_Initial")]
+    [Migration("20230418075727_Initial")]
     partial class Initial
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -198,11 +198,11 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<TimeSpan>("HistoryRetentionPeriod")
+                        .HasColumnType("interval");
+
                     b.Property<bool>("IsServiceInMaintenanceMode")
                         .HasColumnType("boolean");
-
-                    b.Property<TimeSpan>("RunHistoryRetentionPeriod")
-                        .HasColumnType("interval");
 
                     b.Property<string>("SSOAuthority")
                         .HasColumnType("text");

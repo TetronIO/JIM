@@ -304,7 +304,7 @@ namespace JIM.PostgresData.Migrations
                     SSOUniqueIdentifierMetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
                     SSOEnableLogOut = table.Column<bool>(type: "boolean", nullable: false),
                     IsServiceInMaintenanceMode = table.Column<bool>(type: "boolean", nullable: false),
-                    RunHistoryRetentionPeriod = table.Column<TimeSpan>(type: "interval", nullable: false)
+                    HistoryRetentionPeriod = table.Column<TimeSpan>(type: "interval", nullable: false)
                 },
                 constraints: table =>
                 {
