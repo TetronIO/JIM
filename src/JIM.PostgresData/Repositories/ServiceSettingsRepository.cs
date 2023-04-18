@@ -22,9 +22,9 @@ namespace JIM.PostgresData.Repositories
             }
             catch (Npgsql.PostgresException ex)
             {
-                if (ex.Message.StartsWith("42P01: relation \"ServiceSettings\" does not exist"))
+                if (ex.Message.StartsWith("42P01: relation \"ServiceSettings\" does not exist", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    Log.Verbose("GetServiceSettings: Service Settings does not exist. We expect this in a new-db scenario where the app isn't ready yet.");
+                    Log.Verbose("JIM.PostgresData: GetServiceSettingsAsync() - Service Settings does not exist. We expect this in a new-db scenario where the app isn't ready yet.");
                     return null;
                 }
 

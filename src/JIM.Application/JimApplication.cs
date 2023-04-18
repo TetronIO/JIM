@@ -160,6 +160,7 @@ namespace JIM.Application
         /// </summary>
         public async Task<bool> IsApplicationReadyAsync()
         {
+            Log.Verbose("JIM.Application: IsApplicationReadyAsync()");
             var serviceSettings = await ServiceSettings.GetServiceSettingsAsync();
             if (serviceSettings == null || serviceSettings.IsServiceInMaintenanceMode)
                 return false;

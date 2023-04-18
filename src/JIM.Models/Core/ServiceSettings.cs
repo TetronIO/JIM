@@ -42,12 +42,19 @@ namespace JIM.Models.Core
         /// being made ready for service.
         /// </summary>
         public bool IsServiceInMaintenanceMode { get; set; }
+        /// <summary>
+        /// Determines how long run history will be retained for. By default this is 30 days.
+        /// After this time, run history logs older than this will automatically be deleted.
+        /// Note: Longer periods negatively affect database size and system performance.
+        /// </summary>
+        public TimeSpan RunHistoryRetentionPeriod { get; set; }
 
         public ServiceSettings()
         {
             Created = DateTime.Now;
             SSOEnableLogOut = true;
             IsServiceInMaintenanceMode = true;
+            RunHistoryRetentionPeriod = TimeSpan.FromDays(30);
         }
     }
 }

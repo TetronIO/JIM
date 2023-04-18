@@ -174,7 +174,7 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 /// </summary>
 static async Task InitialiseJimApplicationAsync()
 {
-    // process auth variables
+    // collect auth config variables
     Log.Verbose("Program.InitialiseJimApplicationAsync()...");
     var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
     if (string.IsNullOrEmpty(ssoAuthority))
@@ -188,7 +188,7 @@ static async Task InitialiseJimApplicationAsync()
     if (string.IsNullOrEmpty(ssoSecret))
         throw new Exception("SSO_SECRET environment variable missing");
 
-    // process claim mapping variables
+    // collect claim mapping config variables
     var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE");
     if (string.IsNullOrEmpty(uniqueIdentifierClaimType))
         throw new Exception("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE environment variable missing");
@@ -210,7 +210,7 @@ static async Task InitialiseJimApplicationAsync()
             break;
         }
 
-        Log.Information("JimApplication is not ready yet. Sleeping...");
+        Log.Information("JIM.Application is not ready yet. Sleeping...");
         Thread.Sleep(1000);
     }
 }
