@@ -119,7 +119,7 @@
                 }
 
                 // look for removals, i.e. serviceTasks items not in newServiceTasks
-                var serviceTaskHeadersToRemove = serviceTaskHeaders.Where(sth => newServiceTaskHeaders.All(sth2 => sth2.Id != sth.Id));
+                var serviceTaskHeadersToRemove = serviceTaskHeaders.Where(sth => newServiceTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
                 foreach (var serviceTaskHeaderToRemove in serviceTaskHeadersToRemove)
                 {
                     Console.WriteLine("ST-POLLING: Removing service task header: " + serviceTaskHeaderToRemove.Id);
