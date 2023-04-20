@@ -51,14 +51,8 @@ namespace JIM.Service
             // as JIM.Service is the initial JimApplication client, it's responsible for seeing the database is intialised.
             // other JimAppication clients will need to check if the app is ready before completing their initialisation.
             // JimApplication instances are ephemeral and should be disposed as soon as a unit of work is complete (for database tracking reasons).
-            var outerJim = new JimApplication(new PostgresDataRepository());
-            await outerJim.InitialiseDatabaseAsync();
-
-
-            // to read:
-            // https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-cancellation
-            // https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/how-to-cancel-a-task-and-its-children
-            // https://stackoverflow.com/questions/4359910/how-to-abort-a-task-like-aborting-a-thread-thread-abort-method
+            var mainLoopJim = new JimApplication(new PostgresDataRepository());
+            await mainLoopJim.InitialiseDatabaseAsync();
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -72,7 +66,7 @@ namespace JIM.Service
                 {
                     // see if we need to cancel any currently-processing tasks...
                     var serviceTaskIds = CurrentTasks.Select(q => q.TaskId).ToArray();
-                    var serviceTasksToCancel = await outerJim.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
+                    var serviceTasksToCancel = await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
                     foreach (var serviceTaskToCancel in serviceTasksToCancel)
                     {
                         var taskTask = CurrentTasks.SingleOrDefault(q => q.TaskId == serviceTaskToCancel.Id);
@@ -80,7 +74,7 @@ namespace JIM.Service
                         {
                             Log.Information($"ExecuteAsync: Cancelling task {serviceTaskToCancel.Id}...");
                             taskTask.CancellationTokenSource.Cancel();
-                            await outerJim.Tasking.DeleteServiceTaskAsync(serviceTaskToCancel);
+                            await mainLoopJim.Tasking.DeleteServiceTaskAsync(serviceTaskToCancel);
                             CurrentTasks.Remove(taskTask);
                         }
                         else
@@ -92,7 +86,7 @@ namespace JIM.Service
                 else
                 {
                     // look for new tasks to process...
-                    var newServiceTasksToProcess = await outerJim.Tasking.GetNextServiceTasksToProcessAsync();
+                    var newServiceTasksToProcess = await mainLoopJim.Tasking.GetNextServiceTasksToProcessAsync();
                     if (newServiceTasksToProcess.Count == 0)
                     {
                         Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
@@ -133,6 +127,13 @@ namespace JIM.Service
                     }
                 }
             }
+
+            if (stoppingToken.IsCancellationRequested)
+                foreach (var currentTask in CurrentTasks)
+                {
+                    Log.Debug($"ExecuteAsync: Cancelling task {currentTask.TaskId} as worker has been cancelled.");
+                    currentTask.CancellationTokenSource.Cancel();
+                }
         }
 
         private static void InitialiseLogging()
