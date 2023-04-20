@@ -37,10 +37,16 @@ namespace JIM.Service
 
     public class Worker : BackgroundService
     {
+        /// <summary>
+        /// The service tasks currently being executed.
+        /// </summary>
+        private List<TaskTask> CurrentTasks { get; set; } = new List<TaskTask>();
+        private readonly object _currentTasksLock = new();
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             InitialiseLogging();
-            Log.Information("Starting JIM.Service");
+            Log.Information("Starting JIM.Service...");
 
             // as JIM.Service is the initial JimApplication client, it's responsible for seeing the database is intialised.
             // other JimAppication clients will need to check if the app is ready before completing their initialisation.
@@ -48,32 +54,83 @@ namespace JIM.Service
             var outerJim = new JimApplication(new PostgresDataRepository());
             await outerJim.InitialiseDatabaseAsync();
 
+
+            // to read:
+            // https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/task-cancellation
+            // https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/how-to-cancel-a-task-and-its-children
+            // https://stackoverflow.com/questions/4359910/how-to-abort-a-task-like-aborting-a-thread-thread-abort-method
+
             while (!stoppingToken.IsCancellationRequested)
             {
-                // get the oldest ready task
-                var task = await outerJim.Tasking.GetNextServiceTaskAsync();
-                if (task == null)
+                // if processing no tasks:
+                //      get the next batch of parallel tasks and execute them all at once or the next sequential task and execute that
+                // if processing tasks:
+                //      get the service tasks for those being processed
+                //      foreach: if the status is cancellation requested, then cancel the task
+
+                if (CurrentTasks.Count > 0)
                 {
-                    Log.Debug("ExecuteAsync: No task on queue. Sleeping...");
-                    await Task.Delay(4000, stoppingToken);
+                    // see if we need to cancel any currently-processing tasks...
+                    var serviceTaskIds = CurrentTasks.Select(q => q.TaskId).ToArray();
+                    var serviceTasksToCancel = await outerJim.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
+                    foreach (var serviceTaskToCancel in serviceTasksToCancel)
+                    {
+                        var taskTask = CurrentTasks.SingleOrDefault(q => q.TaskId == serviceTaskToCancel.Id);
+                        if (taskTask != null)
+                        {
+                            Log.Information($"ExecuteAsync: Cancelling task {serviceTaskToCancel.Id}...");
+                            taskTask.CancellationTokenSource.Cancel();
+                            await outerJim.Tasking.DeleteServiceTaskAsync(serviceTaskToCancel);
+                            CurrentTasks.Remove(taskTask);
+                        }
+                        else
+                        {
+                            Log.Debug($"ExecuteAsync: No need to cancel task id {serviceTaskToCancel.Id} as it seems to have finished processing.");
+                        }
+                    }
                 }
                 else
                 {
-                    if (task is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
+                    // look for new tasks to process...
+                    var newServiceTasksToProcess = await outerJim.Tasking.GetNextServiceTasksToProcessAsync();
+                    if (newServiceTasksToProcess.Count == 0)
                     {
-                        Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenerationTemplateServiceTask.TemplateId);
-                        await outerJim.DataGeneration.ExecuteTemplateAsync(dataGenerationTemplateServiceTask.TemplateId);
+                        Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
+                        await Task.Delay(2000, stoppingToken);
                     }
-                    else if (task is SynchronisationServiceTask synchronisationServiceTask)
+                    else
                     {
-                        Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + synchronisationServiceTask.ConnectedSystemRunProfileId);
+                        foreach (var newServiceTask in newServiceTasksToProcess)
+                        {
+                            var cancellationTokenSource = new CancellationTokenSource();
+                            var task = Task.Run(async () =>
+                            {
+                                var taskJim = new JimApplication(new PostgresDataRepository());
+                                if (newServiceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
+                                {
+                                    Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenerationTemplateServiceTask.TemplateId);
+                                    await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenerationTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+                                }
+                                else if (newServiceTask is SynchronisationServiceTask synchronisationServiceTask)
+                                {
+                                    Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + synchronisationServiceTask.ConnectedSystemRunProfileId);
 
-                        // temporary, to simulate processing a sync task
-                        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                                    // temporary, to simulate processing a sync task
+                                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                                }
+
+                                // very important: we must delete the task once it's completed so we know it's complete
+                                await taskJim.Tasking.DeleteServiceTaskAsync(newServiceTask);
+
+                                // remove from the current tasks list after locking it for thread safety
+                                lock (_currentTasksLock)
+                                    CurrentTasks.RemoveAll(q => q.TaskId == newServiceTask.Id);
+
+                            }, cancellationTokenSource.Token);
+
+                            CurrentTasks.Add(new TaskTask(newServiceTask.Id, task, cancellationTokenSource));
+                        }
                     }
-
-                    // very important: we must delete the task once it's completed so we know it's complete
-                    await outerJim.Tasking.DeleteServiceTaskAsync(task);
                 }
             }
         }

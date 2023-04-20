@@ -15,6 +15,11 @@ namespace JIM.Application.Servers
         private JimApplication Application { get; }
         #endregion
 
+        #region members
+        private readonly object _valuesLock = new();
+        private readonly object _metaverseObjectLock = new();
+        #endregion
+
         internal DataGenerationServer(JimApplication application)
         {
             Application = application;
@@ -98,7 +103,7 @@ namespace JIM.Application.Servers
             await Application.Repository.DataGeneration.DeleteTemplateAsync(templateId);
         }
 
-        public async Task ExecuteTemplateAsync(int templateId)
+        public async Task ExecuteTemplateAsync(int templateId, CancellationToken cancellationToken)
         {
             // get the entire template 
             // enumerate the object types
@@ -135,15 +140,29 @@ namespace JIM.Application.Servers
             foreach (var objectType in template.ObjectTypes)
                 foreach (var templateAttribute in objectType.TemplateAttributes)
                     foreach (var datasetInstance in templateAttribute.ExampleDataSetInstances)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from data set processing prematurely.");
+                            return;
+                        }
+
                         if (datasetInstance != null && datasetInstance.ExampleDataSet != null && !exampleDataSets.Any(q => q.Id == datasetInstance.ExampleDataSet.Id))
                         {
                             var exampleDataSet = await GetExampleDataSetAsync(datasetInstance.ExampleDataSet.Id);
                             if (exampleDataSet != null)
                                 exampleDataSets.Add(exampleDataSet);
                         }
+                    }
 
             foreach (var objectType in template.ObjectTypes)
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from object type processing prematurely.");
+                    return;
+                }
+
                 var objectTypeStopWatch = Stopwatch.StartNew();
                 Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
                 Parallel.For(0, objectType.ObjectsToCreate,
@@ -153,6 +172,12 @@ namespace JIM.Application.Servers
                     // make sure we process attributes with no depedencies first
                     foreach (var templateAttribute in objectType.TemplateAttributes.OrderBy(q => q.AttributeDependency))
                     {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            Log.Verbose("ExecuteTemplateAsync: Cancellation requested. Returning from attribute processing prematurely.");
+                            return;
+                        }
+
                         // only supporting Metaverse attributes for now.
                         // generating values for Connector Space values will ahve to come later, subject to demand
                         if (templateAttribute.MetaverseAttribute != null)
@@ -209,7 +234,7 @@ namespace JIM.Application.Servers
                         }
                     }
 
-                    lock (metaverseObjectsToCreate)
+                    lock (_metaverseObjectLock)
                         metaverseObjectsToCreate.Add(metaverseObject);
 
                     Interlocked.Add(ref totalObjectsCreated, 1);
@@ -228,10 +253,25 @@ namespace JIM.Application.Servers
             Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count:N0} objects");
             objectPreparationStopwatch.Stop();
 
+            if (cancellationToken.IsCancellationRequested)
+            {
+                Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning after removing unecessary attributes prematurely.");
+                return;
+            }
+
             // submit metaverse objects to data layer for creation
             var persistenceStopwatch = new Stopwatch();
             persistenceStopwatch.Start();
-            await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate);
+
+            try
+            {
+                await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate, cancellationToken);
+            }
+            catch (OperationCanceledException ex)
+            {
+                Log.Information(ex, "ExecuteTemplateAsync: Template '{template.Name}' object persistence did not complete as cancellation was requested.");
+            }
+
             persistenceStopwatch.Stop();
             totalTimeStopwatch.Stop();
             Log.Information($"ExecuteTemplateAsync: Template '{template.Name}' complete. {totalObjectsCreated:N0} objects prepared in {objectPreparationStopwatch.Elapsed}. Persisted in {persistenceStopwatch.Elapsed}. Total time: {totalTimeStopwatch.Elapsed}");
@@ -245,7 +285,7 @@ namespace JIM.Application.Servers
         #endregion
 
         #region Attribute Generation
-        private static void GenerateMetaverseStringValue(
+        private void GenerateMetaverseStringValue(
             MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
             List<ExampleDataSet> exampleDataSets,
@@ -356,7 +396,7 @@ namespace JIM.Application.Servers
             });
         }
 
-        private static void GenerateMetaverseNumberValue(
+        private void GenerateMetaverseNumberValue(
             MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
             Random random,
@@ -596,7 +636,7 @@ namespace JIM.Application.Servers
             return textToProcess;
         }
 
-        private static string ReplaceSystemVariables(
+        private string ReplaceSystemVariables(
             MetaverseObject metaverseObject,
             MetaverseAttribute metaverseAttribute,
             List<DataGenerationValueTracker> dataGenerationValueTrackers,
@@ -623,26 +663,27 @@ namespace JIM.Application.Servers
 
                     // have we already generated this value, and therefore need to add a unique int to it?
                     DataGenerationValueTracker? uniqueIntTracker = null;
-                    lock (dataGenerationValueTrackers)
+
+                    lock (_valuesLock)
+                    {
                         uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
 
-                    if (uniqueIntTracker == null)
-                    {
-                        // this is a unique value, not previously assigned. it does not need a unique int added.
-                        textToProcess = textWithoutSystemVar;
+                        if (uniqueIntTracker == null)
+                        {
+                            // this is a unique value, not previously assigned. it does not need a unique int added.
+                            textToProcess = textWithoutSystemVar;
 
-                        // add it to the tracker
-                        lock (dataGenerationValueTrackers)
+                            // add it to the tracker
                             dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
-                    }
-                    else
-                    {
-                        // this is not a unique value, we've generated it before. we need a unique int added.
-                        // increase the tracker last int assigned value by one as well for next time we generate the same value again
-                        lock (uniqueIntTracker)
+                        }
+                        else
+                        {
+                            // this is not a unique value, we've generated it before. we need a unique int added.
+                            // increase the tracker last int assigned value by one as well for next time we generate the same value again
                             uniqueIntTracker.LastIntAssigned += 1;
-
-                        textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
+                            
+                            textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
+                        }
                     }
                 }
             }
@@ -650,7 +691,7 @@ namespace JIM.Application.Servers
             return textToProcess;
         }
 
-        private static string ReplaceExampleDataSetVariables(
+        private string ReplaceExampleDataSetVariables(
             MetaverseObject metaverseObject,
             MetaverseAttribute metaverseAttribute,
             List<ExampleDataSetInstance> exampleDataSetInstances,
@@ -702,30 +743,32 @@ namespace JIM.Application.Servers
 
                 // is the generated value unique? exit if so
                 DataGenerationValueTracker? uniqueStringTracker = null;
-                lock (dataGenerationValueTrackers)
+
+                lock (_valuesLock)
+                {
                     uniqueStringTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == completeGeneratedValue);
 
-                if (uniqueStringTracker == null)
-                {
-                    // generated value is unique
-                    isGeneratedValueUnique = true;
-                    textToProcess = completeGeneratedValue;
+                    if (uniqueStringTracker == null)
+                    {
+                        // generated value is unique
+                        isGeneratedValueUnique = true;
+                        textToProcess = completeGeneratedValue;
 
-                    // add the generated value to the tracker so we don't end up generating and assigning it again
-                    lock (dataGenerationValueTrackers)
+                        // add the generated value to the tracker so we don't end up generating and assigning it again
                         dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textToProcess });
-                }
-                else
-                {
-                    // this is not a unique value, we've generated it before. go round again until it is unique
-                    //Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
+                    }
+                    else
+                    {
+                        // this is not a unique value, we've generated it before. go round again until it is unique
+                        //Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
+                    }
                 }
             }
 
             return textToProcess;
         }
 
-        private static int GenerateNumberValue(MetaverseObjectType metaverseObjectType, DataGenerationTemplateAttribute dataGenTemplateAttribute, Random random, List<DataGenerationValueTracker> trackers)
+        private int GenerateNumberValue(MetaverseObjectType metaverseObjectType, DataGenerationTemplateAttribute dataGenTemplateAttribute, Random random, List<DataGenerationValueTracker> trackers)
         {
             int value = 1;
             int attributeId;
@@ -755,7 +798,7 @@ namespace JIM.Application.Servers
             }
             else
             {
-                lock (trackers)
+                lock (_valuesLock)
                 {
                     // sequential numbers
                     // query last value used for this object type and attribute. totally inefficient, but let's see what the performance is like first

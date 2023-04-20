@@ -58,7 +58,7 @@
     <RowTemplate>
         <MudTd>
             <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleTaskDeleteAsync(context))">Cancel</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleCancelTaskAsync(context))">Cancel</MudMenuItem>
             </MudMenu>
         </MudTd>
         <MudTd DataLabel="Type">@context.Type</MudTd>
@@ -169,13 +169,12 @@
             return "Unknown Task";
     }
 
-    private async Task HandleTaskDeleteAsync(ServiceTaskHeader serviceTaskHeader)
+    private async Task HandleCancelTaskAsync(ServiceTaskHeader serviceTaskHeader)
     {
-        //if (connectedSystem == null || connectedSystem.RunProfiles == null)
-        //    return;
+        if (serviceTaskHeader == null)
+            return;
 
-        //connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
-        //await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
-        //Snackbar.Add("Run profile removed.", Severity.Success);
+        await Jim.Tasking.CancelServiceTaskAsync(serviceTaskHeader.Id);
+        Snackbar.Add("Service task cancellation requested.", Severity.Success);
     }
 }

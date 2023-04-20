@@ -31,6 +31,6 @@ namespace JIM.Data.Repositories
         public Task UpdateTemplateAsync(DataGenerationTemplate template);
         public Task DeleteTemplateAsync(int templateId);
 
-        public Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects);
+        public Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects, CancellationToken cancellationToken);
     }
 }

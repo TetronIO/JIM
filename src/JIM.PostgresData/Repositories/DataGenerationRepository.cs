@@ -227,14 +227,26 @@ namespace JIM.PostgresData.Repositories
         }
         #endregion
 
-        public async Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects)
+        /// <summary>
+        /// Bulk creates metaverse objects in the database.
+        /// </summary>
+        /// <param name="metsaverseObjects">The list of MetaverseObjects to persist.</param>
+        /// <param name="cancellationToken">The cancellation token to use to determine if the operation should be cancelled before completion.</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="OperationCanceledException"></exception>
+        public async Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects, CancellationToken cancellationToken)
         {
             Log.Verbose("CreateMetaverseObjectsAsync: Starting to persist MetaverseObjects...");
             if (metsaverseObjects == null || metsaverseObjects.Count == 0)
                 throw new ArgumentNullException(nameof(metsaverseObjects));
 
             Repository.Database.MetaverseObjects.AddRange(metsaverseObjects);
-            await Repository.Database.SaveChangesAsync();
+            await Repository.Database.SaveChangesAsync(cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested)
+                cancellationToken.ThrowIfCancellationRequested();
+
             Log.Verbose("CreateMetaverseObjectsAsync: Done");
         }
 

@@ -16,6 +16,24 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
+        public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
+        {
+            if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
+            {
+                Repository.Database.DataGenerationTemplateServiceTasks.Add(dataGenerationTemplateServiceTask);
+                await Repository.Database.SaveChangesAsync();
+            }
+            else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
+            {
+                Repository.Database.SynchronisationServiceTasks.Add(synchronisationServiceTask);
+                await Repository.Database.SaveChangesAsync();
+            }
+            else
+            {
+                throw new ArgumentException("serviceTask was of an unexpected type: " + serviceTask.GetType());
+            }
+        }
+
         public async Task<List<ServiceTask>> GetServiceTasksAsync()
         {
             return await Repository.Database.ServiceTasks.ToListAsync();
@@ -38,30 +56,40 @@ namespace JIM.PostgresData.Repositories
             return serviceTaskHeaders;
         }
 
-        public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
-        {
-            if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
-            {
-                Repository.Database.DataGenerationTemplateServiceTasks.Add(dataGenerationTemplateServiceTask);
-                await Repository.Database.SaveChangesAsync();
-            }
-            else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
-            {
-                Repository.Database.SynchronisationServiceTasks.Add(synchronisationServiceTask);
-                await Repository.Database.SaveChangesAsync();
-            }
-            else
-            {
-                throw new ArgumentException("serviceTask was of an unexpected type: " + serviceTask.GetType());
-            }
-        }
-
         public async Task<ServiceTask?> GetNextServiceTaskAsync()
         {
             return await Repository.Database.ServiceTasks.
                 Where(q => q.Status == ServiceTaskStatus.Queued).
-                OrderByDescending(q => q.Timestamp).
+                OrderBy(q => q.Timestamp).
                 FirstOrDefaultAsync();
+        }
+
+        public async Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync()
+        {
+            var tasks = new List<ServiceTask>();
+            foreach (var task in await Repository.Database.ServiceTasks.Where(q => q.Status == ServiceTaskStatus.Queued).OrderBy(q => q.Timestamp).ToListAsync())
+            {
+                if (task.ExecutionMode == ServiceTaskExecutionMode.Sequential)
+                {
+                    tasks.Add(task);
+                    break;
+                }
+                else if (task.ExecutionMode == ServiceTaskExecutionMode.Parallel)
+                {
+                    tasks.Add(task);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return tasks;
+        }
+
+        public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds)
+        {
+            return await Repository.Database.ServiceTasks.Where(q => serviceTaskIds.Contains(q.Id) && q.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
         }
 
         public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)
@@ -80,7 +108,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)
         {
-            if (serviceTask is DataGenerationTemplateServiceTask task)
+            if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
             {
                 var dbDataGenerationTemplateServiceTask = await Repository.Database.DataGenerationTemplateServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
                 if (dbDataGenerationTemplateServiceTask == null)
@@ -90,16 +118,45 @@ namespace JIM.PostgresData.Repositories
                 }
 
                 // map scalar value updates to the db version of the object
-                Repository.Database.Entry(dbDataGenerationTemplateServiceTask).CurrentValues.SetValues(task);
+                Repository.Database.Entry(dbDataGenerationTemplateServiceTask).CurrentValues.SetValues(dataGenerationTemplateServiceTask);
+            }
+            else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
+            {
+                var dbSynchronisationServiceTask = await Repository.Database.SynchronisationServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
+                if (dbSynchronisationServiceTask == null)
+                {
+                    Log.Error("UpdateServiceTaskAsync: Could not retrieve a SynchronisationServiceTask object to update.");
+                    return;
+                }
+
+                // map scalar value updates to the db version of the object
+                Repository.Database.Entry(dbSynchronisationServiceTask).CurrentValues.SetValues(synchronisationServiceTask);
             }
 
             await Repository.Database.SaveChangesAsync();
         }
 
+        public async Task CancelServiceTaskAsync(Guid serviceTaskId)
+        {
+            var serviceTask = Repository.Database.ServiceTasks.SingleOrDefault(q => q.Id == serviceTaskId);
+            if (serviceTask == null)
+                return;
+
+            serviceTask.Status = ServiceTaskStatus.CancellationRequested;
+            await Repository.Database.SaveChangesAsync();
+        }
+
         public async Task DeleteServiceTaskAsync(ServiceTask serviceTask)
         {
-            Repository.Database.ServiceTasks.Remove(serviceTask);
-            await Repository.Database.SaveChangesAsync();
+            if (await Repository.Database.ServiceTasks.AnyAsync(q => q.Id == serviceTask.Id))
+            {
+                Repository.Database.ServiceTasks.Remove(serviceTask);
+                await Repository.Database.SaveChangesAsync();
+            }
+            else
+            {
+                Log.Debug($"DeleteServiceTaskAsync: Did not delete service task {serviceTask.Id} as it doesn't exist (already deleted?)");
+            }
         }
 
         #region private methods

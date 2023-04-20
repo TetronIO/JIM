@@ -39,9 +39,9 @@ namespace JIM.Api.Controllers
         }
 
         [HttpPost("/data_generation/templates/{id}/execute")]
-        public async Task ExecuteTemplateAsync(int id)
+        public async Task ExecuteTemplateAsync(int id, CancellationToken cancellationToken)
         {
-            await _application.DataGeneration.ExecuteTemplateAsync(id);
+            await _application.DataGeneration.ExecuteTemplateAsync(id, cancellationToken);
         }
     }
 }
