@@ -6,7 +6,7 @@ namespace JIM.Models.Interfaces
     {
         public void OpenImportConnection(IList<ConnectedSystemSettingValue> settingValues);
 
-        public ConnectedSystemImportResult Import(ConnectedSystemRunProfile runProfile, CancellationToken cancellationToken);
+        public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystemRunProfile runProfile, CancellationToken cancellationToken);
 
         public void CloseImportConnection();
     }
