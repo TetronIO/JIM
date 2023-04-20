@@ -150,7 +150,7 @@ namespace JIM.Connectors.LDAP
             _connection.Bind();
         }
 
-        public ConnectedSystemImportResult Import(ConnectedSystemRunProfile runProfile)
+        public ConnectedSystemImportResult Import(ConnectedSystemRunProfile runProfile, CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }
