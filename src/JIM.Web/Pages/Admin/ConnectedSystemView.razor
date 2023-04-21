@@ -132,7 +132,17 @@
                     </MudAlert>
                 }
 
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync" DisableElevation="true">Save Settings</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || settingsBeingSaved)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync" DisableElevation="true">
+                    @if (settingsBeingSaved)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ms-2">Processing</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Save Settings</MudText>
+                    }
+                </MudButton>
             </MudForm>
         </MudTabPanel>
 
@@ -351,26 +361,29 @@
                             }
                         </MudSelect>
                     }
+                    <MudNumericField @bind-Value="newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DisableElevation="true">Create Run Profile</MudButton>
                 </MudForm>
             </MudPaper>
 
             <MudTable Items="@connectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
                 <HeaderContent>
-                    <MudTh>Action</MudTh>
+                    <MudTh>Actions</MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)">Run Type</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition.Name)">Partition</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">Page Size</MudTableSortLabel></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>
-                        <MudMenu Icon="@Icons.Material.Filled.MoreVert">
-                            <MudMenuItem OnClick="((e) => HandleRunProfileDeleteAsync(context))">Delete</MudMenuItem>
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconSize="Size.Small" OnClick="((e) => HandleRunProfileDeleteAsync(context))">Delete</MudMenuItem>
                         </MudMenu>
                     </MudTd>
                     <MudTd DataLabel="Name">@context.Name</MudTd>
                     <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
                     <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
+                    <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
                     There are no run profiles. Create your first.
@@ -385,27 +398,25 @@
 @code {
     [Parameter]
     public int Id { get; set; }
-
     [Parameter]
     public string? Name { get; set; }
-
-    private ConnectedSystem? connectedSystem;
-    private List<ConnectedSystemSettingCategory>? settingCategories;
-    private string? partitionsAndHierarchiesText;
-    private string? partitionAndHierarchyText;
-    
-    private bool schemaBeingRetrieved;
-
-    private ConnectedSystemObjectType? selectedObjectType;
-    private bool hierarchyBeingRetrieved;
     private bool IsDetailsFormValid { get; set; }
     private string[] DetailsFormErrors { get; set; } = { };
     private bool IsSettingsFormValid { get; set; }
     private string[] SettingsFormErrors { get; set; } = { };
     private Dictionary<string, string> SettingsFormCustomErrors { get; set; } = new Dictionary<string, string>();
+    private bool IsNewRunProfileFormValid { get; set; }    
+
+    private ConnectedSystem? connectedSystem;
+    private bool settingsBeingSaved = false;
+    private List<ConnectedSystemSettingCategory>? settingCategories;
+    private string? partitionsAndHierarchiesText;
+    private string? partitionAndHierarchyText;
+    private bool schemaBeingRetrieved;
+    private ConnectedSystemObjectType? selectedObjectType;
+    private bool hierarchyBeingRetrieved;
     private string schemaSearchString = "";
-    private bool IsNewRunProfileFormValid { get; set; }
-    private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile();
+    private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile { PageSize = 500 };
 
     protected override async Task OnInitializedAsync()
     {
@@ -469,6 +480,8 @@
             return;
         }
 
+        settingsBeingSaved = true;
+
         // validate the form
         SettingsFormCustomErrors.Clear();
         var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
@@ -485,10 +498,14 @@
         }
 
         if (SettingsFormCustomErrors.Any())
+        {
+            settingsBeingSaved = false;
             return;
+        }
 
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);
+        settingsBeingSaved = false;
     }
 
     private async Task HandleImportSchemaAsync()
@@ -696,6 +713,7 @@
             Name = newRunProfile.Name,
             RunType = newRunProfile.RunType,
             Partition = newRunProfile.Partition,
+            PageSize = newRunProfile.PageSize
         });
 
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);

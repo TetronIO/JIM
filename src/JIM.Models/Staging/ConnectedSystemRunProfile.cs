@@ -17,6 +17,11 @@ namespace JIM.Models.Staging
 
         public SyncRunType RunType { get; set; }
 
+        /// <summary>
+        /// How many items to process in one go via the Connector.
+        /// </summary>
+        public int PageSize { get; set; }
+
         public override string ToString() => Name;
     }
 }
