@@ -2,13 +2,14 @@
 {
     public enum AttributeDataType
     {
-        String = 0,
-        Number = 1,
-        DateTime = 2,
-        Binary = 3,
-        Reference = 4,
-        Guid = 5,
-        Bool = 6
+        NotSet = 0,
+        String = 1,
+        Number = 2,
+        DateTime = 3,
+        Binary = 4,
+        Reference = 5,
+        Guid = 6,
+        Bool = 7
     }
 
     public enum AttributePlurality

@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Staging;
+using Serilog;
 
 namespace JIM.Models.Interfaces
 {
@@ -11,12 +12,12 @@ namespace JIM.Models.Interfaces
         /// <summary>
         /// Returns a list of setting definitions that the Connector offers, i.e. connection and general configuration settings.
         /// </summary>
-        public IList<ConnectorSetting> GetSettings();
+        public List<ConnectorSetting> GetSettings();
 
         /// <summary>
         /// Validates that all required combinations of settings values have been provided by an administrator, and optionally if the values themselves are valid, i.e. can the system be contacted with the supplied credentials.
         /// </summary>
         /// <returns>Whether or not the setting values are valid.</returns>
-        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSettingValue> settings);
+        public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settings, ILogger logger);
     }
 }

@@ -5,6 +5,7 @@ using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
+using Serilog;
 
 namespace JIM.Application.Servers
 {
@@ -161,7 +162,7 @@ namespace JIM.Application.Servers
 
             if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
             {
-                return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues);
+                return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
             }
 
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
@@ -198,7 +199,7 @@ namespace JIM.Application.Servers
             ConnectorSchema schema;
             if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
             {
-                schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues);
+                schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
             }
             else
             {
@@ -247,7 +248,7 @@ namespace JIM.Application.Servers
             List<ConnectorPartition> partitions;
             if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
             {
-                partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues);
+                partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             }
             else
             {

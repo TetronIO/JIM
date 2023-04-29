@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Staging;
+using Serilog;
 
 namespace JIM.Models.Interfaces
 {
@@ -7,6 +8,6 @@ namespace JIM.Models.Interfaces
     /// </summary>
     public interface IConnectorPartitions
     {
-        public Task<List<ConnectorPartition>> GetPartitionsAsync(IList<ConnectedSystemSettingValue> settings);
+        public Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger);
     }
 }

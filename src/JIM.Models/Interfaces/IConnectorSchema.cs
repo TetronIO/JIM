@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Staging;
+using Serilog;
 
 namespace JIM.Models.Interfaces
 {
@@ -12,6 +13,6 @@ namespace JIM.Models.Interfaces
         /// Recommend this is implemented so that the Connector dynamically retrieves the schema from the connected system to reduce re-configuration work in the future if the system changes.
         /// If this isn't viable/desirable, then you can also just hard-code the schema in this method.
         /// </summary>
-        public Task<ConnectorSchema> GetSchemaAsync(IList<ConnectedSystemSettingValue> settings);
+        public Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settings, ILogger logger);
     }
 }

@@ -48,4 +48,13 @@
         Divider,
         File
     }
+
+    public enum ConnectedSystemImportObjectChangeType
+    {
+        NotSet,
+        Add,
+        Update,
+        Replace,
+        Delete
+    }
 }

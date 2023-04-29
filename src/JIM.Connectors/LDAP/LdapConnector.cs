@@ -1,6 +1,8 @@
 ﻿using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
+using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
 
@@ -37,7 +39,7 @@ namespace JIM.Connectors.LDAP
         private readonly string _settingPassword = "Password";
         private readonly string _settingCreateContainersAsNeeded = "Create containers as needed?";
 
-        public IList<ConnectorSetting> GetSettings()
+        public List<ConnectorSetting> GetSettings()
         {
             return new List<ConnectorSetting>
             {
@@ -63,12 +65,12 @@ namespace JIM.Connectors.LDAP
         /// <summary>
         /// Validates LdapConnector setting values using custom business logic.
         /// </summary>
-        public IList<ConnectorSettingValueValidationResult> ValidateSettingValues(IList<ConnectedSystemSettingValue> settingValues)
+        public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
             var response = new List<ConnectorSettingValueValidationResult>();
 
             // validate that we can connect to the directory service with the supplied setting credentials
-            var connectivityTestResult = TestDirectoryConnectivity(settingValues);
+            var connectivityTestResult = TestDirectoryConnectivity(settingValues, logger);
             if (!connectivityTestResult.IsValid)
                 response.Add(connectivityTestResult);
 
@@ -91,9 +93,9 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorSchema members
-        public async Task<ConnectorSchema> GetSchemaAsync(IList<ConnectedSystemSettingValue> settingValues)
+        public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            OpenImportConnection(settingValues);
+            OpenImportConnection(settingValues, logger);
             if (_connection == null)
                 throw new Exception("No connection available to get schema with");
 
@@ -109,9 +111,9 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorPartitions members
-        public async Task<List<ConnectorPartition>> GetPartitionsAsync(IList<ConnectedSystemSettingValue> settingValues)
+        public async Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            OpenImportConnection(settingValues);
+            OpenImportConnection(settingValues, logger);
             if (_connection == null)
                 throw new Exception("No connection available to get partitions with");
 
@@ -127,7 +129,7 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorImportUsingCalls members
-        public void OpenImportConnection(IList<ConnectedSystemSettingValue> settingValues)
+        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
             var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
             var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
@@ -150,9 +152,32 @@ namespace JIM.Connectors.LDAP
             _connection.Bind();
         }
 
-        public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystemRunProfile runProfile, CancellationToken cancellationToken)
+        public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException();
+            if (_connection == null)
+                throw new InvalidOperationException("Must call OpenImportConnection() before ImportAsync()!");
+
+            // needs to filter by partitions
+            // needs to filter by object types
+            // needs to filter by attributes
+            // needs to be able to stop processing at convenient points if cancellation has been requested
+
+            var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, paginationTokens, persistedConnectorData, logger, cancellationToken);
+
+            if (runProfile.RunType == SyncRunType.FullImport)
+            {
+                logger.Debug("ImportAsync: Full Import requested");
+                return import.GetFullImportObjects();
+            }
+            else if (runProfile.RunType == SyncRunType.DeltaImport)
+            {
+                logger.Debug("ImportAsync: Delta Import requested");
+                throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");
+            }
+            else
+            {
+                throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}");
+            }
         }
 
         public void CloseImportConnection()
@@ -162,11 +187,11 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region private methods
-        private ConnectorSettingValueValidationResult TestDirectoryConnectivity(IList<ConnectedSystemSettingValue> settingValues)
+        private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
             try
             {
-                OpenImportConnection(settingValues);
+                OpenImportConnection(settingValues, logger);
                 CloseImportConnection();
                 return new ConnectorSettingValueValidationResult
                 {

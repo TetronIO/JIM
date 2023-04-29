@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\JIM.Models\JIM.Models.csproj" />
+    <ProjectReference Include="..\JIM.Utilities\JIM.Utilities.csproj" />
   </ItemGroup>
 
   <ItemGroup>
