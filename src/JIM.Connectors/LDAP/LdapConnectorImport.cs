@@ -3,6 +3,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.Data;
+using System.Diagnostics;
 using System.DirectoryServices.Protocols;
 
 namespace JIM.Connectors.LDAP
@@ -137,16 +138,15 @@ namespace JIM.Connectors.LDAP
 
         private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
         {
-            //Stopwatch
-
             if (_cancellationToken.IsCancellationRequested)
             {
                 _logger.Debug("GetFisoResults: O1 Cancellation requested. Stopping");
                 return;
             }
 
+            var stopwatch = Stopwatch.StartNew();
             var lastRunsCookieLength = lastRunsCookie != null ? lastRunsCookie.Length.ToString() : "null";
-            var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})";
+            var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})"; // todo: add in implicit support for containers/OUs?
             string[] attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToArray(); // might need to add in some non-user selected attributes
             var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, attributes);
             var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize);
@@ -170,6 +170,8 @@ namespace JIM.Connectors.LDAP
             }
             
             connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries));
+            stopwatch.Stop();
+            _logger.Debug($"GetFisoResults: Executed for {connectedSystemObjectType.Name} in {stopwatch.Elapsed}");
         }
 
         private List<ConnectedSystemImportObject> ConvertLdapResults(SearchResultEntryCollection searchResults)
