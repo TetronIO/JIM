@@ -1,6 +1,12 @@
 using JIM.Application;
+using JIM.Connectors;
+using JIM.Connectors.LDAP;
+using JIM.Models.Interfaces;
+using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
+using JIM.Service.Processors;
 using Serilog;
 
 namespace JIM.Service
@@ -100,17 +106,48 @@ namespace JIM.Service
                             var task = Task.Run(async () =>
                             {
                                 var taskJim = new JimApplication(new PostgresDataRepository());
-                                if (newServiceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
+                                if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {
-                                    Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenerationTemplateServiceTask.TemplateId);
-                                    await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenerationTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+                                    Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
+                                    await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
                                 }
-                                else if (newServiceTask is SynchronisationServiceTask synchronisationServiceTask)
+                                else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
                                 {
-                                    Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + synchronisationServiceTask.ConnectedSystemRunProfileId);
+                                    Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
+                                    var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncServiceTask.ConnectedSystemId);
+                                    if (connectedSystem != null)
+                                    {
+                                        // work out what connector we need to use
+                                        // todo: run through built-in connectors first, then do a lookup for user-supplied connectors
+                                        IConnector connector;
+                                        if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
+                                            connector = new LdapConnector();
+                                        else
+                                            throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported by service processing");
 
-                                    // temporary, to simulate processing a sync task
-                                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                                        // work out what type of run profile we're being asked to run
+                                        var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
+                                        if (runProfile != null)
+                                        {
+                                            if (runProfile.RunType == SyncRunType.FullImport)
+                                            {
+                                                var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, cancellationTokenSource);
+                                                await synchronisationImportTaskProcessor.PerformFullImportAsync();
+                                            }
+                                            else
+                                            {
+                                                Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncServiceTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncServiceTask.ConnectedSystemId}.");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncServiceTask.ConnectedSystemId} but no such connected system found.");
+                                    }
                                 }
 
                                 // very important: we must delete the task once it's completed so we know it's complete
@@ -136,6 +173,7 @@ namespace JIM.Service
                 }
         }
 
+        #region private methods
         private static void InitialiseLogging()
         {
             var loggerConfiguration = new LoggerConfiguration();
@@ -173,6 +211,7 @@ namespace JIM.Service
             loggerConfiguration.WriteTo.File(Path.Combine(loggingPath, "jim.service..log"), rollingInterval: RollingInterval.Day);
             loggerConfiguration.WriteTo.Console();
             Log.Logger = loggerConfiguration.CreateLogger();
-        }        
+        }
+        #endregion
     }
 }

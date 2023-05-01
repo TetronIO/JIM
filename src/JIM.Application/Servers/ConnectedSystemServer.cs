@@ -160,7 +160,7 @@ namespace JIM.Application.Servers
             // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
             // especially when we need to support uploaded connectors, not just built-in ones
 
-            if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
             {
                 return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
             }
@@ -197,7 +197,7 @@ namespace JIM.Application.Servers
             // especially when we need to support uploaded connectors, not just built-in ones
 
             ConnectorSchema schema;
-            if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
             {
                 schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
             }
@@ -246,7 +246,7 @@ namespace JIM.Application.Servers
             // especially when we need to support uploaded connectors, not just built-in ones
 
             List<ConnectorPartition> partitions;
-            if (connectedSystem.ConnectorDefinition.Name == Connectors.Constants.LdapConnectorName)
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
             {
                 partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             }

@@ -13,7 +13,7 @@ namespace JIM.Connectors.LDAP
         private LdapConnection? _connection;
 
         #region IConnector members
-        public string Name => Constants.LdapConnectorName;
+        public string Name => ConnectorConstants.LdapConnectorName;
 
         public string? Description => "Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory.";
 

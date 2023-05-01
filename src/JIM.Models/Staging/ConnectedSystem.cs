@@ -6,16 +6,26 @@ namespace JIM.Models.Staging
     public class ConnectedSystem
     {
         public int Id { get; set; }
+
         [Required(ErrorMessage = "Please provide a name for the connected system")]
         public string Name { get; set; }
+
         public string? Description { get; set; }
+
         public DateTime Created { get; set; }
+
         public DateTime LastUpdated { get; set; }
+
         public List<ConnectedSystemRunProfile>? RunProfiles { get; set; }
+
         public List<ConnectedSystemObject> Objects { get; set; }
+
         public List<ConnectedSystemObjectType>? ObjectTypes { get; set; }
+
         public List<PendingExport> PendingExports { get; set; }
+
         public ConnectorDefinition ConnectorDefinition { get; set; }
+
         public List<ConnectedSystemSettingValue> SettingValues { get; set; }
 
         /// <summary>
@@ -30,6 +40,12 @@ namespace JIM.Models.Staging
         /// Note: Partitions don't have to support containers, but it's common that they do, i.e. with LDAP-based Connectors.
         /// </summary>
         public List<ConnectedSystemPartition>? Partitions { get; set; }
+
+        /// <summary>
+        /// Information that connector developers want to have persisted between synchronisation runs can be stored here.
+        /// This is to suppose use-cases such as needing to store the last change id for an LDAP sytem, to enable delta imports.
+        /// </summary>
+        public string? PersistedConnectorData { get; set; }
 
         public ConnectedSystem()
         {
