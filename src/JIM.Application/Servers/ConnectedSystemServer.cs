@@ -295,10 +295,22 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(id);
         }
+        #endregion
 
+        #region Connected System Objects
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
+        }
+
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, ConnectedSystemAttributeValue connectedSystemAttributeValue)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeValue);
+        }
+
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int attributeId, string attributeValue)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeValue);
         }
 
         public async Task<int> GetConnectedSystemObjectCountAsync()

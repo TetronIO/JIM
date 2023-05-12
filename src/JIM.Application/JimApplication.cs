@@ -8,20 +8,22 @@ namespace JIM.Application
 {
     public class JimApplication
     {
+        internal IRepository Repository { get; }
+        internal SeedingServer Seeding { get; }
         public ConnectedSystemServer ConnectedSystems { get; }
         public DataGenerationServer DataGeneration { get; }
+        public HistoryServer History { get; }
         public MetaverseServer Metaverse { get; }
         public SearchServer Search { get; }
         public SecurityServer Security { get; }
         public ServiceSettingsServer ServiceSettings { get; }
         public TaskingServer Tasking { get; }
-        internal SeedingServer Seeding { get; }
-        internal IRepository Repository { get; }
 
         public JimApplication(IRepository dataRepository)
         {
             ConnectedSystems = new ConnectedSystemServer(this);
             DataGeneration = new DataGenerationServer(this);
+            History = new HistoryServer(this);
             Metaverse = new MetaverseServer(this);
             Repository = dataRepository;
             Search = new SearchServer(this);

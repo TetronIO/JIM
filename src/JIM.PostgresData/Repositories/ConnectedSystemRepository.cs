@@ -1,4 +1,5 @@
 ﻿using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
@@ -174,6 +175,30 @@ namespace JIM.PostgresData.Repositories
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
         {
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+        }
+
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, ConnectedSystemAttributeValue connectedSystemAttributeValue)
+        {
+            switch (connectedSystemAttributeValue.Attribute.Type)
+            {
+                case AttributeDataType.String:
+                    return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
+                      x.ConnectedSystem.Id == connectedSystemId &&
+                      x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeValue.Id && av.StringValue != null && av.StringValue.Equals(connectedSystemAttributeValue.StringValue, StringComparison.CurrentCultureIgnoreCase)));
+
+                case AttributeDataType.Number:
+                    return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
+                      x.ConnectedSystem.Id == connectedSystemId &&
+                      x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeValue.Id && av.IntValue == connectedSystemAttributeValue.IntValue));
+
+                case AttributeDataType.Guid:
+                    return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
+                      x.ConnectedSystem.Id == connectedSystemId &&
+                      x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeValue.Id && av.GuidValue == connectedSystemAttributeValue.GuidValue));
+
+                default:
+                    throw new ArgumentException($"GetConnectedSystemObjectByUniqueIdAsync: Unsupported connected system attribute type: {connectedSystemAttributeValue.Attribute.Type}", nameof(connectedSystemAttributeValue));
+            }
         }
 
         public async Task<int> GetConnectedSystemObjectCountAsync()

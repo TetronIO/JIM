@@ -1,6 +1,7 @@
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
+using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
@@ -128,10 +129,37 @@ namespace JIM.Service
                                         var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
                                         if (runProfile != null)
                                         {
+                                            // create the history item for this run profile execution, then pass it in to the processor for iterative updates
+                                            var synchronisationRunHistoryDetail = new SynchronisationRunHistoryDetail
+                                            {
+                                                RunProfile = runProfile,
+                                                RunProfileName = runProfile.Name,
+                                                ConnectedSystem = connectedSystem,
+                                                ConnectedSystemName = connectedSystem.Name
+                                            };
+                                            await taskJim.History.RecordSynchronisationRunAsync(synchronisationRunHistoryDetail);
+
+                                            // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                             if (runProfile.RunType == SyncRunType.FullImport)
                                             {
-                                                var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, cancellationTokenSource);
+                                                var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, synchronisationRunHistoryDetail, cancellationTokenSource);
                                                 await synchronisationImportTaskProcessor.PerformFullImportAsync();
+                                            }
+                                            else if (runProfile.RunType == SyncRunType.DeltaImport)
+                                            {
+                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                            }
+                                            else if (runProfile.RunType == SyncRunType.Export)
+                                            {
+                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                            }
+                                            else if (runProfile.RunType == SyncRunType.FullSynchronisation)
+                                            {
+                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                            }
+                                            else if (runProfile.RunType == SyncRunType.DeltaSynchronisation)
+                                            {
+                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
                                             }
                                             else
                                             {

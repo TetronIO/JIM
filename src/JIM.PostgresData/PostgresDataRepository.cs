@@ -11,6 +11,7 @@ namespace JIM.PostgresData
     {
         public IConnectedSystemRepository ConnectedSystems { get; }
         public IDataGenerationRepository DataGeneration { get; }
+        public IHistoryRepository History { get; }
         public IMetaverseRepository Metaverse { get; }
         public ISearchRepository Search { get; }
         public ISecurityRepository Security { get; }
@@ -27,14 +28,15 @@ namespace JIM.PostgresData
             AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
             ConnectedSystems = new ConnectedSystemRepository(this);
+            Database = new JimDbContext();
             DataGeneration = new DataGenerationRepository(this);
+            History = new HistoryRepository(this);
             Metaverse = new MetaverseRepository(this);
-            Security = new SecurityRepository(this);
             Search = new SearchRepository(this);
+            Security = new SecurityRepository(this);
             Seeding = new SeedingRepository(this);
             ServiceSettings = new ServiceSettingsRepository(this);
             Tasking = new TaskingRepository(this);
-            Database = new JimDbContext();
         }
 
         public async Task InitialiseDatabaseAsync()
@@ -67,7 +69,7 @@ namespace JIM.PostgresData
 
         public void Dispose()
         {
-            //if ( Database != null )
+            //if (Database != null)
             //    Database.Dispose();
         }
     }

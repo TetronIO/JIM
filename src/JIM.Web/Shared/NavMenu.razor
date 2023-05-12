@@ -13,7 +13,10 @@
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix">Distribution Groups</MudNavLink>
     </MudNavGroup>
 
-    <MudNavLink Href="/requests" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Requests</MudNavLink>
+    <MudNavGroup Title="History" Expanded="false" Icon="@Icons.Material.Filled.DynamicFeed">
+        <MudNavLink Href="/history" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.FilterAltOff">All History</MudNavLink>
+        <MudNavLink Href="/history/mine" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.FilterAlt">My History</MudNavLink>
+    </MudNavGroup>
 
     <AuthorizeView Roles="Administrators">
         <MudNavGroup Title="Dashboard" Expanded="false" Icon="@Icons.Material.Filled.Dashboard">

@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.DataGeneration;
+using JIM.Models.History;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Security;
@@ -27,6 +28,7 @@ namespace JIM.PostgresData
         internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
         internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
+        internal DbSet<SynchronisationRunHistoryDetail> SynchronisationRunHistoryDetails { get; set; }
         internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
         internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
         internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
@@ -47,6 +49,11 @@ namespace JIM.PostgresData
         internal DbSet<SyncRule> SyncRules { get; set; }
         internal DbSet<SyncRun> SyncRuns { get; set; }
         internal DbSet<SyncRunObject> SyncRunObjects { get; set; }
+        /// <summary>
+        /// Do not use this, this is required for EF Core to handle base and derived classes persisted to the db.
+        /// </summary>
+        internal DbSet<HistoryItem> HistoryItems { get; set; }
+        internal DbSet<RunHistoryItem> RunHistoryItems { get; set; }
 
         private readonly string _connectionString;
 

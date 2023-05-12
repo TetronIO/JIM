@@ -30,6 +30,9 @@ namespace JIM.Data.Repositories
 
         public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
         public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, ConnectedSystemAttributeValue connectedSystemAttributeValue);
+
+
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
         public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();

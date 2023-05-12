@@ -14,6 +14,7 @@
 
         public SynchronisationServiceTask()
         {
+            // for use by EntityFramework to construct db-sourced objects.
         }
 
 		public SynchronisationServiceTask(int connectedSystemId, int connectedSystemRunProfileId)

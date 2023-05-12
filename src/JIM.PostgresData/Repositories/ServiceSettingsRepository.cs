@@ -1,6 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 
 namespace JIM.PostgresData.Repositories
@@ -20,7 +21,7 @@ namespace JIM.PostgresData.Repositories
             {
                 return await Repository.Database.ServiceSettings.Include(q => q.SSOUniqueIdentifierMetaverseAttribute).FirstOrDefaultAsync();
             }
-            catch (Npgsql.PostgresException ex)
+            catch (PostgresException ex)
             {
                 if (ex.Message.StartsWith("42P01: relation \"ServiceSettings\" does not exist", StringComparison.CurrentCultureIgnoreCase))
                 {

@@ -1,6 +1,5 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Staging;
-using Microsoft.Extensions.Logging;
 using System.DirectoryServices.Protocols;
 
 namespace JIM.Connectors.LDAP

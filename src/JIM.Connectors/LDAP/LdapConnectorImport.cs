@@ -202,7 +202,7 @@ namespace JIM.Connectors.LDAP
 
                 var importObject = new ConnectedSystemImportObject
                 {
-                    UniqueIdentifierAttribute = searchResult.DistinguishedName,
+                    UniqueIdentifierAttributeValue = searchResult.DistinguishedName,
                     ObjectType = objectType.Name,
                     ChangeType = ConnectedSystemImportObjectChangeType.Add
                 };

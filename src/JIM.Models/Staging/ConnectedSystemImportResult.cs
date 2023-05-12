@@ -2,6 +2,9 @@
 {
     public class ConnectedSystemImportResult
     {
+        /// <summary>
+        /// The objects imported from the connected system, i.e. users, groups, etc.
+        /// </summary>
         public List<ConnectedSystemImportObject> ImportObjects { get; set; }
 
         /// <summary>

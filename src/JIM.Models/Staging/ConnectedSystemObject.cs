@@ -17,7 +17,7 @@ namespace JIM.Models.Staging
         /// <summary>
         /// The attribute that uniquely identifies this object in the connected system.
         /// It should be immutable (not change for the lifetime of the object). 
-        /// The connected system may author it, or you may specify it at provisioning time. It depends on the system.
+        /// The connected system may author it, or you may specify it at provisioning time, depending on the needs of the connected system.
         /// </summary>
         public ConnectedSystemAttribute UniqueIdentifierAttribute { get; set; }
 

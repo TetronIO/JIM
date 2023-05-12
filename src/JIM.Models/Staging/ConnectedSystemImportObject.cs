@@ -9,11 +9,11 @@ namespace JIM.Models.Staging
     public class ConnectedSystemImportObject
     {
         /// <summary>
-        /// The attribute that uniquely identifies this object in the connected system.
+        /// The value for the attribute that uniquely identifies this object in the connected system.
         /// It should be immutable (not change for the lifetime of the object). 
         /// The connected system may author it, or you may specify it at provisioning time. It depends on the system.
         /// </summary>
-        public string? UniqueIdentifierAttribute { get; set; }
+        public string? UniqueIdentifierAttributeValue { get; set; }
         
         public string? ObjectType { get; set; }
 
