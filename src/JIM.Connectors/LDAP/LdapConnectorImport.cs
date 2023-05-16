@@ -179,45 +179,82 @@ namespace JIM.Connectors.LDAP
             if (_connectedSystem.ObjectTypes == null)
                 throw new InvalidDataException("_connectedSystem.ObjectTypes is null. Cannot continue.");
 
-            var output = new List<ConnectedSystemImportObject>();
+            var importObjects = new List<ConnectedSystemImportObject>();
 
-            // todo: experiment with parallel foreach
+            // todo: experiment with parallel foreach to see if we can speed up processing
             foreach (SearchResultEntry searchResult in searchResults)
             {
                 if (_cancellationToken.IsCancellationRequested)
                 {
                     _logger.Debug("ConvertLdapResults: Cancellation requested. Stopping");
-                    return output;
+                    return importObjects;
                 }
+
+                // start to build the object that will represent the object in the connected system. we will pass this back to JIM 
+                var importObject = new ConnectedSystemImportObject {
+                    ChangeType = ConnectedSystemImportObjectChangeType.Add
+                };
 
                 // work out what JIM object type this result is
                 var objectClasses = (string[])searchResult.Attributes["objectclass"].GetValues(typeof(string));
                 var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => objectClasses.Any(oc => oc.Equals(ot.Name, StringComparison.CurrentCultureIgnoreCase)));
                 if (objectType == null)
                 {
-                    _logger.Error($"ConvertLdapResults: Couldn't match object type to object classes received: {string.Join(',', objectClasses)}");
-                    // todo: record error on result and continue
+                    importObject.ErrorType = ConnectedSystemImportObjectError.CouldNotDetermineObjectType;
+                    importObject.ErrorMessage = $"ConvertLdapResults: Couldn't match object type to object classes received: {string.Join(',', objectClasses)}";
+                    importObjects.Add(importObject);
+                    continue;
+                }
+                else
+                {
+                    importObject.ObjectType = objectType.Name;
+                }
+
+                // make sure JIM has passed us in a valid configuration
+                // ideally a connector shouldn't have to do this, but as type is nullable, it pays to be sure.
+                if (objectType.UniqueIdentifierAttribute == null)
+                {
+                    importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
+                    importObject.ErrorMessage = $"ConvertLdapResults: Object Type '{objectType.Name}' has no Unique Identifier Attribute set. Cannot process search result.";
+                    importObjects.Add(importObject);
                     continue;
                 }
 
-                var importObject = new ConnectedSystemImportObject
+                // get the unique identifier attribute is for this object type
+                var searchResultUniqueIdAttribute = searchResult.Attributes[objectType.UniqueIdentifierAttribute.Name];
+                if (searchResultUniqueIdAttribute == null)
                 {
-                    UniqueIdentifierAttributeValue = searchResult.DistinguishedName,
-                    ObjectType = objectType.Name,
-                    ChangeType = ConnectedSystemImportObjectChangeType.Add
-                };
+                    importObject.ErrorType = ConnectedSystemImportObjectError.MissingUniqueIdentifierAttribute;
+                    importObject.ErrorMessage = $"No '{objectType.UniqueIdentifierAttribute.Name}' attribute found on search result for DN: {searchResult.DistinguishedName}";
+                    importObjects.Add(importObject);
+                    continue;
+                }
 
+                // set the right type of unique identifier attribute value
+                if (objectType.UniqueIdentifierAttribute.Type == AttributeDataType.String)
+                    importObject.UniqueIdentifierAttributeStringValue = LdapConnectorUtilities.GetEntryAttributeStringValue(searchResult, searchResultUniqueIdAttribute.Name);
+                else if (objectType.UniqueIdentifierAttribute.Type == AttributeDataType.Number)
+                    importObject.UniqueIdentifierIntValue = LdapConnectorUtilities.GetEntryAttributeIntValue(searchResult, searchResultUniqueIdAttribute.Name);
+                else if (objectType.UniqueIdentifierAttribute.Type == AttributeDataType.Guid)
+                    importObject.UniqueIdentifierAttributeGuidValue = LdapConnectorUtilities.GetEntryAttributeGuidValue(searchResult, searchResultUniqueIdAttribute.Name);
+
+                // start populating import object attribute values from the search result
                 foreach (string name in searchResult.Attributes.AttributeNames)
                 {
-                    // work out what data type the attribute is
-                    var omSyntax = LdapConnectorUtilities.GetEntryAttributeIntValue(searchResult, "omsyntax");
-                    if (!omSyntax.HasValue)
-                        throw new InvalidDataException("ConvertLdapResults: SearchResultEntry didn't have an omSyntax attribute.");
+                    // get the schema attribute for this search result attribute, so we can work out what type it is
+                    var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase));
+                    if (schemaAttribute == null)
+                    {
+                        importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
+                        importObject.ErrorMessage = $"Search result attribute '{name}' not found in schema!";
+                        importObjects.Add(importObject);
+                        break;
+                    }
 
                     var importObjectAttribute = new ConnectedSystemImportObjectAttribute
                     {
                         Name = name,
-                        Type = LdapConnectorUtilities.GetLdapAttributeDataType(omSyntax.Value)
+                        Type = schemaAttribute.Type
                     };
 
                     // assign the right type of value(s)
@@ -253,10 +290,10 @@ namespace JIM.Connectors.LDAP
                     }
                 }
 
-                output.Add(importObject);
+                importObjects.Add(importObject);
             }
 
-            return output;
+            return importObjects;
         }
         #endregion
     }

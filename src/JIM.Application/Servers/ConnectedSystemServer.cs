@@ -303,14 +303,19 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, ConnectedSystemAttributeValue connectedSystemAttributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int attributeId, string attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+        }
+
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
         public async Task<int> GetConnectedSystemObjectCountAsync()
@@ -321,6 +326,11 @@ namespace JIM.Application.Servers
         public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(ConnectedSystemObjectType connectedSystemObjectType)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
+        }
+
+        public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        {
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         }
         #endregion
 

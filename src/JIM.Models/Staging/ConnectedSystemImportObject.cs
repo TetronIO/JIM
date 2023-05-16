@@ -9,16 +9,37 @@ namespace JIM.Models.Staging
     public class ConnectedSystemImportObject
     {
         /// <summary>
-        /// The value for the attribute that uniquely identifies this object in the connected system.
+        /// The string value for the attribute that uniquely identifies this object in the connected system.
         /// It should be immutable (not change for the lifetime of the object). 
         /// The connected system may author it, or you may specify it at provisioning time. It depends on the system.
         /// </summary>
-        public string? UniqueIdentifierAttributeValue { get; set; }
+        public string? UniqueIdentifierAttributeStringValue { get; set; }
+
+        /// <summary>
+        /// The guid value for the attribute that uniquely identifies this object in the connected system.
+        /// It should be immutable (not change for the lifetime of the object). 
+        /// The connected system may author it, or you may specify it at provisioning time. It depends on the system.
+        /// </summary>
+        public Guid? UniqueIdentifierAttributeGuidValue { get; set; }
+
+        /// <summary>
+        /// The integer value for the attribute that uniquely identifies this object in the connected system.
+        /// It should be immutable (not change for the lifetime of the object). 
+        /// The connected system may author it, or you may specify it at provisioning time. It depends on the system.
+        /// </summary>
+        public int? UniqueIdentifierIntValue { get; set; }
         
+        /// <summary>
+        /// The type of object this is in the connected system, i.e. user, group, etc.
+        /// </summary>
         public string? ObjectType { get; set; }
 
         public List<ConnectedSystemImportObjectAttribute> Attributes { get; set; } = new List<ConnectedSystemImportObjectAttribute>();
 
-        public ConnectedSystemImportObjectChangeType ChangeType { get; set; } = ConnectedSystemImportObjectChangeType.NotSet;
+        public ConnectedSystemImportObjectChangeType ChangeType { get; set; } = ConnectedSystemImportObjectChangeType.NotSet;    
+        
+        public ConnectedSystemImportObjectError? ErrorType { get; set; }
+
+        public string? ErrorMessage { get; set; }
     }
 }

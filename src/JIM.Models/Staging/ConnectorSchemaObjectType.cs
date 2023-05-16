@@ -4,7 +4,7 @@
     {
         /// <summary>
         /// The name of the Object Type in the connected system.
-        /// Recommend using standard conventions, i.e. "User" or "Group" to simplify attribute mappings and enable JIM to auto-map object types.
+        /// Recommend using standard conventions, i.e. "User" or "Group" to simplify mappings between the metaverse and connected system object types and enable JIM to auto-map them.
         /// </summary>
         public string Name { get; set; }
 

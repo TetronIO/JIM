@@ -13,6 +13,12 @@
         /// </summary>
         public bool Selected { get; set; }
 
+        /// <summary>
+        /// The user chosen attribute to use as the unique identifier attribute.
+        /// Typically this is guided by the connected system though, and the connected system can make recommendations on what attributes to use.
+        /// </summary>
+        public ConnectedSystemAttribute? UniqueIdentifierAttribute { get; set; }
+
         public ConnectedSystemObjectType()
         {
             Created = DateTime.Now;

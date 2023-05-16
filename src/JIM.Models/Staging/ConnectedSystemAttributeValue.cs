@@ -18,5 +18,7 @@
         public byte[]? ByteValue { get; set; }
 
         public Guid? GuidValue { get; set; }
+
+        public bool? BoolValue { get; set; }
     }
 }

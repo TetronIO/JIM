@@ -10,6 +10,7 @@ namespace JIM.Data.Repositories
     {
         public Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem);       
         public Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
+        public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
         public Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
         public Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
         public Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
@@ -30,7 +31,9 @@ namespace JIM.Data.Repositories
 
         public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
         public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id);
-        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, ConnectedSystemAttributeValue connectedSystemAttributeValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
 
 
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);

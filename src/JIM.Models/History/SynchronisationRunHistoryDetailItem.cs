@@ -26,10 +26,8 @@ namespace JIM.Models.History
         /// </summary>
         public string? DataSnapshot { get; set; }
 
+        public SynchronisationRunHistoryDetailItemError? Error { get; set; }
         public string? ErrorMessage { get; set; }
-
-        public string? ErrorCode { get; set; } 
-
         public string? ErrorStackTrace { get; set; }
     }
 }

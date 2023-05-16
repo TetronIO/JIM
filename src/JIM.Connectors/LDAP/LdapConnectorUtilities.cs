@@ -22,6 +22,14 @@ namespace JIM.Connectors.LDAP
             return (bool)entry.Attributes[attributeName][0];
         }
 
+        internal static Guid? GetEntryAttributeGuidValue(SearchResultEntry entry, string attributeName)
+        {
+            if (entry == null) return null;
+            if (!entry.Attributes.Contains(attributeName)) return null;
+            if (entry.Attributes[attributeName].Count != 1) return null;
+            return (Guid)entry.Attributes[attributeName][0];
+        }
+
         internal static DateTime? GetEntryAttributeDateTimeValue(SearchResultEntry entry, string attributeName)
         {
             if (entry == null) return null;

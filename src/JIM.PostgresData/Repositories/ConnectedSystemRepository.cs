@@ -1,5 +1,4 @@
 ﻿using JIM.Data.Repositories;
-using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
@@ -177,28 +176,25 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, ConnectedSystemAttributeValue connectedSystemAttributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
-            switch (connectedSystemAttributeValue.Attribute.Type)
-            {
-                case AttributeDataType.String:
-                    return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
-                      x.ConnectedSystem.Id == connectedSystemId &&
-                      x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeValue.Id && av.StringValue != null && av.StringValue.Equals(connectedSystemAttributeValue.StringValue, StringComparison.CurrentCultureIgnoreCase)));
+            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
+                x.ConnectedSystem.Id == connectedSystemId &&
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.Equals(attributeValue, StringComparison.CurrentCultureIgnoreCase)));
+        }
 
-                case AttributeDataType.Number:
-                    return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
-                      x.ConnectedSystem.Id == connectedSystemId &&
-                      x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeValue.Id && av.IntValue == connectedSystemAttributeValue.IntValue));
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
+        {
+            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
+                x.ConnectedSystem.Id == connectedSystemId &&
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
+        }
 
-                case AttributeDataType.Guid:
-                    return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
-                      x.ConnectedSystem.Id == connectedSystemId &&
-                      x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeValue.Id && av.GuidValue == connectedSystemAttributeValue.GuidValue));
-
-                default:
-                    throw new ArgumentException($"GetConnectedSystemObjectByUniqueIdAsync: Unsupported connected system attribute type: {connectedSystemAttributeValue.Attribute.Type}", nameof(connectedSystemAttributeValue));
-            }
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
+        {
+            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
+                x.ConnectedSystem.Id == connectedSystemId &&
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue));
         }
 
         public async Task<int> GetConnectedSystemObjectCountAsync()
@@ -209,6 +205,12 @@ namespace JIM.PostgresData.Repositories
         public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId)
         {
             return await Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).CountAsync();
+        }
+
+        public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        {
+            Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);
+            await Repository.Database.SaveChangesAsync();
         }
         #endregion
 

@@ -14,6 +14,8 @@ namespace JIM.Models.Staging
 
         public DateTime? DateTimeValue { get; set; }
 
+        public Guid? GuidValue { get; set; }
+
         public List<byte[]> ByteValues { get; set; } = new List<byte[]>();
 
         public bool? BoolValue { get; set; }
