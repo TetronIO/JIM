@@ -127,10 +127,8 @@ namespace JIM.Service.Processors
                             continue;
                         }
 
-                        // todo: process import object and apply connector space changes as necessary
                         // is new - new cso required
                         // is existing - apply any changes to the cso from the import object
-
                         if (connectedSystemObject == null)
                         {
                             // new object - create connected system object
@@ -148,7 +146,7 @@ namespace JIM.Service.Processors
                                 var csAttribute = csObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(importObjectAttribute.Name, StringComparison.CurrentCultureIgnoreCase));
                                 if (csAttribute == null)
                                 {
-                                    // unexpected attribute!
+                                    // unexpected import attribute!
                                     synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.UnexpectedAttribute;
                                     synchronisationRunHistoryDetailItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
                                     _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
@@ -190,21 +188,25 @@ namespace JIM.Service.Processors
                                             });
                                         }
                                         break;
-                                    // todo: change import object attribute value to mva. everything should be mva capable, except bool, that would make no sense
                                     case AttributeDataType.Guid:
-                                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                                        foreach (var importObjectAttributeGuidValue in importObjectAttribute.GuidValues)
                                         {
-                                            Attribute = csAttribute,
-                                            GuidValue = importObjectAttribute.GuidValue
-                                        });
+                                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                                            {
+                                                Attribute = csAttribute,
+                                                GuidValue = importObjectAttributeGuidValue
+                                            });
+                                        }
                                         break;
-                                    // todo: change import object attribute value to mva. everything should be mva capable, except bool, that would make no sense
                                     case AttributeDataType.DateTime:
-                                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                                        foreach (var importObjectAttributeDateTimeValue in importObjectAttribute.DateTimeValues)
                                         {
-                                            Attribute = csAttribute,
-                                            DateTimeValue = importObjectAttribute.DateTimeValue
-                                        });
+                                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                                            {
+                                                Attribute = csAttribute,
+                                                DateTimeValue = importObjectAttributeDateTimeValue
+                                            });
+                                        }
                                         break;
                                     case AttributeDataType.Bool:
                                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
@@ -227,10 +229,11 @@ namespace JIM.Service.Processors
                         else
                         {
                             // existing connected system object - update from import object if necessary
+
                         }
                     }
 
-                    // process deletes - what wasn't imported?
+                    // process deletes - what wasn't imported? how do we do this when paging is being used?
                     // make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
 
                     if (initialPage)

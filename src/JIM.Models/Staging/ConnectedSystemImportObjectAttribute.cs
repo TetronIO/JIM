@@ -12,9 +12,9 @@ namespace JIM.Models.Staging
 
         public List<int> IntValues { get; set; } = new List<int>();
 
-        public DateTime? DateTimeValue { get; set; }
+        public List<DateTime> DateTimeValues { get; set; } = new List<DateTime>();
 
-        public Guid? GuidValue { get; set; }
+        public List<Guid> GuidValues { get; set; } = new List<Guid>();
 
         public List<byte[]> ByteValues { get; set; } = new List<byte[]>();
 

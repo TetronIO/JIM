@@ -22,6 +22,19 @@ namespace JIM.Connectors.LDAP
             return (bool)entry.Attributes[attributeName][0];
         }
 
+        internal static List<Guid>? GetEntryAttributeGuidValues(SearchResultEntry entry, string attributeName)
+        {
+            if (entry == null) return null;
+            if (!entry.Attributes.Contains(attributeName)) return null;
+            if (entry.Attributes[attributeName].Count == 0) return null;
+            return (from Guid value in entry.Attributes[attributeName].GetValues(typeof(Guid))
+                    select value).ToList();
+        }
+
+        /// <summary>
+        /// Returns the first value of an LDAP SearchResultEntry attribute, cast to Guid.
+        /// If there are multiple values, only the first is returned.
+        /// </summary>
         internal static Guid? GetEntryAttributeGuidValue(SearchResultEntry entry, string attributeName)
         {
             if (entry == null) return null;
@@ -30,12 +43,13 @@ namespace JIM.Connectors.LDAP
             return (Guid)entry.Attributes[attributeName][0];
         }
 
-        internal static DateTime? GetEntryAttributeDateTimeValue(SearchResultEntry entry, string attributeName)
+        internal static List<DateTime>? GetEntryAttributeDateTimeValues(SearchResultEntry entry, string attributeName)
         {
             if (entry == null) return null;
             if (!entry.Attributes.Contains(attributeName)) return null;
-            if (entry.Attributes[attributeName].Count != 1) return null;
-            return (DateTime)entry.Attributes[attributeName][0];
+            if (entry.Attributes[attributeName].Count == 0) return null;
+            return (from DateTime value in entry.Attributes[attributeName].GetValues(typeof(DateTime))
+                    select value).ToList();
         }
 
         internal static List<string>? GetEntryAttributeStringValues(SearchResultEntry entry, string attributeName)

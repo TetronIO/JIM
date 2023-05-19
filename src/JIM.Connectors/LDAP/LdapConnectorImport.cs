@@ -277,7 +277,15 @@ namespace JIM.Connectors.LDAP
                             break;
 
                         case AttributeDataType.DateTime:
-                            importObjectAttribute.DateTimeValue = LdapConnectorUtilities.GetEntryAttributeDateTimeValue(searchResult, name);
+                            var dateTimeValues = LdapConnectorUtilities.GetEntryAttributeDateTimeValues(searchResult, name);
+                            if (dateTimeValues != null && dateTimeValues.Count > 0)
+                                importObjectAttribute.DateTimeValues.AddRange(dateTimeValues);
+                            break;
+
+                        case AttributeDataType.Guid:
+                            var guidValues = LdapConnectorUtilities.GetEntryAttributeGuidValues(searchResult, name);
+                            if (guidValues != null && guidValues.Count > 0)
+                                importObjectAttribute.GuidValues.AddRange(guidValues);
                             break;
 
                         case AttributeDataType.Binary:
