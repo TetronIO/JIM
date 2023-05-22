@@ -18,6 +18,7 @@ namespace JIM.Data.Repositories
 
 
         public Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
+        public Task DeleteConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemAttributeValue> connectedSystemAttributeValues);
         public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
         public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
         public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
@@ -25,6 +26,7 @@ namespace JIM.Data.Repositories
 
 
         public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+        public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
         public Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile);
         public Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
 

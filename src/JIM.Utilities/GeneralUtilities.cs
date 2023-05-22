@@ -10,5 +10,12 @@ namespace JIM.Utilities
             var withSpaces = string.Join(" ", words);
             return withSpaces;
         }
+
+        
+        public static bool AreByteArraysTheSame(ReadOnlySpan<byte> array1, ReadOnlySpan<byte> array2)
+        {
+            // byte[] is implicitly convertible to ReadOnlySpan<byte>
+            return array1.SequenceEqual(array2);
+        }
     }
 }

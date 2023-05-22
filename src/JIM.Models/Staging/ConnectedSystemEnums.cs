@@ -81,6 +81,7 @@
         MissingUniqueIdentifierAttributeValue,
         CouldntMatchObjectType,
         UnsupportedUniqueIdentifierAttribyteType,
-        UnexpectedAttribute
+        UnexpectedAttribute,
+        DuplicateImportedAttribute
     }
 }

@@ -131,105 +131,12 @@ namespace JIM.Service.Processors
                         // is existing - apply any changes to the cso from the import object
                         if (connectedSystemObject == null)
                         {
-                            // new object - create connected system object
-                            connectedSystemObject = new ConnectedSystemObject
-                            {
-                                ConnectedSystem = _connectedSystem,
-                                UniqueIdentifierAttribute = csObjectType.UniqueIdentifierAttribute,
-                                Type = csObjectType
-                            };
-
-                            var needToSkipImportObject = false;
-                            foreach (var importObjectAttribute in importObject.Attributes)
-                            {
-                                // find the connected system schema attribute that has the same name
-                                var csAttribute = csObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(importObjectAttribute.Name, StringComparison.CurrentCultureIgnoreCase));
-                                if (csAttribute == null)
-                                {
-                                    // unexpected import attribute!
-                                    synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.UnexpectedAttribute;
-                                    synchronisationRunHistoryDetailItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
-                                    _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
-                                    needToSkipImportObject = true;
-                                    break;
-                                }
-                                
-                                // assign the attribute value(s)
-                                // remember, jim treats attributes requires an attribute value object for each connected system attribute value, i.e. everything's multi-valued capable
-                                switch (csAttribute.Type)
-                                {
-                                    case AttributeDataType.String:
-                                        foreach (var importObjectAttributeStringValue in importObjectAttribute.StringValues)
-                                        {
-                                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
-                                            {
-                                                Attribute = csAttribute,
-                                                StringValue = importObjectAttributeStringValue
-                                            });
-                                        }
-                                        break;
-                                    case AttributeDataType.Number:
-                                        foreach (var importObjectAttributeIntValue in importObjectAttribute.IntValues)
-                                        {
-                                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
-                                            {
-                                                Attribute = csAttribute,
-                                                IntValue = importObjectAttributeIntValue
-                                            });
-                                        }
-                                        break;
-                                    case AttributeDataType.Binary:
-                                        foreach (var importObjectAttributeByteValue in importObjectAttribute.ByteValues)
-                                        {
-                                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
-                                            {
-                                                Attribute = csAttribute,
-                                                ByteValue = importObjectAttributeByteValue
-                                            });
-                                        }
-                                        break;
-                                    case AttributeDataType.Guid:
-                                        foreach (var importObjectAttributeGuidValue in importObjectAttribute.GuidValues)
-                                        {
-                                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
-                                            {
-                                                Attribute = csAttribute,
-                                                GuidValue = importObjectAttributeGuidValue
-                                            });
-                                        }
-                                        break;
-                                    case AttributeDataType.DateTime:
-                                        foreach (var importObjectAttributeDateTimeValue in importObjectAttribute.DateTimeValues)
-                                        {
-                                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
-                                            {
-                                                Attribute = csAttribute,
-                                                DateTimeValue = importObjectAttributeDateTimeValue
-                                            });
-                                        }
-                                        break;
-                                    case AttributeDataType.Bool:
-                                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
-                                        {
-                                            Attribute = csAttribute,
-                                            BoolValue = importObjectAttribute.BoolValue
-                                        });
-                                        break;
-                                    //case AttributeDataType.Reference:
-                                    //    break;
-                                }
-                            }
-
-                            if (needToSkipImportObject)
-                                continue;
-
-                            // persist the new cso
-                            await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+                            await CreateConnectedSystemObjectFromImportObjectAsync(importObject, csObjectType, synchronisationRunHistoryDetailItem);
                         }
                         else
                         {
                             // existing connected system object - update from import object if necessary
-
+                            await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, synchronisationRunHistoryDetailItem);
                         }
                     }
 
@@ -253,6 +160,240 @@ namespace JIM.Service.Processors
             {
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
             }
+        }
+
+        private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, SynchronisationRunHistoryDetailItem synchronisationRunHistoryDetailItem)
+        {
+            // this has been tested earlier, no need to error handle
+            if (connectedSystemObjectType.UniqueIdentifierAttribute == null)
+                return;
+
+            // new object - create connected system object
+            var connectedSystemObject = new ConnectedSystemObject
+            {
+                ConnectedSystem = _connectedSystem,
+                UniqueIdentifierAttribute = connectedSystemObjectType.UniqueIdentifierAttribute,
+                Type = connectedSystemObjectType
+            };
+
+            var csoIsInvalid = false;
+            foreach (var importObjectAttribute in connectedSystemImportObject.Attributes)
+            {
+                // find the connected system schema attribute that has the same name
+                var csAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(importObjectAttribute.Name, StringComparison.CurrentCultureIgnoreCase));
+                if (csAttribute == null)
+                {
+                    // unexpected import attribute!
+                    synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.UnexpectedAttribute;
+                    synchronisationRunHistoryDetailItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
+                    _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
+                    csoIsInvalid = true;
+                    break;
+                }
+
+                // assign the attribute value(s)
+                // remember, jim treats attributes requires an attribute value object for each connected system attribute value, i.e. everything's multi-valued capable
+                switch (csAttribute.Type)
+                {
+                    case AttributeDataType.String:
+                        foreach (var importObjectAttributeStringValue in importObjectAttribute.StringValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                StringValue = importObjectAttributeStringValue
+                            });
+                        }
+                        break;
+                    case AttributeDataType.Number:
+                        foreach (var importObjectAttributeIntValue in importObjectAttribute.IntValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                IntValue = importObjectAttributeIntValue
+                            });
+                        }
+                        break;
+                    case AttributeDataType.Binary:
+                        foreach (var importObjectAttributeByteValue in importObjectAttribute.ByteValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                ByteValue = importObjectAttributeByteValue
+                            });
+                        }
+                        break;
+                    case AttributeDataType.Guid:
+                        foreach (var importObjectAttributeGuidValue in importObjectAttribute.GuidValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                GuidValue = importObjectAttributeGuidValue
+                            });
+                        }
+                        break;
+                    case AttributeDataType.DateTime:
+                        foreach (var importObjectAttributeDateTimeValue in importObjectAttribute.DateTimeValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                DateTimeValue = importObjectAttributeDateTimeValue
+                            });
+                        }
+                        break;
+                    case AttributeDataType.Bool:
+                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                        {
+                            Attribute = csAttribute,
+                            BoolValue = importObjectAttribute.BoolValue
+                        });
+                        break;
+                        //case AttributeDataType.Reference:
+                        //    break;
+                }
+            }
+
+            if (csoIsInvalid)
+                return;
+
+            // persist the new cso
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+        }
+
+        private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, SynchronisationRunHistoryDetailItem synchronisationRunHistoryDetailItem)
+        {
+            // attribute value additions and removals for all attributes will be collected together for persistence in one go
+            var attributeValueRemovals  = new List<ConnectedSystemAttributeValue>();
+            var attributeValueAdditions = new List<ConnectedSystemAttributeValue>();
+
+            // process known attributes (potential updates)
+            // need to work with the fact that we have individual objects for multi-valued attribute values
+            // get a list of distinct attributes
+            var csoAttributeNames = connectedSystemObject.AttributeValues.Select(q => q.Attribute.Name).Distinct();
+            foreach (var csoAttributeName in csoAttributeNames)
+            {
+                // is there a matching attribute in the import object?
+                var importedAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name != null && q.Name.Equals(csoAttributeName, StringComparison.OrdinalIgnoreCase));
+                if (importedAttribute != null)
+                {
+                    // work out what data type this attribute is and get the matching imported object attribute
+                    var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase));
+                    var importedObjectAttributeList = connectedSystemImportObject.Attributes.Where(a => a.Name != null && a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase)).ToList();
+                    if (importedObjectAttributeList.Count > 1)
+                    {
+                        // imported objects attributes should be distinct, i.e. one per name
+                        synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.DuplicateImportedAttribute;
+                        synchronisationRunHistoryDetailItem.ErrorMessage = $"Attribute '{csoAttributeName}' was present more than one once the import object. Cannot continue processing this object.";
+                        return;
+                    }
+                    var importedObjectAttribute = importedObjectAttributeList[0];
+
+                    // process attribute additions and removals...
+                    switch (csoAttribute.Type)
+                    {
+                        case AttributeDataType.String:
+
+                            // find values on the cso of type string that aren't on the imported object and remove them first
+                            var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && !(importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))));
+                            attributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingStringAttributeValues.Any(msav => msav.Id == av.Id)));
+
+                            // find imported values of type string that aren't on the cso and add them
+                            var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv)));
+                            foreach (var newStringValue in newStringValues)
+                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, StringValue = newStringValue });
+
+                            break;
+                        case AttributeDataType.Number:
+
+                            // find values on the cso of type int that aren't on the imported object and remove them first
+                            var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && !(importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue))));
+                            attributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingIntAttributeValues.Any(msav => msav.Id == av.Id)));
+
+                            // find imported values of type int that aren't on the cso and add them
+                            var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv)));
+                            foreach (var newIntValue in newIntValues)
+                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, IntValue = newIntValue });
+
+                            break;
+                        case AttributeDataType.DateTime:
+
+                            // find values on the cso of type DateTime that aren't on the imported object and remove them first
+                            var missingDateTimeAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && !(importedObjectAttribute.DateTimeValues.Any(i => i.Equals(av.DateTimeValue))));
+                            attributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingDateTimeAttributeValues.Any(msav => msav.Id == av.Id)));
+
+                            // find imported values of type DateTime that aren't on the cso and add them
+                            var newDateTimeValues = importedObjectAttribute.DateTimeValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && av.DateTimeValue.Equals(sv)));
+                            foreach (var newDateTimeValue in newDateTimeValues)
+                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
+
+                            break;
+                        case AttributeDataType.Binary:
+
+                            // find values on the cso of type byte array that aren't on the imported object and remove them first
+                            var missingByteArrayAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && !importedObjectAttribute.ByteValues.Any(i => Utilities.Utilities.AreByteArraysTheSame(i, av.ByteValue)));
+                            attributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingByteArrayAttributeValues.Any(msav => msav.Id == av.Id)));
+
+                            // find imported values of type byte array that aren't on the cso and add them
+                            var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue)));
+                            foreach (var newByteArrayValue in newByteArrayValues)
+                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, ByteValue = newByteArrayValue });
+
+                            break;
+
+                        case AttributeDataType.Reference:
+                            // todo: handle references...
+                            var x = 1;
+                            break;
+
+                        case AttributeDataType.Guid:
+
+                            // find values on the cso of type Guid that aren't on the imported object and remove them first
+                            var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && !(importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue))));
+                            attributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingGuidAttributeValues.Any(msav => msav.Id == av.Id)));
+
+                            // find imported values of type Guid that aren't on the cso and add them
+                            var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv)));
+                            foreach (var newGuidValue in newGuidValues)
+                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, GuidValue = newGuidValue });
+
+                            break;
+                        case AttributeDataType.Bool:
+
+                            // there will be only a single value for a bool. is it the same or different?
+                            // if different, remove the old value, add the new one
+                            // observation: removing and adding sva values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
+                            // todo: consider having the ability to update values instead of replacing.
+
+                            var csAttributeValue = connectedSystemObject.AttributeValues.Single(av => av.Attribute.Name == csoAttributeName);
+                            if (csAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
+                            {
+                                attributeValueRemovals.Add(csAttributeValue);
+                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
+                            }
+
+                            break;
+                    }
+                }
+                else
+                {
+                    // no values were imported for this attribute. delete the cso attribute values
+                    var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Name == csoAttributeName).ToList();
+                    await _jim.ConnectedSystems.DeleteConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, attributeValuesToDelete);
+                }
+            }
+
+            // process new imported attributes (add attribute values where they were null before)
+            var newAttributes = connectedSystemImportObject.Attributes.Where(csio => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.Equals(csio.Name, StringComparison.CurrentCultureIgnoreCase)));
+            foreach (var newAttribute in newAttributes)
+            {
+
+            }
+
+            // persist addition and removals...
         }
     }
 }

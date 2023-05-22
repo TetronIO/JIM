@@ -212,6 +212,18 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);
             await Repository.Database.SaveChangesAsync();
         }
+
+        public async Task DeleteConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemAttributeValue> connectedSystemAttributeValues)
+        {
+            Repository.Database.ConnectedSystemAttributeValues.RemoveRange(connectedSystemAttributeValues);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        {
+            Repository.Database.ConnectedSystemObjects.Update(connectedSystemObject);
+            await Repository.Database.SaveChangesAsync();
+        }
         #endregion
 
         #region Connected System Object Types

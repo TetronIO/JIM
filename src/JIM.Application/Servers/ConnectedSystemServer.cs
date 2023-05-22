@@ -332,6 +332,16 @@ namespace JIM.Application.Servers
         {
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         }
+
+        public async Task DeleteConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemAttributeValue> connectedSystemAttributeValues)
+        {
+            // remove the references
+            connectedSystemObject.AttributeValues.RemoveAll(av => connectedSystemAttributeValues.Any(csav => csav.Id == av.Id));
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
+
+            // delete the attribute values
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, connectedSystemAttributeValues);
+        }
         #endregion
 
         #region Connected System Partitions
