@@ -78,9 +78,9 @@ namespace JIM.Application.Servers
 
         public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)
         {
-            if (connectedSystem == null) 
+            if (connectedSystem == null)
                 throw new ArgumentNullException(nameof(connectedSystem));
-            
+
             if (connectedSystem.ConnectorDefinition == null)
                 throw new ArgumentException("connectedSystem.ConnectorDefinition is null!");
 
@@ -154,7 +154,7 @@ namespace JIM.Application.Servers
         /// <remarks>Do not make static, it needs to be available on the instance</remarks>
         public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
         {
-            ValidateConnectedSystemParameter(connectedSystem);            
+            ValidateConnectedSystemParameter(connectedSystem);
 
             // work out what connector we need to instantiate, so that we can use its internal validation method
             // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
@@ -235,9 +235,9 @@ namespace JIM.Application.Servers
         /// </summary>
         /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
         /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-        #pragma warning disable CA1822 // Mark members as static
+#pragma warning disable CA1822 // Mark members as static
         public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem)
-        #pragma warning restore CA1822 // Mark members as static
+#pragma warning restore CA1822 // Mark members as static
         {
             ValidateConnectedSystemParameter(connectedSystem);
 
@@ -332,15 +332,31 @@ namespace JIM.Application.Servers
         {
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         }
+        #endregion
 
-        public async Task DeleteConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemAttributeValue> connectedSystemAttributeValues)
+        #region Connected System Attribute Values
+        public async Task CreateConnectedSystemObjectAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> connectedSystemObjectAttributeValues)
         {
-            // remove the references
-            connectedSystemObject.AttributeValues.RemoveAll(av => connectedSystemAttributeValues.Any(csav => csav.Id == av.Id));
+            if (connectedSystemObjectAttributeValues == null)
+                throw new ArgumentNullException(nameof(connectedSystemObjectAttributeValues));
+
+            if (connectedSystemObjectAttributeValues.Any(csav => csav.Attribute == null))
+                throw new ArgumentException($"One or more {nameof(ConnectedSystemObjectAttributeValue)} objects do not have an Attribute property set.", nameof(connectedSystemObjectAttributeValues));
+
+            if (connectedSystemObjectAttributeValues.Any(csav => csav.ConnectedSystem == null))
+                throw new ArgumentException($"One or more {nameof(ConnectedSystemObjectAttributeValue)} do not have a ConnectedSystem property set.", nameof(connectedSystemObjectAttributeValues));
+
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAttributeValuesAsync(connectedSystemObjectAttributeValues);
+        }
+
+        public async Task DeleteConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> connectedSystemObjectAttributeValues)
+        {
+            // first remove all reference to the attribute values
+            connectedSystemObject.AttributeValues.RemoveAll(av => connectedSystemObjectAttributeValues.Any(csoav => csoav.Id == av.Id));
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
 
-            // delete the attribute values
-            await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, connectedSystemAttributeValues);
+            // then delete the attribute values
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAttributeValuesAsync(connectedSystemObjectAttributeValues);
         }
         #endregion
 

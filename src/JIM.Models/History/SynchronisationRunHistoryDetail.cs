@@ -2,6 +2,9 @@
 
 namespace JIM.Models.History
 {
+    /// <summary>
+    /// Provides information on the execution of a synchronisation run event.
+    /// </summary>
     public class SynchronisationRunHistoryDetail
     {
         public Guid Id { get; set; }

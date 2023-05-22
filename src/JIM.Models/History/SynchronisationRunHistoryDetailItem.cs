@@ -3,7 +3,7 @@
 namespace JIM.Models.History
 {
     /// <summary>
-    /// Represents the result of an import or export operation, i.e. result, errors, snapshot, etc. 
+    /// Provides information on the item of a synchronisation run, i.e. a pending export object, or import object.
     /// </summary>
     public class SynchronisationRunHistoryDetailItem
     {
@@ -22,7 +22,7 @@ namespace JIM.Models.History
         public SynchronisationRunHistoryDetail SynchronisationRunHistoryDetail { get; set; }
 
         /// <summary>
-        /// If settings allow during run execution, a JSON representation of the data imported, or exported can be accessed here for investigative purposes.
+        /// If settings allow during run execution, a JSON representation of the data imported, or exported can be accessed here for investigative purposes in the event of an error.
         /// </summary>
         public string? DataSnapshot { get; set; }
 

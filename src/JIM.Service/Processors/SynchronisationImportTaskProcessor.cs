@@ -198,7 +198,7 @@ namespace JIM.Service.Processors
                     case AttributeDataType.String:
                         foreach (var importObjectAttributeStringValue in importObjectAttribute.StringValues)
                         {
-                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                             {
                                 Attribute = csAttribute,
                                 StringValue = importObjectAttributeStringValue
@@ -208,7 +208,7 @@ namespace JIM.Service.Processors
                     case AttributeDataType.Number:
                         foreach (var importObjectAttributeIntValue in importObjectAttribute.IntValues)
                         {
-                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                             {
                                 Attribute = csAttribute,
                                 IntValue = importObjectAttributeIntValue
@@ -218,7 +218,7 @@ namespace JIM.Service.Processors
                     case AttributeDataType.Binary:
                         foreach (var importObjectAttributeByteValue in importObjectAttribute.ByteValues)
                         {
-                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                             {
                                 Attribute = csAttribute,
                                 ByteValue = importObjectAttributeByteValue
@@ -228,7 +228,7 @@ namespace JIM.Service.Processors
                     case AttributeDataType.Guid:
                         foreach (var importObjectAttributeGuidValue in importObjectAttribute.GuidValues)
                         {
-                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                             {
                                 Attribute = csAttribute,
                                 GuidValue = importObjectAttributeGuidValue
@@ -238,7 +238,7 @@ namespace JIM.Service.Processors
                     case AttributeDataType.DateTime:
                         foreach (var importObjectAttributeDateTimeValue in importObjectAttribute.DateTimeValues)
                         {
-                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                             {
                                 Attribute = csAttribute,
                                 DateTimeValue = importObjectAttributeDateTimeValue
@@ -246,7 +246,7 @@ namespace JIM.Service.Processors
                         }
                         break;
                     case AttributeDataType.Bool:
-                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemAttributeValue
+                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
                             BoolValue = importObjectAttribute.BoolValue
@@ -267,8 +267,8 @@ namespace JIM.Service.Processors
         private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, SynchronisationRunHistoryDetailItem synchronisationRunHistoryDetailItem)
         {
             // attribute value additions and removals for all attributes will be collected together for persistence in one go
-            var attributeValueRemovals  = new List<ConnectedSystemAttributeValue>();
-            var attributeValueAdditions = new List<ConnectedSystemAttributeValue>();
+            var attributeValueRemovals  = new List<ConnectedSystemObjectAttributeValue>();
+            var attributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
 
             // process known attributes (potential updates)
             // need to work with the fact that we have individual objects for multi-valued attribute values
@@ -304,7 +304,7 @@ namespace JIM.Service.Processors
                             // find imported values of type string that aren't on the cso and add them
                             var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv)));
                             foreach (var newStringValue in newStringValues)
-                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, StringValue = newStringValue });
+                                attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, StringValue = newStringValue });
 
                             break;
                         case AttributeDataType.Number:
@@ -316,7 +316,7 @@ namespace JIM.Service.Processors
                             // find imported values of type int that aren't on the cso and add them
                             var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv)));
                             foreach (var newIntValue in newIntValues)
-                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, IntValue = newIntValue });
+                                attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, IntValue = newIntValue });
 
                             break;
                         case AttributeDataType.DateTime:
@@ -328,7 +328,7 @@ namespace JIM.Service.Processors
                             // find imported values of type DateTime that aren't on the cso and add them
                             var newDateTimeValues = importedObjectAttribute.DateTimeValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && av.DateTimeValue.Equals(sv)));
                             foreach (var newDateTimeValue in newDateTimeValues)
-                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
+                                attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
 
                             break;
                         case AttributeDataType.Binary:
@@ -340,7 +340,7 @@ namespace JIM.Service.Processors
                             // find imported values of type byte array that aren't on the cso and add them
                             var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue)));
                             foreach (var newByteArrayValue in newByteArrayValues)
-                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, ByteValue = newByteArrayValue });
+                                attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, ByteValue = newByteArrayValue });
 
                             break;
 
@@ -360,7 +360,7 @@ namespace JIM.Service.Processors
                             // find imported values of type Guid that aren't on the cso and add them
                             var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv)));
                             foreach (var newGuidValue in newGuidValues)
-                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, GuidValue = newGuidValue });
+                                attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, GuidValue = newGuidValue });
 
                             break;
                         case AttributeDataType.Bool:
@@ -374,7 +374,7 @@ namespace JIM.Service.Processors
                             if (csAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
                             {
                                 attributeValueRemovals.Add(csAttributeValue);
-                                attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
+                                attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
                             }
 
                             break;
@@ -382,7 +382,7 @@ namespace JIM.Service.Processors
                 }
                 else
                 {
-                    // no values were imported for this attribute. delete the cso attribute values
+                    // no values were imported for this attribute. delete all the cso attribute values for this attribute
                     var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Name == csoAttributeName).ToList();
                     await _jim.ConnectedSystems.DeleteConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, attributeValuesToDelete);
                 }
@@ -399,19 +399,19 @@ namespace JIM.Service.Processors
                 {
                     case AttributeDataType.String:
                         foreach (var newStringValue in newAttribute.StringValues)
-                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, StringValue = newStringValue });
+                            attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, StringValue = newStringValue });
                         break;
                     case AttributeDataType.Number:
                         foreach (var newIntValue in newAttribute.IntValues)
-                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, IntValue = newIntValue });
+                            attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, IntValue = newIntValue });
                         break;
                     case AttributeDataType.DateTime:
                         foreach (var newDateTimeValue in newAttribute.DateTimeValues)
-                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
+                            attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
                         break;
                     case AttributeDataType.Binary:
                         foreach (var newByteArrayValue in newAttribute.ByteValues)
-                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, ByteValue = newByteArrayValue });
+                            attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, ByteValue = newByteArrayValue });
                         break;
                     case AttributeDataType.Reference:
                         // todo: handle references...
@@ -421,15 +421,17 @@ namespace JIM.Service.Processors
                         break;
                     case AttributeDataType.Guid:
                         foreach (var newGuidValue in newAttribute.GuidValues)
-                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, GuidValue = newGuidValue });
+                            attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, GuidValue = newGuidValue });
                         break;
                     case AttributeDataType.Bool:
-                        attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, BoolValue = newAttribute.BoolValue });
+                        attributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystem = _connectedSystem, Attribute = csoAttribute, BoolValue = newAttribute.BoolValue });
                         break;
                 }
             }
 
             // persist addition and removals...
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectAttributeValuesAsync(attributeValueAdditions);
+            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, attributeValueRemovals);
         }
     }
 }

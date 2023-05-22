@@ -1,6 +1,6 @@
 ﻿namespace JIM.Models.Staging
 {
-    public class ConnectedSystemAttributeValue
+    public class ConnectedSystemObjectAttributeValue
     {
         public long Id { get; set; }
 
@@ -8,6 +8,11 @@
         /// The parent attribute for this attribute value object.
         /// </summary>
         public ConnectedSystemAttribute Attribute { get; set; }
+
+        /// <summary>
+        /// The parent connected system for this attribute value object.
+        /// </summary>
+        public ConnectedSystem ConnectedSystem { get; set; }
 
         public string? StringValue { get; set; }
 

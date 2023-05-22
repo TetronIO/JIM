@@ -213,15 +213,29 @@ namespace JIM.PostgresData.Repositories
             await Repository.Database.SaveChangesAsync();
         }
 
-        public async Task DeleteConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemAttributeValue> connectedSystemAttributeValues)
-        {
-            Repository.Database.ConnectedSystemAttributeValues.RemoveRange(connectedSystemAttributeValues);
-            await Repository.Database.SaveChangesAsync();
-        }
-
         public async Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
         {
             Repository.Database.ConnectedSystemObjects.Update(connectedSystemObject);
+            await Repository.Database.SaveChangesAsync();
+        }
+        #endregion
+
+        #region Connected System Attribute Values
+        public async Task CreateConnectedSystemObjectAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> connectedSystemAttributeValues)
+        {
+            Repository.Database.ConnectedSystemObjectAttributeValues.AddRange(connectedSystemAttributeValues);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        //public async Task DeleteAllConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, int attributeId)
+        //{
+        //    // EF 7 feature. Upgrade needed
+        //    Repository.Database.ConnectedSystemObjectAttributeValues.Where(csav => csav.ConnectedSystem.Id == connectedSystemObject.Id && csav.Attribute.Id == attributeId).ExecuteDelete();
+        //}
+
+        public async Task DeleteConnectedSystemObjectAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> connectedSystemAttributeValues)
+        {
+            Repository.Database.ConnectedSystemObjectAttributeValues.RemoveRange(connectedSystemAttributeValues);
             await Repository.Database.SaveChangesAsync();
         }
         #endregion

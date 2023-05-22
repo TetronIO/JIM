@@ -21,7 +21,7 @@ namespace JIM.Models.Staging
         /// </summary>
         public ConnectedSystemAttribute UniqueIdentifierAttribute { get; set; }
 
-        public List<ConnectedSystemAttributeValue> AttributeValues { get; set; }
+        public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; }
 
         public ConnectedSystemObjectStatus Status { get; set; }
 
@@ -43,7 +43,7 @@ namespace JIM.Models.Staging
         public ConnectedSystemObject()
         {
             Created = DateTime.Now;
-            AttributeValues = new List<ConnectedSystemAttributeValue>();
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
             Status = ConnectedSystemObjectStatus.Normal;
             JoinType = ConnectedSystemObjectJoinType.NotJoined;
         }
