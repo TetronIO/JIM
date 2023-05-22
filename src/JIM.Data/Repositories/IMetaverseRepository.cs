@@ -19,7 +19,7 @@ namespace JIM.Data.Repositories
         #endregion
 
         #region objects
-        public Task<MetaverseObject?> GetMetaverseObjectAsync(int id);
+        public Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id);
 
         public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
 

@@ -98,7 +98,7 @@ namespace JIM.PostgresData.Repositories
         #endregion
 
         #region metaverse objects
-        public async Task<MetaverseObject?> GetMetaverseObjectAsync(int id)
+        public async Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id)
         {
             return await Repository.Database.MetaverseObjects.
                 Include(mo => mo.Type).

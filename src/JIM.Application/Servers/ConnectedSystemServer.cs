@@ -298,7 +298,7 @@ namespace JIM.Application.Servers
         #endregion
 
         #region Connected System Objects
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
         }
@@ -343,8 +343,8 @@ namespace JIM.Application.Servers
             if (connectedSystemObjectAttributeValues.Any(csav => csav.Attribute == null))
                 throw new ArgumentException($"One or more {nameof(ConnectedSystemObjectAttributeValue)} objects do not have an Attribute property set.", nameof(connectedSystemObjectAttributeValues));
 
-            if (connectedSystemObjectAttributeValues.Any(csav => csav.ConnectedSystem == null))
-                throw new ArgumentException($"One or more {nameof(ConnectedSystemObjectAttributeValue)} do not have a ConnectedSystem property set.", nameof(connectedSystemObjectAttributeValues));
+            if (connectedSystemObjectAttributeValues.Any(csav => csav.ConnectedSystemObject == null))
+                throw new ArgumentException($"One or more {nameof(ConnectedSystemObjectAttributeValue)} do not have a ConnectedSystemObject property set.", nameof(connectedSystemObjectAttributeValues));
 
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAttributeValuesAsync(connectedSystemObjectAttributeValues);
         }

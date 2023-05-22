@@ -46,7 +46,7 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/metaverse/objects/{id}")]
-        public async Task<MetaverseObject?> GetObjectAsync(int id)
+        public async Task<MetaverseObject?> GetObjectAsync(Guid id)
         {
             _logger.LogTrace($"Someone requested a metaverse object: {id}");
             return await _application.Metaverse.GetMetaverseObjectAsync(id);

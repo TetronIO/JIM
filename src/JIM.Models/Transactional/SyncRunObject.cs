@@ -8,7 +8,7 @@ namespace JIM.Models.Transactional
     /// </summary>
     public class SyncRunObject
     {
-        public long Id { get; set; }
+        public Guid Id { get; set; }
         /// <summary>
         /// The parent synchronisation run this object relates to.
         /// </summary>
@@ -26,10 +26,5 @@ namespace JIM.Models.Transactional
         public SyncRunItemResult Result { get; set; }
         public string? ConnectedSystemErrorMessage { get; set; }
         public string? ConnectedSystemStackTrace { get; set; }
-
-
-        public SyncRunObject()
-        {
-        }
     }
 }

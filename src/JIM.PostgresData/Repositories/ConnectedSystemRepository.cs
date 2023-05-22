@@ -171,7 +171,7 @@ namespace JIM.PostgresData.Repositories
         #endregion
 
         #region Connected System Objects
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, int id)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }

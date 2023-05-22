@@ -23,17 +23,17 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.Roles.SingleOrDefaultAsync(q => q.Name == roleName);
         }
 
-        public async Task<List<Role>> GetMetaverseObjectRolesAsync(int metaverseObjectId)
+        public async Task<List<Role>> GetMetaverseObjectRolesAsync(Guid metaverseObjectId)
         {
             return await Repository.Database.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToListAsync();
         }
 
-        public async Task<bool> IsObjectInRoleAsync(int userId, string roleName)
+        public async Task<bool> IsObjectInRoleAsync(Guid userId, string roleName)
         {
             return await Repository.Database.Roles.AnyAsync(q => q.Name == roleName && q.StaticMembers.Any(sm => sm.Id == userId));
         }
 
-        public async Task AddObjectToRoleAsync(int objectId, string roleName)
+        public async Task AddObjectToRoleAsync(Guid objectId, string roleName)
         {
             var dbRole = await Repository.Database.Roles.SingleOrDefaultAsync(r => r.Name == roleName);
             if (dbRole == null)

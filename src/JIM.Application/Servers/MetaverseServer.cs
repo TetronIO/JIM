@@ -63,7 +63,7 @@ namespace JIM.Application.Servers
         #endregion
 
         #region metaverse objects
-        public async Task<MetaverseObject?> GetMetaverseObjectAsync(int id)
+        public async Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id)
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectAsync(id);
         }

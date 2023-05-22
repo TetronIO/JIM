@@ -1,8 +1,13 @@
-﻿namespace JIM.Models.Staging
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
+
+namespace JIM.Models.Staging
 {
     public class ConnectedSystemObjectAttributeValue
     {
-        public long Id { get; set; }
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public Guid Id { get; set; }
 
         /// <summary>
         /// The parent attribute for this attribute value object.
@@ -10,9 +15,9 @@
         public ConnectedSystemAttribute Attribute { get; set; }
 
         /// <summary>
-        /// The parent connected system for this attribute value object.
+        /// The parent connected system object for this attribute value object.
         /// </summary>
-        public ConnectedSystem ConnectedSystem { get; set; }
+        public ConnectedSystemObject ConnectedSystemObject { get; set; }
 
         public string? StringValue { get; set; }
 

@@ -135,6 +135,7 @@ namespace JIM.PostgresData.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
+                    ExecutionMode = table.Column<int>(type: "integer", nullable: false),
                     Discriminator = table.Column<string>(type: "text", nullable: false),
                     TemplateId = table.Column<int>(type: "integer", nullable: true),
                     ConnectedSystemId = table.Column<int>(type: "integer", nullable: true),
@@ -156,7 +157,8 @@ namespace JIM.PostgresData.Migrations
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     ConnectorDefinitionId = table.Column<int>(type: "integer", nullable: false),
-                    SettingValuesValid = table.Column<bool>(type: "boolean", nullable: false)
+                    SettingValuesValid = table.Column<bool>(type: "boolean", nullable: false),
+                    PersistedConnectorData = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -370,8 +372,7 @@ namespace JIM.PostgresData.Migrations
                 name: "MetaverseObjects",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     TypeId = table.Column<int>(type: "integer", nullable: false),
@@ -414,28 +415,6 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ConnectedSystemObjectTypes",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
-                    Selected = table.Column<bool>(type: "boolean", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ConnectedSystemObjectTypes", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ConnectedSystemObjectTypes_ConnectedSystems_ConnectedSystem~",
-                        column: x => x.ConnectedSystemId,
-                        principalTable: "ConnectedSystems",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "ConnectedSystemPartitions",
                 columns: table => new
                 {
@@ -461,8 +440,7 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRuns",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     RunType = table.Column<int>(type: "integer", nullable: false),
@@ -536,15 +514,14 @@ namespace JIM.PostgresData.Migrations
                 name: "MetaverseObjectAttributeValues",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     AttributeId = table.Column<int>(type: "integer", nullable: false),
-                    MetaverseObjectId = table.Column<int>(type: "integer", nullable: false),
+                    MetaverseObjectId = table.Column<Guid>(type: "uuid", nullable: false),
                     StringValue = table.Column<string>(type: "text", nullable: true),
                     DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     IntValue = table.Column<int>(type: "integer", nullable: true),
                     ByteValue = table.Column<byte[]>(type: "bytea", nullable: true),
-                    ReferenceValueId = table.Column<int>(type: "integer", nullable: true),
+                    ReferenceValueId = table.Column<Guid>(type: "uuid", nullable: true),
                     GuidValue = table.Column<Guid>(type: "uuid", nullable: true),
                     BoolValue = table.Column<bool>(type: "boolean", nullable: true),
                     ContributedBySystemId = table.Column<int>(type: "integer", nullable: true)
@@ -581,7 +558,7 @@ namespace JIM.PostgresData.Migrations
                 columns: table => new
                 {
                     RolesId = table.Column<int>(type: "integer", nullable: false),
-                    StaticMembersId = table.Column<int>(type: "integer", nullable: false)
+                    StaticMembersId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -654,71 +631,6 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ConnectedSystemAttributes",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Description = table.Column<string>(type: "text", nullable: true),
-                    ClassName = table.Column<string>(type: "text", nullable: true),
-                    Type = table.Column<int>(type: "integer", nullable: false),
-                    AttributePlurality = table.Column<int>(type: "integer", nullable: false),
-                    ConnectedSystemObjectTypeId = table.Column<int>(type: "integer", nullable: false),
-                    Selected = table.Column<bool>(type: "boolean", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ConnectedSystemAttributes", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ConnectedSystemAttributes_ConnectedSystemObjectTypes_Connec~",
-                        column: x => x.ConnectedSystemObjectTypeId,
-                        principalTable: "ConnectedSystemObjectTypes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "SyncRules",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
-                    ConnectedSystemObjectTypeId = table.Column<int>(type: "integer", nullable: false),
-                    MetaverseObjectTypeId = table.Column<int>(type: "integer", nullable: false),
-                    Direction = table.Column<int>(type: "integer", nullable: false),
-                    ProvisionToConnectedSystem = table.Column<bool>(type: "boolean", nullable: true),
-                    ProjectToMetaverse = table.Column<bool>(type: "boolean", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_SyncRules", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_SyncRules_ConnectedSystemObjectTypes_ConnectedSystemObjectT~",
-                        column: x => x.ConnectedSystemObjectTypeId,
-                        principalTable: "ConnectedSystemObjectTypes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_SyncRules_ConnectedSystems_ConnectedSystemId",
-                        column: x => x.ConnectedSystemId,
-                        principalTable: "ConnectedSystems",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_SyncRules_MetaverseObjectTypes_MetaverseObjectTypeId",
-                        column: x => x.MetaverseObjectTypeId,
-                        principalTable: "MetaverseObjectTypes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "ConnectedSystemContainers",
                 columns: table => new
                 {
@@ -762,7 +674,8 @@ namespace JIM.PostgresData.Migrations
                     Name = table.Column<string>(type: "text", nullable: false),
                     ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
                     PartitionId = table.Column<int>(type: "integer", nullable: true),
-                    RunType = table.Column<int>(type: "integer", nullable: false)
+                    RunType = table.Column<int>(type: "integer", nullable: false),
+                    PageSize = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -808,47 +721,102 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ConnectedSystemObjects",
+                name: "SynchronisationRunHistoryDetails",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    TypeId = table.Column<int>(type: "integer", nullable: false),
-                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
-                    UniqueIdentifierAttributeId = table.Column<int>(type: "integer", nullable: false),
-                    Status = table.Column<int>(type: "integer", nullable: false),
-                    MetaverseObjectId = table.Column<int>(type: "integer", nullable: true),
-                    JoinType = table.Column<int>(type: "integer", nullable: false),
-                    DateJoined = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: true),
+                    ConnectedSystemName = table.Column<string>(type: "text", nullable: true),
+                    RunProfileId = table.Column<int>(type: "integer", nullable: true),
+                    RunProfileName = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_ConnectedSystemObjects", x => x.Id);
+                    table.PrimaryKey("PK_SynchronisationRunHistoryDetails", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_ConnectedSystemObjects_ConnectedSystemAttributes_UniqueIden~",
+                        name: "FK_SynchronisationRunHistoryDetails_ConnectedSystemRunProfiles~",
+                        column: x => x.RunProfileId,
+                        principalTable: "ConnectedSystemRunProfiles",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_SynchronisationRunHistoryDetails_ConnectedSystems_Connected~",
+                        column: x => x.ConnectedSystemId,
+                        principalTable: "ConnectedSystems",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "HistoryItems",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    InitiatedById = table.Column<Guid>(type: "uuid", nullable: true),
+                    InitiatedByName = table.Column<string>(type: "text", nullable: true),
+                    Discriminator = table.Column<string>(type: "text", nullable: false),
+                    SynchronisationRunHistoryDetailId = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_HistoryItems", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_HistoryItems_MetaverseObjects_InitiatedById",
+                        column: x => x.InitiatedById,
+                        principalTable: "MetaverseObjects",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_HistoryItems_SynchronisationRunHistoryDetails_Synchronisati~",
+                        column: x => x.SynchronisationRunHistoryDetailId,
+                        principalTable: "SynchronisationRunHistoryDetails",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ConnectedSystemAttributes",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    ClassName = table.Column<string>(type: "text", nullable: true),
+                    Type = table.Column<int>(type: "integer", nullable: false),
+                    AttributePlurality = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemObjectTypeId = table.Column<int>(type: "integer", nullable: false),
+                    Selected = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ConnectedSystemAttributes", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ConnectedSystemObjectTypes",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
+                    Selected = table.Column<bool>(type: "boolean", nullable: false),
+                    UniqueIdentifierAttributeId = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ConnectedSystemObjectTypes", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ConnectedSystemObjectTypes_ConnectedSystemAttributes_Unique~",
                         column: x => x.UniqueIdentifierAttributeId,
                         principalTable: "ConnectedSystemAttributes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_ConnectedSystemObjects_ConnectedSystemObjectTypes_TypeId",
-                        column: x => x.TypeId,
-                        principalTable: "ConnectedSystemObjectTypes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_ConnectedSystemObjects_ConnectedSystems_ConnectedSystemId",
+                        name: "FK_ConnectedSystemObjectTypes_ConnectedSystems_ConnectedSystem~",
                         column: x => x.ConnectedSystemId,
                         principalTable: "ConnectedSystems",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_ConnectedSystemObjects_MetaverseObjects_MetaverseObjectId",
-                        column: x => x.MetaverseObjectId,
-                        principalTable: "MetaverseObjects",
-                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -901,90 +869,83 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "SyncRuleMapping",
+                name: "ConnectedSystemObjects",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    TypeId = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
+                    UniqueIdentifierAttributeId = table.Column<int>(type: "integer", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    MetaverseObjectId = table.Column<Guid>(type: "uuid", nullable: true),
+                    JoinType = table.Column<int>(type: "integer", nullable: false),
+                    DateJoined = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ConnectedSystemObjects", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ConnectedSystemObjects_ConnectedSystemAttributes_UniqueIden~",
+                        column: x => x.UniqueIdentifierAttributeId,
+                        principalTable: "ConnectedSystemAttributes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ConnectedSystemObjects_ConnectedSystemObjectTypes_TypeId",
+                        column: x => x.TypeId,
+                        principalTable: "ConnectedSystemObjectTypes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ConnectedSystemObjects_ConnectedSystems_ConnectedSystemId",
+                        column: x => x.ConnectedSystemId,
+                        principalTable: "ConnectedSystems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ConnectedSystemObjects_MetaverseObjects_MetaverseObjectId",
+                        column: x => x.MetaverseObjectId,
+                        principalTable: "MetaverseObjects",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SyncRules",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    SynchronisationRuleId = table.Column<int>(type: "integer", nullable: false),
-                    Priority = table.Column<int>(type: "integer", nullable: false),
-                    TargetMetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
-                    TargetConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_SyncRuleMapping", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_SyncRuleMapping_ConnectedSystemAttributes_TargetConnectedSy~",
-                        column: x => x.TargetConnectedSystemAttributeId,
-                        principalTable: "ConnectedSystemAttributes",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_SyncRuleMapping_MetaverseAttributes_TargetMetaverseAttribut~",
-                        column: x => x.TargetMetaverseAttributeId,
-                        principalTable: "MetaverseAttributes",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_SyncRuleMapping_SyncRules_SynchronisationRuleId",
-                        column: x => x.SynchronisationRuleId,
-                        principalTable: "SyncRules",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "ConnectedSystemAttributeValue",
-                columns: table => new
-                {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AttributeId = table.Column<int>(type: "integer", nullable: false),
-                    StringValue = table.Column<string>(type: "text", nullable: true),
-                    DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    IntValue = table.Column<int>(type: "integer", nullable: false),
-                    ByteValue = table.Column<byte[]>(type: "bytea", nullable: false),
-                    ConnectedSystemObjectId = table.Column<long>(type: "bigint", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ConnectedSystemAttributeValue", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ConnectedSystemAttributeValue_ConnectedSystemAttributes_Att~",
-                        column: x => x.AttributeId,
-                        principalTable: "ConnectedSystemAttributes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_ConnectedSystemAttributeValue_ConnectedSystemObjects_Connec~",
-                        column: x => x.ConnectedSystemObjectId,
-                        principalTable: "ConnectedSystemObjects",
-                        principalColumn: "Id");
-                });
-
-            migrationBuilder.CreateTable(
-                name: "PendingExports",
-                columns: table => new
-                {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
-                    ConnectedSystemObjectId = table.Column<long>(type: "bigint", nullable: true),
-                    ChangeType = table.Column<int>(type: "integer", nullable: false),
-                    Status = table.Column<int>(type: "integer", nullable: false),
-                    ErrorCount = table.Column<int>(type: "integer", nullable: true)
+                    ConnectedSystemObjectTypeId = table.Column<int>(type: "integer", nullable: false),
+                    MetaverseObjectTypeId = table.Column<int>(type: "integer", nullable: false),
+                    Direction = table.Column<int>(type: "integer", nullable: false),
+                    ProvisionToConnectedSystem = table.Column<bool>(type: "boolean", nullable: true),
+                    ProjectToMetaverse = table.Column<bool>(type: "boolean", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_PendingExports", x => x.Id);
+                    table.PrimaryKey("PK_SyncRules", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_PendingExports_ConnectedSystemObjects_ConnectedSystemObject~",
-                        column: x => x.ConnectedSystemObjectId,
-                        principalTable: "ConnectedSystemObjects",
-                        principalColumn: "Id");
+                        name: "FK_SyncRules_ConnectedSystemObjectTypes_ConnectedSystemObjectT~",
+                        column: x => x.ConnectedSystemObjectTypeId,
+                        principalTable: "ConnectedSystemObjectTypes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_PendingExports_ConnectedSystems_ConnectedSystemId",
+                        name: "FK_SyncRules_ConnectedSystems_ConnectedSystemId",
                         column: x => x.ConnectedSystemId,
                         principalTable: "ConnectedSystems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_SyncRules_MetaverseObjectTypes_MetaverseObjectTypeId",
+                        column: x => x.MetaverseObjectTypeId,
+                        principalTable: "MetaverseObjectTypes",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -1061,6 +1022,188 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ConnectedSystemObjectAttributeValues",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AttributeId = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: false),
+                    StringValue = table.Column<string>(type: "text", nullable: true),
+                    DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IntValue = table.Column<int>(type: "integer", nullable: true),
+                    ByteValue = table.Column<byte[]>(type: "bytea", nullable: true),
+                    GuidValue = table.Column<Guid>(type: "uuid", nullable: true),
+                    BoolValue = table.Column<bool>(type: "boolean", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ConnectedSystemObjectAttributeValues", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ConnectedSystemObjectAttributeValues_ConnectedSystemAttribu~",
+                        column: x => x.AttributeId,
+                        principalTable: "ConnectedSystemAttributes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ConnectedSystemObjectAttributeValues_ConnectedSystemObjects~",
+                        column: x => x.ConnectedSystemObjectId,
+                        principalTable: "ConnectedSystemObjects",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PendingExports",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ChangeType = table.Column<int>(type: "integer", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    ErrorCount = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PendingExports", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PendingExports_ConnectedSystemObjects_ConnectedSystemObject~",
+                        column: x => x.ConnectedSystemObjectId,
+                        principalTable: "ConnectedSystemObjects",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_PendingExports_ConnectedSystems_ConnectedSystemId",
+                        column: x => x.ConnectedSystemId,
+                        principalTable: "ConnectedSystems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SynchronisationRunHistoryDetailItem",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SynchronisationRunHistoryDetailId = table.Column<Guid>(type: "uuid", nullable: false),
+                    DataSnapshot = table.Column<string>(type: "text", nullable: true),
+                    Error = table.Column<int>(type: "integer", nullable: true),
+                    ErrorMessage = table.Column<string>(type: "text", nullable: true),
+                    ErrorStackTrace = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SynchronisationRunHistoryDetailItem", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SynchronisationRunHistoryDetailItem_ConnectedSystemObjects_~",
+                        column: x => x.ConnectedSystemObjectId,
+                        principalTable: "ConnectedSystemObjects",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_SynchronisationRunHistoryDetailItem_SynchronisationRunHisto~",
+                        column: x => x.SynchronisationRunHistoryDetailId,
+                        principalTable: "SynchronisationRunHistoryDetails",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SyncRuleMapping",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    SynchronisationRuleId = table.Column<int>(type: "integer", nullable: false),
+                    Priority = table.Column<int>(type: "integer", nullable: false),
+                    TargetMetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    TargetConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SyncRuleMapping", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SyncRuleMapping_ConnectedSystemAttributes_TargetConnectedSy~",
+                        column: x => x.TargetConnectedSystemAttributeId,
+                        principalTable: "ConnectedSystemAttributes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_SyncRuleMapping_MetaverseAttributes_TargetMetaverseAttribut~",
+                        column: x => x.TargetMetaverseAttributeId,
+                        principalTable: "MetaverseAttributes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_SyncRuleMapping_SyncRules_SynchronisationRuleId",
+                        column: x => x.SynchronisationRuleId,
+                        principalTable: "SyncRules",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PendingExportAttributeValueChanges",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AttributeId = table.Column<int>(type: "integer", nullable: false),
+                    StringValue = table.Column<string>(type: "text", nullable: true),
+                    DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    IntValue = table.Column<int>(type: "integer", nullable: true),
+                    ByteValue = table.Column<byte[]>(type: "bytea", nullable: true),
+                    ChangeType = table.Column<int>(type: "integer", nullable: false),
+                    ErrorCount = table.Column<int>(type: "integer", nullable: true),
+                    PendingExportId = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PendingExportAttributeValueChanges", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PendingExportAttributeValueChanges_ConnectedSystemAttribute~",
+                        column: x => x.AttributeId,
+                        principalTable: "ConnectedSystemAttributes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_PendingExportAttributeValueChanges_PendingExports_PendingEx~",
+                        column: x => x.PendingExportId,
+                        principalTable: "PendingExports",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SyncRunObjects",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SynchronisationRunId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: true),
+                    PendingExportId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Result = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemErrorMessage = table.Column<string>(type: "text", nullable: true),
+                    ConnectedSystemStackTrace = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SyncRunObjects", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SyncRunObjects_ConnectedSystemObjects_ConnectedSystemObject~",
+                        column: x => x.ConnectedSystemObjectId,
+                        principalTable: "ConnectedSystemObjects",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_SyncRunObjects_PendingExports_PendingExportId",
+                        column: x => x.PendingExportId,
+                        principalTable: "PendingExports",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_SyncRunObjects_SyncRuns_SynchronisationRunId",
+                        column: x => x.SynchronisationRunId,
+                        principalTable: "SyncRuns",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "SyncRuleMappingSource",
                 columns: table => new
                 {
@@ -1095,72 +1238,6 @@ namespace JIM.PostgresData.Migrations
                         column: x => x.SyncRuleMappingId,
                         principalTable: "SyncRuleMapping",
                         principalColumn: "Id");
-                });
-
-            migrationBuilder.CreateTable(
-                name: "PendingExportAttributeValueChanges",
-                columns: table => new
-                {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AttributeId = table.Column<int>(type: "integer", nullable: false),
-                    StringValue = table.Column<string>(type: "text", nullable: true),
-                    DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    IntValue = table.Column<int>(type: "integer", nullable: true),
-                    ByteValue = table.Column<byte[]>(type: "bytea", nullable: true),
-                    ChangeType = table.Column<int>(type: "integer", nullable: false),
-                    ErrorCount = table.Column<int>(type: "integer", nullable: true),
-                    PendingExportId = table.Column<long>(type: "bigint", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PendingExportAttributeValueChanges", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_PendingExportAttributeValueChanges_ConnectedSystemAttribute~",
-                        column: x => x.AttributeId,
-                        principalTable: "ConnectedSystemAttributes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_PendingExportAttributeValueChanges_PendingExports_PendingEx~",
-                        column: x => x.PendingExportId,
-                        principalTable: "PendingExports",
-                        principalColumn: "Id");
-                });
-
-            migrationBuilder.CreateTable(
-                name: "SyncRunObjects",
-                columns: table => new
-                {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    SynchronisationRunId = table.Column<long>(type: "bigint", nullable: false),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ConnectedSystemObjectId = table.Column<long>(type: "bigint", nullable: true),
-                    PendingExportId = table.Column<long>(type: "bigint", nullable: true),
-                    Result = table.Column<int>(type: "integer", nullable: false),
-                    ConnectedSystemErrorMessage = table.Column<string>(type: "text", nullable: true),
-                    ConnectedSystemStackTrace = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_SyncRunObjects", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_SyncRunObjects_ConnectedSystemObjects_ConnectedSystemObject~",
-                        column: x => x.ConnectedSystemObjectId,
-                        principalTable: "ConnectedSystemObjects",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_SyncRunObjects_PendingExports_PendingExportId",
-                        column: x => x.PendingExportId,
-                        principalTable: "PendingExports",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_SyncRunObjects_SyncRuns_SynchronisationRunId",
-                        column: x => x.SynchronisationRunId,
-                        principalTable: "SyncRuns",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -1209,16 +1286,6 @@ namespace JIM.PostgresData.Migrations
                 column: "ConnectedSystemObjectTypeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ConnectedSystemAttributeValue_AttributeId",
-                table: "ConnectedSystemAttributeValue",
-                column: "AttributeId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ConnectedSystemAttributeValue_ConnectedSystemObjectId",
-                table: "ConnectedSystemAttributeValue",
-                column: "ConnectedSystemObjectId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ConnectedSystemContainers_ConnectedSystemId",
                 table: "ConnectedSystemContainers",
                 column: "ConnectedSystemId");
@@ -1232,6 +1299,16 @@ namespace JIM.PostgresData.Migrations
                 name: "IX_ConnectedSystemContainers_PartitionId",
                 table: "ConnectedSystemContainers",
                 column: "PartitionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ConnectedSystemObjectAttributeValues_AttributeId",
+                table: "ConnectedSystemObjectAttributeValues",
+                column: "AttributeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ConnectedSystemObjectAttributeValues_ConnectedSystemObjectId",
+                table: "ConnectedSystemObjectAttributeValues",
+                column: "ConnectedSystemObjectId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ConnectedSystemObjects_ConnectedSystemId",
@@ -1257,6 +1334,11 @@ namespace JIM.PostgresData.Migrations
                 name: "IX_ConnectedSystemObjectTypes_ConnectedSystemId",
                 table: "ConnectedSystemObjectTypes",
                 column: "ConnectedSystemId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ConnectedSystemObjectTypes_UniqueIdentifierAttributeId",
+                table: "ConnectedSystemObjectTypes",
+                column: "UniqueIdentifierAttributeId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ConnectedSystemPartitions_ConnectedSystemId",
@@ -1372,6 +1454,17 @@ namespace JIM.PostgresData.Migrations
                 name: "IX_FunctionParameter_FunctionId",
                 table: "FunctionParameter",
                 column: "FunctionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_HistoryItems_InitiatedById",
+                table: "HistoryItems",
+                column: "InitiatedById");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_HistoryItems_SynchronisationRunHistoryDetailId",
+                table: "HistoryItems",
+                column: "SynchronisationRunHistoryDetailId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_MetaverseAttributeMetaverseObjectType_MetaverseObjectTypesId",
@@ -1509,6 +1602,26 @@ namespace JIM.PostgresData.Migrations
                 column: "SSOUniqueIdentifierMetaverseAttributeId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_SynchronisationRunHistoryDetailItem_ConnectedSystemObjectId",
+                table: "SynchronisationRunHistoryDetailItem",
+                column: "ConnectedSystemObjectId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SynchronisationRunHistoryDetailItem_SynchronisationRunHisto~",
+                table: "SynchronisationRunHistoryDetailItem",
+                column: "SynchronisationRunHistoryDetailId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SynchronisationRunHistoryDetails_ConnectedSystemId",
+                table: "SynchronisationRunHistoryDetails",
+                column: "ConnectedSystemId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SynchronisationRunHistoryDetails_RunProfileId",
+                table: "SynchronisationRunHistoryDetails",
+                column: "RunProfileId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleMapping_SynchronisationRuleId",
                 table: "SyncRuleMapping",
                 column: "SynchronisationRuleId");
@@ -1597,18 +1710,27 @@ namespace JIM.PostgresData.Migrations
                 name: "IX_SyncRuns_ConnectedSystemId",
                 table: "SyncRuns",
                 column: "ConnectedSystemId");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_ConnectedSystemAttributes_ConnectedSystemObjectTypes_Connec~",
+                table: "ConnectedSystemAttributes",
+                column: "ConnectedSystemObjectTypeId",
+                principalTable: "ConnectedSystemObjectTypes",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "ConnectedSystemAttributeValue");
+            migrationBuilder.DropForeignKey(
+                name: "FK_ConnectedSystemAttributes_ConnectedSystemObjectTypes_Connec~",
+                table: "ConnectedSystemAttributes");
 
             migrationBuilder.DropTable(
                 name: "ConnectedSystemContainers");
 
             migrationBuilder.DropTable(
-                name: "ConnectedSystemRunProfiles");
+                name: "ConnectedSystemObjectAttributeValues");
 
             migrationBuilder.DropTable(
                 name: "ConnectedSystemSettingValue");
@@ -1627,6 +1749,9 @@ namespace JIM.PostgresData.Migrations
 
             migrationBuilder.DropTable(
                 name: "ExampleDataSetValues");
+
+            migrationBuilder.DropTable(
+                name: "HistoryItems");
 
             migrationBuilder.DropTable(
                 name: "MetaverseAttributeMetaverseObjectType");
@@ -1653,13 +1778,13 @@ namespace JIM.PostgresData.Migrations
                 name: "ServiceTasks");
 
             migrationBuilder.DropTable(
+                name: "SynchronisationRunHistoryDetailItem");
+
+            migrationBuilder.DropTable(
                 name: "SyncRuleMappingSourceParamValue");
 
             migrationBuilder.DropTable(
                 name: "SyncRunObjects");
-
-            migrationBuilder.DropTable(
-                name: "ConnectedSystemPartitions");
 
             migrationBuilder.DropTable(
                 name: "ConnectorDefinitionSetting");
@@ -1675,6 +1800,9 @@ namespace JIM.PostgresData.Migrations
 
             migrationBuilder.DropTable(
                 name: "PredefinedSearchCriteriaGroups");
+
+            migrationBuilder.DropTable(
+                name: "SynchronisationRunHistoryDetails");
 
             migrationBuilder.DropTable(
                 name: "FunctionParameter");
@@ -1698,6 +1826,9 @@ namespace JIM.PostgresData.Migrations
                 name: "PredefinedSearches");
 
             migrationBuilder.DropTable(
+                name: "ConnectedSystemRunProfiles");
+
+            migrationBuilder.DropTable(
                 name: "Function");
 
             migrationBuilder.DropTable(
@@ -1710,6 +1841,9 @@ namespace JIM.PostgresData.Migrations
                 name: "DataGenerationTemplates");
 
             migrationBuilder.DropTable(
+                name: "ConnectedSystemPartitions");
+
+            migrationBuilder.DropTable(
                 name: "FunctionLibrary");
 
             migrationBuilder.DropTable(
@@ -1719,16 +1853,16 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRules");
 
             migrationBuilder.DropTable(
-                name: "ConnectedSystemAttributes");
+                name: "MetaverseObjects");
 
             migrationBuilder.DropTable(
-                name: "MetaverseObjects");
+                name: "MetaverseObjectTypes");
 
             migrationBuilder.DropTable(
                 name: "ConnectedSystemObjectTypes");
 
             migrationBuilder.DropTable(
-                name: "MetaverseObjectTypes");
+                name: "ConnectedSystemAttributes");
 
             migrationBuilder.DropTable(
                 name: "ConnectedSystems");

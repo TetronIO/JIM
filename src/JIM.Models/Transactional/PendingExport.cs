@@ -18,7 +18,7 @@ namespace JIM.Models.Transactional
         // - delete object: success or fail
         // - update attribute: atomic, some can succeed, some can fail
 
-        public long Id { get; set; }
+        public Guid Id { get; set; }
         /// <summary>
         /// If the change type is create, then it's essential we know what connected system this applies to :)
         /// </summary>

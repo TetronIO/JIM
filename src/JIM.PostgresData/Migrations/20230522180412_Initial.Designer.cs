@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20230429205334_HistoryRententionPeriod")]
-    partial class HistoryRententionPeriod
+    [Migration("20230522180412_Initial")]
+    partial class Initial
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
@@ -73,11 +73,9 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
@@ -105,11 +103,9 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectAttributeValue", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
@@ -132,11 +128,11 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
-                    b.Property<int>("MetaverseObjectId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("MetaverseObjectId")
+                        .HasColumnType("uuid");
 
-                    b.Property<int?>("ReferenceValueId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("ReferenceValueId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("StringValue")
                         .HasColumnType("text");
@@ -560,6 +556,94 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("FunctionParameter");
                 });
 
+            modelBuilder.Entity("JIM.Models.History.HistoryItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Discriminator")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("InitiatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InitiatedByName")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InitiatedById");
+
+                    b.ToTable("HistoryItems");
+
+                    b.HasDiscriminator<string>("Discriminator").HasValue("HistoryItem");
+                });
+
+            modelBuilder.Entity("JIM.Models.History.SynchronisationRunHistoryDetail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConnectedSystemName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RunProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RunProfileName")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId");
+
+                    b.HasIndex("RunProfileId");
+
+                    b.ToTable("SynchronisationRunHistoryDetails");
+                });
+
+            modelBuilder.Entity("JIM.Models.History.SynchronisationRunHistoryDetailItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DataSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Error")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ErrorStackTrace")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SynchronisationRunHistoryDetailId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectId");
+
+                    b.HasIndex("SynchronisationRunHistoryDetailId");
+
+                    b.ToTable("SynchronisationRunHistoryDetailItem");
+                });
+
             modelBuilder.Entity("JIM.Models.Logic.SyncRule", b =>
                 {
                     b.Property<int>("Id")
@@ -887,6 +971,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PersistedConnectorData")
+                        .HasColumnType("text");
+
                     b.Property<bool>("SettingValuesValid")
                         .HasColumnType("boolean");
 
@@ -937,42 +1024,6 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectedSystemAttributes");
                 });
 
-            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemAttributeValue", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<int>("AttributeId")
-                        .HasColumnType("integer");
-
-                    b.Property<byte[]>("ByteValue")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.Property<long?>("ConnectedSystemObjectId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime>("DateTimeValue")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("IntValue")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StringValue")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AttributeId");
-
-                    b.HasIndex("ConnectedSystemObjectId");
-
-                    b.ToTable("ConnectedSystemAttributeValue");
-                });
-
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>
                 {
                     b.Property<int>("Id")
@@ -1020,11 +1071,9 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObject", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
@@ -1041,8 +1090,8 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("MetaverseObjectId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("MetaverseObjectId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -1066,6 +1115,45 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectedSystemObjects");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectAttributeValue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("BoolValue")
+                        .HasColumnType("boolean");
+
+                    b.Property<byte[]>("ByteValue")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DateTimeValue")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GuidValue")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("IntValue")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StringValue")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttributeId");
+
+                    b.HasIndex("ConnectedSystemObjectId");
+
+                    b.ToTable("ConnectedSystemObjectAttributeValues");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectType", b =>
                 {
                     b.Property<int>("Id")
@@ -1087,9 +1175,14 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("Selected")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("UniqueIdentifierAttributeId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemId");
+
+                    b.HasIndex("UniqueIdentifierAttributeId");
 
                     b.ToTable("ConnectedSystemObjectTypes");
                 });
@@ -1371,11 +1464,9 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<int>("ChangeType")
                         .HasColumnType("integer");
@@ -1383,8 +1474,8 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
-                    b.Property<long?>("ConnectedSystemObjectId")
-                        .HasColumnType("bigint");
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("ErrorCount")
                         .HasColumnType("integer");
@@ -1403,11 +1494,9 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Transactional.PendingExportAttributeValueChange", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
@@ -1427,8 +1516,8 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
-                    b.Property<long?>("PendingExportId")
-                        .HasColumnType("bigint");
+                    b.Property<Guid?>("PendingExportId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("StringValue")
                         .HasColumnType("text");
@@ -1444,11 +1533,9 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Transactional.SyncRun", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ConnectedSystemErrorMessage")
                         .HasColumnType("text");
@@ -1474,17 +1561,15 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Transactional.SyncRunObject", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ConnectedSystemErrorMessage")
                         .HasColumnType("text");
 
-                    b.Property<long?>("ConnectedSystemObjectId")
-                        .HasColumnType("bigint");
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ConnectedSystemStackTrace")
                         .HasColumnType("text");
@@ -1492,14 +1577,14 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<long?>("PendingExportId")
-                        .HasColumnType("bigint");
+                    b.Property<Guid?>("PendingExportId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Result")
                         .HasColumnType("integer");
 
-                    b.Property<long>("SynchronisationRunId")
-                        .HasColumnType("bigint");
+                    b.Property<Guid>("SynchronisationRunId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -1532,14 +1617,27 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("RolesId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("StaticMembersId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("StaticMembersId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("RolesId", "StaticMembersId");
 
                     b.HasIndex("StaticMembersId");
 
                     b.ToTable("MetaverseObjectRole");
+                });
+
+            modelBuilder.Entity("JIM.Models.History.RunHistoryItem", b =>
+                {
+                    b.HasBaseType("JIM.Models.History.HistoryItem");
+
+                    b.Property<Guid?>("SynchronisationRunHistoryDetailId")
+                        .HasColumnType("uuid");
+
+                    b.HasIndex("SynchronisationRunHistoryDetailId")
+                        .IsUnique();
+
+                    b.HasDiscriminator().HasValue("RunHistoryItem");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.DataGenerationTemplateServiceTask", b =>
@@ -1737,6 +1835,47 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Function");
                 });
 
+            modelBuilder.Entity("JIM.Models.History.HistoryItem", b =>
+                {
+                    b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedBy")
+                        .WithMany()
+                        .HasForeignKey("InitiatedById");
+
+                    b.Navigation("InitiatedBy");
+                });
+
+            modelBuilder.Entity("JIM.Models.History.SynchronisationRunHistoryDetail", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId");
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemRunProfile", "RunProfile")
+                        .WithMany()
+                        .HasForeignKey("RunProfileId");
+
+                    b.Navigation("ConnectedSystem");
+
+                    b.Navigation("RunProfile");
+                });
+
+            modelBuilder.Entity("JIM.Models.History.SynchronisationRunHistoryDetailItem", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ConnectedSystemObject")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectId");
+
+                    b.HasOne("JIM.Models.History.SynchronisationRunHistoryDetail", "SynchronisationRunHistoryDetail")
+                        .WithMany("Items")
+                        .HasForeignKey("SynchronisationRunHistoryDetailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystemObject");
+
+                    b.Navigation("SynchronisationRunHistoryDetail");
+                });
+
             modelBuilder.Entity("JIM.Models.Logic.SyncRule", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
@@ -1919,21 +2058,6 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectType");
                 });
 
-            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemAttributeValue", b =>
-                {
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemAttribute", "Attribute")
-                        .WithMany()
-                        .HasForeignKey("AttributeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", null)
-                        .WithMany("AttributeValues")
-                        .HasForeignKey("ConnectedSystemObjectId");
-
-                    b.Navigation("Attribute");
-                });
-
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
@@ -1988,6 +2112,25 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("UniqueIdentifierAttribute");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectAttributeValue", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemAttribute", "Attribute")
+                        .WithMany()
+                        .HasForeignKey("AttributeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ConnectedSystemObject")
+                        .WithMany("AttributeValues")
+                        .HasForeignKey("ConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Attribute");
+
+                    b.Navigation("ConnectedSystemObject");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectType", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
@@ -1996,7 +2139,13 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemAttribute", "UniqueIdentifierAttribute")
+                        .WithMany()
+                        .HasForeignKey("UniqueIdentifierAttributeId");
+
                     b.Navigation("ConnectedSystem");
+
+                    b.Navigation("UniqueIdentifierAttribute");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
@@ -2160,6 +2309,13 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("JIM.Models.History.RunHistoryItem", b =>
+                {
+                    b.HasOne("JIM.Models.History.SynchronisationRunHistoryDetail", null)
+                        .WithOne("RunHistoryItem")
+                        .HasForeignKey("JIM.Models.History.RunHistoryItem", "SynchronisationRunHistoryDetailId");
+                });
+
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
                 {
                     b.Navigation("PredefinedSearchAttributes");
@@ -2197,6 +2353,13 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ExampleDataSetInstances");
 
                     b.Navigation("Values");
+                });
+
+            modelBuilder.Entity("JIM.Models.History.SynchronisationRunHistoryDetail", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("RunHistoryItem");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRule", b =>

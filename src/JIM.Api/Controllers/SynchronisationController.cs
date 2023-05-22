@@ -48,7 +48,7 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/objects/{id}")]
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int csid, int id)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int csid, Guid id)
         {
             _logger.LogTrace($"Someone requested an object ({id}) connected system: {csid}");
             return await _application.ConnectedSystems.GetConnectedSystemObjectAsync(csid, id);
