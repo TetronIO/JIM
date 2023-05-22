@@ -346,6 +346,8 @@ namespace JIM.Service.Processors
 
                         case AttributeDataType.Reference:
                             // todo: handle references...
+                            // what will we get back? full references for objects either in, or potentially out of OU selection scope?
+                            // reconcile this against selected OUs. what kind of response and information do we want to pass back to sync admins in this scenario? 
                             var x = 1;
                             break;
 
@@ -390,7 +392,41 @@ namespace JIM.Service.Processors
             var newAttributes = connectedSystemImportObject.Attributes.Where(csio => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.Equals(csio.Name, StringComparison.CurrentCultureIgnoreCase)));
             foreach (var newAttribute in newAttributes)
             {
+                // work out what data type this attribute is
+                var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(newAttribute.Name, StringComparison.CurrentCultureIgnoreCase));
 
+                switch (csoAttribute.Type)
+                {
+                    case AttributeDataType.String:
+                        foreach (var newStringValue in newAttribute.StringValues)
+                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, StringValue = newStringValue });
+                        break;
+                    case AttributeDataType.Number:
+                        foreach (var newIntValue in newAttribute.IntValues)
+                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, IntValue = newIntValue });
+                        break;
+                    case AttributeDataType.DateTime:
+                        foreach (var newDateTimeValue in newAttribute.DateTimeValues)
+                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
+                        break;
+                    case AttributeDataType.Binary:
+                        foreach (var newByteArrayValue in newAttribute.ByteValues)
+                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, ByteValue = newByteArrayValue });
+                        break;
+                    case AttributeDataType.Reference:
+                        // todo: handle references...
+                        // what will we get back? full references for objects either in, or potentially out of OU selection scope?
+                        // reconcile this against selected OUs. what kind of response and information do we want to pass back to sync admins in this scenario? 
+                        var x = 1;
+                        break;
+                    case AttributeDataType.Guid:
+                        foreach (var newGuidValue in newAttribute.GuidValues)
+                            attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, GuidValue = newGuidValue });
+                        break;
+                    case AttributeDataType.Bool:
+                        attributeValueAdditions.Add(new ConnectedSystemAttributeValue { Attribute = csoAttribute, BoolValue = newAttribute.BoolValue });
+                        break;
+                }
             }
 
             // persist addition and removals...
