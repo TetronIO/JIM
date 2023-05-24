@@ -29,7 +29,7 @@ namespace JIM.PostgresData
         internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
         internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
-        internal DbSet<SynchronisationRunHistoryDetail> SynchronisationRunHistoryDetails { get; set; }
+        internal DbSet<SyncRunHistoryDetail> SyncRunHistoryDetails { get; set; }
         internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
         internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
         internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
@@ -48,8 +48,6 @@ namespace JIM.PostgresData
         /// </summary>
         internal DbSet<ServiceTask> ServiceTasks { get; set; }
         internal DbSet<SyncRule> SyncRules { get; set; }
-        internal DbSet<SyncRun> SyncRuns { get; set; }
-        internal DbSet<SyncRunObject> SyncRunObjects { get; set; }
         /// <summary>
         /// Do not use this, this is required for EF Core to handle base and derived classes persisted to the db.
         /// </summary>

@@ -4,7 +4,6 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
-using JIM.Models.Transactional;
 using Serilog;
 
 namespace JIM.Application.Servers
@@ -456,13 +455,6 @@ namespace JIM.Application.Servers
         public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfileHeaderAsync(connectedSystemRunProfileId);
-        }
-        #endregion
-
-        #region Synchronisation Runs
-        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
-        {
-            return await Application.Repository.ConnectedSystems.GetSynchronisationRunsAsync(id);
         }
         #endregion
 

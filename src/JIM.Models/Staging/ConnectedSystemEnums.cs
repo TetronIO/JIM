@@ -75,13 +75,12 @@
         ConfigurationError
     }
 
-    public enum SynchronisationRunHistoryDetailItemError
+    public enum SyncRunType
     {
-        NotSet,
-        MissingUniqueIdentifierAttributeValue,
-        CouldntMatchObjectType,
-        UnsupportedUniqueIdentifierAttribyteType,
-        UnexpectedAttribute,
-        DuplicateImportedAttribute
+        FullImport = 0,
+        DeltaImport = 1,
+        FullSynchronisation = 2,
+        DeltaSynchronisation = 3,
+        Export = 4
     }
 }

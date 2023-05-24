@@ -12,9 +12,9 @@ namespace JIM.PostgresData.Repositories
             Repository = dataRepository;
         }
 
-        public async Task CreateSynchronisationRunHistoryDetailAsync(SynchronisationRunHistoryDetail synchronisationRunHistoryDetail)
+        public async Task CreateSyncRunHistoryDetailAsync(SyncRunHistoryDetail synchronisationRunHistoryDetail)
         {
-            Repository.Database.SynchronisationRunHistoryDetails.Add(synchronisationRunHistoryDetail);
+            Repository.Database.SyncRunHistoryDetails.Add(synchronisationRunHistoryDetail);
             await Repository.Database.SaveChangesAsync();
         }
 
@@ -24,9 +24,9 @@ namespace JIM.PostgresData.Repositories
             await Repository.Database.SaveChangesAsync();
         }
 
-        public async Task UpdateSynchronisationRunHistoryDetailAsync(SynchronisationRunHistoryDetail synchronisationRunHistoryDetail)
+        public async Task UpdateSyncRunHistoryDetailAsync(SyncRunHistoryDetail synchronisationRunHistoryDetail)
         {
-            Repository.Database.SynchronisationRunHistoryDetails.Update(synchronisationRunHistoryDetail);
+            Repository.Database.SyncRunHistoryDetails.Update(synchronisationRunHistoryDetail);
             await Repository.Database.SaveChangesAsync();
         }
     }

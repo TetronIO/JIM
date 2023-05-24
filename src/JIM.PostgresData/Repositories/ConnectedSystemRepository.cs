@@ -358,12 +358,5 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.SyncRules.SingleOrDefaultAsync(x => x.Id == id);
         }
         #endregion
-
-        #region Sync Runs
-        public async Task<IList<SyncRun>?> GetSynchronisationRunsAsync(int id)
-        {
-            return await Repository.Database.SyncRuns.Where(x => x.ConnectedSystem.Id == id).OrderByDescending(x => x.Created).ToListAsync();
-        }
-        #endregion
     }
 }

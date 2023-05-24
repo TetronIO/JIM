@@ -15,10 +15,19 @@ namespace JIM.Models.History
 
         public string? ConnectedSystemName { get; set; }
 
+        /// <summary>
+        /// The run-profile that caused the synchronisation run.
+        /// </summary>
         public ConnectedSystemRunProfile? RunProfile { get; set; }
 
+        /// <summary>
+        /// If the run profile has been deleted, the name of the run profile can be accessed here still.
+        /// </summary>
         public string? RunProfileName { get; set; }
 
+        /// <summary>
+        /// If the run profile has been deleted, the type of sync run this was can be accessed here still.
+        /// </summary>
         public SyncRunType RunType { get; set; }
 
         public SyncRunHistoryDetailError? Error { get; set; }

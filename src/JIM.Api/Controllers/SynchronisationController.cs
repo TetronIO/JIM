@@ -1,7 +1,6 @@
 ﻿using JIM.Application;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
-using JIM.Models.Transactional;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers
@@ -31,13 +30,6 @@ namespace JIM.Api.Controllers
         {
             _logger.LogTrace($"Someone requested a connected system: {csid}");
             return await _application.ConnectedSystems.GetConnectedSystemAsync(csid);
-        }
-
-        [HttpGet("/synchronisation/connected_systems/{csid}/run_history")]
-        public async Task<IEnumerable<SyncRun>?> GetConnectedSystemRunHistoriesAsync(int csid)
-        {
-            _logger.LogTrace($"Someone requested synchronisation runs for system: {csid}");
-            return await _application.ConnectedSystems.GetSynchronisationRunsAsync(csid);
         }
 
         [HttpGet("/synchronisation/connected_systems/{csid}/object_types")]

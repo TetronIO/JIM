@@ -13,7 +13,7 @@ namespace JIM.Service.Processors
         private readonly IConnector _connector;
         private readonly ConnectedSystem _connectedSystem;
         private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
-        private readonly SynchronisationRunHistoryDetail _synchronisationRunHistoryDetail;
+        private readonly SyncRunHistoryDetail _synchronisationRunHistoryDetail;
         private readonly CancellationTokenSource _cancellationTokenSource;
 
         internal SynchronisationImportTaskProcessor(
@@ -21,14 +21,14 @@ namespace JIM.Service.Processors
             IConnector connector,
             ConnectedSystem connectedSystem,
             ConnectedSystemRunProfile connectedSystemRunProfile,
-            SynchronisationRunHistoryDetail synchronisationRunHistoryDetail,
+            SyncRunHistoryDetail syncRunHistoryDetail,
             CancellationTokenSource cancellationTokenSource)
         {
             _jim = jimApplication;
             _connector = connector;
             _connectedSystem = connectedSystem;
             _connectedSystemRunProfile = connectedSystemRunProfile;
-            _synchronisationRunHistoryDetail = synchronisationRunHistoryDetail;
+            _synchronisationRunHistoryDetail = syncRunHistoryDetail;
             _cancellationTokenSource = cancellationTokenSource;
         }
 
@@ -66,7 +66,7 @@ namespace JIM.Service.Processors
                     foreach (var importObject in result.ImportObjects)
                     {
                         // this will store the detail for the import object that will persist in the history for the run
-                        var synchronisationRunHistoryDetailItem = new SynchronisationRunHistoryDetailItem();
+                        var syncRunHistoryDetailItem = new SyncRunHistoryDetailItem();
 
                         // is this a new, or existing object as far as JIM is aware?
                         // find the unique id attribute for this connected system object type, and then pull out the right type attribute value from the importobject
@@ -74,8 +74,8 @@ namespace JIM.Service.Processors
                         var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
                         if (csObjectType == null || csObjectType.UniqueIdentifierAttribute == null)
                         {
-                            synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.CouldntMatchObjectType;
-                            synchronisationRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                            syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.CouldntMatchObjectType;
+                            syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                             continue;
                         }
 
@@ -85,9 +85,9 @@ namespace JIM.Service.Processors
                             if (string.IsNullOrEmpty(importObject.UniqueIdentifierAttributeStringValue))
                             {
                                 // connector has not set a valid unique identifier attribute string value
-                                synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
-                                synchronisationRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier string value.";
-                                _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
+                                syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
+                                syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier string value.";
+                                _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
                                 continue;
                             }
 
@@ -98,9 +98,9 @@ namespace JIM.Service.Processors
                             if (importObject.UniqueIdentifierIntValue == null || importObject.UniqueIdentifierIntValue < 1)
                             {
                                 // connector has not set a valid unique identifier attribute int value
-                                synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
-                                synchronisationRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier int value.";
-                                _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
+                                syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
+                                syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier int value.";
+                                _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
                                 continue;
                             }
 
@@ -111,9 +111,9 @@ namespace JIM.Service.Processors
                             if (importObject.UniqueIdentifierAttributeGuidValue == null || importObject.UniqueIdentifierAttributeGuidValue == Guid.Empty)
                             {
                                 // connector has not set a valid unique identifier attribute guid value
-                                synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
-                                synchronisationRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier guid value.";
-                                _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
+                                syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
+                                syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier guid value.";
+                                _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
                                 continue;
                             }
 
@@ -121,9 +121,9 @@ namespace JIM.Service.Processors
                         }
                         else
                         {
-                            synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.UnsupportedUniqueIdentifierAttribyteType;
-                            synchronisationRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Unsupported connected system object type unique identifier type: {csObjectType.UniqueIdentifierAttribute.Type}";
-                            _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
+                            syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.UnsupportedUniqueIdentifierAttribyteType;
+                            syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Unsupported connected system object type unique identifier type: {csObjectType.UniqueIdentifierAttribute.Type}";
+                            _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
                             continue;
                         }
 
@@ -131,12 +131,12 @@ namespace JIM.Service.Processors
                         // is existing - apply any changes to the cso from the import object
                         if (connectedSystemObject == null)
                         {
-                            await CreateConnectedSystemObjectFromImportObjectAsync(importObject, csObjectType, synchronisationRunHistoryDetailItem);
+                            await CreateConnectedSystemObjectFromImportObjectAsync(importObject, csObjectType, syncRunHistoryDetailItem);
                         }
                         else
                         {
                             // existing connected system object - update from import object if necessary
-                            await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, synchronisationRunHistoryDetailItem);
+                            await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, syncRunHistoryDetailItem);
                         }
                     }
 
@@ -147,7 +147,7 @@ namespace JIM.Service.Processors
                         initialPage = false;
 
                     // update the history item with the results from this page
-                    await _jim.History.UpdateSynchronisationRunAsync(_synchronisationRunHistoryDetail);
+                    await _jim.History.UpdateSyncRunHistoryDetailAsync(_synchronisationRunHistoryDetail);
                 }
 
                 callBasedImportConnector.CloseImportConnection();
@@ -162,7 +162,7 @@ namespace JIM.Service.Processors
             }
         }
 
-        private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, SynchronisationRunHistoryDetailItem synchronisationRunHistoryDetailItem)
+        private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, SyncRunHistoryDetailItem synchronisationRunHistoryDetailItem)
         {
             // this has been tested earlier, no need to error handle
             if (connectedSystemObjectType.UniqueIdentifierAttribute == null)
@@ -184,7 +184,7 @@ namespace JIM.Service.Processors
                 if (csAttribute == null)
                 {
                     // unexpected import attribute!
-                    synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.UnexpectedAttribute;
+                    synchronisationRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.UnexpectedAttribute;
                     synchronisationRunHistoryDetailItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
                     _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
                     csoIsInvalid = true;
@@ -264,7 +264,7 @@ namespace JIM.Service.Processors
             await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         }
 
-        private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, SynchronisationRunHistoryDetailItem synchronisationRunHistoryDetailItem)
+        private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, SyncRunHistoryDetailItem synchronisationRunHistoryDetailItem)
         {
             // attribute value additions and removals for all attributes will be collected together for persistence in one go
             var attributeValueRemovals  = new List<ConnectedSystemObjectAttributeValue>();
@@ -286,7 +286,7 @@ namespace JIM.Service.Processors
                     if (importedObjectAttributeList.Count > 1)
                     {
                         // imported objects attributes should be distinct, i.e. one per name
-                        synchronisationRunHistoryDetailItem.Error = SynchronisationRunHistoryDetailItemError.DuplicateImportedAttribute;
+                        synchronisationRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.DuplicateImportedAttribute;
                         synchronisationRunHistoryDetailItem.ErrorMessage = $"Attribute '{csoAttributeName}' was present more than one once the import object. Cannot continue processing this object.";
                         return;
                     }

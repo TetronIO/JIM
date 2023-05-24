@@ -18,8 +18,11 @@ namespace JIM.Models.History
 
         /// <summary>
         /// The parent for this detail item.
+        /// For EF navigation purposes.
         /// </summary>
         public SyncRunHistoryDetail SyncRunHistoryDetail { get; set; }
+
+        // todo: record before/after values changes here (summarise large binary attributes)
 
         // errors:
         // two-tiers of error logging, depending on system settings:

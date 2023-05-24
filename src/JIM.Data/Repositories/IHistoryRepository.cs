@@ -4,10 +4,10 @@ namespace JIM.Data.Repositories
 {
     public interface IHistoryRepository
     {
-        public Task CreateSynchronisationRunHistoryDetailAsync(SynchronisationRunHistoryDetail synchronisationRunHistoryDetail);
+        public Task CreateSyncRunHistoryDetailAsync(SyncRunHistoryDetail synchronisationRunHistoryDetail);
 
         public Task CreateRunHistoryItemAsync(RunHistoryItem runHistoryItem);
 
-        public Task UpdateSynchronisationRunHistoryDetailAsync(SynchronisationRunHistoryDetail synchronisationRunHistoryDetail);
+        public Task UpdateSyncRunHistoryDetailAsync(SyncRunHistoryDetail synchronisationRunHistoryDetail);
     }
 }

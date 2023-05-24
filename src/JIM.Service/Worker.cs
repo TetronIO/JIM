@@ -3,8 +3,8 @@ using JIM.Connectors;
 using JIM.Connectors.LDAP;
 using JIM.Models.History;
 using JIM.Models.Interfaces;
+using JIM.Models.Staging;
 using JIM.Models.Tasking;
-using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Service.Processors;
 using Serilog;
@@ -130,40 +130,55 @@ namespace JIM.Service
                                         if (runProfile != null)
                                         {
                                             // create the history item for this run profile execution, then pass it in to the processor for iterative updates
-                                            var synchronisationRunHistoryDetail = new SynchronisationRunHistoryDetail
+                                            // we copy some run profile information as run profiles can be user-deleted, but we would want to retain core run profile
+                                            // information for audit reasons.
+                                            var synchronisationRunHistoryDetail = new SyncRunHistoryDetail
                                             {
                                                 RunProfile = runProfile,
                                                 RunProfileName = runProfile.Name,
+                                                RunType = runProfile.RunType,
                                                 ConnectedSystem = connectedSystem,
                                                 ConnectedSystemName = connectedSystem.Name
                                             };
-                                            await taskJim.History.RecordSynchronisationRunAsync(synchronisationRunHistoryDetail);
+                                            await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
 
-                                            // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
-                                            if (runProfile.RunType == SyncRunType.FullImport)
+                                            try
                                             {
-                                                var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, synchronisationRunHistoryDetail, cancellationTokenSource);
-                                                await synchronisationImportTaskProcessor.PerformFullImportAsync();
+                                                // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
+                                                if (runProfile.RunType == SyncRunType.FullImport)
+                                                {
+                                                    var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, synchronisationRunHistoryDetail, cancellationTokenSource);
+                                                    await synchronisationImportTaskProcessor.PerformFullImportAsync();
+                                                }
+                                                else if (runProfile.RunType == SyncRunType.DeltaImport)
+                                                {
+                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                }
+                                                else if (runProfile.RunType == SyncRunType.Export)
+                                                {
+                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                }
+                                                else if (runProfile.RunType == SyncRunType.FullSynchronisation)
+                                                {
+                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                }
+                                                else if (runProfile.RunType == SyncRunType.DeltaSynchronisation)
+                                                {
+                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                }
+                                                else
+                                                {
+                                                    Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
+                                                }
                                             }
-                                            else if (runProfile.RunType == SyncRunType.DeltaImport)
+                                            catch (Exception ex) 
                                             {
-                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                            }
-                                            else if (runProfile.RunType == SyncRunType.Export)
-                                            {
-                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                            }
-                                            else if (runProfile.RunType == SyncRunType.FullSynchronisation)
-                                            {
-                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                            }
-                                            else if (runProfile.RunType == SyncRunType.DeltaSynchronisation)
-                                            {
-                                                Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                            }
-                                            else
-                                            {
-                                                Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
+                                                // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view issues with connectors through JIM,
+                                                // rather than an admin having to dig through server logs.
+                                                synchronisationRunHistoryDetail.ErrorMessage = ex.Message;
+                                                synchronisationRunHistoryDetail.ErrorStackTrace = ex.StackTrace;
+                                                await taskJim.History.UpdateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
+                                                Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
                                             }
                                         }
                                         else
