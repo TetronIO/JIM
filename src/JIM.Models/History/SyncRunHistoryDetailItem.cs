@@ -5,7 +5,7 @@ namespace JIM.Models.History
     /// <summary>
     /// Provides information on the item of a synchronisation run, i.e. a pending export object, or import object.
     /// </summary>
-    public class SynchronisationRunHistoryDetailItem
+    public class SyncRunHistoryDetailItem
     {
         public Guid Id { get; set; }
 
@@ -19,15 +19,22 @@ namespace JIM.Models.History
         /// <summary>
         /// The parent for this detail item.
         /// </summary>
-        public SynchronisationRunHistoryDetail SynchronisationRunHistoryDetail { get; set; }
+        public SyncRunHistoryDetail SyncRunHistoryDetail { get; set; }
+
+        // errors:
+        // two-tiers of error logging, depending on system settings:
+        // - individual error items with detailed error info
+        // - individual error items with detailed error info and json snapshot of exported/imported object
 
         /// <summary>
         /// If settings allow during run execution, a JSON representation of the data imported, or exported can be accessed here for investigative purposes in the event of an error.
         /// </summary>
         public string? DataSnapshot { get; set; }
 
-        public SynchronisationRunHistoryDetailItemError? Error { get; set; }
+        public SyncRunHistoryDetailItemError? Error { get; set; }
+
         public string? ErrorMessage { get; set; }
+        
         public string? ErrorStackTrace { get; set; }
     }
 }

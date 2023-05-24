@@ -5,7 +5,7 @@ namespace JIM.Models.History
     /// <summary>
     /// Provides information on the execution of a synchronisation run event.
     /// </summary>
-    public class SynchronisationRunHistoryDetail
+    public class SyncRunHistoryDetail
     {
         public Guid Id { get; set; }
 
@@ -19,17 +19,21 @@ namespace JIM.Models.History
 
         public string? RunProfileName { get; set; }
 
+        public SyncRunType RunType { get; set; }
+
+        public SyncRunHistoryDetailError? Error { get; set; }
+
+        public string? ErrorMessage { get; set; }
+        
+        public string? ErrorStackTrace { get; set; }
+
         // results:
-        // not sure that a full delta change log is needed, as mv changes will be logged, i.e. old value, new value when syncs are performed or workflows execute, user changes performed, etc.
+        // not sure that a full delta change log is needed, as mv changes will be logged, 
+        // i.e. old value, new value when syncs are performed or workflows execute, user changes performed, etc.
         // what would be useful here is to capture two levels of stats, depending on system settings:
         // - result item with operation type (create/update/delete) and link to mv object
         // - result item with operation type (create/update/delete) and link to mv object and json snapshot of imported/exported object
 
-        // errors:
-        // two-tiers of error logging, depending on system settings:
-        // - individual error items with detailed error info
-        // - individual error items with detailed error info and json snapshot of exported/imported object
-
-        public List<SynchronisationRunHistoryDetailItem> Items { get; set; } = new List<SynchronisationRunHistoryDetailItem>();
+        public List<SyncRunHistoryDetailItem> Items { get; set; } = new List<SyncRunHistoryDetailItem>();
     }
 }
