@@ -11,6 +11,7 @@ namespace JIM.Models.Core
         public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
         public List<Role> Roles { get; set; }
         public MetaverseObjectStatus Status { get; set; }
+        public List<MetaverseObjectChange> Changes { get; set; }
 
         public string? DisplayName 
         { 

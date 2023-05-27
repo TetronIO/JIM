@@ -40,6 +40,8 @@ namespace JIM.Models.Staging
         /// </summary>
         public DateTime? DateJoined { get; set; }
 
+        public List<ConnectedSystemObjectChange> Changes { get; set; }
+
         public ConnectedSystemObject()
         {
             Created = DateTime.Now;
