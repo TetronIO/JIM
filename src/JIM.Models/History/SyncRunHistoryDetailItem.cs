@@ -10,19 +10,15 @@ namespace JIM.Models.History
         public Guid Id { get; set; }
 
         /// <summary>
-        /// What connected system object does this history detail item relate to?
-        /// The history item may outlive the object in question, so a reference isn't always required, 
-        /// or there may have been a problem during priovisioning and a connected system object may not have been created yet.
-        /// </summary>
-        public ConnectedSystemObject? ConnectedSystemObject { get; set; }
-
-        /// <summary>
         /// The parent for this detail item.
         /// For EF navigation purposes.
         /// </summary>
         public SyncRunHistoryDetail SyncRunHistoryDetail { get; set; }
 
-        // todo: record before/after values changes here (summarise large binary attributes)
+        /// <summary>
+        /// What change(s) were made to the connected system object in question?
+        /// </summary>
+        public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
 
         // errors:
         // two-tiers of error logging, depending on system settings:
