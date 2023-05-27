@@ -164,12 +164,12 @@ namespace JIM.Connectors.LDAP
 
             var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, paginationTokens, persistedConnectorData, logger, cancellationToken);
 
-            if (runProfile.RunType == SyncRunType.FullImport)
+            if (runProfile.RunType == ConnectedSystemRunType.FullImport)
             {
                 logger.Debug("ImportAsync: Full Import requested");
                 return import.GetFullImportObjects();
             }
-            else if (runProfile.RunType == SyncRunType.DeltaImport)
+            else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
             {
                 logger.Debug("ImportAsync: Delta Import requested");
                 throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");

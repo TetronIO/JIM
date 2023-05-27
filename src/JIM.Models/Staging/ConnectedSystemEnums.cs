@@ -75,7 +75,7 @@
         ConfigurationError
     }
 
-    public enum SyncRunType
+    public enum ConnectedSystemRunType
     {
         FullImport = 0,
         DeltaImport = 1,

@@ -19,6 +19,7 @@ namespace JIM.PostgresData
         internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
         internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
+        internal DbSet<ConnectedSystemObjectChange> ConnectedSystemObjectChanges { get; set; }
         internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; }
         internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; }
         internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
@@ -35,6 +36,7 @@ namespace JIM.PostgresData
         internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
         internal DbSet<MetaverseObject> MetaverseObjects { get; set; }
         internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }
+        internal DbSet<MetaverseObjectChange> MetaverseObjectChanges { get; set; }
         internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
         internal DbSet<PendingExport> PendingExports { get; set; }
         internal DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; }

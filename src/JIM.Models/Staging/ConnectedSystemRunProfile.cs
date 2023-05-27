@@ -15,7 +15,7 @@ namespace JIM.Models.Staging
         /// </summary>
         public ConnectedSystemPartition? Partition { get; set; }
 
-        public SyncRunType RunType { get; set; }
+        public ConnectedSystemRunType RunType { get; set; }
 
         /// <summary>
         /// How many items to process in one go via the Connector.

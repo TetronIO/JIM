@@ -23,4 +23,14 @@
         Normal = 0,
         Obsolete = 1
     }
+
+
+    public enum MetaverseObjectChangeInitiator
+    {
+        NotSet = 0,
+        User = 1,
+        WorkflowInstance = 2,
+        GroupMembershipRuleEvaluation = 3,
+        SynchronisationRule = 4
+    }
 }

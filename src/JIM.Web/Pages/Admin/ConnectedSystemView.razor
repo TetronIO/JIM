@@ -346,8 +346,8 @@
 
                 <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
                     <MudTextField T="string" @bind-Value="newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
-                    <MudSelect T="SyncRunType" @bind-Value="newRunProfile.RunType" Label="Run Type" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="A run profile type is required">
-                        @foreach (SyncRunType runType in Enum.GetValues(typeof(SyncRunType)))
+                    <MudSelect T="ConnectedSystemRunType" @bind-Value="newRunProfile.RunType" Label="Run Type" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="A run profile type is required">
+                        @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
                         {
                             <MudSelectItem Value="@runType">@runType.ToString().SplitOnCapitalLetters()</MudSelectItem>
                         }

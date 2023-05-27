@@ -145,24 +145,24 @@ namespace JIM.Service
                                             try
                                             {
                                                 // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
-                                                if (runProfile.RunType == SyncRunType.FullImport)
+                                                if (runProfile.RunType == ConnectedSystemRunType.FullImport)
                                                 {
                                                     var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, synchronisationRunHistoryDetail, cancellationTokenSource);
                                                     await synchronisationImportTaskProcessor.PerformFullImportAsync();
                                                 }
-                                                else if (runProfile.RunType == SyncRunType.DeltaImport)
+                                                else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
                                                 {
                                                     Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
                                                 }
-                                                else if (runProfile.RunType == SyncRunType.Export)
+                                                else if (runProfile.RunType == ConnectedSystemRunType.Export)
                                                 {
                                                     Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
                                                 }
-                                                else if (runProfile.RunType == SyncRunType.FullSynchronisation)
+                                                else if (runProfile.RunType == ConnectedSystemRunType.FullSynchronisation)
                                                 {
                                                     Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
                                                 }
-                                                else if (runProfile.RunType == SyncRunType.DeltaSynchronisation)
+                                                else if (runProfile.RunType == ConnectedSystemRunType.DeltaSynchronisation)
                                                 {
                                                     Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
                                                 }
