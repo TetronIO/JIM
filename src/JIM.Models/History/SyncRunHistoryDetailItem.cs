@@ -16,7 +16,7 @@ namespace JIM.Models.History
         public SyncRunHistoryDetail SyncRunHistoryDetail { get; set; }
 
         /// <summary>
-        /// What change(s) were made to the connected system object in question?
+        /// What change(s), if any were made to the connected system object in question?
         /// </summary>
         public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
 

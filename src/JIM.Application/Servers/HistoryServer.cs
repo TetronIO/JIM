@@ -19,10 +19,10 @@ namespace JIM.Application.Servers
             if (syncRunHistoryDetail.RunHistoryItem != null)
                 throw new ArgumentException($"{nameof(syncRunHistoryDetail)} already has a RunHistoryItem associated. This is not supported.");
 
-            // create the detail object
+            // create the required child detail object
             await Application.Repository.History.CreateSyncRunHistoryDetailAsync(syncRunHistoryDetail);
             
-            // then we're able to create the history object
+            // then we're able to create the history object that references the detail object
             var runHistoryItem = new RunHistoryItem(syncRunHistoryDetail);
             await Application.Repository.History.CreateRunHistoryItemAsync(runHistoryItem);
         }

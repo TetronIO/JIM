@@ -1,3 +1,5 @@
+using JIM.Models.History;
+
 namespace JIM.Models.Staging
 {
     /// <summary>
@@ -6,6 +8,8 @@ namespace JIM.Models.Staging
     public class ConnectedSystemObjectChange
     {
         public Guid Id { get; set; }
+
+        public SyncRunHistoryDetailItem? SyncRunHistoryDetailItem { get; set; }
 
         /// <summary>
         /// Which Connected System did/does the Connected System Object in question relate to.
@@ -22,17 +26,11 @@ namespace JIM.Models.Staging
         /// <summary>
         /// When was this change made?
         /// </summary>
-        public DateTime ChangeMade { get; set; }
-        
-        /// <summary>
-        /// What caused this change.
-        /// Acceptable values: imports and synchronisations.
-        /// </summary>
-        public ConnectedSystemRunType RunType { get; set; }
+        public DateTime ChangeTime { get; set; }
 
         /// <summary>
         /// What was the change type?
-        /// Acceptable values: UPDATE and DELETE. There would be no change entry for create.
+        /// Acceptable values: UPDATE and DELETE. There would be no change object for a create scenario.
         /// </summary>
         public ConnectedSystemImportObjectChangeType ChangeType { get; set; }
 

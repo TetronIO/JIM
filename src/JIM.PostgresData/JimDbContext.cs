@@ -15,11 +15,11 @@ namespace JIM.PostgresData
     {
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
         internal DbSet<ConnectedSystemAttribute> ConnectedSystemAttributes { get; set; }
-        internal DbSet<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValues { get; set; }
         internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
-        internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
+        internal DbSet<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValues { get; set; }
         internal DbSet<ConnectedSystemObjectChange> ConnectedSystemObjectChanges { get; set; }
+        internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
         internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; }
         internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; }
         internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
@@ -28,11 +28,10 @@ namespace JIM.PostgresData
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
         internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
-        internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
-        internal DbSet<SyncRunHistoryDetail> SyncRunHistoryDetails { get; set; }
         internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
         internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
+        internal DbSet<HistoryItem> HistoryItems { get; set; }
         internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
         internal DbSet<MetaverseObject> MetaverseObjects { get; set; }
         internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }
@@ -44,17 +43,12 @@ namespace JIM.PostgresData
         internal DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; }
         internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; }
         internal DbSet<Role> Roles { get; set; }
-        internal DbSet<ServiceSettings> ServiceSettings { get; set; }
-        /// <summary>
-        /// Do not use this, this is required for EF Core to handle base and derived classes persisted to the db.
-        /// </summary>
-        internal DbSet<ServiceTask> ServiceTasks { get; set; }
-        internal DbSet<SyncRule> SyncRules { get; set; }
-        /// <summary>
-        /// Do not use this, this is required for EF Core to handle base and derived classes persisted to the db.
-        /// </summary>
-        internal DbSet<HistoryItem> HistoryItems { get; set; }
         internal DbSet<RunHistoryItem> RunHistoryItems { get; set; }
+        internal DbSet<ServiceSettings> ServiceSettings { get; set; }
+        internal DbSet<ServiceTask> ServiceTasks { get; set; }
+        internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; }
+        internal DbSet<SyncRule> SyncRules { get; set; }
+        internal DbSet<SyncRunHistoryDetail> SyncRunHistoryDetails { get; set; }
 
         private readonly string _connectionString;
 

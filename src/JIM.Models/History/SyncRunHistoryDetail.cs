@@ -37,8 +37,6 @@ namespace JIM.Models.History
         public string? ErrorStackTrace { get; set; }
 
         // results:
-        // not sure that a full delta change log is needed, as mv changes will be logged, 
-        // i.e. old value, new value when syncs are performed or workflows execute, user changes performed, etc.
         // what would be useful here is to capture two levels of stats, depending on system settings:
         // - result item with operation type (create/update/delete) and link to mv object
         // - result item with operation type (create/update/delete) and link to mv object and json snapshot of imported/exported object
