@@ -3,12 +3,17 @@ using JIM.Models.History;
 namespace JIM.Models.Staging
 {
     /// <summary>
-    /// Represents a change to a Connected System Object, i.e. what was changed, when and how.
+    /// Represents a change to a Connected System Object, i.e. what was changed, when and by what.
     /// </summary>
     public class ConnectedSystemObjectChange
     {
         public Guid Id { get; set; }
 
+        /// <summary>
+        /// The connected system object change would have been caused by a synchronisation run, 
+        /// though it's worth bearing in mind that sync run history can be cleared down so a reference may not always be present,
+        /// depending on how old the connected system object is.
+        /// </summary>
         public SyncRunHistoryDetailItem? SyncRunHistoryDetailItem { get; set; }
 
         /// <summary>
@@ -35,8 +40,8 @@ namespace JIM.Models.Staging
         public ConnectedSystemImportObjectChangeType ChangeType { get; set; }
 
         /// <summary>
-        /// A list of what was changed. Multiple changes can be recorded at once.
+        /// Enables access to per-attribute value changes for the connected system object in question.
         /// </summary>
-        public List<ConnectedSystemObjectChangeItem> ChangeItems { get; set; } = new List<ConnectedSystemObjectChangeItem>();
+        public List<ConnectedSystemObjectChangeAttribute> AttributeChanges { get; set; } = new List<ConnectedSystemObjectChangeAttribute>();
     }
 }

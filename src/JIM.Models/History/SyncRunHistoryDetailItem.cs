@@ -3,7 +3,7 @@
 namespace JIM.Models.History
 {
     /// <summary>
-    /// Provides information on the item of a synchronisation run, i.e. a pending export object, or import object.
+    /// Stores information on the item of a synchronisation run, i.e. an import object.
     /// </summary>
     public class SyncRunHistoryDetailItem
     {
