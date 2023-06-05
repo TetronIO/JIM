@@ -30,5 +30,7 @@ namespace JIM.Models.Staging
         public Guid? GuidValue { get; set; }
 
         public bool? BoolValue { get; set; }
+
+        public ConnectedSystemObject? ReferenceValue { get; set; }
     }
 }

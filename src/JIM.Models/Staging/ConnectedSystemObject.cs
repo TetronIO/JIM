@@ -4,6 +4,7 @@ namespace JIM.Models.Staging
 {
     public class ConnectedSystemObject
     {
+        #region accessors
         public Guid Id { get; set; }
 
         public DateTime Created { get; set; }
@@ -40,8 +41,23 @@ namespace JIM.Models.Staging
         /// </summary>
         public DateTime? DateJoined { get; set; }
 
+        /// <summary>
+        /// A list of the changes made to this connected system object.
+        /// </summary>
         public List<ConnectedSystemObjectChange> Changes { get; set; }
 
+        /// <summary>
+        /// Only for use by JIM.Service to determine what attribute values need adding and and recording.
+        /// </summary>
+        public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueAdditions { get; set; } = new();
+
+        /// <summary>
+        /// Only for use by JIM.Service to determine what attribute values need removing and recording.
+        /// </summary>
+        public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
+        #endregion
+
+        #region constructors
         public ConnectedSystemObject()
         {
             Created = DateTime.Now;
@@ -49,5 +65,113 @@ namespace JIM.Models.Staging
             Status = ConnectedSystemObjectStatus.Normal;
             JoinType = ConnectedSystemObjectJoinType.NotJoined;
         }
+        #endregion
+
+        #region public methods
+        public void UpdateSingleValuedAttribute<T>(ConnectedSystemAttribute connectedSystemAttribute, T newAttributeValue)
+        {
+            if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
+                throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued Attribute. Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
+
+            // the attribute might have pending changes already, so clear any previous pending changes as we can only accept the last change to a sva
+            PendingAttributeValueAdditions.RemoveAll(q => q.Attribute.Id == connectedSystemAttribute.Id);
+            PendingAttributeValueRemovals.RemoveAll(q => q.Attribute.Id == connectedSystemAttribute.Id);
+
+            // create a new attribute value object for the addition
+            var connectedSystemObjectAttributeValue = new ConnectedSystemObjectAttributeValue {
+                Attribute = connectedSystemAttribute
+            };
+
+            // we need to cast the generic value back to object before we can cast to the specific attribute type next
+            // and assign the correct attribute value.
+            var newAttributeValueObject = newAttributeValue as object;
+            if (typeof(T) == typeof(string))
+                connectedSystemObjectAttributeValue.StringValue = newAttributeValueObject as string;
+            else if (typeof(T) == typeof(int)) 
+                connectedSystemObjectAttributeValue.IntValue = newAttributeValueObject as int?;
+            else if (typeof(T) == typeof(DateTime))
+                connectedSystemObjectAttributeValue.DateTimeValue = newAttributeValueObject as DateTime?;
+            else if (typeof(T) == typeof(Guid))
+                connectedSystemObjectAttributeValue.GuidValue = newAttributeValueObject as Guid?;
+            else if (typeof(T) == typeof(bool))
+                connectedSystemObjectAttributeValue.BoolValue = newAttributeValueObject as bool?;
+            else if (typeof(T) == typeof(byte[]))
+                connectedSystemObjectAttributeValue.ByteValue = newAttributeValueObject as byte[];
+            else if (typeof(T) == typeof(ConnectedSystemObject))
+                connectedSystemObjectAttributeValue.ReferenceValue = newAttributeValueObject as ConnectedSystemObject;
+            else
+                throw new ArgumentNullException(nameof(newAttributeValue), "New attribute value was not an accepted attribute value type!");
+
+            // if all is good by this point, add the change attribute to the list of pending attribute changes
+            PendingAttributeValueAdditions.Add(connectedSystemObjectAttributeValue);
+
+            // add  removal for the existing value
+            var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
+            if (existingAttributeValue != null)
+                PendingAttributeValueRemovals.Add(existingAttributeValue);
+        }
+
+        public void RemoveSingleValuedAttributeValue<T>(ConnectedSystemAttribute connectedSystemAttribute)
+        {
+            if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
+                throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued attribute (SVA). Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
+
+            var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
+            if (existingAttributeValue != null)
+                PendingAttributeValueRemovals.Add(existingAttributeValue);
+        }
+
+        public void AddMultiValuedAttributeValue<T>(ConnectedSystemAttribute connectedSystemAttribute, T attributeValueToAdd)
+        {
+            if (connectedSystemAttribute.AttributePlurality != AttributePlurality.MultiValued)
+                throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Multi-Valued attribute (MVA). Cannot add a value. Use the UpdateSingleValuedAttribute method instead.", nameof(connectedSystemAttribute));
+
+            // create a new attribute value object for the addition
+            var connectedSystemObjectAttributeValue = new ConnectedSystemObjectAttributeValue
+            {
+                Attribute = connectedSystemAttribute
+            };
+
+            // we need to cast the generic value back to object before we can cast to the specific attribute type next
+            // and assign the correct attribute value.
+            var newAttributeValueObject = attributeValueToAdd as object;
+            if (typeof(T) == typeof(string))
+                connectedSystemObjectAttributeValue.StringValue = newAttributeValueObject as string;
+            else if (typeof(T) == typeof(int))
+                connectedSystemObjectAttributeValue.IntValue = newAttributeValueObject as int?;
+            else if (typeof(T) == typeof(DateTime))
+                connectedSystemObjectAttributeValue.DateTimeValue = newAttributeValueObject as DateTime?;
+            else if (typeof(T) == typeof(Guid))
+                connectedSystemObjectAttributeValue.GuidValue = newAttributeValueObject as Guid?;
+            else if (typeof(T) == typeof(bool))
+                connectedSystemObjectAttributeValue.BoolValue = newAttributeValueObject as bool?;
+            else if (typeof(T) == typeof(byte[]))
+                connectedSystemObjectAttributeValue.ByteValue = newAttributeValueObject as byte[];
+            else if (typeof(T) == typeof(ConnectedSystemObject))
+                connectedSystemObjectAttributeValue.ReferenceValue = newAttributeValueObject as ConnectedSystemObject;
+            else
+                throw new ArgumentNullException(nameof(attributeValueToAdd), "New attribute value was not an accepted attribute value type!");
+
+            // if all is good by this point, add the change attribute to the list of pending attribute additions
+            PendingAttributeValueAdditions.Add(connectedSystemObjectAttributeValue);
+        }
+
+        public void RemoveMultiValuedAttributeValue(ConnectedSystemObjectAttributeValue attributeValueToRemove)
+        {
+            if (attributeValueToRemove.Attribute.AttributePlurality != AttributePlurality.MultiValued)
+                throw new ArgumentException($"Attribute '{attributeValueToRemove.Attribute.Name}' is not a Multi-Valued attribute (MVA). Cannot remove a value. Use the RemoveSingleValuedAttributeValue method instead.", nameof(attributeValueToRemove));
+
+            // add  removal for the existing value
+            var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Id == attributeValueToRemove.Id);
+            if (existingAttributeValue != null)
+                PendingAttributeValueRemovals.Add(existingAttributeValue);
+        }
+
+        public void RemoveAllMultiValuedAttributeValues(ConnectedSystemAttribute connectedSystemAttribute)
+        {
+            foreach (var attributeValue in AttributeValues.Where(av => av.Attribute.Id == connectedSystemAttribute.Id))
+                RemoveMultiValuedAttributeValue(attributeValue);
+        }
+        #endregion
     }
 }

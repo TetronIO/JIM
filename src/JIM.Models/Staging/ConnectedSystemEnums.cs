@@ -54,7 +54,6 @@
         NotSet,
         Add,
         Update,
-        Replace,
         Delete
     }
 

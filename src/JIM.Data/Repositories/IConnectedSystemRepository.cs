@@ -35,7 +35,6 @@ namespace JIM.Data.Repositories
         public Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
         public Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
         public Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
-        public Task CreateConnectedSystemObjectAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> connectedSystemAttributeValues);
         public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
         public Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
         public Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem);
@@ -51,7 +50,6 @@ namespace JIM.Data.Repositories
         public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
         public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
         public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
-        public Task DeleteConnectedSystemObjectAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> connectedSystemAttributeValues);
         public Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
     }
 }

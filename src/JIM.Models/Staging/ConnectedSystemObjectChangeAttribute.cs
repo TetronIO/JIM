@@ -13,7 +13,7 @@
         /// <summary>
         /// The connected system attribute these value changes relates to.
         /// </summary>
-        public ConnectedSystemAttribute ConnectedSystemAttribute { get; set; }
+        public ConnectedSystemAttribute Attribute { get; set; }
 
         /// <summary>
         /// A list of what values were added to this attribute.

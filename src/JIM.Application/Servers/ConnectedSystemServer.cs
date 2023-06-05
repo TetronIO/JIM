@@ -1,4 +1,6 @@
 ﻿using JIM.Connectors.LDAP;
+using JIM.Models.Core;
+using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -331,31 +333,115 @@ namespace JIM.Application.Servers
         {
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         }
-        #endregion
 
-        #region Connected System Attribute Values
-        public async Task CreateConnectedSystemObjectAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> connectedSystemObjectAttributeValues)
+        public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, SyncRunHistoryDetailItem syncRunHistoryDetailItem)
         {
-            if (connectedSystemObjectAttributeValues == null)
-                throw new ArgumentNullException(nameof(connectedSystemObjectAttributeValues));
+            if (connectedSystemObject == null)
+                throw new ArgumentNullException(nameof(connectedSystemObject));
 
-            if (connectedSystemObjectAttributeValues.Any(csav => csav.Attribute == null))
-                throw new ArgumentException($"One or more {nameof(ConnectedSystemObjectAttributeValue)} objects do not have an Attribute property set.", nameof(connectedSystemObjectAttributeValues));
+            if (connectedSystemObject.AttributeValues.Any(csav => csav.Attribute == null))
+                throw new ArgumentException($"One or more AttributeValue {nameof(ConnectedSystemObjectAttributeValue)} objects do not have an Attribute property set.", nameof(connectedSystemObject));
 
-            if (connectedSystemObjectAttributeValues.Any(csav => csav.ConnectedSystemObject == null))
-                throw new ArgumentException($"One or more {nameof(ConnectedSystemObjectAttributeValue)} do not have a ConnectedSystemObject property set.", nameof(connectedSystemObjectAttributeValues));
+            if (connectedSystemObject.AttributeValues.Any(csav => csav.ConnectedSystemObject == null))
+                throw new ArgumentException($"One or more AttributeValue {nameof(ConnectedSystemObjectAttributeValue)} objects do not have a ConnectedSystemObject property set.", nameof(connectedSystemObject));
 
-            await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAttributeValuesAsync(connectedSystemObjectAttributeValues);
-        }
+            // check if there's any work to do. we need something in the pending attribute value additions, or removals to continue
+            if ((connectedSystemObject.PendingAttributeValueAdditions == null || connectedSystemObject.PendingAttributeValueAdditions.Count == 0) &&
+                (connectedSystemObject.PendingAttributeValueRemovals == null || connectedSystemObject.PendingAttributeValueRemovals.Count == 0))
+            {
+                Log.Verbose($"UpdateConnectedSystemObjectAttributeValuesAsync: No work to do. No pending attribute value changes for CSO: {connectedSystemObject.Id}");
+                return;
+            }
 
-        public async Task DeleteConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> connectedSystemObjectAttributeValues)
-        {
-            // first remove all reference to the attribute values
-            connectedSystemObject.AttributeValues.RemoveAll(av => connectedSystemObjectAttributeValues.Any(csoav => csoav.Id == av.Id));
+            // create a change object we can add attribute changes to
+            var change = new ConnectedSystemObjectChange
+            {
+                ConnectedSystem = connectedSystemObject.ConnectedSystem,
+                ConnectedSystemObject = connectedSystemObject,
+                ChangeType = ConnectedSystemImportObjectChangeType.Update,
+                SyncRunHistoryDetailItem = syncRunHistoryDetailItem
+            };
+
+            // the change object will be persisted by the sync run history detail item further up the stack
+            // we just need to associate the change with the detail item.
+            // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
+            syncRunHistoryDetailItem.ConnectedSystemObjectChange = change;
+
+            // persist new attribute values from addition list and create change
+            if (connectedSystemObject.PendingAttributeValueAdditions != null)
+            {
+                foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
+                {
+                    connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
+                    var attributeChange = GetChangAttribute(change, pendingAttributeValueAddition.Attribute);
+
+                    // add an attribute value change to the attribute change object
+                    if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.String && pendingAttributeValueAddition.StringValue != null)
+                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueAddition.StringValue));
+                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Number && pendingAttributeValueAddition.IntValue != null)
+                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (int)pendingAttributeValueAddition.IntValue));
+                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueAddition.GuidValue != null)
+                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (Guid)pendingAttributeValueAddition.GuidValue));
+                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Bool && pendingAttributeValueAddition.BoolValue != null)
+                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (bool)pendingAttributeValueAddition.BoolValue));
+                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueAddition.ByteValue != null)
+                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, true, pendingAttributeValueAddition.ByteValue.Length));
+                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Reference && pendingAttributeValueAddition.ReferenceValue != null)
+                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueAddition.ReferenceValue));
+                    else
+                        throw new InvalidDataException("UpdateConnectedSystemObjectAttributeValuesAsync:  Invalid addition attribute type or null attribute value");
+                }
+            }
+
+            // delete attribute values to be removed and create change
+            if (connectedSystemObject.PendingAttributeValueRemovals != null)
+            {
+                foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
+                {
+                    // this will cause a cascade delete of the attribute value object
+                    connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
+                    var attributeChange = GetChangAttribute(change, pendingAttributeValueRemoval.Attribute);
+
+                    // add an attribute value change to the attribute change object
+                    if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.String && pendingAttributeValueRemoval.StringValue != null)
+                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueRemoval.StringValue));
+                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Number && pendingAttributeValueRemoval.IntValue != null)
+                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (int)pendingAttributeValueRemoval.IntValue));
+                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueRemoval.GuidValue != null)
+                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (Guid)pendingAttributeValueRemoval.GuidValue));
+                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Bool && pendingAttributeValueRemoval.BoolValue != null)
+                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (bool)pendingAttributeValueRemoval.BoolValue));
+                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueRemoval.ByteValue != null)
+                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, true, pendingAttributeValueRemoval.ByteValue.Length));
+                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Reference && pendingAttributeValueRemoval.ReferenceValue != null)
+                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueRemoval.ReferenceValue));
+                    else
+                        throw new InvalidDataException("UpdateConnectedSystemObjectAttributeValuesAsync:  Invalid removal attribute type or null attribute value");
+                }
+            }
+
+            // update the cso, which will create/delete the attribute value objects
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
 
-            // then delete the attribute values
-            await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAttributeValuesAsync(connectedSystemObjectAttributeValues);
+            // we can now reset the pending attribute value lists
+            connectedSystemObject.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
+            connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
+        }
+
+        private static ConnectedSystemObjectChangeAttribute GetChangAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemAttribute connectedSystemAttribute)
+        {
+            var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemAttribute.Id);
+            if (attributeChange == null)
+            {
+                // create the attribute change object
+                attributeChange = new ConnectedSystemObjectChangeAttribute
+                {
+                    Attribute = connectedSystemAttribute,
+                    ConnectedSystemChange = connectedSystemObjectChange
+                };
+                connectedSystemObjectChange.AttributeChanges.Add(attributeChange);
+            }
+            return attributeChange;
         }
         #endregion
 
