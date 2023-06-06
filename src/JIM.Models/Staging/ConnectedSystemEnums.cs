@@ -49,14 +49,6 @@
         File
     }
 
-    public enum ConnectedSystemImportObjectChangeType
-    {
-        NotSet,
-        Add,
-        Update,
-        Delete
-    }
-
     public enum ConnectedSystemImportObjectError
     {
         NotSet,

@@ -1,5 +1,6 @@
 ﻿using JIM.Connectors.LDAP;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -358,7 +359,7 @@ namespace JIM.Application.Servers
             {
                 ConnectedSystem = connectedSystemObject.ConnectedSystem,
                 ConnectedSystemObject = connectedSystemObject,
-                ChangeType = ConnectedSystemImportObjectChangeType.Update,
+                ChangeType = ChangeType.Update,
                 SyncRunHistoryDetailItem = syncRunHistoryDetailItem
             };
 

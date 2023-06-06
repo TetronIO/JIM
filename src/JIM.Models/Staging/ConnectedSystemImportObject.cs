@@ -1,3 +1,5 @@
+using JIM.Models.Enums;
+
 namespace JIM.Models.Staging
 {
     /// <summary>
@@ -36,7 +38,7 @@ namespace JIM.Models.Staging
 
         public List<ConnectedSystemImportObjectAttribute> Attributes { get; set; } = new List<ConnectedSystemImportObjectAttribute>();
 
-        public ConnectedSystemImportObjectChangeType ChangeType { get; set; } = ConnectedSystemImportObjectChangeType.NotSet;    
+        public ChangeType ChangeType { get; set; } = ChangeType.NotSet;    
         
         public ConnectedSystemImportObjectError? ErrorType { get; set; }
 

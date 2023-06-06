@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Core
+﻿using JIM.Models.Enums;
+
+namespace JIM.Models.Core
 {
     /// <summary>
     /// Represents a change to a Metaverse Object, i.e. what was changed, when and by what/whom.
@@ -16,17 +18,26 @@
         /// <summary>
         /// When was this change made?
         /// </summary>
-        public DateTime ChangeMade { get; set; }
+        public DateTime ChangeTime { get; set; }
 
         /// <summary>
         /// Which user initiated this change, if any?
         /// </summary>
-        public MetaverseObject? ChangeMadeBy { get; set; }
+        public MetaverseObject? ChangeInitiator { get; set; }
 
-        public MetaverseObjectChangeInitiator ChangeInitiator { get; set; } 
+        public MetaverseObjectChangeInitiatorType ChangeInitiatorType { get; set; }
+
+        /// <summary>
+        /// What was the change type?
+        /// Acceptable values: UPDATE and DELETE. There would be no change object for a create scenario.
+        /// </summary>
+        public ChangeType ChangeType { get; set; }
 
         // todo: add in links to workflow instance, group and sync rules for the initiators...
 
-        public List<MetaverseObjectChangeItem> ChangeItems { get; set; } = new List<MetaverseObjectChangeItem>();
+        /// <summary>
+        /// Enables access to per-attribute value changes for the metaverse object in question.
+        /// </summary>
+        public List<MetaverseObjectChangeAttribute> AttributeChanges { get; set; } = new List<MetaverseObjectChangeAttribute>();
     }
 }

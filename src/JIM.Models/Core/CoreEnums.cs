@@ -25,7 +25,7 @@
     }
 
 
-    public enum MetaverseObjectChangeInitiator
+    public enum MetaverseObjectChangeInitiatorType
     {
         NotSet = 0,
         User = 1,

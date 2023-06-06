@@ -1,3 +1,4 @@
+using JIM.Models.Enums;
 using JIM.Models.History;
 
 namespace JIM.Models.Staging
@@ -37,7 +38,7 @@ namespace JIM.Models.Staging
         /// What was the change type?
         /// Acceptable values: UPDATE and DELETE. There would be no change object for a create scenario.
         /// </summary>
-        public ConnectedSystemImportObjectChangeType ChangeType { get; set; }
+        public ChangeType ChangeType { get; set; }
 
         /// <summary>
         /// Enables access to per-attribute value changes for the connected system object in question.

@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -192,7 +193,7 @@ namespace JIM.Connectors.LDAP
 
                 // start to build the object that will represent the object in the connected system. we will pass this back to JIM 
                 var importObject = new ConnectedSystemImportObject {
-                    ChangeType = ConnectedSystemImportObjectChangeType.Add
+                    ChangeType = ChangeType.Add
                 };
 
                 // work out what JIM object type this result is
