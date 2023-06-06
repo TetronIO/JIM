@@ -31,7 +31,7 @@ namespace JIM.Models.Core
         /// What was the change type?
         /// Acceptable values: UPDATE and DELETE. There would be no change object for a create scenario.
         /// </summary>
-        public ChangeType ChangeType { get; set; }
+        public ObjectChangeType ChangeType { get; set; }
 
         // todo: add in links to workflow instance, group and sync rules for the initiators...
 

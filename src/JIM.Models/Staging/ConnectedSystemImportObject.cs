@@ -38,7 +38,7 @@ namespace JIM.Models.Staging
 
         public List<ConnectedSystemImportObjectAttribute> Attributes { get; set; } = new List<ConnectedSystemImportObjectAttribute>();
 
-        public ChangeType ChangeType { get; set; } = ChangeType.NotSet;    
+        public ObjectChangeType ChangeType { get; set; } = ObjectChangeType.NotSet;    
         
         public ConnectedSystemImportObjectError? ErrorType { get; set; }
 

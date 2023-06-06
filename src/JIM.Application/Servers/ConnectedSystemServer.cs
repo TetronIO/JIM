@@ -359,7 +359,7 @@ namespace JIM.Application.Servers
             {
                 ConnectedSystem = connectedSystemObject.ConnectedSystem,
                 ConnectedSystemObject = connectedSystemObject,
-                ChangeType = ChangeType.Update,
+                ChangeType = ObjectChangeType.Update,
                 SyncRunHistoryDetailItem = syncRunHistoryDetailItem
             };
 
@@ -378,17 +378,17 @@ namespace JIM.Application.Servers
 
                     // add an attribute value change to the attribute change object
                     if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.String && pendingAttributeValueAddition.StringValue != null)
-                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueAddition.StringValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, pendingAttributeValueAddition.StringValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Number && pendingAttributeValueAddition.IntValue != null)
-                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (int)pendingAttributeValueAddition.IntValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (int)pendingAttributeValueAddition.IntValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueAddition.GuidValue != null)
-                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (Guid)pendingAttributeValueAddition.GuidValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (Guid)pendingAttributeValueAddition.GuidValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Bool && pendingAttributeValueAddition.BoolValue != null)
-                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (bool)pendingAttributeValueAddition.BoolValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (bool)pendingAttributeValueAddition.BoolValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueAddition.ByteValue != null)
-                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, true, pendingAttributeValueAddition.ByteValue.Length));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, true, pendingAttributeValueAddition.ByteValue.Length));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Reference && pendingAttributeValueAddition.ReferenceValue != null)
-                        attributeChange.ValuesAdded.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueAddition.ReferenceValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, pendingAttributeValueAddition.ReferenceValue));
                     else
                         throw new InvalidDataException("UpdateConnectedSystemObjectAttributeValuesAsync:  Invalid addition attribute type or null attribute value");
                 }
@@ -405,17 +405,17 @@ namespace JIM.Application.Servers
 
                     // add an attribute value change to the attribute change object
                     if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.String && pendingAttributeValueRemoval.StringValue != null)
-                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueRemoval.StringValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, pendingAttributeValueRemoval.StringValue));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Number && pendingAttributeValueRemoval.IntValue != null)
-                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (int)pendingAttributeValueRemoval.IntValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (int)pendingAttributeValueRemoval.IntValue));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueRemoval.GuidValue != null)
-                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (Guid)pendingAttributeValueRemoval.GuidValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (Guid)pendingAttributeValueRemoval.GuidValue));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Bool && pendingAttributeValueRemoval.BoolValue != null)
-                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, (bool)pendingAttributeValueRemoval.BoolValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (bool)pendingAttributeValueRemoval.BoolValue));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueRemoval.ByteValue != null)
-                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, true, pendingAttributeValueRemoval.ByteValue.Length));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, true, pendingAttributeValueRemoval.ByteValue.Length));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Reference && pendingAttributeValueRemoval.ReferenceValue != null)
-                        attributeChange.ValuesRemoved.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, pendingAttributeValueRemoval.ReferenceValue));
+                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, pendingAttributeValueRemoval.ReferenceValue));
                     else
                         throw new InvalidDataException("UpdateConnectedSystemObjectAttributeValuesAsync:  Invalid removal attribute type or null attribute value");
                 }

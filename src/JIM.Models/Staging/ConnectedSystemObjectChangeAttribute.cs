@@ -16,13 +16,8 @@
         public ConnectedSystemAttribute Attribute { get; set; }
 
         /// <summary>
-        /// A list of what values were added to this attribute.
+        /// A list of what values were added to or removed from this attribute.
         /// </summary>
-        public List<ConnectedSystemObjectChangeAttributeValue> ValuesAdded { get; set; } = new List<ConnectedSystemObjectChangeAttributeValue>();
-
-        /// <summary>
-        /// A list of what values were renmoved from this attribute.
-        /// </summary>
-        public List<ConnectedSystemObjectChangeAttributeValue> ValuesRemoved { get; set; } = new List<ConnectedSystemObjectChangeAttributeValue>();
+        public List<ConnectedSystemObjectChangeAttributeValue> ValueChanges { get; set; } = new List<ConnectedSystemObjectChangeAttributeValue>();
     }
 }

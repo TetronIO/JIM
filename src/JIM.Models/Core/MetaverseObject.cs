@@ -33,6 +33,7 @@ namespace JIM.Models.Core
             Created = DateTime.Now;
             Status = MetaverseObjectStatus.Normal;
             AttributeValues = new List<MetaverseObjectAttributeValue>();
+            Changes = new List<MetaverseObjectChange>();
         }
 
         public MetaverseObjectAttributeValue? GetAttributeValue(string name)

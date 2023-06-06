@@ -11,11 +11,12 @@ namespace JIM.Models.Staging
         public Guid Id { get; set; }
 
         /// <summary>
-        /// The connected system object change would have been caused by a synchronisation run, 
+        /// The parent connected system object change would have been caused by a synchronisation run, 
         /// though it's worth bearing in mind that sync run history can be cleared down so a reference may not always be present,
         /// depending on how old the connected system object is.
         /// </summary>
         public SyncRunHistoryDetailItem? SyncRunHistoryDetailItem { get; set; }
+        public Guid? SyncRunHistoryDetailItemId { get; set; }
 
         /// <summary>
         /// Which Connected System did/does the Connected System Object in question relate to.
@@ -38,7 +39,7 @@ namespace JIM.Models.Staging
         /// What was the change type?
         /// Acceptable values: UPDATE and DELETE. There would be no change object for a create scenario.
         /// </summary>
-        public ChangeType ChangeType { get; set; }
+        public ObjectChangeType ChangeType { get; set; }
 
         /// <summary>
         /// Enables access to per-attribute value changes for the connected system object in question.

@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Core;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JIM.Models.Staging
 {
@@ -49,11 +50,13 @@ namespace JIM.Models.Staging
         /// <summary>
         /// Only for use by JIM.Service to determine what attribute values need adding and and recording.
         /// </summary>
+        [NotMapped]
         public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueAdditions { get; set; } = new();
 
         /// <summary>
         /// Only for use by JIM.Service to determine what attribute values need removing and recording.
         /// </summary>
+        [NotMapped]
         public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
         #endregion
 

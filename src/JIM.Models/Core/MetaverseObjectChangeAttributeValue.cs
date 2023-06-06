@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Core
+﻿using JIM.Models.Enums;
+
+namespace JIM.Models.Core
 {
     public class MetaverseObjectChangeAttributeValue
     {
@@ -10,6 +12,11 @@
         /// Required for establishing an Entity Framework relationship.
         /// </summary>
         public MetaverseObjectChangeAttribute MetaverseObjectChangeAttribute { get; set; }
+
+        /// <summary>
+        /// Was the value being added, or removed?
+        /// </summary>
+        public ValueChangeType ValueChangeType { get; set; } = ValueChangeType.NotSet;
 
         public string? StringValue { get; set; }
 
@@ -35,37 +42,42 @@
             // default constructor still required for EntityFramework
         }
 
-        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, string stringValue)
+        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, string stringValue)
         {
             StringValue = stringValue;
             MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+            ValueChangeType = valueChangeType;
         }
 
-        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, int intValue)
+        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, int intValue)
         {
             IntValue = intValue;
             MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+            ValueChangeType = valueChangeType;
         }
 
-        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, DateTime dateTimeValue)
+        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, DateTime dateTimeValue)
         {
             DateTimeValue = dateTimeValue;
             MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+            ValueChangeType = valueChangeType;
         }
 
-        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, Guid guidValue)
+        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, Guid guidValue)
         {
             GuidValue = guidValue;
             MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+            ValueChangeType = valueChangeType;
         }
 
-        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, bool boolValue)
+        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, bool boolValue)
         {
             BoolValue = boolValue;
             MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+            ValueChangeType = valueChangeType;
         }
 
-        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, bool isByteValueLength, int byteValueLength)
+        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, bool isByteValueLength, int byteValueLength)
         {
             // we use isByteValueLength to enable us to have a unique constructor signature for an int arg type
             if (isByteValueLength)
@@ -74,12 +86,14 @@
                 throw new ArgumentException("Expected isByteValueLength == true");
 
             MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+            ValueChangeType = valueChangeType;
         }
 
-        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, MetaverseObject referenceValue)
+        public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, MetaverseObject referenceValue)
         {
             ReferenceValue = referenceValue;
             MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+            ValueChangeType = valueChangeType;
         }
         #endregion
     }

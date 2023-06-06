@@ -8,6 +8,7 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics.Metrics;
 
 namespace JIM.PostgresData
 {
@@ -97,6 +98,27 @@ namespace JIM.PostgresData
             modelBuilder.Entity<ConnectedSystemObjectType>()
                 .HasMany(csot => csot.Attributes)
                 .WithOne(csa => csa.ConnectedSystemObjectType);
+
+            modelBuilder.Entity<MetaverseObject>()
+                .HasMany(mvo => mvo.Changes)
+                .WithOne(mvoc => mvoc.MetaverseObject);
+
+            modelBuilder.Entity<ConnectedSystemObject>()
+                .HasMany(cso => cso.AttributeValues)
+                .WithOne(csoav => csoav.ConnectedSystemObject);
+
+            modelBuilder.Entity<SyncRunHistoryDetailItem>()
+                .HasOne(a => a.ConnectedSystemObjectChange)
+                .WithOne(a => a.SyncRunHistoryDetailItem)
+                .HasForeignKey<ConnectedSystemObjectChange>(csoc => csoc.SyncRunHistoryDetailItemId);
+
+            //modelBuilder.Entity<MetaverseObjectChangeAttribute>()
+            //    .HasMany(mvoca => mvoca.ValueChanges)
+            //    .WithOne(mvocav => mvocav.MetaverseObjectChangeAttribute);
+
+            //modelBuilder.Entity<MetaverseObjectChangeAttribute>()
+            //    .HasMany(mvoca => mvoca.ValuesRemoved)
+            //    .WithOne(mvocav => mvocav.MetaverseObjectChangeAttribute);
 
             // reduce the chance of concurrency issues by using a system attribute to identify row versions
             // for our most heavily updated objects.

@@ -193,7 +193,7 @@ namespace JIM.Connectors.LDAP
 
                 // start to build the object that will represent the object in the connected system. we will pass this back to JIM 
                 var importObject = new ConnectedSystemImportObject {
-                    ChangeType = ChangeType.Add
+                    ChangeType = ObjectChangeType.Create
                 };
 
                 // work out what JIM object type this result is
