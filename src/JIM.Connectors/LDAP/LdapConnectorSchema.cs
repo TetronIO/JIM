@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Staging;
+using Serilog;
 using System.DirectoryServices.Protocols;
 
 namespace JIM.Connectors.LDAP
@@ -157,8 +158,17 @@ namespace JIM.Connectors.LDAP
 
             var description = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "description");
             var admindescription = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "admindescription");
-            var isSingleValued = LdapConnectorUtilities.GetEntryAttributeBooleanValue(attributeEntry, "issinglevalued");
-            var attributePlurality = (isSingleValued == true || isSingleValued == null) ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
+            
+            // isSingleValued comes back as TRUE/FALSE string
+            // if we can't convert to a bool, assume it's single-valued
+            var isSingleValuedRawValue = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "issinglevalued");
+            if (!bool.TryParse(isSingleValuedRawValue, out bool isSingleValued))
+            {
+                isSingleValued = true;
+                Log.Verbose($"GetSchemaAttribute: Could not establish if SVA/MVA for attribute {attributeName}. Assuming SVA. Raw value: '{isSingleValuedRawValue}'");
+            }
+
+            var attributePlurality = isSingleValued ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
             var attribute = new ConnectorSchemaAttribute(attributeName, AttributeDataType.String, attributePlurality, required, objectClass);
 
             if (!string.IsNullOrEmpty(description))
