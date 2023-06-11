@@ -87,6 +87,11 @@ namespace JIM.PostgresData.Repositories
             return tasks;
         }
 
+        public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync()
+        {
+            return await Repository.Database.ServiceTasks.Where(q => q.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
+        }
+
         public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds)
         {
             return await Repository.Database.ServiceTasks.Where(q => serviceTaskIds.Contains(q.Id) && q.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();

@@ -15,6 +15,14 @@ namespace JIM.Data.Repositories
 
         public Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId);
 
+        /// <summary>
+        /// Get all service tasks that need cancelling.
+        /// </summary>
+        public Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync();
+
+        /// <summary>
+        /// Get selective service tasks that need cancelling.
+        /// </summary>
         public Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds);
 
         public Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync();

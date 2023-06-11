@@ -59,6 +59,11 @@ namespace JIM.Application.Servers
             return tasks;
         }
 
+        public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync()
+        {
+            return await Application.Repository.Tasking.GetServiceTasksThatNeedCancellingAsync();
+        }
+
         public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds)
         {
             return await Application.Repository.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);

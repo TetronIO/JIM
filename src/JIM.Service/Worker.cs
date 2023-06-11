@@ -54,11 +54,16 @@ namespace JIM.Service
             InitialiseLogging();
             Log.Information("Starting JIM.Service...");
 
-            // as JIM.Service is the initial JimApplication client, it's responsible for seeing the database is intialised.
+            // as JIM.Service is the first JimApplication client to start, it's responsible for ensuring the database is intialised.
             // other JimAppication clients will need to check if the app is ready before completing their initialisation.
-            // JimApplication instances are ephemeral and should be disposed as soon as a unit of work is complete (for database tracking reasons).
+            // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
             var mainLoopJim = new JimApplication(new PostgresDataRepository());
             await mainLoopJim.InitialiseDatabaseAsync();
+
+            // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
+            // this scenario is expected to be for when the worker unexpectedly quits and doesn't complete cancellation.
+            foreach (var taskToCancel in await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync())
+                await mainLoopJim.Tasking.DeleteServiceTaskAsync(taskToCancel);
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -70,7 +75,7 @@ namespace JIM.Service
 
                 if (CurrentTasks.Count > 0)
                 {
-                    // see if we need to cancel any currently-processing tasks...
+                    // check the database to see if we need to cancel any tasks we're currently processing...
                     var serviceTaskIds = CurrentTasks.Select(q => q.TaskId).ToArray();
                     var serviceTasksToCancel = await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
                     foreach (var serviceTaskToCancel in serviceTasksToCancel)
