@@ -9,6 +9,9 @@ namespace JIM.Models.History
     {
         public Guid Id { get; set; }
 
+        /// <summary>
+        /// The parent object.
+        /// </summary>
         public RunHistoryItem? RunHistoryItem { get; set; }
 
         public ConnectedSystem? ConnectedSystem { get; set; }

@@ -101,58 +101,51 @@ namespace JIM.PostgresData.Repositories
         {
             // retrieve a complex connected system object. break the query down into three parts for optimal performance.
             // (doing it in one giant include tree query will make it timeout.
-            ConnectedSystem? connectedSystem = null;
             List<ConnectedSystemObjectType>? types = null;
             List<ConnectedSystemRunProfile>? runProfiles = null;
             List<ConnectedSystemPartition>? partitions = null;
-            var tasks = new List<Task>
-            {
-                Task.Run(async () =>
-                {
-                    using var dbc1 = new JimDbContext();
-                    connectedSystem = await dbc1.ConnectedSystems.
-                    Include(cs => cs.ConnectorDefinition).
-                    Include(cs => cs.SettingValues).
-                    ThenInclude(sv => sv.Setting).
-                    SingleOrDefaultAsync(x => x.Id == id);
-                }),
-                Task.Run(async () =>
-                {
-                    using var dbc2 = new JimDbContext();
-                    runProfiles = await dbc2.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
-                }),
-                Task.Run(async () =>
-                {
-                    using var dbc3 = new JimDbContext();
-                    types = await dbc3.ConnectedSystemObjectTypes.Include(ot => ot.Attributes).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
-                }),
-                Task.Run(async () =>
-                {
-                    using var dbc4 = new JimDbContext();
-                    partitions = await dbc4.ConnectedSystemPartitions
-                    .Include(p => p.Containers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .ThenInclude(c => c.ChildContainers)
-                    .Where(p => p.ConnectedSystem.Id == id).ToListAsync();
-                })
-            };
+
+            var connectedSystem = await Repository.Database.ConnectedSystems.
+                Include(cs => cs.ConnectorDefinition).
+                Include(cs => cs.SettingValues).
+                ThenInclude(sv => sv.Setting).
+                SingleOrDefaultAsync(x => x.Id == id);
+
+            if (connectedSystem == null)
+                return null;
+
+            connectedSystem = await Repository.Database.ConnectedSystems.
+                Include(cs => cs.ConnectorDefinition).
+                Include(cs => cs.SettingValues).
+                ThenInclude(sv => sv.Setting).
+                SingleOrDefaultAsync(x => x.Id == id);
+
+            runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+
+            types = await Repository.Database.ConnectedSystemObjectTypes.Include(ot => ot.Attributes).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+
+            partitions = await Repository.Database.ConnectedSystemPartitions
+                .Include(p => p.Containers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .ThenInclude(c => c.ChildContainers)
+                .Where(p => p.ConnectedSystem.Id == id).ToListAsync();
 
             // collect and merge data
-            await Task.WhenAll(tasks);
             if (connectedSystem == null)
                 return null;
 
             connectedSystem.RunProfiles = runProfiles;
             connectedSystem.ObjectTypes = types;
             connectedSystem.Partitions = partitions;
+
             return connectedSystem;
         }
 

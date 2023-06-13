@@ -1,7 +1,6 @@
 ﻿using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
-using JIM.Models.Transactional;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;

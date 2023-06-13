@@ -76,7 +76,13 @@ namespace JIM.PostgresData
             _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}";
         }
 
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.UseNpgsql(_connectionString);
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            optionsBuilder.UseNpgsql(_connectionString);
+
+            // enable only when needed during development
+            //optionsBuilder.EnableSensitiveDataLogging();
+        }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -111,14 +117,6 @@ namespace JIM.PostgresData
                 .HasOne(a => a.ConnectedSystemObjectChange)
                 .WithOne(a => a.SyncRunHistoryDetailItem)
                 .HasForeignKey<ConnectedSystemObjectChange>(csoc => csoc.SyncRunHistoryDetailItemId);
-
-            //modelBuilder.Entity<MetaverseObjectChangeAttribute>()
-            //    .HasMany(mvoca => mvoca.ValueChanges)
-            //    .WithOne(mvocav => mvocav.MetaverseObjectChangeAttribute);
-
-            //modelBuilder.Entity<MetaverseObjectChangeAttribute>()
-            //    .HasMany(mvoca => mvoca.ValuesRemoved)
-            //    .WithOne(mvocav => mvocav.MetaverseObjectChangeAttribute);
 
             // reduce the chance of concurrency issues by using a system attribute to identify row versions
             // for our most heavily updated objects.

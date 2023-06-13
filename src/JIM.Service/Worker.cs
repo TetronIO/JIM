@@ -119,6 +119,9 @@ namespace JIM.Service
                                 else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
+
+
+                                    // todo: argh, won't work, some references needed
                                     var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncServiceTask.ConnectedSystemId);
                                     if (connectedSystem != null)
                                     {
@@ -128,7 +131,7 @@ namespace JIM.Service
                                         if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
                                             connector = new LdapConnector();
                                         else
-                                            throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported by service processing");
+                                            throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for service processing");
 
                                         // work out what type of run profile we're being asked to run
                                         var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);

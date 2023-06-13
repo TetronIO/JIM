@@ -1,4 +1,5 @@
-﻿using JIM.Models.Transactional;
+﻿using JIM.Models.History;
+using JIM.Models.Transactional;
 using System.ComponentModel.DataAnnotations;
 
 namespace JIM.Models.Staging
@@ -46,6 +47,11 @@ namespace JIM.Models.Staging
         /// This is to suppose use-cases such as needing to store the last change id for an LDAP sytem, to enable delta imports.
         /// </summary>
         public string? PersistedConnectorData { get; set; }
+
+        /// <summary>
+        /// EF back-link.
+        /// </summary>
+        public List<SyncRunHistoryDetail>? SyncRunHistoryDetails { get; set; }
 
         public ConnectedSystem()
         {
