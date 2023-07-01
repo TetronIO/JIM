@@ -200,13 +200,9 @@ namespace JIM.Application.Servers
 
             ConnectorSchema schema;
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            {
                 schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-            }
             else
-            {
                 throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
-            }
 
             // this point could potentially be a good point to check for data-loss if persisted and return a report object
             // that the user could decide whether or not to take action upon, i.e. cancel or persist.
@@ -214,6 +210,7 @@ namespace JIM.Application.Servers
             connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>(); // super destructive at this point. this is for mvp only
             foreach (var objectType in schema.ObjectTypes)
             {
+                // todo: set the unique identifier attribute!
                 connectedSystem.ObjectTypes.Add(new ConnectedSystemObjectType
                 {
                     Name = objectType.Name,

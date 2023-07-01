@@ -6,6 +6,7 @@ using Serilog;
 using System.Data;
 using System.Diagnostics;
 using System.DirectoryServices.Protocols;
+using System.Text.Json;
 
 namespace JIM.Connectors.LDAP
 {
@@ -55,15 +56,26 @@ namespace JIM.Connectors.LDAP
             if (_paginationTokens.Count == 0)
             {
                 // initial-page call. we have no paging tokens to use (yet) to resume a query
+                
+                // get information about the directory we're connected to
+                var rootDseInfo = GetRootDseInformation();
+
+                // serialise the info to json for persistence
+                // todo: this will need to change to support delta imports. there will need to be checks done and the connector data
+                // only persisted in certain situations (see JIM Processes flowcharts)
+                result.PersistedConnectorData = JsonSerializer.Serialize(rootDseInfo);
+
+                // if directory supports USNs (ADDS/ADLDS) then persist hostname and highestcommmittedusn info
+                // else if directory supports changelog, then persist hostname and last change number
 
                 // we use the persisted connector data property to store the last known change number in the directory.
                 // this enables us to perform a delta-import later on by only importing changes beyond this current value.
                 // note: we only want to do this on the initial call into here to avoid the situation where we miss changes
                 // made after our initial LDAP query but whilst processing subsequent pages.
-                if (string.IsNullOrEmpty(_persistedConnectorData))
-                    result.PersistedConnectorData = QueryDirectoryForLastChangeNumber(0).ToString();
-                else
-                    result.PersistedConnectorData = QueryDirectoryForLastChangeNumber(int.Parse(_persistedConnectorData)).ToString();
+                //if (string.IsNullOrEmpty(_persistedConnectorData))
+                //    result.PersistedConnectorData = QueryDirectoryForLastChangeNumber(0).ToString();
+                //else
+                //    result.PersistedConnectorData = QueryDirectoryForLastChangeNumber(int.Parse(_persistedConnectorData)).ToString();
             }
 
             // enumerate all selected partitions
@@ -100,6 +112,9 @@ namespace JIM.Connectors.LDAP
         }
 
         #region private methods
+        /// <summary>
+        /// For directories that support changelog.
+        /// </summary>
         private int? QueryDirectoryForLastChangeNumber(int lastChangeNumber)
         {
             // TODO: this needs optimising. If we pass in zero, do we really want to have to enumerate all changes to get the last change number?
@@ -137,6 +152,29 @@ namespace JIM.Connectors.LDAP
             }
         }
 
+        private LdapConnectorRootDse GetRootDseInformation()
+        {
+            var request = new SearchRequest() {
+                Scope = SearchScope.Base,
+            };
+
+            request.Attributes.AddRange(new string[] {
+                "DNSHostName",
+                "HighestCommittedUSN",
+                "LastChangeNumber"
+            });
+
+            var response = (SearchResponse)_connection.SendRequest(request);
+            var rootDseEntry = response.Entries[0];
+            var rootDse = new LdapConnectorRootDse
+            {
+                DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
+                HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeIntValue(rootDseEntry, "HighestCommittedUSN")
+            };
+
+            return rootDse;
+        }
+
         private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
         {
             if (_cancellationToken.IsCancellationRequested)
@@ -148,8 +186,14 @@ namespace JIM.Connectors.LDAP
             var stopwatch = Stopwatch.StartNew();
             var lastRunsCookieLength = lastRunsCookie != null ? lastRunsCookie.Length.ToString() : "null";
             var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})"; // todo: add in implicit support for containers/OUs?
-            string[] attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToArray(); // might need to add in some non-user selected attributes
-            var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, attributes);
+            
+            // user selected attributes
+            var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
+
+            // additional attributes we always need returning for processing purposes
+            attributes.Add("objectClass");
+
+            var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, attributes.ToArray());
             var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize);
             if (lastRunsCookie != null && lastRunsCookie.Length > 0)
                 pageResultRequestControl.Cookie = lastRunsCookie;

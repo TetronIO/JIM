@@ -122,7 +122,10 @@ namespace JIM.PostgresData.Repositories
 
             runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
 
-            types = await Repository.Database.ConnectedSystemObjectTypes.Include(ot => ot.Attributes).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+            types = await Repository.Database.ConnectedSystemObjectTypes
+                .Include(ot => ot.Attributes)
+                .Include(ot => ot.UniqueIdentifierAttribute)
+                .Where(q => q.ConnectedSystem.Id == id).ToListAsync();
 
             partitions = await Repository.Database.ConnectedSystemPartitions
                 .Include(p => p.Containers)

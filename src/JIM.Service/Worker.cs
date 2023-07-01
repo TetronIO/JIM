@@ -120,8 +120,6 @@ namespace JIM.Service
                                 {
                                     Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
 
-
-                                    // todo: argh, won't work, some references needed
                                     var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncServiceTask.ConnectedSystemId);
                                     if (connectedSystem != null)
                                     {
