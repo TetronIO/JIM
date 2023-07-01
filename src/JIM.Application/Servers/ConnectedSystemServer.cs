@@ -210,19 +210,26 @@ namespace JIM.Application.Servers
             connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>(); // super destructive at this point. this is for mvp only
             foreach (var objectType in schema.ObjectTypes)
             {
-                // todo: set the unique identifier attribute!
-                connectedSystem.ObjectTypes.Add(new ConnectedSystemObjectType
+                var connectedSystemObjectType = new ConnectedSystemObjectType
                 {
                     Name = objectType.Name,
-                    Attributes = objectType.Attributes.Select(q => new ConnectedSystemAttribute
+                    Attributes = objectType.Attributes.Select(a => new ConnectedSystemAttribute
                     {
-                        Name = q.Name,
-                        Description = q.Description,
-                        AttributePlurality = q.AttributePlurality,
-                        Type = q.Type,
-                        ClassName = q.ClassName
+                        Name = a.Name,
+                        Description = a.Description,
+                        AttributePlurality = a.AttributePlurality,
+                        Type = a.Type,
+                        ClassName = a.ClassName
                     }).ToList()
-                });
+                };
+
+                // 
+                if (objectType.RecommendedUniqueIdentifierAttributes.Count > 0)
+                {
+
+                }
+
+                connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
             }
         }
         #endregion

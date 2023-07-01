@@ -47,7 +47,15 @@ namespace JIM.Connectors.LDAP
 
                     // now go and work out which attributes the object type has and add them to the object type
                     if (AddObjectTypeAttributes(objectType))
+                    {
+                        // make a recommendation on what unique identifier attribute(s) to use
+                        // for AD/ADLDS:
+                        var objectGuidSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("objectguid", StringComparison.SameCultureIgnoreCase));
+                        objectType.RecommendedUniqueIdentifierAttributes.Add(objectGuidSchemaAttribute);
+
+                        // object type looks good to go, add it to the schema
                         _schema.ObjectTypes.Add(objectType);
+                    }
                 }
 
                 return _schema;
