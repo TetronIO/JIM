@@ -212,7 +212,7 @@ namespace JIM.Application.Servers
                             // handle each attribute type in dedicated functions
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
-                                case AttributeDataType.String:
+                                case AttributeDataType.Text:
                                     GenerateMetaverseStringValue(metaverseObject, templateAttribute, exampleDataSets, random, dataGenerationValueTrackers);
                                     break;
                                 case AttributeDataType.Guid:
@@ -224,7 +224,7 @@ namespace JIM.Application.Servers
                                 case AttributeDataType.DateTime:
                                     GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
                                     break;
-                                case AttributeDataType.Bool:
+                                case AttributeDataType.Boolean:
                                     GenerateMetaverseBooleanValue(metaverseObject, templateAttribute, random);
                                     break;
                                 case AttributeDataType.Reference:

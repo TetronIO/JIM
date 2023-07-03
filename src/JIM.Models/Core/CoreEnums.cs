@@ -3,13 +3,13 @@
     public enum AttributeDataType
     {
         NotSet = 0,
-        String = 1,
+        Text = 1,
         Number = 2,
         DateTime = 3,
         Binary = 4,
         Reference = 5,
         Guid = 6,
-        Bool = 7
+        Boolean = 7
     }
 
     public enum AttributePlurality

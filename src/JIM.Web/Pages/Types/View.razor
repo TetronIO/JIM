@@ -16,7 +16,7 @@
             {
                 <MudItem xs="12" sm="6" md="4">
                     <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Outlined">
-                        @if (attributeValue.Attribute.Type == AttributeDataType.String)
+                        @if (attributeValue.Attribute.Type == AttributeDataType.Text)
                         {
                             if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
                             {
@@ -39,7 +39,7 @@
                         {
                             @attributeValue.GuidValue.ToString()
                         }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Bool && attributeValue.BoolValue.HasValue)
+                        else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
                         {
                             @(attributeValue.BoolValue.Value ? "true" : "false")
                         }

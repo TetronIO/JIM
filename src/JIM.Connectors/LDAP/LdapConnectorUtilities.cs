@@ -27,8 +27,12 @@ namespace JIM.Connectors.LDAP
             if (entry == null) return null;
             if (!entry.Attributes.Contains(attributeName)) return null;
             if (entry.Attributes[attributeName].Count == 0) return null;
-            return (from Guid value in entry.Attributes[attributeName].GetValues(typeof(Guid))
-                    select value).ToList();
+
+            var guidValues = new List<Guid>();
+            foreach (byte[] byteValue in entry.Attributes[attributeName])
+                guidValues.Add(new Guid(byteValue));
+
+            return guidValues;
         }
 
         /// <summary>
@@ -40,7 +44,7 @@ namespace JIM.Connectors.LDAP
             if (entry == null) return null;
             if (!entry.Attributes.Contains(attributeName)) return null;
             if (entry.Attributes[attributeName].Count != 1) return null;
-            return (Guid)entry.Attributes[attributeName][0];
+            return new Guid((byte[])entry.Attributes[attributeName][0]);
         }
 
         internal static List<DateTime>? GetEntryAttributeDateTimeValues(SearchResultEntry entry, string attributeName)
@@ -107,10 +111,10 @@ namespace JIM.Connectors.LDAP
             // https://social.technet.microsoft.com/wiki/contents/articles/52570.active-directory-syntaxes-of-attributes.aspx
             return omSyntax switch
             {
-                1 or 10 => AttributeDataType.Bool,
+                1 or 10 => AttributeDataType.Boolean,
                 2 or 65 => AttributeDataType.Number,
                 3 => AttributeDataType.Binary,
-                6 or 18 or 19 or 20 or 22 or 27 or 64 => AttributeDataType.String,
+                6 or 18 or 19 or 20 or 22 or 27 or 64 => AttributeDataType.Text,
                 23 or 24 => AttributeDataType.DateTime,
                 127 => AttributeDataType.Reference,
                 _ => throw new InvalidDataException("Unsupported omSyntax value: " + omSyntax),

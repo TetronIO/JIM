@@ -136,13 +136,13 @@ namespace JIM.Models.DataGeneration
                 throw new DataGeneratationTemplateAttributeException("Either a MetaverseAttribute OR a ConnectedSystemAttribute reference is required. None was present.");
 
 
-            if (attributeDataType != AttributeDataType.Bool && (BoolTrueDistribution != null || BoolShouldBeRandom != null))
+            if (attributeDataType != AttributeDataType.Boolean && (BoolTrueDistribution != null || BoolShouldBeRandom != null))
                 throw new DataGeneratationTemplateAttributeException("Not Bool and BoolTrueDistribution is not null or BoolShouldBeRandom is not null");
 
             if (attributeDataType != AttributeDataType.DateTime && IsUsingDates())
                 throw new DataGeneratationTemplateAttributeException("Not DateTime and MinDate is not null or MaxDate is not null");
 
-            if (attributeDataType != AttributeDataType.String)
+            if (attributeDataType != AttributeDataType.Text)
             {
                 // pattern can only be used with string attributes
                 if (usingPattern)
@@ -165,10 +165,10 @@ namespace JIM.Models.DataGeneration
             if (attributeDataType != AttributeDataType.Reference && usingMvaRefMinMaxAttributes)
                 throw new DataGeneratationTemplateAttributeException("MvaRefMinAssignments or MvaRefMaxAssignments can only be used with reference attribute data types");
 
-            if (attributeDataType == AttributeDataType.String && !usingPattern && !usingExampleData && !usingWeightedStringValues && !IsUsingNumbers())
+            if (attributeDataType == AttributeDataType.Text && !usingPattern && !usingExampleData && !usingWeightedStringValues && !IsUsingNumbers())
                 throw new DataGeneratationTemplateAttributeException("String but not using pattern, example data, weighted string values or numbers");
 
-            if (attributeDataType == AttributeDataType.Bool)
+            if (attributeDataType == AttributeDataType.Boolean)
             {
                 if (IsUsingNumbers())
                     throw new DataGeneratationTemplateAttributeException("Bool but using number properties. This is not supported");

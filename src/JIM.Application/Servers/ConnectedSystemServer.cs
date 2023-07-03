@@ -385,13 +385,13 @@ namespace JIM.Application.Servers
                     var attributeChange = GetChangAttribute(change, pendingAttributeValueAddition.Attribute);
 
                     // add an attribute value change to the attribute change object
-                    if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.String && pendingAttributeValueAddition.StringValue != null)
+                    if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Text && pendingAttributeValueAddition.StringValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, pendingAttributeValueAddition.StringValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Number && pendingAttributeValueAddition.IntValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (int)pendingAttributeValueAddition.IntValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueAddition.GuidValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (Guid)pendingAttributeValueAddition.GuidValue));
-                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Bool && pendingAttributeValueAddition.BoolValue != null)
+                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Boolean && pendingAttributeValueAddition.BoolValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (bool)pendingAttributeValueAddition.BoolValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueAddition.ByteValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, true, pendingAttributeValueAddition.ByteValue.Length));
@@ -412,13 +412,13 @@ namespace JIM.Application.Servers
                     var attributeChange = GetChangAttribute(change, pendingAttributeValueRemoval.Attribute);
 
                     // add an attribute value change to the attribute change object
-                    if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.String && pendingAttributeValueRemoval.StringValue != null)
+                    if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Text && pendingAttributeValueRemoval.StringValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, pendingAttributeValueRemoval.StringValue));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Number && pendingAttributeValueRemoval.IntValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (int)pendingAttributeValueRemoval.IntValue));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueRemoval.GuidValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (Guid)pendingAttributeValueRemoval.GuidValue));
-                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Bool && pendingAttributeValueRemoval.BoolValue != null)
+                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Boolean && pendingAttributeValueRemoval.BoolValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (bool)pendingAttributeValueRemoval.BoolValue));
                     else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueRemoval.ByteValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, true, pendingAttributeValueRemoval.ByteValue.Length));

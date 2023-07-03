@@ -35,6 +35,8 @@ namespace JIM.Service.Processors
 
         internal async Task PerformFullImportAsync()
         {
+            Log.Verbose("PerformFullImportAsync: Starting");
+
             if (_connectedSystem.ObjectTypes == null)
                 throw new InvalidDataException("PerformFullImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
@@ -44,12 +46,13 @@ namespace JIM.Service.Processors
 
                 var initialPage = true;
                 var paginationTokens = new List<ConnectedSystemPaginationToken>();
-                var wereResultsReturned = false;
-                while (initialPage || paginationTokens.Count > 0 || wereResultsReturned)
+                //var wereResultsReturned = false;
+                //while (initialPage || paginationTokens.Count > 0 || wereResultsReturned)
+                while (initialPage || paginationTokens.Count > 0)
                 {
                     // perform the import for this page
                     var result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
-                    wereResultsReturned = result.ImportObjects.Count > 0;
+                    //wereResultsReturned = result.ImportObjects.Count > 0;
 
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
@@ -134,7 +137,7 @@ namespace JIM.Service.Processors
                 importObjectAttribute.GuidValues.Count > 1)
                 throw new UniqueIdentifierAttributeNotSingleValuedException($"Unique identifier attribute ({uniqueIdentifierAttribute.Name}) on the imported object has multiple values! The Unique Identifier attribute must be single-valued.");
 
-            if (uniqueIdentifierAttribute.Type == AttributeDataType.String)
+            if (uniqueIdentifierAttribute.Type == AttributeDataType.Text)
             {
                 if (importObjectAttribute.StringValues.Count == 0)
                     throw new UniqueIdentifierAttributeValueMissingException($"Unique identifier string attribute ({uniqueIdentifierAttribute.Name}) on the imported object has no value.");
@@ -189,7 +192,7 @@ namespace JIM.Service.Processors
                 // remember, jim requires an attribute value object for each connected system attribute value, i.e. everything's multi-valued capable
                 switch (csAttribute.Type)
                 {
-                    case AttributeDataType.String:
+                    case AttributeDataType.Text:
                         foreach (var importObjectAttributeStringValue in importObjectAttribute.StringValues)
                         {
                             connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
@@ -239,7 +242,7 @@ namespace JIM.Service.Processors
                             });
                         }
                         break;
-                    case AttributeDataType.Bool:
+                    case AttributeDataType.Boolean:
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
@@ -285,7 +288,7 @@ namespace JIM.Service.Processors
                     // process attribute additions and removals...
                     switch (csoAttribute.Type)
                     {
-                        case AttributeDataType.String:
+                        case AttributeDataType.Text:
 
                             // find values on the cso of type string that aren't on the imported object and remove them first
                             var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && !(importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))));
@@ -353,7 +356,7 @@ namespace JIM.Service.Processors
                                 connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, GuidValue = newGuidValue });
 
                             break;
-                        case AttributeDataType.Bool:
+                        case AttributeDataType.Boolean:
 
                             // there will be only a single value for a bool. is it the same or different?
                             // if different, remove the old value, add the new one
@@ -387,7 +390,7 @@ namespace JIM.Service.Processors
 
                 switch (csoAttribute.Type)
                 {
-                    case AttributeDataType.String:
+                    case AttributeDataType.Text:
                         foreach (var newStringValue in newAttribute.StringValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
                         break;
@@ -413,7 +416,7 @@ namespace JIM.Service.Processors
                         foreach (var newGuidValue in newAttribute.GuidValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, GuidValue = newGuidValue });
                         break;
-                    case AttributeDataType.Bool:
+                    case AttributeDataType.Boolean:
                         connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = newAttribute.BoolValue });
                         break;
                 }

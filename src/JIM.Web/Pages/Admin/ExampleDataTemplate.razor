@@ -30,7 +30,7 @@
                 <MudTd DataLabel="Type">@context.MetaverseAttribute?.Type</MudTd>
                 <MudTd DataLabel="Population &">@context.PopulatedValuesPercentage</MudTd>
                 <MudTd DataLabel="Rules">
-                    @if (context.MetaverseAttribute?.Type == AttributeDataType.String)
+                    @if (context.MetaverseAttribute?.Type == AttributeDataType.Text)
                     {
                         if (!string.IsNullOrEmpty(context.Pattern))
                         {
@@ -91,7 +91,7 @@
                             <MudChip Color="Color.Primary"><b>Random numbers:</b>&nbsp;@context.RandomNumbers.Value.ToString()</MudChip>
                         }
                     }
-                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Bool)
+                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Boolean)
                     {
                         if (context.BoolShouldBeRandom.HasValue)
                         {

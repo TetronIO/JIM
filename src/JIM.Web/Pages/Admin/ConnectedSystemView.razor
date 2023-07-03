@@ -211,6 +211,7 @@
                                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
                                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName)">Class</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)">Type</MudTableSortLabel></MudTh>
                                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
                                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
                             </HeaderContent>
@@ -220,6 +221,7 @@
                                 </MudTd>
                                 <MudTd DataLabel="Name">@context.Name</MudTd>
                                 <MudTd DataLabel="Class">@context.ClassName</MudTd>
+                                <MudTd DataLabel="Type">@context.Type</MudTd>
                                 <MudTd DataLabel="Plurality">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
                                 <MudTd DataLabel="Description">@context.Description</MudTd>
                             </RowTemplate>
@@ -581,11 +583,11 @@
         if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (element.ClassName != null && element.ClassName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        //if (element.ClassName != null && element.ClassName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        //    return true;
 
-        if (element.Description != null && element.Description.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        //if (element.Description != null && element.Description.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+        //    return true;
 
         return false;
     }

@@ -174,7 +174,7 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
-                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.Equals(attributeValue, StringComparison.CurrentCultureIgnoreCase)));
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == attributeValue.ToLower()));
         }
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)

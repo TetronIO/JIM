@@ -137,8 +137,7 @@ namespace JIM.Connectors.LDAP
             {
                 foreach (var auxiliaryClass in auxiliaryClasses)
                 {
-                    var auxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={auxiliaryClass})");
-                    if (auxiliaryClassEntry == null)
+                    var auxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={auxiliaryClass})") ?? 
                         throw new Exception($"Couldn't find auxiliary class entry: {auxiliaryClass}");
 
                     GetObjectClassAttributesRecursively(auxiliaryClassEntry, objectType);
@@ -149,8 +148,7 @@ namespace JIM.Connectors.LDAP
             {
                 foreach (var systemAuxiliaryClass in systemAuxiliaryClasses)
                 {
-                    var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={systemAuxiliaryClass})");
-                    if (systemAuxiliaryClassEntry == null)
+                    var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={systemAuxiliaryClass})") ?? 
                         throw new Exception($"Couldn't find auxiliary class entry: {systemAuxiliaryClass}");
 
                     GetObjectClassAttributesRecursively(systemAuxiliaryClassEntry, objectType);
@@ -160,8 +158,7 @@ namespace JIM.Connectors.LDAP
 
         private ConnectorSchemaAttribute GetSchemaAttribute(string attributeName, string objectClass, bool required)
         {
-            var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={attributeName})");
-            if (attributeEntry == null)
+            var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={attributeName})") ?? 
                 throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
 
             var description = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "description");
@@ -177,12 +174,58 @@ namespace JIM.Connectors.LDAP
             }
 
             var attributePlurality = isSingleValued ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
-            var attribute = new ConnectorSchemaAttribute(attributeName, AttributeDataType.String, attributePlurality, required, objectClass);
+
+            // work out what data-type the attribute is
+            var omSyntax = LdapConnectorUtilities.GetEntryAttributeIntValue(attributeEntry, "omsyntax");
+            var attributeDataType = AttributeDataType.Text;
+
+            if (omSyntax.HasValue)
+            {
+                // https://social.technet.microsoft.com/wiki/contents/articles/52570.active-directory-syntaxes-of-attributes.aspx
+                switch (omSyntax)
+                {
+                    case 1:
+                    case 10:
+                        attributeDataType = AttributeDataType.Boolean;
+                        break;
+                    case 2:
+                    case 65:
+                        attributeDataType = AttributeDataType.Number;
+                        break;
+                    case 3:
+                        attributeDataType = AttributeDataType.Binary;
+                        break;
+                    case 4:
+                    case 6:
+                    case 18:
+                    case 19:
+                    case 20:
+                    case 22:
+                    case 27:
+                    case 64:
+                        attributeDataType = AttributeDataType.Text;
+                        break;
+                    case 23:
+                    case 24:
+                        attributeDataType = AttributeDataType.DateTime;
+                        break;
+                    case 127:
+                        attributeDataType = AttributeDataType.Reference;
+                        break;
+                }
+            }
+
+            // handle exceptions:
+            // the objectGUID is typed as a string in the schema, but the byte-array returned does not decode to a string, but does to a Guid. go figure.
+            if (attributeName.Equals("objectguid", StringComparison.OrdinalIgnoreCase))
+                attributeDataType = AttributeDataType.Guid;
+
+            var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass);
 
             if (!string.IsNullOrEmpty(description))
                 attribute.Description = description;
             else if (!string.IsNullOrEmpty(admindescription))
-                attribute.Description = admindescription;
+                attribute.Description = admindescription;            
 
             return attribute;
         }

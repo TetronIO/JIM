@@ -93,7 +93,7 @@
             while (true)
             {
                 var stateHasChanged = false;
-                Console.WriteLine("Polling for service task headers...");
+                Console.WriteLine("JIM.Web: Operations.razor: Polling for service task headers...");
                 var newServiceTaskHeaders = await Jim.Tasking.GetServiceTaskHeadersAsync();
 
                 // look for additions or updates...
@@ -103,14 +103,14 @@
                     if (serviceTaskHeader == null)
                     {
                         // newServiceTask is new, add it
-                        Console.WriteLine("ST-POLLING: Adding service task header: " + newServiceTaskHeader.Id);
+                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Adding service task header: " + newServiceTaskHeader.Id);
                         serviceTaskHeaders.Add(newServiceTaskHeader);
                         stateHasChanged = true;
                     }
                     else if (serviceTaskHeader.Status != newServiceTaskHeader.Status)
                     {
                         // existing service task, so it's either unchanged, or an update
-                        Console.WriteLine("ST-POLLING: Updating service task header: " + newServiceTaskHeader.Id);
+                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Updating service task header: " + newServiceTaskHeader.Id);
                         var position = serviceTaskHeaders.IndexOf(serviceTaskHeader);
                         serviceTaskHeaders.Remove(serviceTaskHeader);
                         serviceTaskHeaders.Insert(position, newServiceTaskHeader);
@@ -122,7 +122,7 @@
                 var serviceTaskHeadersToRemove = serviceTaskHeaders.Where(sth => newServiceTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
                 foreach (var serviceTaskHeaderToRemove in serviceTaskHeadersToRemove)
                 {
-                    Console.WriteLine("ST-POLLING: Removing service task header: " + serviceTaskHeaderToRemove.Id);
+                    Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Removing service task header: " + serviceTaskHeaderToRemove.Id);
                     serviceTaskHeaders.Remove(serviceTaskHeaderToRemove);
                     stateHasChanged = true;
                 }

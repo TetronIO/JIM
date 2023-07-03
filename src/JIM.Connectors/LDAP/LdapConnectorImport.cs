@@ -40,6 +40,8 @@ namespace JIM.Connectors.LDAP
 
         internal ConnectedSystemImportResult GetFullImportObjects()
         {
+            _logger.Verbose("GetFullImportObjects: Started");
+
             if (_connectedSystem.Partitions == null)
                 throw new ArgumentException("_connectedSystem.Partitions is null. Cannot continue.");
             if (_connectedSystem.ObjectTypes == null)
@@ -223,7 +225,7 @@ namespace JIM.Connectors.LDAP
 
             connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries));
             stopwatch.Stop();
-            _logger.Debug($"GetFisoResults: Executed for {connectedSystemObjectType.Name} in {stopwatch.Elapsed}");
+            _logger.Debug($"GetFisoResults: Executed for object type '{connectedSystemObjectType.Name}' within container '{connectedSystemContainer.Name}' in {stopwatch.Elapsed}");
         }
 
         private List<ConnectedSystemImportObject> ConvertLdapResults(SearchResultEntryCollection searchResults)
@@ -319,7 +321,7 @@ namespace JIM.Connectors.LDAP
                     // assign the right type of value(s)
                     switch (importObjectAttribute.Type)
                     {
-                        case AttributeDataType.String:
+                        case AttributeDataType.Text:
                             var stringValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
                             if (stringValues != null && stringValues.Count > 0)
                                 importObjectAttribute.StringValues.AddRange(stringValues);
@@ -331,7 +333,7 @@ namespace JIM.Connectors.LDAP
                                 importObjectAttribute.IntValues.AddRange(numberValues);
                             break;
 
-                        case AttributeDataType.Bool:
+                        case AttributeDataType.Boolean:
                             importObjectAttribute.BoolValue = LdapConnectorUtilities.GetEntryAttributeBooleanValue(searchResult, attributeName);
                             break;
 
