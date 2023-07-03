@@ -355,6 +355,8 @@ namespace JIM.Connectors.LDAP
 
                             // todo: reference data type
                     }
+
+                    importObject.Attributes.Add(importObjectAttribute);
                 }
 
                 importObjects.Add(importObject);
