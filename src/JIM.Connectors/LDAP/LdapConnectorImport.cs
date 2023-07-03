@@ -56,7 +56,7 @@ namespace JIM.Connectors.LDAP
             if (_paginationTokens.Count == 0)
             {
                 // initial-page call. we have no paging tokens to use (yet) to resume a query
-                
+
                 // get information about the directory we're connected to
                 var rootDseInfo = GetRootDseInformation();
 
@@ -107,7 +107,7 @@ namespace JIM.Connectors.LDAP
             // this implementation ends up performing paging per selected container, which might confuse the user if they have a lot of selected containers and end up
             // getting more results back per pass than they expect. Consider refactoring the interface between JIM.Service and the connector so it is executed once per selected container
             // so the connector always returns a page of results to the JIM.Service (a page of results per container).
-            
+
             return result;
         }
 
@@ -154,7 +154,8 @@ namespace JIM.Connectors.LDAP
 
         private LdapConnectorRootDse GetRootDseInformation()
         {
-            var request = new SearchRequest() {
+            var request = new SearchRequest()
+            {
                 Scope = SearchScope.Base,
             };
 
@@ -185,15 +186,21 @@ namespace JIM.Connectors.LDAP
 
             var stopwatch = Stopwatch.StartNew();
             var lastRunsCookieLength = lastRunsCookie != null ? lastRunsCookie.Length.ToString() : "null";
-            var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})"; // todo: add in implicit support for containers/OUs?
-            
-            // user selected attributes
+            var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})"; // todo: add in implicit support for returning containers/organisational units?
+
+            // add user selected attributes
             var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
 
-            // additional attributes we always need returning for processing purposes
+            // ensure we are also retriving the unique identifier attribute(s)
+            attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsUniqueIdentifier).Select(a => a.Name));
+
+            // we also need the objectClass for type matching purposes
             attributes.Add("objectClass");
 
-            var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, attributes.ToArray());
+            // remove any duplicates we might have added and change to a simple array for use with the search request
+            var queryAttributes = attributes.Distinct().ToArray();
+
+            var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
             var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize);
             if (lastRunsCookie != null && lastRunsCookie.Length > 0)
                 pageResultRequestControl.Cookie = lastRunsCookie;
@@ -213,7 +220,7 @@ namespace JIM.Connectors.LDAP
                 _logger.Debug("GetFisoResults: O2 Cancellation requested. Stopping");
                 return;
             }
-            
+
             connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries));
             stopwatch.Stop();
             _logger.Debug($"GetFisoResults: Executed for {connectedSystemObjectType.Name} in {stopwatch.Elapsed}");
@@ -236,7 +243,8 @@ namespace JIM.Connectors.LDAP
                 }
 
                 // start to build the object that will represent the object in the connected system. we will pass this back to JIM 
-                var importObject = new ConnectedSystemImportObject {
+                var importObject = new ConnectedSystemImportObject
+                {
                     ChangeType = ObjectChangeType.Create
                 };
 
@@ -255,50 +263,56 @@ namespace JIM.Connectors.LDAP
                     importObject.ObjectType = objectType.Name;
                 }
 
-                // make sure JIM has passed us in a valid configuration
-                // ideally a connector shouldn't have to do this, but as type is nullable, it pays to be sure.
-                if (objectType.UniqueIdentifierAttribute == null)
-                {
-                    importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
-                    importObject.ErrorMessage = $"ConvertLdapResults: Object Type '{objectType.Name}' has no Unique Identifier Attribute set. Cannot process search result.";
-                    importObjects.Add(importObject);
-                    continue;
-                }
+                //// make sure JIM has passed us in a valid configuration
+                //if (objectType.UniqueIdentifierAttributes.Count == 0)
+                //{
+                //    importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
+                //    importObject.ErrorMessage = $"ConvertLdapResults: Object Type '{objectType.Name}' has no Unique Identifier Attribute(s) set. Cannot process search result.";
+                //    importObjects.Add(importObject);
+                //    continue;
+                //}
 
-                // get the unique identifier attribute is for this object type
-                var searchResultUniqueIdAttribute = searchResult.Attributes[objectType.UniqueIdentifierAttribute.Name];
-                if (searchResultUniqueIdAttribute == null)
-                {
-                    importObject.ErrorType = ConnectedSystemImportObjectError.MissingUniqueIdentifierAttribute;
-                    importObject.ErrorMessage = $"No '{objectType.UniqueIdentifierAttribute.Name}' attribute found on search result for DN: {searchResult.DistinguishedName}";
-                    importObjects.Add(importObject);
-                    continue;
-                }
+                //// get the unique identifier attribute(s) for this object type
+                //var searchResultUniqueIdAttributes = new List<DirectoryAttribute>();
+                //foreach (var connectedSystemUniqueIdAttribute in objectType.UniqueIdentifierAttributes)
+                //    searchResultUniqueIdAttributes.Add(searchResult.Attributes[connectedSystemUniqueIdAttribute.Name]);
 
-                // set the right type of unique identifier attribute value
-                if (objectType.UniqueIdentifierAttribute.Type == AttributeDataType.String)
-                    importObject.UniqueIdentifierAttributeStringValue = LdapConnectorUtilities.GetEntryAttributeStringValue(searchResult, searchResultUniqueIdAttribute.Name);
-                else if (objectType.UniqueIdentifierAttribute.Type == AttributeDataType.Number)
-                    importObject.UniqueIdentifierIntValue = LdapConnectorUtilities.GetEntryAttributeIntValue(searchResult, searchResultUniqueIdAttribute.Name);
-                else if (objectType.UniqueIdentifierAttribute.Type == AttributeDataType.Guid)
-                    importObject.UniqueIdentifierAttributeGuidValue = LdapConnectorUtilities.GetEntryAttributeGuidValue(searchResult, searchResultUniqueIdAttribute.Name);
+                //if (searchResultUniqueIdAttributes.Count == 0)
+                //{
+                //    importObject.ErrorType = ConnectedSystemImportObjectError.MissingUniqueIdentifierAttributes;
+                //    importObject.ErrorMessage = $"Could not find all the unique identifier attributes required for search result DN: {searchResult.DistinguishedName}";
+                //    importObjects.Add(importObject);
+                //    continue;
+                //}
+
+                //// ldpap systems only need a single unique identifier attribute
+                //var objectTypeUniqueIdentifierAttribute = objectType.UniqueIdentifierAttributes[0];
+                //var searchResultUniqueIdentifierAttribute = searchResultUniqueIdAttributes[0];
+
+                /// set the right type of unique identifier attribute value
+                //if (objectTypeUniqueIdentifierAttribute.Type == AttributeDataType.String)
+                //    importObject.UniqueIdentifierAttributeStringValue = LdapConnectorUtilities.GetEntryAttributeStringValue(searchResult, searchResultUniqueIdentifierAttribute.Name);
+                //else if (objectTypeUniqueIdentifierAttribute.Type == AttributeDataType.Number)
+                //    importObject.UniqueIdentifierIntValue = LdapConnectorUtilities.GetEntryAttributeIntValue(searchResult, searchResultUniqueIdentifierAttribute.Name);
+                //else if (objectTypeUniqueIdentifierAttribute.Type == AttributeDataType.Guid)
+                //    importObject.UniqueIdentifierAttributeGuidValue = LdapConnectorUtilities.GetEntryAttributeGuidValue(searchResult, searchResultUniqueIdentifierAttribute.Name);
 
                 // start populating import object attribute values from the search result
-                foreach (string name in searchResult.Attributes.AttributeNames)
+                foreach (string attributeName in searchResult.Attributes.AttributeNames)
                 {
                     // get the schema attribute for this search result attribute, so we can work out what type it is
-                    var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase));
+                    var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName, StringComparison.CurrentCultureIgnoreCase));
                     if (schemaAttribute == null)
                     {
                         importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
-                        importObject.ErrorMessage = $"Search result attribute '{name}' not found in schema!";
+                        importObject.ErrorMessage = $"Search result attribute '{attributeName}' not found in schema!";
                         importObjects.Add(importObject);
                         break;
                     }
 
                     var importObjectAttribute = new ConnectedSystemImportObjectAttribute
                     {
-                        Name = name,
+                        Name = attributeName,
                         Type = schemaAttribute.Type
                     };
 
@@ -306,40 +320,40 @@ namespace JIM.Connectors.LDAP
                     switch (importObjectAttribute.Type)
                     {
                         case AttributeDataType.String:
-                            var stringValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, name);
+                            var stringValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
                             if (stringValues != null && stringValues.Count > 0)
                                 importObjectAttribute.StringValues.AddRange(stringValues);
                             break;
 
                         case AttributeDataType.Number:
-                            var numberValues = LdapConnectorUtilities.GetEntryAttributeIntValues(searchResult, name);
+                            var numberValues = LdapConnectorUtilities.GetEntryAttributeIntValues(searchResult, attributeName);
                             if (numberValues != null && numberValues.Count > 0)
                                 importObjectAttribute.IntValues.AddRange(numberValues);
                             break;
 
                         case AttributeDataType.Bool:
-                            importObjectAttribute.BoolValue = LdapConnectorUtilities.GetEntryAttributeBooleanValue(searchResult, name);
+                            importObjectAttribute.BoolValue = LdapConnectorUtilities.GetEntryAttributeBooleanValue(searchResult, attributeName);
                             break;
 
                         case AttributeDataType.DateTime:
-                            var dateTimeValues = LdapConnectorUtilities.GetEntryAttributeDateTimeValues(searchResult, name);
+                            var dateTimeValues = LdapConnectorUtilities.GetEntryAttributeDateTimeValues(searchResult, attributeName);
                             if (dateTimeValues != null && dateTimeValues.Count > 0)
                                 importObjectAttribute.DateTimeValues.AddRange(dateTimeValues);
                             break;
 
                         case AttributeDataType.Guid:
-                            var guidValues = LdapConnectorUtilities.GetEntryAttributeGuidValues(searchResult, name);
+                            var guidValues = LdapConnectorUtilities.GetEntryAttributeGuidValues(searchResult, attributeName);
                             if (guidValues != null && guidValues.Count > 0)
                                 importObjectAttribute.GuidValues.AddRange(guidValues);
                             break;
 
                         case AttributeDataType.Binary:
-                            var binaryValues = LdapConnectorUtilities.GetEntryAttributeBinaryValues(searchResult, name);
+                            var binaryValues = LdapConnectorUtilities.GetEntryAttributeBinaryValues(searchResult, attributeName);
                             if (binaryValues != null && binaryValues.Count > 0)
                                 importObjectAttribute.ByteValues.AddRange(binaryValues);
                             break;
 
-                        // todo: reference data type
+                            // todo: reference data type
                     }
                 }
 

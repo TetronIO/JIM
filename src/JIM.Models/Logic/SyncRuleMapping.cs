@@ -14,7 +14,7 @@ namespace JIM.Models.Logic
         public int Priority { get; set; }
         public List<SyncRuleMappingSource> Sources { get; set; }
         public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
-        public ConnectedSystemAttribute? TargetConnectedSystemAttribute { get; set; }
+        public ConnectedSystemObjectTypeAttribute? TargetConnectedSystemAttribute { get; set; }
 
         public SyncRuleMapping()
         {

@@ -32,7 +32,7 @@ namespace JIM.Models.Tests
         {
             var subject = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
@@ -73,7 +73,7 @@ namespace JIM.Models.Tests
             // numbers can be assigned to attributes of type number AND string
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 MinNumber = 1
             };
@@ -81,7 +81,7 @@ namespace JIM.Models.Tests
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 MaxNumber = 50
             };
@@ -89,7 +89,7 @@ namespace JIM.Models.Tests
 
             var subject3 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 MaxNumber = 100
             };
@@ -97,7 +97,7 @@ namespace JIM.Models.Tests
 
             var subject4 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true
             };
@@ -105,7 +105,7 @@ namespace JIM.Models.Tests
 
             var subject5 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true,
                 MinNumber = 1
@@ -114,7 +114,7 @@ namespace JIM.Models.Tests
 
             var subject6 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true,
                 MinNumber = 1
@@ -128,7 +128,7 @@ namespace JIM.Models.Tests
             // numbers can be assigned to attributes of type number AND string
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true,
                 MinNumber = 1
@@ -137,7 +137,7 @@ namespace JIM.Models.Tests
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true,
                 MaxNumber = 50
@@ -146,7 +146,7 @@ namespace JIM.Models.Tests
 
             var subject3 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Number },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true,
                 MinNumber = 0,
@@ -161,7 +161,7 @@ namespace JIM.Models.Tests
             // numbers can be assigned to attributes of type number AND string
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true,
                 MinNumber = 1
@@ -170,7 +170,7 @@ namespace JIM.Models.Tests
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true,
                 MaxNumber = 50
@@ -179,7 +179,7 @@ namespace JIM.Models.Tests
 
             var subject3 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true,
                 MinNumber = 0,
@@ -189,7 +189,7 @@ namespace JIM.Models.Tests
 
             var subject4 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true,
                 MinNumber = 1
@@ -198,7 +198,7 @@ namespace JIM.Models.Tests
 
             var subject5 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true,
                 MaxNumber = 50
@@ -207,7 +207,7 @@ namespace JIM.Models.Tests
 
             var subject6 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true,
                 MinNumber = 0,
@@ -310,7 +310,7 @@ namespace JIM.Models.Tests
         {
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
@@ -318,7 +318,7 @@ namespace JIM.Models.Tests
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
@@ -351,7 +351,7 @@ namespace JIM.Models.Tests
 
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
@@ -359,7 +359,7 @@ namespace JIM.Models.Tests
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance(), new ExampleDataSetInstance() }
             };
@@ -367,7 +367,7 @@ namespace JIM.Models.Tests
 
             var subject3 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.String },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.String },
                 PopulatedValuesPercentage = 100,
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance(), new ExampleDataSetInstance() },
                 Pattern = "{0} {1}"
@@ -380,7 +380,7 @@ namespace JIM.Models.Tests
         {
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Guid },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Guid },
                 PopulatedValuesPercentage = 100
             };
             Assert.DoesNotThrow(subject1.Validate);
@@ -391,7 +391,7 @@ namespace JIM.Models.Tests
         {
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.StaticMembers },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.StaticMembers },
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100
             };
@@ -403,7 +403,7 @@ namespace JIM.Models.Tests
         {
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 10
@@ -412,7 +412,7 @@ namespace JIM.Models.Tests
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMaxAssignments = 10
@@ -421,7 +421,7 @@ namespace JIM.Models.Tests
 
             var subject3 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new MetaverseObjectType() },
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = 10,
@@ -435,14 +435,14 @@ namespace JIM.Models.Tests
         {
             var subject1 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 50
             };
             Assert.DoesNotThrow(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
-                ConnectedSystemAttribute = new ConnectedSystemAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
+                ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 95
             };
             Assert.DoesNotThrow(subject2.Validate);

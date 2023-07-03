@@ -201,18 +201,18 @@
                     @if (selectedObjectType != null)
                     {
                         <MudText Typo="Typo.caption" Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which attributes you would like to manage for this object type. To maximise performance, only select those that you need.</MudText>
-                        <MudTable Items="@selectedObjectType.Attributes" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" SortLabel="Sort By" Filter="new Func<ConnectedSystemAttribute,bool>(SchemaFilterFuncHandler)" Class="mt-5">
+                        <MudTable Items="@selectedObjectType.Attributes" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" SortLabel="Sort By" Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)" Class="mt-5">
                             <ToolBarContent>
                                 <MudText Typo="Typo.h6">@selectedObjectType.Name</MudText>
                                 <MudSpacer />
                                 <MudTextField @bind-Value="schemaSearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
                             </ToolBarContent>
                             <HeaderContent>
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.ClassName)">Class</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName)">Class</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd DataLabel="Selected">
@@ -571,9 +571,9 @@
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
     }
 
-    private bool SchemaFilterFuncHandler(ConnectedSystemAttribute element) => SchemaFilterFunc(element, schemaSearchString);
+    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, schemaSearchString);
 
-    private bool SchemaFilterFunc(ConnectedSystemAttribute element, string searchString)
+    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString)
     {
         if (string.IsNullOrWhiteSpace(searchString))
             return true;

@@ -124,7 +124,6 @@ namespace JIM.PostgresData.Repositories
 
             types = await Repository.Database.ConnectedSystemObjectTypes
                 .Include(ot => ot.Attributes)
-                .Include(ot => ot.UniqueIdentifierAttribute)
                 .Where(q => q.ConnectedSystem.Id == id).ToListAsync();
 
             partitions = await Repository.Database.ConnectedSystemPartitions

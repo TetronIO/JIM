@@ -4,7 +4,7 @@ namespace JIM.Models.Staging
 {
     public class ConnectedSystemImportObjectAttribute
     {
-        public string? Name { get; set; }
+        public string Name { get; set; }
 
         public AttributeDataType Type { get; set; }
 

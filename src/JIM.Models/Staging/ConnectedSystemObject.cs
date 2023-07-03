@@ -21,7 +21,7 @@ namespace JIM.Models.Staging
         /// It should be immutable (not change for the lifetime of the object). 
         /// The connected system may author it, or you may specify it at provisioning time, depending on the needs of the connected system.
         /// </summary>
-        public ConnectedSystemAttribute UniqueIdentifierAttribute { get; set; }
+        public ConnectedSystemObjectTypeAttribute UniqueIdentifierAttribute { get; set; }
 
         public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; }
 
@@ -71,7 +71,7 @@ namespace JIM.Models.Staging
         #endregion
 
         #region public methods
-        public void UpdateSingleValuedAttribute<T>(ConnectedSystemAttribute connectedSystemAttribute, T newAttributeValue)
+        public void UpdateSingleValuedAttribute<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T newAttributeValue)
         {
             if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
                 throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued Attribute. Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
@@ -114,7 +114,7 @@ namespace JIM.Models.Staging
                 PendingAttributeValueRemovals.Add(existingAttributeValue);
         }
 
-        public void RemoveSingleValuedAttributeValue<T>(ConnectedSystemAttribute connectedSystemAttribute)
+        public void RemoveSingleValuedAttributeValue<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute)
         {
             if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
                 throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued attribute (SVA). Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
@@ -124,7 +124,7 @@ namespace JIM.Models.Staging
                 PendingAttributeValueRemovals.Add(existingAttributeValue);
         }
 
-        public void AddMultiValuedAttributeValue<T>(ConnectedSystemAttribute connectedSystemAttribute, T attributeValueToAdd)
+        public void AddMultiValuedAttributeValue<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T attributeValueToAdd)
         {
             if (connectedSystemAttribute.AttributePlurality != AttributePlurality.MultiValued)
                 throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Multi-Valued attribute (MVA). Cannot add a value. Use the UpdateSingleValuedAttribute method instead.", nameof(connectedSystemAttribute));
@@ -170,7 +170,7 @@ namespace JIM.Models.Staging
                 PendingAttributeValueRemovals.Add(existingAttributeValue);
         }
 
-        public void RemoveAllMultiValuedAttributeValues(ConnectedSystemAttribute connectedSystemAttribute)
+        public void RemoveAllMultiValuedAttributeValues(ConnectedSystemObjectTypeAttribute connectedSystemAttribute)
         {
             foreach (var attributeValue in AttributeValues.Where(av => av.Attribute.Id == connectedSystemAttribute.Id))
                 RemoveMultiValuedAttributeValue(attributeValue);

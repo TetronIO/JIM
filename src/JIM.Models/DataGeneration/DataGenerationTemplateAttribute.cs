@@ -8,7 +8,7 @@ namespace JIM.Models.DataGeneration
     {
         #region accessors
         public int Id { get; set; }
-        public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }
+        public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
         public MetaverseAttribute? MetaverseAttribute { get; set; }
         /// <summary>
         /// How many values should be generated? 100% would mean every object has a value for this attribute.

@@ -1,5 +1,6 @@
 ﻿using JIM.Application;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -70,63 +71,19 @@ namespace JIM.Service.Processors
                         _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
 
                         // is this a new, or existing object as far as JIM is aware?
-                        // find the unique id attribute for this connected system object type, and then pull out the right type attribute value from the importobject
+                        // find the unique id attribute(s) for this connected system object type, and then pull out the right type attribute values from the importobject.
+
                         // match the string object type to a name of an object type in the schema..
                         var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
-                        if (csObjectType == null || csObjectType.UniqueIdentifierAttribute == null)
+                        if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsUniqueIdentifier))
                         {
                             syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.CouldntMatchObjectType;
-                            syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                            syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                             continue;
                         }
 
-                        ConnectedSystemObject? connectedSystemObject;
-                        if (csObjectType.UniqueIdentifierAttribute.Type == AttributeDataType.String)
-                        {
-                            if (string.IsNullOrEmpty(importObject.UniqueIdentifierAttributeStringValue))
-                            {
-                                // connector has not set a valid unique identifier attribute string value
-                                syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
-                                syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier string value.";
-                                _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
-                                continue;
-                            }
-
-                            connectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, csObjectType.UniqueIdentifierAttribute.Id, importObject.UniqueIdentifierAttributeStringValue);
-                        }
-                        else if (csObjectType.UniqueIdentifierAttribute.Type == AttributeDataType.Number)
-                        {
-                            if (importObject.UniqueIdentifierIntValue == null || importObject.UniqueIdentifierIntValue < 1)
-                            {
-                                // connector has not set a valid unique identifier attribute int value
-                                syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
-                                syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier int value.";
-                                _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
-                                continue;
-                            }
-
-                            connectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, csObjectType.UniqueIdentifierAttribute.Id, (int)importObject.UniqueIdentifierIntValue);
-                        }
-                        else if (csObjectType.UniqueIdentifierAttribute.Type == AttributeDataType.Guid)
-                        {
-                            if (importObject.UniqueIdentifierAttributeGuidValue == null || importObject.UniqueIdentifierAttributeGuidValue == Guid.Empty)
-                            {
-                                // connector has not set a valid unique identifier attribute guid value
-                                syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.MissingUniqueIdentifierAttributeValue;
-                                syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Connector hasn't supplied a valid unique identifier guid value.";
-                                _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
-                                continue;
-                            }
-
-                            connectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, csObjectType.UniqueIdentifierAttribute.Id, (Guid)importObject.UniqueIdentifierAttributeGuidValue);
-                        }
-                        else
-                        {
-                            syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.UnsupportedUniqueIdentifierAttribyteType;
-                            syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Unsupported connected system object type unique identifier type: {csObjectType.UniqueIdentifierAttribute.Type}";
-                            _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
-                            continue;
-                        }
+                        // try and find a matching connected system object
+                        var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
 
                         // is new - new cso required
                         // is existing - apply any changes to the cso from the import object
@@ -163,17 +120,53 @@ namespace JIM.Service.Processors
             }
         }
 
+        private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+        {
+            // todo: add support for multiple unique identifier attributes, i.e. compound primary keys
+            var uniqueIdentifierAttribute = connectedSystemObjectType.Attributes.First(a => a.IsUniqueIdentifier);
+
+            // find the matching import object attribute
+            var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(uniqueIdentifierAttribute.Name, StringComparison.OrdinalIgnoreCase)) ?? 
+                throw new MissingUniqueIdentifierAttributeException($"The imported object is missing the unique identifier attribute '{uniqueIdentifierAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
+
+            if (importObjectAttribute.IntValues.Count > 1 ||
+                importObjectAttribute.StringValues.Count > 1 ||
+                importObjectAttribute.GuidValues.Count > 1)
+                throw new UniqueIdentifierAttributeNotSingleValuedException($"Unique identifier attribute ({uniqueIdentifierAttribute.Name}) on the imported object has multiple values! The Unique Identifier attribute must be single-valued.");
+
+            if (uniqueIdentifierAttribute.Type == AttributeDataType.String)
+            {
+                if (importObjectAttribute.StringValues.Count == 0)
+                    throw new UniqueIdentifierAttributeValueMissingException($"Unique identifier string attribute ({uniqueIdentifierAttribute.Name}) on the imported object has no value.");
+
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, uniqueIdentifierAttribute.Id, importObjectAttribute.StringValues[0]);
+            }
+            else if (uniqueIdentifierAttribute.Type == AttributeDataType.Number)
+            {
+                if (importObjectAttribute.IntValues.Count == 0)
+                    throw new UniqueIdentifierAttributeValueMissingException($"Unique identifier number attribute({uniqueIdentifierAttribute.Name}) on the imported object has no value.");
+
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, uniqueIdentifierAttribute.Id, importObjectAttribute.IntValues[0]);
+            }
+            else if (uniqueIdentifierAttribute.Type == AttributeDataType.Guid)
+            {
+                if (importObjectAttribute.GuidValues.Count == 0)
+                    throw new UniqueIdentifierAttributeValueMissingException($"Unique identifier guid attribute ({uniqueIdentifierAttribute.Name}) on the imported object has no value.");
+
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, uniqueIdentifierAttribute.Id, importObjectAttribute.GuidValues[0]);
+            }
+
+            // should never happen, but covering our bases
+            throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type unique identifier type: {uniqueIdentifierAttribute.Type}");
+        }
+
         private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, SyncRunHistoryDetailItem synchronisationRunHistoryDetailItem)
         {
-            // this has been tested earlier, no need to error handle
-            if (connectedSystemObjectType.UniqueIdentifierAttribute == null)
-                return;
-
             // new object - create connected system object
             var connectedSystemObject = new ConnectedSystemObject
             {
                 ConnectedSystem = _connectedSystem,
-                UniqueIdentifierAttribute = connectedSystemObjectType.UniqueIdentifierAttribute,
+                UniqueIdentifierAttribute = connectedSystemObjectType.Attributes.First(a => a.IsUniqueIdentifier), // todo: support multiple unique identifier attributes, i..e. compound primary keys
                 Type = connectedSystemObjectType
             };
 

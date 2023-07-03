@@ -2,7 +2,7 @@
 
 namespace JIM.Models.Staging
 {
-    public class ConnectedSystemAttribute
+    public class ConnectedSystemObjectTypeAttribute
     {
         public int Id { get; set; }
         
@@ -23,7 +23,7 @@ namespace JIM.Models.Staging
         public AttributePlurality AttributePlurality { get; set; }
 
         /// <summary>
-        /// The parent for this attribute.
+        /// The Connected System Object Type this attribute belongs to.
         /// </summary>
         public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; }
 
@@ -32,7 +32,12 @@ namespace JIM.Models.Staging
         /// </summary>
         public bool Selected { get; set; }
 
-        public ConnectedSystemAttribute()
+        /// <summary>
+        /// Indicates if this attribute is a unique identifier for the object type.
+        /// </summary>
+        public bool IsUniqueIdentifier { get; set; }
+
+        public ConnectedSystemObjectTypeAttribute()
         {
             Created = DateTime.Now;
         }

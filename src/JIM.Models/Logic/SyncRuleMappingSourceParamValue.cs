@@ -15,7 +15,7 @@ namespace JIM.Models.Logic
         public FunctionParameter FunctionParameter { get; set; }
         
         public MetaverseAttribute? MetaverseAttribute { get; set; }
-        public ConnectedSystemAttribute? ConnectedSystemAttribute { get; set; }
+        public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
 
         public string? StringValue { get; set; }
         public DateTime DateTimeValue { get; set; }

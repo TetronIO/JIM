@@ -15,7 +15,7 @@ namespace JIM.PostgresData
     public class JimDbContext : DbContext
     {
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
-        internal DbSet<ConnectedSystemAttribute> ConnectedSystemAttributes { get; set; }
+        internal DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; }
         internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
         internal DbSet<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValues { get; set; }

@@ -213,7 +213,7 @@ namespace JIM.Application.Servers
                 var connectedSystemObjectType = new ConnectedSystemObjectType
                 {
                     Name = objectType.Name,
-                    Attributes = objectType.Attributes.Select(a => new ConnectedSystemAttribute
+                    Attributes = objectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
                     {
                         Name = a.Name,
                         Description = a.Description,
@@ -223,10 +223,14 @@ namespace JIM.Application.Servers
                     }).ToList()
                 };
 
-                // 
-                if (objectType.RecommendedUniqueIdentifierAttributes.Count > 0)
+                // take the unique identifier attribute recommendations as the default, and allow the user to potentially change them later if they want/need.
+                foreach (var recommendedAttribute in objectType.RecommendedUniqueIdentifierAttributes)
                 {
-
+                    var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == recommendedAttribute.Name);
+                    if (attribute != null)
+                        attribute.IsUniqueIdentifier = true;
+                    else
+                        Log.Error($"Recommended attribute '{recommendedAttribute.Name}' was not found in the objects list of attributes!");
                 }
 
                 connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
@@ -433,7 +437,7 @@ namespace JIM.Application.Servers
             connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
         }
 
-        private static ConnectedSystemObjectChangeAttribute GetChangAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemAttribute connectedSystemAttribute)
+        private static ConnectedSystemObjectChangeAttribute GetChangAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)
         {
             var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemAttribute.Id);
             if (attributeChange == null)

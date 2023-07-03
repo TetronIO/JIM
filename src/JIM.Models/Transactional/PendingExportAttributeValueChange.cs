@@ -5,7 +5,7 @@ namespace JIM.Models.Transactional
     public class PendingExportAttributeValueChange
     {
         public Guid Id { get; set; }
-        public ConnectedSystemAttribute Attribute { get; set; }
+        public ConnectedSystemObjectTypeAttribute Attribute { get; set; }
         public string? StringValue { get; set; }
         public DateTime? DateTimeValue { get; set; }
         public int? IntValue { get; set; }
