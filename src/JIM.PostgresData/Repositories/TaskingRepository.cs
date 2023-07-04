@@ -1,4 +1,5 @@
 ﻿using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 using JIM.Utilities;
@@ -43,7 +44,14 @@ namespace JIM.PostgresData.Repositories
         {
             // todo: find a way to retrieve a stub user, i.e. just mvo with id and displayname
             var serviceTaskHeaders = new List<ServiceTaskHeader>();
-            var serviceTasks = Repository.Database.ServiceTasks.Include(st => st.InitiatedBy).ThenInclude(ib => ib.Type).OrderByDescending(q => q.Timestamp);
+            var serviceTasks = Repository.Database.ServiceTasks.
+                Include(st => st.InitiatedBy).
+                ThenInclude(ib => ib.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+                ThenInclude(av => av.Attribute).
+                Include(st => st.InitiatedBy).
+                ThenInclude(ib => ib.Type).
+                OrderByDescending(q => q.Timestamp);
+
             foreach (var serviceTask in serviceTasks)
             {
                 serviceTaskHeaders.Add(new ServiceTaskHeader
