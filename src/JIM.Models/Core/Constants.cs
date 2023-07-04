@@ -144,5 +144,10 @@
             public static string UsersEn => "Users En";
             public static string GroupsEn => "Groups En";
         }
+
+        public static class BuiltInClaims
+        {
+            public static string MetaverseObjectId => "jim_mvo_id";
+        }
     }
 }

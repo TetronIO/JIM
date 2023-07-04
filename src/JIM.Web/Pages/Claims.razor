@@ -4,39 +4,33 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<h3>ClaimsPrincipal Data</h3>
+<PageTitle>Your Claims</PageTitle>
+<MudText Typo="Typo.h4">Your Claims</MudText>
 
-<button class="btn btn-primary" @onclick="GetClaimsPrincipalData">Get ClaimsPrincipal Data</button>
-
-<p>@authMessage</p>
-
-@if (claims.Count() > 0)
+@if (user != null)
 {
-    <ul>
-        @foreach (var claim in claims)
-        {
-            <li>@claim.Type: @claim.Value</li>
-        }
-    </ul>
+    <MudTable Items="@user.Claims" Hover="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
+        <HeaderContent>
+            <MudTh>Claim Type</MudTh>
+            <MudTh>Claim Value</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Claim Type">@context.Type</MudTd>
+            <MudTd DataLabel="Claim Value">@context.Value</MudTd>
+        </RowTemplate>
+    </MudTable>
 }
 
 @code {
-    private string? authMessage;
-    private IEnumerable<Claim> claims = Enumerable.Empty<Claim>();
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask { get; set; }
+    private ClaimsPrincipal? user { get; set; }
 
-    private async Task GetClaimsPrincipalData()
+    protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        if (authenticationStateTask == null)
+            return;
 
-        if (user != null && user.Identity != null && user.Identity.IsAuthenticated)
-        {
-            authMessage = $"{user.Identity.Name} is authenticated.";
-            claims = user.Claims;
-        }
-        else
-        {
-            authMessage = "The user is NOT authenticated.";
-        }
+        user = (await authenticationStateTask).User;
     }
 }

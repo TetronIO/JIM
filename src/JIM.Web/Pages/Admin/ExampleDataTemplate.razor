@@ -184,7 +184,8 @@
 @code {
     [Parameter]
     public int Id { get; set; }
-
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask { get; set; }
     private DataGenerationTemplate? template;
     private DataGenerationTemplateServiceTask? task;
     private ServiceTaskStatus? status;
@@ -230,7 +231,9 @@
         if (template == null)
             return;
 
-        task = new DataGenerationTemplateServiceTask(template.Id);
+        // attribute the execution to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        task = new DataGenerationTemplateServiceTask(template.Id, user);
         await Jim.Tasking.CreateServiceTaskAsync(task);
     }
 }

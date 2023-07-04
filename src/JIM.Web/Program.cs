@@ -226,18 +226,17 @@ static async Task InitialiseJimApplicationAsync()
 /// </summary>
 static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 {
-    Log.Verbose("AuthoriseUserAsync()...");
+    Log.Verbose("AuthoriseAndUpdateUserAsync()...");
 
     if (context.Principal == null || context.Principal.Identity == null)
     {
-        Log.Error($"AuthoriseUserAsync: User doesn't have a principal or identity");
+        Log.Error($"AuthoriseAndUpdateUserAsync: User doesn't have a principal or identity");
         return;
     }
 
     // there's probably a better way to do this, i.e. getting JimApplication from Services somehow
     var jim = new JimApplication(new PostgresDataRepository());
-    var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync();
-    if (serviceSettings == null)
+    var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync() ?? 
         throw new Exception("ServiceSettings was null. Cannot continue.");
 
     if (serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
@@ -249,23 +248,22 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     var uniqueIdClaimValue = context.Principal.FindFirstValue(serviceSettings.SSOUniqueIdentifierClaimType);
     if (string.IsNullOrEmpty(uniqueIdClaimValue))
     {
-        Log.Warning($"AuthoriseUserAsync: User '{context.Principal.Identity.Name}' doesn't have a {serviceSettings.SSOUniqueIdentifierClaimType} claim");
+        Log.Warning($"AuthoriseAndUpdateUserAsync: User '{context.Principal.Identity.Name}' doesn't have a '{serviceSettings.SSOUniqueIdentifierClaimType}' claim");
         return;
     }
 
-    Log.Debug($"AuthoriseUserAsync: User '{context.Principal.Identity.Name}' has a '{serviceSettings.SSOUniqueIdentifierClaimType}' claim value of '{uniqueIdClaimValue}'");
+    Log.Debug($"AuthoriseAndUpdateUserAsync: User '{context.Principal.Identity.Name}' has a '{serviceSettings.SSOUniqueIdentifierClaimType}' claim value of '{uniqueIdClaimValue}'");
 
     // get the user using their unique id claim value
-    var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false);
-    if (userType == null)
+    var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false) ?? 
         throw new Exception("Could not retrieve User object type");
 
     var user = await jim.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue);
     if (user != null)
     {
-        // we mapped a token user to a Metaverse user, create a new identity that represents an internal view
-        // of the user, with their roles claims. This will do for MVP, when we need more a more developed RBAC
-        // system later, we might need to extend ClaimsIdentity to accomodate our complex roles.
+        // we mapped a token user to a Metaverse user, now we need to create a new identity that represents an internal view
+        // of the user, with their roles claims. We have to create a new identity as we cannot modify the default one.
+        // This will do for MVP, when we need more a more developed RBAC system later, we might need to extend ClaimsIdentity to accomodate our more scomplex roles.
 
         var roles = await jim.Security.GetMetaverseObjectRolesAsync(user);
         var claims = new List<Claim>();
@@ -276,7 +274,11 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much
         claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
 
-        var jimIdentity = new ClaimsIdentity(claims) { Label = "Internal JIM Identity" };
+        // add their metaverse object id claim to the new identity as well.
+        // we'll use this to attribute user actions to the claims identity.
+        claims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
+
+        var jimIdentity = new ClaimsIdentity(claims) { Label = "JIM.Web" };
         context.Principal.AddIdentity(jimIdentity);
 
         // now also see if we can assign any initial user attribute values from the claims principal

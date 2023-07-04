@@ -14,7 +14,7 @@ namespace JIM.Models.History
 
         public HistoryItem()
         {
-            Created = DateTime.MinValue;
+            Created = DateTime.Now;
         }
     }
 }

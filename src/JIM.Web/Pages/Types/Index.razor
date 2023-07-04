@@ -6,6 +6,7 @@
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Search
 @using JIM.Models.Utility
+@using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
@@ -29,13 +30,13 @@
         <tbody>
             @if (MetaverseObjectHeaders != null && MetaverseObjectHeaders.Results.Count > 0)
             {
-                foreach (var mo in MetaverseObjectHeaders.Results)
+                foreach (var moh in MetaverseObjectHeaders.Results)
                 {
                     <tr>
-                        <td><MudLink Href="@("/t/"+MetaverseObjectType?.Name.ToLower()+"/v/"+mo.Id)">@mo.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue</MudLink></td>
+                        <td><MudLink Href="@Utilities.GetMetaverseObjectHref(moh)">@Utilities.GetMetaverseObjectHrefText(moh)</MudLink></td>
                         @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
                         {
-                            <td>@mo.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</td>
+                            <td>@moh.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</td>
                         }
                     </tr>
                 }

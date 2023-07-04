@@ -135,16 +135,15 @@ namespace JIM.Service
                                         var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
                                         if (runProfile != null)
                                         {
-                                            // create the history item for this run profile execution, then pass it in to the processor for iterative updates
-                                            // we copy some run profile information as run profiles can be user-deleted, but we would want to retain core run profile
-                                            // information for audit reasons.
+                                            // create the history item for this run profile execution, then pass it in to the processor for iterative updates for each item processed.
+                                            // we copy some run profile information as run profiles can be user-deleted, but we would want to retain core run profile information for audit purposes.
                                             var synchronisationRunHistoryDetail = new SyncRunHistoryDetail
                                             {
                                                 RunProfile = runProfile,
                                                 RunProfileName = runProfile.Name,
                                                 RunType = runProfile.RunType,
                                                 ConnectedSystem = connectedSystem,
-                                                ConnectedSystemName = connectedSystem.Name
+                                                ConnectedSystemName = connectedSystem.Name                                                
                                             };
                                             await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
 

@@ -46,13 +46,10 @@ namespace JIM.Service.Processors
 
                 var initialPage = true;
                 var paginationTokens = new List<ConnectedSystemPaginationToken>();
-                //var wereResultsReturned = false;
-                //while (initialPage || paginationTokens.Count > 0 || wereResultsReturned)
                 while (initialPage || paginationTokens.Count > 0)
                 {
                     // perform the import for this page
                     var result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
-                    //wereResultsReturned = result.ImportObjects.Count > 0;
 
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
@@ -101,7 +98,7 @@ namespace JIM.Service.Processors
                         }
                     }
 
-                    // process deletes - what wasn't imported? how do we do this when paging is being used?
+                    // todo: process deletes - what wasn't imported? how do we do this when paging is being used?
                     // make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
 
                     if (initialPage)

@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Tasking
+﻿using JIM.Models.Core;
+
+namespace JIM.Models.Tasking
 {
 	public class SynchronisationServiceTask : ServiceTask
 	{
@@ -21,6 +23,17 @@
         {
             ConnectedSystemId = connectedSystemId;
             ConnectedSystemRunProfileId = connectedSystemRunProfileId;
+        }
+
+        /// <summary>
+        /// When a synchronisation service task is triggered by a user, this overload should be used to attribute the action to the user.
+        /// </summary>
+        public SynchronisationServiceTask(int connectedSystemId, int connectedSystemRunProfileId, MetaverseObject initiatingBy)
+        {
+            ConnectedSystemId = connectedSystemId;
+            ConnectedSystemRunProfileId = connectedSystemRunProfileId;
+            InitiatedBy = initiatingBy;
+            InitiatedByName = initiatingBy.DisplayName;
         }
     }
 }

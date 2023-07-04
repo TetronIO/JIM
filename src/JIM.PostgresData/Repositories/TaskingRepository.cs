@@ -36,13 +36,15 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<List<ServiceTask>> GetServiceTasksAsync()
         {
-            return await Repository.Database.ServiceTasks.ToListAsync();
+            return await Repository.Database.ServiceTasks.Include(st => st.InitiatedBy).ThenInclude(ib => ib.Type).ToListAsync();
         }
 
         public async Task<List<ServiceTaskHeader>> GetServiceTaskHeadersAsync()
         {
+            // todo: find a way to retrieve a stub user, i.e. just mvo with id and displayname
             var serviceTaskHeaders = new List<ServiceTaskHeader>();
-            foreach (var serviceTask in Repository.Database.ServiceTasks.OrderByDescending(q => q.Timestamp))
+            var serviceTasks = Repository.Database.ServiceTasks.Include(st => st.InitiatedBy).ThenInclude(ib => ib.Type).OrderByDescending(q => q.Timestamp);
+            foreach (var serviceTask in serviceTasks)
             {
                 serviceTaskHeaders.Add(new ServiceTaskHeader
                 {
@@ -50,7 +52,8 @@ namespace JIM.PostgresData.Repositories
                     Status = serviceTask.Status,
                     Timestamp = serviceTask.Timestamp,
                     Name = await GetServiceTaskHeaderNameAync(serviceTask),
-                    Type = GetServiceTaskType(serviceTask)
+                    Type = GetServiceTaskType(serviceTask),
+                    InitiatedBy = serviceTask.InitiatedBy
                 });
             }
             return serviceTaskHeaders;
@@ -104,7 +107,8 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId)
         {
-            var result = await Repository.Database.DataGenerationTemplateServiceTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
+            using var db = new JimDbContext();
+            var result = await db.DataGenerationTemplateServiceTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
             if (result != null && result.Count == 1)
                 return result[0];
 

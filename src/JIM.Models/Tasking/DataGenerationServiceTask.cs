@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Tasking
+﻿using JIM.Models.Core;
+
+namespace JIM.Models.Tasking
 {
 	public class DataGenerationTemplateServiceTask : ServiceTask
 	{
@@ -11,9 +13,11 @@
         {
         }
 
-		public DataGenerationTemplateServiceTask(int templateId)
+		public DataGenerationTemplateServiceTask(int templateId, MetaverseObject user)
         {
             TemplateId = templateId;
+            InitiatedBy = user;
+            InitiatedByName = user.DisplayName;
         }
     }
 }

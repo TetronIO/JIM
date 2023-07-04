@@ -8,6 +8,7 @@
 @attribute [Authorize(Roles = "Administrators")]
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
 
 <PageTitle>Operations</PageTitle>
@@ -54,6 +55,7 @@
         <MudTh>Name</MudTh>
         <MudTh>Status</MudTh>
         <MudTh>Created</MudTh>
+        <MudTh>Initiated By</MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd>
@@ -65,6 +67,12 @@
         <MudTd DataLabel="Name">@context.Name</MudTd>
         <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
         <MudTd DataLabel="Created">@context.Timestamp</MudTd>
+        <MudTd DataLabel="Initiated By">
+            @if (context.InitiatedBy != null)
+            {
+                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)</MudLink>
+            }
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no service tasks queued.
@@ -72,6 +80,8 @@
 </MudTable>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask { get; set; }
     private List<ConnectedSystemHeader>? connectedSystemHeaders;
     private List<ConnectedSystemRunProfile>? connectedSystemRunProfiles;
     private ConnectedSystemHeader? selectedConnectedSystemHeader;
@@ -154,7 +164,9 @@
         if (selectedConnectedSystemHeader == null || selectedConnectedSystemRunProfile == null)
             return;
 
-        var task = new SynchronisationServiceTask(selectedConnectedSystemHeader.Id, selectedConnectedSystemRunProfile.Id);
+        // attribute the execution to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        var task = new SynchronisationServiceTask(selectedConnectedSystemHeader.Id, selectedConnectedSystemRunProfile.Id, user);
         await Jim.Tasking.CreateServiceTaskAsync(task);
         Snackbar.Add("Synchronisation task added.", Severity.Success);
     }

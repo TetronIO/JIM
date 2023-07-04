@@ -1,4 +1,7 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Application;
+using JIM.Models.Core;
+using JIM.Utilities;
+using Microsoft.AspNetCore.Components.Authorization;
 
 namespace JIM.Web
 {
@@ -27,6 +30,19 @@ namespace JIM.Web
                 return string.Empty;
 
             return $"/t/{ConvertToUrlParam(metaverseObject.Type.Name)}/v/{metaverseObject.Id}";
+        }
+
+        /// <summary>
+        /// Returns the MetaverseObject for the currently signed-in JIM.Web user.
+        /// </summary>
+        public static async Task<MetaverseObject> GetUserAsync(JimApplication jimApplication, Task<AuthenticationState>? authenticationStateTask)
+        {
+            if (authenticationStateTask == null)
+                throw new Exception("Authentication state not available");
+
+            var userId = IdentityUtilities.GetUserId((await authenticationStateTask).User);
+            var user = await jimApplication.Metaverse.GetMetaverseObjectAsync(userId);
+            return user ?? throw new Exception($"User not found for user id: {userId}");
         }
     }
 }

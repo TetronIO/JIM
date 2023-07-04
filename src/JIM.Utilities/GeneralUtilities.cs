@@ -1,4 +1,6 @@
-﻿using System.Text.RegularExpressions;
+﻿using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
+using System.Text.RegularExpressions;
 
 namespace JIM.Utilities
 {
@@ -16,6 +18,25 @@ namespace JIM.Utilities
         {
             // byte[] is implicitly convertible to ReadOnlySpan<byte>
             return array1.SequenceEqual(array2);
+        }
+
+        public static string GetMetaverseObjectHref(MetaverseObject metaverseObject)
+        {
+            return $"/t/{metaverseObject.Type.Name.ToLower()}/v/{metaverseObject.Id}";
+        }
+        public static string? GetMetaverseObjectHrefText(MetaverseObject metaverseObject)
+        {
+            return metaverseObject.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue;
+        }
+
+        public static string GetMetaverseObjectHref(MetaverseObjectHeader metaverseObjectHeader)
+        {
+            return $"/t/{metaverseObjectHeader.TypeName.ToLower()}/v/{metaverseObjectHeader.Id}";
+        }
+
+        public static string? GetMetaverseObjectHrefText(MetaverseObjectHeader metaverseObjectHeader)
+        {
+            return metaverseObjectHeader.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue;
         }
     }
 }
