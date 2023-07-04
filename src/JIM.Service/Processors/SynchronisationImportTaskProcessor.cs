@@ -5,6 +5,7 @@ using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
+using System.Diagnostics;
 
 namespace JIM.Service.Processors
 {
@@ -106,7 +107,7 @@ namespace JIM.Service.Processors
 
                     // update the history item with the results from this page processing
                     await _jim.History.UpdateSyncRunHistoryDetailAsync(_synchronisationRunHistoryDetail);
-                }
+                }                
 
                 callBasedImportConnector.CloseImportConnection();
             }
@@ -162,6 +163,8 @@ namespace JIM.Service.Processors
 
         private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, SyncRunHistoryDetailItem synchronisationRunHistoryDetailItem)
         {
+            var stopwatch = Stopwatch.StartNew();
+
             // new object - create connected system object
             var connectedSystemObject = new ConnectedSystemObject
             {
@@ -256,6 +259,8 @@ namespace JIM.Service.Processors
 
             // persist the new cso
             await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+            stopwatch.Stop();
+            Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
         }
 
         private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, SyncRunHistoryDetailItem synchronisationRunHistoryDetailItem)

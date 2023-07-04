@@ -175,6 +175,7 @@ namespace JIM.Connectors.LDAP
                 HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeIntValue(rootDseEntry, "HighestCommittedUSN")
             };
 
+            Log.Verbose("LDAPConnector > GetRootDseInformation: Got info");
             return rootDse;
         }
 
@@ -264,40 +265,6 @@ namespace JIM.Connectors.LDAP
                 {
                     importObject.ObjectType = objectType.Name;
                 }
-
-                //// make sure JIM has passed us in a valid configuration
-                //if (objectType.UniqueIdentifierAttributes.Count == 0)
-                //{
-                //    importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
-                //    importObject.ErrorMessage = $"ConvertLdapResults: Object Type '{objectType.Name}' has no Unique Identifier Attribute(s) set. Cannot process search result.";
-                //    importObjects.Add(importObject);
-                //    continue;
-                //}
-
-                //// get the unique identifier attribute(s) for this object type
-                //var searchResultUniqueIdAttributes = new List<DirectoryAttribute>();
-                //foreach (var connectedSystemUniqueIdAttribute in objectType.UniqueIdentifierAttributes)
-                //    searchResultUniqueIdAttributes.Add(searchResult.Attributes[connectedSystemUniqueIdAttribute.Name]);
-
-                //if (searchResultUniqueIdAttributes.Count == 0)
-                //{
-                //    importObject.ErrorType = ConnectedSystemImportObjectError.MissingUniqueIdentifierAttributes;
-                //    importObject.ErrorMessage = $"Could not find all the unique identifier attributes required for search result DN: {searchResult.DistinguishedName}";
-                //    importObjects.Add(importObject);
-                //    continue;
-                //}
-
-                //// ldpap systems only need a single unique identifier attribute
-                //var objectTypeUniqueIdentifierAttribute = objectType.UniqueIdentifierAttributes[0];
-                //var searchResultUniqueIdentifierAttribute = searchResultUniqueIdAttributes[0];
-
-                /// set the right type of unique identifier attribute value
-                //if (objectTypeUniqueIdentifierAttribute.Type == AttributeDataType.String)
-                //    importObject.UniqueIdentifierAttributeStringValue = LdapConnectorUtilities.GetEntryAttributeStringValue(searchResult, searchResultUniqueIdentifierAttribute.Name);
-                //else if (objectTypeUniqueIdentifierAttribute.Type == AttributeDataType.Number)
-                //    importObject.UniqueIdentifierIntValue = LdapConnectorUtilities.GetEntryAttributeIntValue(searchResult, searchResultUniqueIdentifierAttribute.Name);
-                //else if (objectTypeUniqueIdentifierAttribute.Type == AttributeDataType.Guid)
-                //    importObject.UniqueIdentifierAttributeGuidValue = LdapConnectorUtilities.GetEntryAttributeGuidValue(searchResult, searchResultUniqueIdentifierAttribute.Name);
 
                 // start populating import object attribute values from the search result
                 foreach (string attributeName in searchResult.Attributes.AttributeNames)

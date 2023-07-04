@@ -45,5 +45,10 @@ namespace JIM.Models.History
         // - result item with operation type (create/update/delete) and link to mv object and json snapshot of imported/exported object
 
         public List<SyncRunHistoryDetailItem> Items { get; set; } = new List<SyncRunHistoryDetailItem>();
+
+        /// <summary>
+        /// When the synchronisation run is complete, a value for how long the run took should be stored here.
+        /// </summary>
+        public TimeSpan? CompletionTime { get; set; }
     }
 }

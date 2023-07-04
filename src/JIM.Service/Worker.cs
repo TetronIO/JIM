@@ -8,6 +8,7 @@ using JIM.Models.Tasking;
 using JIM.PostgresData;
 using JIM.Service.Processors;
 using Serilog;
+using System.Diagnostics;
 
 namespace JIM.Service
 {
@@ -145,8 +146,10 @@ namespace JIM.Service
                                                 ConnectedSystem = connectedSystem,
                                                 ConnectedSystemName = connectedSystem.Name                                                
                                             };
+                                            
                                             await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
-
+                                            var stopwatch = Stopwatch.StartNew();
+                                            
                                             try
                                             {
                                                 // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
@@ -184,6 +187,13 @@ namespace JIM.Service
                                                 synchronisationRunHistoryDetail.ErrorStackTrace = ex.StackTrace;
                                                 await taskJim.History.UpdateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
                                                 Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
+                                            }
+                                            finally
+                                            {
+                                                // record how long the sync run took, whether it was successful, or not.
+                                                stopwatch.Stop();
+                                                synchronisationRunHistoryDetail.CompletionTime = stopwatch.Elapsed;
+                                                await taskJim.History.UpdateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
                                             }
                                         }
                                         else
