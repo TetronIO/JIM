@@ -1,5 +1,6 @@
 ﻿using JIM.Application;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.History;
 using JIM.Models.Interfaces;
@@ -90,11 +91,13 @@ namespace JIM.Service.Processors
                         // is existing - apply any changes to the cso from the import object
                         if (connectedSystemObject == null)
                         {
+                            syncRunHistoryDetailItem.ObjectChangeType = ObjectChangeType.Create;
                             await CreateConnectedSystemObjectFromImportObjectAsync(importObject, csObjectType, syncRunHistoryDetailItem);
                         }
                         else
                         {
                             // existing connected system object - update from import object if necessary
+                            syncRunHistoryDetailItem.ObjectChangeType = ObjectChangeType.Update;
                             await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, syncRunHistoryDetailItem);
                         }
                     }

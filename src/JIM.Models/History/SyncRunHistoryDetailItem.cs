@@ -1,4 +1,5 @@
-﻿using JIM.Models.Staging;
+﻿using JIM.Models.Enums;
+using JIM.Models.Staging;
 
 namespace JIM.Models.History
 {
@@ -16,7 +17,19 @@ namespace JIM.Models.History
         public SyncRunHistoryDetail SyncRunHistoryDetail { get; set; }
 
         /// <summary>
+        /// What happened with the ConnectedSystemObject? Was it created/updated/deleted?
+        /// </summary>
+        public ObjectChangeType ObjectChangeType { get; set; }
+
+        /// <summary>
+        /// What CSO does this sync run history detail item relate to?
+        /// Note: If the change was a delete, then there will be no CSO to reference.
+        /// </summary>
+        public ConnectedSystemObject? ConnectedSystemObject { get; set; }
+
+        /// <summary>
         /// What change(s), if any were made to the connected system object in question?
+        /// This needs populating for update and delete scenarios.
         /// </summary>
         public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
 

@@ -11,11 +11,15 @@ namespace JIM.Models.Staging
         public Guid Id { get; set; }
 
         /// <summary>
-        /// The parent connected system object change would have been caused by a synchronisation run, 
-        /// though it's worth bearing in mind that sync run history can be cleared down so a reference may not always be present,
-        /// depending on how old the connected system object is.
+        /// The connected system object change would have been caused by a synchronisation run, access that here if it still exists. 
+        /// It's worth bearing in mind that sync run history can be cleared down so a reference may not always be present,
+        /// depending on how old the connected system object change is.
         /// </summary>
         public SyncRunHistoryDetailItem? SyncRunHistoryDetailItem { get; set; }
+
+        /// <summary>
+        /// Needed for EF linking.
+        /// </summary>
         public Guid? SyncRunHistoryDetailItemId { get; set; }
 
         /// <summary>
@@ -45,5 +49,9 @@ namespace JIM.Models.Staging
         /// Enables access to per-attribute value changes for the connected system object in question.
         /// </summary>
         public List<ConnectedSystemObjectChangeAttribute> AttributeChanges { get; set; } = new List<ConnectedSystemObjectChangeAttribute>();
+
+        // todo: make it possible to know what CSO was deleted:
+        // copy over the object type, i.e. user
+        // copy over the unique identifier attribute values, i.e. objectGUID=x
     }
 }
