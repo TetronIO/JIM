@@ -172,7 +172,7 @@ namespace JIM.Service.Processors
             var connectedSystemObject = new ConnectedSystemObject
             {
                 ConnectedSystem = _connectedSystem,
-                UniqueIdentifierAttribute = connectedSystemObjectType.Attributes.First(a => a.IsUniqueIdentifier), // todo: support multiple unique identifier attributes, i..e. compound primary keys
+                UniqueIdentifierAttributeId = connectedSystemObjectType.Attributes.First(a => a.IsUniqueIdentifier).Id,
                 Type = connectedSystemObjectType
             };
 
