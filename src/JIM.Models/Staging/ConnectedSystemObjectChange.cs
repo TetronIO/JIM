@@ -24,9 +24,9 @@ namespace JIM.Models.Staging
 
         /// <summary>
         /// Which Connected System did/does the Connected System Object in question relate to.
-        /// Important information when the operation was DELETE and there's no ConnectedSystemObject to reference.
+        /// Important information when the change type was DELETE and there's no ConnectedSystemObject to reference anymore.
         /// </summary>
-        public ConnectedSystem ConnectedSystem { get; set; }
+        public int ConnectedSystemId { get; set; }
 
         /// <summary>
         /// What Connected System Object does this change relate to?

@@ -223,15 +223,12 @@ namespace JIM.Application.Servers
                     }).ToList()
                 };
 
-                // take the unique identifier attribute recommendations as the default, and allow the user to potentially change them later if they want/need.
-                foreach (var recommendedAttribute in objectType.RecommendedUniqueIdentifierAttributes)
-                {
-                    var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == recommendedAttribute.Name);
-                    if (attribute != null)
-                        attribute.IsUniqueIdentifier = true;
-                    else
-                        Log.Error($"Recommended attribute '{recommendedAttribute.Name}' was not found in the objects list of attributes!");
-                }
+                // take the unique identifier attribute recommendation as the default, and allow the user to potentially change it later if they want/need
+                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedUniqueIdentifierAttribute.Name);
+                if (attribute != null)
+                    attribute.IsUniqueIdentifier = true;
+                else
+                    Log.Error($"Recommended attribute '{objectType.RecommendedUniqueIdentifierAttribute.Name}' was not found in the objects list of attributes!");
 
                 connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
             }
@@ -365,7 +362,7 @@ namespace JIM.Application.Servers
             // create a change object we can add attribute changes to
             var change = new ConnectedSystemObjectChange
             {
-                ConnectedSystem = connectedSystemObject.ConnectedSystem,
+                ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Update,
                 SyncRunHistoryDetailItem = syncRunHistoryDetailItem
