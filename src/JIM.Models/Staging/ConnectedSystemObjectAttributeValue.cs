@@ -15,9 +15,10 @@ namespace JIM.Models.Staging
         public ConnectedSystemObjectTypeAttribute Attribute { get; set; }
 
         /// <summary>
-        /// The parent connected system object for this attribute value object.
+        /// The normal parent connected system object for this attribute value object.
+        /// Might be null if being referenced by a Connected System Object Change object and the CSO has been deleted.
         /// </summary>
-        public ConnectedSystemObject ConnectedSystemObject { get; set; }
+        public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
         public string? StringValue { get; set; }
 

@@ -86,6 +86,22 @@ namespace JIM.PostgresData
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<ConnectedSystemObject>()
+                .HasMany(cso => cso.AttributeValues)
+                .WithOne(csoav => csoav.ConnectedSystemObject);
+
+            modelBuilder.Entity<ConnectedSystemObjectType>()
+                .HasMany(csot => csot.Attributes)
+                .WithOne(csa => csa.ConnectedSystemObjectType);
+
+            modelBuilder.Entity<MetaverseObject>()
+                .HasMany(mo => mo.Roles)
+                .WithMany(r => r.StaticMembers);
+
+            modelBuilder.Entity<MetaverseObject>()
+                .HasMany(mvo => mvo.Changes)
+                .WithOne(mvoc => mvoc.MetaverseObject);
+
             modelBuilder.Entity<MetaverseObjectAttributeValue>()
                 .HasOne(moav => moav.MetaverseObject)
                 .WithMany(mo => mo.AttributeValues);
@@ -94,24 +110,8 @@ namespace JIM.PostgresData
                 .HasOne(moav => moav.ReferenceValue)
                 .WithMany();
 
-            modelBuilder.Entity<MetaverseObject>()
-                .HasMany(mo => mo.Roles)
-                .WithMany(r => r.StaticMembers);
-
             modelBuilder.Entity<MetaverseObjectType>()
                 .HasMany(mot => mot.Attributes);
-
-            modelBuilder.Entity<ConnectedSystemObjectType>()
-                .HasMany(csot => csot.Attributes)
-                .WithOne(csa => csa.ConnectedSystemObjectType);
-
-            modelBuilder.Entity<MetaverseObject>()
-                .HasMany(mvo => mvo.Changes)
-                .WithOne(mvoc => mvoc.MetaverseObject);
-
-            modelBuilder.Entity<ConnectedSystemObject>()
-                .HasMany(cso => cso.AttributeValues)
-                .WithOne(csoav => csoav.ConnectedSystemObject);
 
             modelBuilder.Entity<SyncRunHistoryDetailItem>()
                 .HasOne(a => a.ConnectedSystemObjectChange)
