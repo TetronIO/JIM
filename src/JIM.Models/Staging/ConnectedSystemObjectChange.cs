@@ -50,8 +50,14 @@ namespace JIM.Models.Staging
         /// </summary>
         public List<ConnectedSystemObjectChangeAttribute> AttributeChanges { get; set; } = new List<ConnectedSystemObjectChangeAttribute>();
 
-        // todo: make it possible to know what CSO was deleted:
-        // copy over the object type, i.e. user
-        // copy over the unique identifier attribute values, i.e. objectGUID=x
+        /// <summary>
+        /// If the objectr was deleted, the object type will be copied here to make it possible to identify what type of object was deleted.
+        /// </summary>
+        public ConnectedSystemObjectType? DeletedObjectType { get; set; }
+
+        /// <summary>
+        /// If the object was deleted, the unique identifier attribute will be copied here to make it possible to identify which object was deleted.
+        /// </summary>
+        public ConnectedSystemObjectAttributeValue? DeletedObjectUniqueIdentifierAttributeValue { get; set; }
     }
 }
