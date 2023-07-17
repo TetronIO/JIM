@@ -200,7 +200,7 @@
 
                     @if (selectedObjectType != null)
                     {
-                        <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which attributes you would like to manage for this object type. To maximise performance, only select those that you need.</MudText>
+                        <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.</MudText>
                         <MudTable Items="@selectedObjectType.Attributes" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" SortLabel="Sort By" Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)" Class="mt-5">
                             <ToolBarContent>
                                 <MudText Typo="Typo.h6">@selectedObjectType.Name</MudText>
