@@ -176,7 +176,7 @@
             @if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0)
             {
                 <MudPaper Outlined="true" Class="pa-4 mt-5">
-                    <MudText Typo="Typo.caption" Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which object types you would like to manage with JIM.</MudText>
+                    <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which object types you would like to manage with JIM.</MudText>
                     <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                         @foreach (var objectType in connectedSystem.ObjectTypes)
                         {
@@ -200,7 +200,7 @@
 
                     @if (selectedObjectType != null)
                     {
-                        <MudText Typo="Typo.caption" Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which attributes you would like to manage for this object type. To maximise performance, only select those that you need.</MudText>
+                        <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">Select which attributes you would like to manage for this object type. To maximise performance, only select those that you need.</MudText>
                         <MudTable Items="@selectedObjectType.Attributes" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" SortLabel="Sort By" Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)" Class="mt-5">
                             <ToolBarContent>
                                 <MudText Typo="Typo.h6">@selectedObjectType.Name</MudText>
