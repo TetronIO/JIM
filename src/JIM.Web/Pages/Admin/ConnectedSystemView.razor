@@ -254,7 +254,15 @@
 
                 @if (selectedObjectType != null)
                 {
-                    <MudTable Items="@selectedObjectType.Attributes" Virtualize="true" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" SortLabel="Sort By" Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)" Class="mt-5">
+                    <MudTable 
+                        Items="@selectedObjectType.Attributes" 
+                        Virtualize="true" 
+                        Hover="true" 
+                        Dense="true" 
+                        Breakpoint="Breakpoint.Sm" 
+                        SortLabel="Sort By" 
+                        Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
+                        Class="mt-5">
                         <HeaderContent>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
@@ -270,7 +278,7 @@
                             <MudTd DataLabel="Name">@context.Name</MudTd>
                             <MudTd DataLabel="Class">@context.ClassName</MudTd>
                             <MudTd DataLabel="Type">@context.Type</MudTd>
-                            <MudTd DataLabel="Plurality">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
+                            <MudTd DataLabel="Plurality" Class="jim-no-wrap">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
                             <MudTd DataLabel="Description">@context.Description</MudTd>
                         </RowTemplate>
                         <NoRecordsContent>
