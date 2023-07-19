@@ -1,4 +1,4 @@
-﻿@page "/admin/connected-systems/{Id:int}/{Name}"
+﻿@page "/admin/connected-systems/{Id:int}"
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.Core
@@ -196,7 +196,10 @@
                                 <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
                                     @foreach (var objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
                                     {
-                                        <MudButton OnClick="@((e) => HandleActiveObjectTypeClick(objectType))" Disabled="@(selectedObjectType != null && selectedObjectType.Id == objectType.Id)" DisableElevation="true">@objectType.Name</MudButton>
+                                        <MudButton 
+                                            OnClick="@((e) => HandleActiveObjectTypeClick(objectType))" 
+                                            Disabled="@(selectedObjectType != null && selectedObjectType.Id == objectType.Id)" 
+                                            DisableElevation="true">@objectType.Name</MudButton>
                                     }
                                 </MudButtonGroup>
                             </div>
@@ -240,8 +243,7 @@
                                 <MudItem xs="12">
                                     <MudCheckBox 
                                         @bind-Checked="attributeSelectedFilter" 
-                                        Color="@Color.Secondary" 
-                                        TriState="true">Show Selected/Not Selected/All attributes</MudCheckBox>
+                                        Color="Color.Primary">Show only selected?</MudCheckBox>
                                 </MudItem>
                                 <MudItem xs="10">
                                     <MudTextField T="string"
@@ -486,7 +488,7 @@
     private string schemaSearchString = "";
     private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile { PageSize = 500 };
     private IEnumerable<string> attributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
-    private bool? attributeSelectedFilter = null;
+    private bool attributeSelectedFilter;
     private string attributeSelectionCsv = "";
 
     protected override async Task OnInitializedAsync()
@@ -644,7 +646,7 @@
 
     private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, schemaSearchString, attributeClassFilterSelectedValues, attributeSelectionCsv, attributeSelectedFilter);
 
-    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, string attributeSelectionCsv, bool? attributeSelectedFilter)
+    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, string attributeSelectionCsv, bool attributeSelectedFilter)
     {
         // what type of search is this? name, class or csv?
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
@@ -663,22 +665,12 @@
             else
                 return false;
         }
-        else if (attributeSelectedFilter != null)
+        else if (attributeSelectedFilter)
         {
-            if (attributeSelectedFilter)
-            {
-                if (element.Selected)
-                    return true;
-                else 
-                    return false;
-            }
-            else if (!attributeSelectedFilter)
-            {
-                if (!element.Selected)
-                    return true;
-                else
-                    return false;
-            }
+            if (element.Selected)
+                return true;
+            else 
+                return false;
         }
 
         return true;
@@ -841,8 +833,8 @@
         }
 
         // clear the other search boxes
-        schemaSearchString = null;
-        attributeClassFilterSelectedValues.Clear();
+        schemaSearchString = string.Empty;
+        ((HashSet<string>)attributeClassFilterSelectedValues).Clear();
 
         // convert the csv to a list and trim the entries
         // go through each attribute on the object type and select it

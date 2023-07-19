@@ -33,7 +33,6 @@
     </ToolBarContent>
     <HeaderContent>
         <MudTh></MudTh>
-        <MudTh></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ObjectCount)">Objects</MudTableSortLabel></MudTh>
@@ -42,23 +41,21 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)">Connector</MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Configuration">
-            <MudButton Href="@($"/admin/connected-systems/{context.Id}/{Helpers.ConvertToUrlParam(context.Name)}")"
-                Target="_blank"
-                Variant="Variant.Filled"
+        <MudTd DataLabel="Options">
+            <MudButton Href="@($"/admin/connected-systems/{context.Id}/")"
+                Variant="Variant.Outlined"
                 StartIcon="@Icons.Material.Filled.Settings"
-                Color="Color.Secondary"
-                Size="Size.Small">
+                Color="Color.Default"
+                Size="Size.Small"
+                DisableElevation="true">
                 Configure
             </MudButton>
-        </MudTd>
-        <MudTd DataLabel="Connector Space">
-            <MudButton Href="@($"/admin/connected-systems/{context.Id}/{Helpers.ConvertToUrlParam(context.Name)}/objects")"
-                Target="_blank"
-                Variant="Variant.Filled"
+            <MudButton Href="@($"/admin/connected-systems/{context.Id}/objects")"
+                Variant="Variant.Outlined"
                 StartIcon="@Icons.Material.Filled.List"
-                Color="Color.Secondary"
-                Size="Size.Small">
+                Color="Color.Default"
+                Size="Size.Small"
+                DisableElevation="true">
                 View Objects
             </MudButton>
         </MudTd>
