@@ -239,15 +239,27 @@
                                 </MudItem>
                             </MudGrid>
 
-                            <MudTextField T="string"
-                                Label="Select attributes via CSV"
-                                @bind-Value="attributeSelectionCsv"
-                                HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
-                                InputType="InputType.Text"
-                                Adornment="Adornment.Start"
-                                AdornmentIcon="@Icons.Material.Filled.Input"
-                                IconSize="Size.Small"
-                                Variant="Variant.Outlined" />
+                            <MudGrid>
+                                    <MudItem xs="10">
+                                    <MudTextField T="string"
+                                                  Label="Select attributes via CSV"
+                                    @bind-Value="attributeSelectionCsv"
+                                                  HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
+                                                  InputType="InputType.Text"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Input"
+                                                  IconSize="Size.Small"
+                                                  Variant="Variant.Outlined" />
+                                    </MudItem>
+                                    <MudItem xs="2">
+                                    <MudButton Variant="Variant.Filled" DisableElevation="true" Color="Color.Default">Select Attributes</MudButton>
+                                    </MudItem>
+                            </MudGrid>
+
+                            
+
+
+                            
                         }
                     </MudPaper>
                 }
