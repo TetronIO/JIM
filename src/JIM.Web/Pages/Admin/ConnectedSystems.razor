@@ -32,6 +32,8 @@
         <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
+        <MudTh></MudTh>
+        <MudTh></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ObjectCount)">Objects</MudTableSortLabel></MudTh>
@@ -40,9 +42,27 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)">Connector</MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Name">
-            <MudLink Href="@($"/admin/connected-systems/{context.Id}/{Helpers.ConvertToUrlParam(context.Name)}")">@context.Name</MudLink>
+        <MudTd DataLabel="Configuration">
+            <MudButton Href="@($"/admin/connected-systems/{context.Id}/{Helpers.ConvertToUrlParam(context.Name)}")"
+                Target="_blank"
+                Variant="Variant.Filled"
+                StartIcon="@Icons.Material.Filled.Settings"
+                Color="Color.Secondary"
+                Size="Size.Small">
+                Configure
+            </MudButton>
         </MudTd>
+        <MudTd DataLabel="Connector Space">
+            <MudButton Href="@($"/admin/connected-systems/{context.Id}/{Helpers.ConvertToUrlParam(context.Name)}/objects")"
+                Target="_blank"
+                Variant="Variant.Filled"
+                StartIcon="@Icons.Material.Filled.List"
+                Color="Color.Secondary"
+                Size="Size.Small">
+                View Objects
+            </MudButton>
+        </MudTd>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
         <MudTd DataLabel="Description">@context.Description</MudTd>
         <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>
         <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
