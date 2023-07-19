@@ -242,24 +242,19 @@
                             <MudGrid>
                                     <MudItem xs="10">
                                     <MudTextField T="string"
-                                                  Label="Select attributes via CSV"
-                                    @bind-Value="attributeSelectionCsv"
-                                                  HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
-                                                  InputType="InputType.Text"
-                                                  Adornment="Adornment.Start"
-                                                  AdornmentIcon="@Icons.Material.Filled.Input"
-                                                  IconSize="Size.Small"
-                                                  Variant="Variant.Outlined" />
+                                        Label="Select attributes via CSV"
+                                        @bind-Value="attributeSelectionCsv"
+                                        HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
+                                        InputType="InputType.Text"
+                                        Adornment="Adornment.Start"
+                                        AdornmentIcon="@Icons.Material.Filled.Input"
+                                        IconSize="Size.Small"
+                                        Variant="Variant.Outlined" />
                                     </MudItem>
                                     <MudItem xs="2">
-                                    <MudButton Variant="Variant.Filled" DisableElevation="true" Color="Color.Default">Select Attributes</MudButton>
+                                        <MudButton Variant="Variant.Filled" DisableElevation="true" Color="Color.Default" OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
                                     </MudItem>
                             </MudGrid>
-
-                            
-
-
-                            
                         }
                     </MudPaper>
                 }
@@ -676,19 +671,6 @@
         //return false;
     }
 
-    //private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, schemaSearchString);
-
-    //private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString)
-    //{
-    //    if (string.IsNullOrWhiteSpace(searchString))
-    //        return true;
-
-    //    if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-    //        return true;
-
-    //    return false;
-    //}
-
     private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container, bool? newCheckboxValue)
     {
         // if included and clicked, change to not included, not selected
@@ -829,5 +811,24 @@
         connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
         await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         Snackbar.Add("Run profile removed.", Severity.Success);
+    }
+
+    private async Task HandleAttributeCsvSubmit()
+    {
+        if (selectedObjectType == null)
+        {
+            Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: connectedSystem was null");
+            return;
+        }
+
+        // clear the other search boxes
+        // enumerate the csv entries
+        // trim the csv entry
+        // go through each attribute on the object type and select it
+        // filter by selected
+
+        
+        
+        Snackbar.Add("Attributes selected.", Severity.Success);
     }
 }
