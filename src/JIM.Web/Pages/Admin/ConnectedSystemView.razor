@@ -237,10 +237,13 @@
                                         }
                                     </MudSelect>
                                 </MudItem>
-                            </MudGrid>
-
-                            <MudGrid>
-                                    <MudItem xs="10">
+                                <MudItem xs="12">
+                                    <MudCheckBox 
+                                        @bind-Checked="attributeSelectedFilter" 
+                                        Color="@Color.Secondary" 
+                                        TriState="true">Show Selected/Not Selected/All attributes</MudCheckBox>
+                                </MudItem>
+                                <MudItem xs="10">
                                     <MudTextField T="string"
                                         Label="Select attributes via CSV"
                                         @bind-Value="attributeSelectionCsv"
@@ -483,6 +486,7 @@
     private string schemaSearchString = "";
     private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile { PageSize = 500 };
     private IEnumerable<string> attributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
+    private bool? attributeSelectedFilter = null;
     private string attributeSelectionCsv = "";
 
     protected override async Task OnInitializedAsync()
@@ -638,9 +642,9 @@
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
     }
 
-    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, schemaSearchString, attributeClassFilterSelectedValues, attributeSelectionCsv);
+    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, schemaSearchString, attributeClassFilterSelectedValues, attributeSelectionCsv, attributeSelectedFilter);
 
-    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, string attributeSelectionCsv)
+    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, string attributeSelectionCsv, bool? attributeSelectedFilter)
     {
         // what type of search is this? name, class or csv?
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
@@ -658,17 +662,26 @@
                 return true;
             else
                 return false;
-        }        
+        }
+        else if (attributeSelectedFilter != null)
+        {
+            if (attributeSelectedFilter)
+            {
+                if (element.Selected)
+                    return true;
+                else 
+                    return false;
+            }
+            else if (!attributeSelectedFilter)
+            {
+                if (!element.Selected)
+                    return true;
+                else
+                    return false;
+            }
+        }
 
-        return true;        
-
-        //if (string.IsNullOrWhiteSpace(searchString))
-        //    return true;
-
-        //if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-        //    return true;
-
-        //return false;
+        return true;
     }
 
     private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container, bool? newCheckboxValue)
@@ -821,14 +834,34 @@
             return;
         }
 
-        // clear the other search boxes
-        // enumerate the csv entries
-        // trim the csv entry
-        // go through each attribute on the object type and select it
-        // filter by selected
+        if (string.IsNullOrEmpty(attributeSelectionCsv))
+        {
+            Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: attributeSelectionCsv is null or empty");
+            return;
+        }
 
-        
-        
+        // clear the other search boxes
+        schemaSearchString = null;
+        attributeClassFilterSelectedValues.Clear();
+
+        // convert the csv to a list and trim the entries
+        // go through each attribute on the object type and select it
+        foreach (var attributeName in attributeSelectionCsv.Split(','))
+        {
+            var attribute = selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (attribute == null)
+                continue;
+
+            attribute.Selected = true;
+        }
+
+        // filter by selected
+        attributeSelectedFilter = true;
+
+        // clear the attribute csv textbox
+        attributeSelectionCsv = null;
+
+        // all done, let the user know
         Snackbar.Add("Attributes selected.", Severity.Success);
     }
 }
