@@ -9,13 +9,15 @@
 <PageTitle>Connectors</PageTitle>
 <MudText Typo="Typo.h4">Connectors</MudText>
 <MudText Typo="Typo.subtitle1">
-    JIM uses connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors.
+    JIM uses Connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors.
     From here you can see which are installed and if any have updates that can be applied.
 </MudText>
 
 <br />
-<MudButton Variant="Variant.Filled" Href="/admin/connected-systems" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Connected Systems</MudButton>
-<MudButton Variant="Variant.Filled" Href="/admin/connected-systems/connectors" Size="Size.Small" Color="Color.Primary" Disabled="true">Connectors</MudButton>
+<MudText Typo="Typo.overline" Class="mt-5">
+    <MudLink Href="/admin/connected-systems">Connected Systems</MudLink> |
+    <MudLink Href="/admin/connected-systems/connectors" Underline="Underline.Always">Connectors</MudLink>
+</MudText>
 
 <MudTable Items="@headers" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>

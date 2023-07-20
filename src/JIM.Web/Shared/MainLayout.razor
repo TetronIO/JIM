@@ -9,7 +9,7 @@
 <MudLayout>
     <MudAppBar Elevation="1">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
-        <MudText Typo="Typo.h6" Class="header-title">Junctional Identity Manager</MudText>
+        <MudText Typo="Typo.h6" Class="jim-header-title">Junctional Identity Manager</MudText>
         <MudSpacer />
         <MudTooltip Text="@(IsDarkMode ? _lightModeText : _darkModeText)">
             <MudToggleIconButton @bind-Toggled="@IsDarkMode"

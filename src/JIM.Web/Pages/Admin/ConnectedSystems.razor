@@ -9,7 +9,7 @@
 <PageTitle>Connected Systems</PageTitle>
 <MudText Typo="Typo.h4">Connected Systems</MudText>
 <MudText Typo="Typo.subtitle1">
-    JIM imports from and exports data to connected systems using connectors.
+    JIM imports from and exports data to connected systems using Connectors.
     @if (connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
     {
         <span>Configure at least one connected system to get going.</span>
@@ -18,8 +18,10 @@
 
 <MudGrid Class="mt-5">
     <MudItem xs="6">
-        <MudButton Variant="Variant.Filled" Href="/admin/connected-systems" Size="Size.Small" Color="Color.Primary" Disabled="true">Connected Systems</MudButton>
-        <MudButton Variant="Variant.Filled" Href="/admin/connected-systems/connectors" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Connectors</MudButton>
+        <MudText Typo="Typo.overline">
+            <MudLink Href="/admin/connected-systems" Underline="Underline.Always">Connected Systems</MudLink> |
+            <MudLink Href="/admin/connected-systems/connectors">Connectors</MudLink>
+        </MudText>
     </MudItem>
     <MudItem xs="6" Class="d-flex justify-end">
         <MudButton StartIcon="@Icons.Material.Filled.AddBox" Variant="Variant.Filled" Href="/admin/connected-systems/create" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Create Connected System</MudButton>
