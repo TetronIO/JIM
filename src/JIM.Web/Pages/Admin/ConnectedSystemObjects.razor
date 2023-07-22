@@ -14,6 +14,8 @@
 
 @if (connectedSystemObjectHeaders != null)
 {
+    <ConnectedSystemObjectHeaderPaginator Results="@connectedSystemObjectHeaders" />
+
     <MudTable Items="@connectedSystemObjectHeaders.Results"
               Hover="true"
               Breakpoint="Breakpoint.Sm"

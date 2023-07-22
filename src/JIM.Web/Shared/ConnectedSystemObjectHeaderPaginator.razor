@@ -1,5 +1,6 @@
 ﻿@using JIM.Models.Core
 @using JIM.Models.Core.DTOs
+@using JIM.Models.Staging;
 @using JIM.Models.Utility
 @using JIM.Models.Enums
 @inject NavigationManager NavManager
@@ -14,7 +15,7 @@
             ControlButtonClicked="ControlButtonClickedHandler"
             SelectedChanged="SelectedChangedHandler"
             Rectangular="true"
-            DisableElevation="true" />
+            DisableElevation="true"/>
     </div>
 }
 
@@ -22,7 +23,7 @@
 
     [Parameter]
     [EditorRequired]
-    public PagedResultSet<MetaverseObjectHeader> Results { get; set; }
+    public PagedResultSet<ConnectedSystemObjectHeader> Results { get; set; }
 
     string path;
     const int maxPagesToDisplayInNav = 4;
