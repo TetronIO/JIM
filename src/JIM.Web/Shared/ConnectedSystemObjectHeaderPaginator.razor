@@ -7,16 +7,14 @@
 
 @if (totalPages > 1 && pageNumbers != null)
 {
-    <div class="d-flex flex-column align-center">
-        <MudPagination 
-            ShowFirstButton="true" 
-            ShowLastButton="true" 
-            Count="@Results.TotalPages"
-            ControlButtonClicked="ControlButtonClickedHandler"
-            SelectedChanged="SelectedChangedHandler"
-            Rectangular="true"
-            DisableElevation="true"/>
-    </div>
+    <MudPagination 
+        ShowFirstButton="true" 
+        ShowLastButton="true" 
+        Count="@Results.TotalPages"
+        ControlButtonClicked="ControlButtonClickedHandler"
+        SelectedChanged="SelectedChangedHandler"
+        Rectangular="true"
+        DisableElevation="true"/>
 }
 
 @code {

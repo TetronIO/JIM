@@ -14,7 +14,16 @@
 
 @if (connectedSystemObjectHeaders != null)
 {
-    <ConnectedSystemObjectHeaderPaginator Results="@connectedSystemObjectHeaders" />
+    <MudGrid Class="mt-5">
+        <MudItem xs="6">
+            <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DisableElevation="true">
+                <MudMenuItem IconSize="Size.Small" IconColor="Color.Primary" Icon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteAllObjectsClickAsync">Delete all objects</MudMenuItem>
+            </MudMenu>
+        </MudItem>
+        <MudItem xs="6" Class="d-flex justify-end">
+            <ConnectedSystemObjectHeaderPaginator Results="@connectedSystemObjectHeaders" />
+        </MudItem>
+    </MudGrid>    
 
     <MudTable Items="@connectedSystemObjectHeaders.Results"
               Hover="true"
@@ -50,6 +59,18 @@
             There are no connected system objects for this connected system
         </NoRecordsContent>
     </MudTable>
+
+    <MudMessageBox @ref="DeleteAllObjectsMessageBox" Title="Warning" CancelText="Cancel">
+        <MessageContent>
+            Deleting the connected system objects does not cause objects to be deleted in the external system. 
+            It just removes the objects from JIM. A full-import on this connect system and full-synchrnisation on all connected system is needed to rebuild the correct state.
+            <br><br>
+            The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
+        </MessageContent>
+        <YesButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteForever">Delete all objects!</MudButton>
+        </YesButton>
+    </MudMessageBox>
 }
 
 @code {
@@ -58,6 +79,7 @@
     [Parameter]
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
+    private MudMessageBox? DeleteAllObjectsMessageBox { get; set; }
     private ConnectedSystemHeader? connectedSystemHeader;
     private PagedResultSet<ConnectedSystemObjectHeader>? connectedSystemObjectHeaders;
     private string searchString = "";
@@ -90,5 +112,15 @@
             return true;
 
         return false;
+    }
+
+    private async void HandleDeleteAllObjectsClickAsync()
+    {
+        if (DeleteAllObjectsMessageBox == null)
+            return;
+
+        bool? result = await DeleteAllObjectsMessageBox.Show();
+
+        //StateHasChanged();
     }
 }
