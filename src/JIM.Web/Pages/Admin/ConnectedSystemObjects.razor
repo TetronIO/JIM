@@ -1,0 +1,92 @@
+﻿@page "/admin/connected-systems/{Id:int}/objects"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Staging;
+@using JIM.Models.Staging.DTOs
+@using JIM.Models.Utility;
+@using JIM.Utilities;
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Connected System Objects: @connectedSystemHeader?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @connectedSystemHeader?.Name</MudText>
+<MudText Typo="Typo.subtitle1">A view of the connected system objects imported from the connected system.</MudText>
+
+@if (connectedSystemObjectHeaders != null)
+{
+    <MudTable Items="@connectedSystemObjectHeaders.Results"
+              Hover="true"
+              Breakpoint="Breakpoint.Sm"
+              Class="mt-5 mb-5"
+              SortLabel="Sort By"
+              Filter="new Func<ConnectedSystemObjectHeader,bool>(FilterFunc1)"
+              Outlined="true"
+              Elevation="0">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.UniqueIdentifierAttributeValue)">Unique Identifier</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName)">Display Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.JoinType)">Join Type</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined)">Date Joined</MudTableSortLabel></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Unique Identifier">@context.UniqueIdentifierAttributeValue</MudTd>
+            <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
+            <MudTd DataLabel="Type">@context.TypeName</MudTd>
+            <MudTd DataLabel="Created">@context.Created</MudTd>
+            <MudTd DataLabel="Status">@context.Status</MudTd>
+            <MudTd DataLabel="Join Type">@(Utilities.SplitOnCapitalLetters(context.JoinType.ToString()))</MudTd>
+            <MudTd DataLabel="Date Joined">@context.DateJoined</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            There are no connected system objects for this connected system
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+    private ConnectedSystemHeader? connectedSystemHeader;
+    private PagedResultSet<ConnectedSystemObjectHeader>? connectedSystemObjectHeaders;
+    private string searchString = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // why does this view get executed when the web app launches when debugging?
+        connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
+        if (connectedSystemHeader == null)
+        {
+            // connected system not found, redirect to index page
+            NavManager.NavigateTo("../");
+            return;
+        }
+
+        if (Page == null || Page < 1)
+            Page = 1;
+
+        connectedSystemObjectHeaders = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(Id, (int)Page);
+    }
+
+    private bool FilterFunc1(ConnectedSystemObjectHeader element) => FilterFunc(element, searchString);
+
+    private bool FilterFunc(ConnectedSystemObjectHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (!string.IsNullOrEmpty(element.DisplayName) && element.DisplayName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+}

@@ -1,13 +1,17 @@
-﻿using JIM.Models.Logic;
+﻿using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories
 {
     public interface IConnectedSystemRepository
     {
         public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
+        public Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id);
+        public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, int maxResults, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
         public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
         public Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
         public Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);

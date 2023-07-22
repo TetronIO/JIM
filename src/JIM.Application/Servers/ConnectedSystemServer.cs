@@ -7,6 +7,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Utility;
 using Serilog;
 
 namespace JIM.Application.Servers
@@ -76,6 +77,11 @@ namespace JIM.Application.Servers
         public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id);
+        }
+
+        public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemHeaderAsync(id);
         }
 
         public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)
@@ -308,6 +314,19 @@ namespace JIM.Application.Servers
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
+        }
+
+        public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
+            int connectedSystemId,
+            int page = 1,
+            int pageSize = 20,
+            int maxResults = 500)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+                connectedSystemId,
+                page,
+                pageSize,
+                maxResults);
         }
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
