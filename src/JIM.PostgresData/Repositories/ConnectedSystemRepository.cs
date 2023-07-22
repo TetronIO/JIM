@@ -251,7 +251,7 @@ namespace JIM.PostgresData.Repositories
                 Status = cso.Status,
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
-                DisplayName = cso.AttributeValues.Any(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName) ? cso.AttributeValues.Single(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName).StringValue : null,
+                DisplayName = cso.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? cso.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
                 UniqueIdentifierAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.UniqueIdentifierAttributeId)
             });
             var results = await selectedObjects.ToListAsync();

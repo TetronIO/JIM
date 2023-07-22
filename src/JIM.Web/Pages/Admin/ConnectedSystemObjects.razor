@@ -9,7 +9,7 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Connected System Objects: @connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @connectedSystemHeader?.Name</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @connectedSystemHeader?.Name</MudText>
 <MudText Typo="Typo.subtitle1">A view of the connected system objects imported from the connected system.</MudText>
 
 @if (connectedSystemObjectHeaders != null)
@@ -42,7 +42,7 @@
             <MudTd DataLabel="Created">@context.Created</MudTd>
             <MudTd DataLabel="Status">@context.Status</MudTd>
             <MudTd DataLabel="Join Type">@(Utilities.SplitOnCapitalLetters(context.JoinType.ToString()))</MudTd>
-            <MudTd DataLabel="Date Joined">@context.DateJoined</MudTd>
+            <MudTd DataLabel="Date Joined">@(context.DateJoined != null ? context.DateJoined : "-")</MudTd>
         </RowTemplate>
         <NoRecordsContent>
             There are no connected system objects for this connected system
