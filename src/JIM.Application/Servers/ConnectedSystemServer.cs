@@ -453,6 +453,11 @@ namespace JIM.Application.Servers
             connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
         }
 
+        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemObjectId, Guid userId)
+        {
+
+        }
+
         private static ConnectedSystemObjectChangeAttribute GetChangeAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)
         {
             var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemAttribute.Id);

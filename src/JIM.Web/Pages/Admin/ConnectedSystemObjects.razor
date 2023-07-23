@@ -3,10 +3,12 @@
 @using JIM.Application
 @using JIM.Models.Staging;
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Tasking;
 @using JIM.Models.Utility;
 @using JIM.Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject ISnackbar Snackbar
 
 <PageTitle>Connected System Objects: @connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @connectedSystemHeader?.Name</MudText>
@@ -79,6 +81,8 @@
     [Parameter]
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask { get; set; }
     private MudMessageBox? DeleteAllObjectsMessageBox { get; set; }
     private ConnectedSystemHeader? connectedSystemHeader;
     private PagedResultSet<ConnectedSystemObjectHeader>? connectedSystemObjectHeaders;
@@ -119,8 +123,14 @@
         if (DeleteAllObjectsMessageBox == null)
             return;
 
-        bool? result = await DeleteAllObjectsMessageBox.Show();
-
-        //StateHasChanged();
+        bool? userPromptResult = await DeleteAllObjectsMessageBox.Show();
+        if (userPromptResult.HasValue && userPromptResult.Value)
+        {
+            // attribute the execution to the user
+            var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+            var task = new ClearConnectedSystemObjectsTask(Id, user);
+            await Jim.Tasking.CreateServiceTaskAsync(task);
+            Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
+        }
     }
 }

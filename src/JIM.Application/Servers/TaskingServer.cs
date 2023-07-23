@@ -69,16 +69,6 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
         }
 
-        public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationTemplateServiceTaskAsync(int templateId)
-        {
-            return await Application.Repository.Tasking.GetFirstDataGenerationServiceTaskAsync(templateId);
-        }
-
-        public async Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId)
-        {
-            return await Application.Repository.Tasking.GetFirstDataGenerationTemplateServiceTaskStatus(templateId);
-        }
-
         public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)
         {
             await Application.Repository.Tasking.UpdateServiceTaskAsync(serviceTask);
@@ -93,5 +83,17 @@ namespace JIM.Application.Servers
         {
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
         }
+
+        #region Data Generation Tasks
+        public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationTemplateServiceTaskAsync(int templateId)
+        {
+            return await Application.Repository.Tasking.GetFirstDataGenerationServiceTaskAsync(templateId);
+        }
+
+        public async Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId)
+        {
+            return await Application.Repository.Tasking.GetFirstDataGenerationTemplateServiceTaskStatus(templateId);
+        }
+        #endregion
     }
 }
