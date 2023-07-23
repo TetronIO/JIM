@@ -146,9 +146,6 @@ namespace JIM.Service
                                                 ConnectedSystemName = connectedSystem.Name                                                
                                             };
 
-                                            // capture initiated by when creating history detail...
-
-
                                             await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail, newServiceTask.InitiatedBy);
                                             var stopwatch = Stopwatch.StartNew();
                                             
