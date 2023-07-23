@@ -120,7 +120,6 @@ namespace JIM.Service
                                 else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
-
                                     var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncServiceTask.ConnectedSystemId);
                                     if (connectedSystem != null)
                                     {
@@ -146,8 +145,11 @@ namespace JIM.Service
                                                 ConnectedSystem = connectedSystem,
                                                 ConnectedSystemName = connectedSystem.Name                                                
                                             };
-                                            
-                                            await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
+
+                                            // capture initiated by when creating history detail...
+
+
+                                            await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail, newServiceTask.InitiatedBy);
                                             var stopwatch = Stopwatch.StartNew();
                                             
                                             try

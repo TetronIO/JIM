@@ -1,4 +1,5 @@
-﻿using JIM.Models.History;
+﻿using JIM.Models.Core;
+using JIM.Models.History;
 
 namespace JIM.Application.Servers
 {
@@ -11,7 +12,7 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        public async Task CreateSyncRunHistoryDetailAsync(SyncRunHistoryDetail syncRunHistoryDetail)
+        public async Task CreateSyncRunHistoryDetailAsync(SyncRunHistoryDetail syncRunHistoryDetail, MetaverseObject? initiatedBy)
         {
             if (syncRunHistoryDetail == null)
                 throw new ArgumentNullException(nameof(syncRunHistoryDetail));
@@ -24,6 +25,13 @@ namespace JIM.Application.Servers
             
             // then we're able to create the history object that references the detail object
             var runHistoryItem = new RunHistoryItem(syncRunHistoryDetail);
+
+            if (initiatedBy != null)
+            {
+                runHistoryItem.InitiatedBy = initiatedBy;
+                runHistoryItem.InitiatedByName = initiatedBy.DisplayName;
+            }
+
             await Application.Repository.History.CreateRunHistoryItemAsync(runHistoryItem);
         }
 
