@@ -42,5 +42,19 @@ namespace JIM.Application.Servers
 
             await Application.Repository.History.UpdateSyncRunHistoryDetailAsync(syncRunHistoryDetail);
         }
+
+        public async Task CreateClearConnectedSystemHistoryItemAsync(int connectedSystemId, MetaverseObject? initiatedBy)
+        {
+            // create the history object
+            var clearConnectedSystemHistoryItem = new ClearConnectedSystemHistoryItem(connectedSystemId);
+
+            if (initiatedBy != null)
+            {
+                clearConnectedSystemHistoryItem.InitiatedBy = initiatedBy;
+                clearConnectedSystemHistoryItem.InitiatedByName = initiatedBy.DisplayName;
+            }
+
+            await Application.Repository.History.CreateClearConnectedSystemHistoryItemAsync(clearConnectedSystemHistoryItem);
+        }
     }
 }

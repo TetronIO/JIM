@@ -453,9 +453,22 @@ namespace JIM.Application.Servers
             connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
         }
 
-        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemObjectId, Guid userId)
+        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemObjectId, MetaverseObject? user)
         {
+            // delete all pending export objects
+            Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id: " + connectedSystemObjectId);
+            Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemObjectId);
 
+
+            // delete all connected system objects
+            Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id: " + connectedSystemObjectId);
+            await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemObjectId, true);
+
+            // record this operation in the history
+            await Application.History.CreateClearConnectedSystemHistoryItemAsync(connectedSystemObjectId, user);
+            Log.Verbose("ClearConnectedSystemObjectsAsync: Creating history for connected system id: " + connectedSystemObjectId);
+
+            // admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of correct intended state
         }
 
         private static ConnectedSystemObjectChangeAttribute GetChangeAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)

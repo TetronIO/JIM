@@ -29,6 +29,11 @@ namespace JIM.PostgresData.Repositories
                 Repository.Database.SynchronisationServiceTasks.Add(synchronisationServiceTask);
                 await Repository.Database.SaveChangesAsync();
             }
+            else if (serviceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
+            {
+                Repository.Database.ClearConnectedSystemObjectsTasks.Add(clearConnectedSystemObjectsTask);
+                await Repository.Database.SaveChangesAsync();
+            }
             else
             {
                 throw new ArgumentException("serviceTask was of an unexpected type: " + serviceTask.GetType());
@@ -78,7 +83,7 @@ namespace JIM.PostgresData.Repositories
         public async Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync()
         {
             var tasks = new List<ServiceTask>();
-            foreach (var task in await Repository.Database.ServiceTasks.Where(q => q.Status == ServiceTaskStatus.Queued).OrderBy(q => q.Timestamp).ToListAsync())
+            foreach (var task in await Repository.Database.ServiceTasks.Include( q=> q.InitiatedBy).Where(q => q.Status == ServiceTaskStatus.Queued).OrderBy(q => q.Timestamp).ToListAsync())
             {
                 if (task.ExecutionMode == ServiceTaskExecutionMode.Sequential)
                 {
@@ -177,7 +182,7 @@ namespace JIM.PostgresData.Repositories
         }
 
         #region private methods
-        private async Task<string> GetServiceTaskHeaderNameAync(ServiceTask serviceTask)
+        private static async Task<string> GetServiceTaskHeaderNameAync(ServiceTask serviceTask)
         {
             using var db = new JimDbContext();
             if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
@@ -198,6 +203,11 @@ namespace JIM.PostgresData.Repositories
                 else
                     return "run profile not found!";
             }
+            else if (serviceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
+            {
+                // use the name of the connected system
+                return db.ConnectedSystems.Single(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId).Name;
+            }
             else
             {
                 return "Unknown ServiceTask type";
@@ -210,6 +220,8 @@ namespace JIM.PostgresData.Repositories
                 return nameof(DataGenerationTemplateServiceTask).SplitOnCapitalLetters();
             else if (serviceTask is SynchronisationServiceTask)
                 return nameof(SynchronisationServiceTask).SplitOnCapitalLetters();
+            else if (serviceTask is ClearConnectedSystemObjectsTask)
+                return nameof(ClearConnectedSystemObjectsTask).SplitOnCapitalLetters();
             else
                 return "Unknown Service Task Type";
         }

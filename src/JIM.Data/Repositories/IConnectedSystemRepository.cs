@@ -49,10 +49,12 @@ namespace JIM.Data.Repositories
         public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
 
-        public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
-        public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
-        public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
-        public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
+        public Task DeleteAllConnectedSystemObjectsAsync(int connectedSystemId, bool deleteAllConnectedSystemObjectChangeObjects);
+        public void DeleteAllPendingExportObjects(int connectedSystemId);
         public Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
+        public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
+        public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
+        public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
+        public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     }
 }

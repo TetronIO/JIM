@@ -29,5 +29,11 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.SyncRunHistoryDetails.Update(synchronisationRunHistoryDetail);
             await Repository.Database.SaveChangesAsync();
         }
+
+        public async Task CreateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem)
+        {
+            Repository.Database.ClearConnectedSystemHistoryItems.Add(clearConnectedSystemHistoryItem);
+            await Repository.Database.SaveChangesAsync();
+        }
     }
 }

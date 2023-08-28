@@ -1,12 +1,10 @@
 ﻿using JIM.Data.Repositories;
-using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories
@@ -327,6 +325,27 @@ namespace JIM.PostgresData.Repositories
         {
             Repository.Database.ConnectedSystemObjects.Update(connectedSystemObject);
             await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task DeleteAllConnectedSystemObjectsAsync(int connectedSystemId, bool deleteAllConnectedSystemObjectChangeObjects)
+        {
+            if (deleteAllConnectedSystemObjectChangeObjects)
+            {
+                // it sounds like postgresql cascade delete might auto-delete dependent objects
+                //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjectAttributeValues WHERE ConnectedSystemObjectId IN (SELECT Id FROM ConnectedSystemObjects WHERE ConnectedSystemId = {connectedSystemId})");
+                await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjectChanges WHERE ConnectedSystemId = {connectedSystemId}");
+            }
+
+            // it sounds like postgresql cascade delete might auto-delete dependent objects
+            //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjectAttributeValues WHERE ConnectedSystemObjectId IN (SELECT Id FROM ConnectedSystemObjects WHERE ConnectedSystemId = {connectedSystemId})");
+            await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjects WHERE ConnectedSystemId = {connectedSystemId}");            
+        }
+
+        public void DeleteAllPendingExportObjects(int connectedSystemId)
+        {
+            // it sounds like postgresql cascade delete might auto-delete dependent objects
+            //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM PendingExportAttributeValueChanges WHERE PendingExportId IN (SELECT Id FROM PendingExports WHERE ConnectedSystemId = {connectedSystemId})");
+            Repository.Database.Database.ExecuteSqlRaw($"DELETE FROM PendingExports WHERE ConnectedSystemId = {connectedSystemId}");
         }
         #endregion
 

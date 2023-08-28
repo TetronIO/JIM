@@ -205,7 +205,15 @@ namespace JIM.Service
                                         Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncServiceTask.ConnectedSystemId} but no such connected system found.");
                                     }
                                 }
-
+                                else if (newServiceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
+                                {
+                                    Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                    if (clearConnectedSystemObjectsTask.InitiatedBy == null)
+                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value");
+                                    else
+                                        await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, clearConnectedSystemObjectsTask.InitiatedBy);
+                                }
+                        
                                 // very important: we must delete the task once it's completed so we know it's complete
                                 await taskJim.Tasking.DeleteServiceTaskAsync(newServiceTask);
 

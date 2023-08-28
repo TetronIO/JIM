@@ -14,8 +14,9 @@ namespace JIM.PostgresData
 {
     public class JimDbContext : DbContext
     {
+        internal DbSet<ClearConnectedSystemHistoryItem> ClearConnectedSystemHistoryItems { get; set; }
+        internal DbSet<ClearConnectedSystemObjectsTask> ClearConnectedSystemObjectsTasks { get; set; }
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
-        internal DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; }
         internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
         internal DbSet<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValues { get; set; }
@@ -23,6 +24,7 @@ namespace JIM.PostgresData
         internal DbSet<ConnectedSystemObjectChangeAttribute> ConnectedSystemObjectChangeAttributes { get; set; }
         internal DbSet<ConnectedSystemObjectChangeAttributeValue> ConnectedSystemObjectChangeAttributeValues { get; set; }
         internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
+        internal DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; }
         internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; }
         internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; }
         internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
