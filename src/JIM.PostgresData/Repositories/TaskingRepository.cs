@@ -83,7 +83,12 @@ namespace JIM.PostgresData.Repositories
         public async Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync()
         {
             var tasks = new List<ServiceTask>();
-            foreach (var task in await Repository.Database.ServiceTasks.Include( q=> q.InitiatedBy).Where(q => q.Status == ServiceTaskStatus.Queued).OrderBy(q => q.Timestamp).ToListAsync())
+            foreach (var task in await Repository.Database.ServiceTasks
+                .Include(q => q.InitiatedBy)
+                .ThenInclude(ib => ib.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(av => av.Attribute)
+                .Where(q => q.Status == ServiceTaskStatus.Queued)
+                .OrderBy(q => q.Timestamp).ToListAsync())
             {
                 if (task.ExecutionMode == ServiceTaskExecutionMode.Sequential)
                 {
