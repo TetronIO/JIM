@@ -65,6 +65,7 @@ namespace JIM.PostgresData
             var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
             var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
             var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
+            var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
 
             if (string.IsNullOrEmpty(dbHostName))
                 throw new Exception($"{Constants.Config.DatabaseHostname} environment variable missing");
@@ -76,14 +77,15 @@ namespace JIM.PostgresData
                 throw new Exception($"{Constants.Config.DatabasePassword} environment variable missing");
 
             _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}";
+
+            _ = bool.TryParse(dbLogSensitiveInfo, out bool logSensitiveInfo);
+            if (logSensitiveInfo)
+                _connectionString += ";Include Error Detail=True";
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseNpgsql(_connectionString);
-
-            // enable only when needed during development
-            //optionsBuilder.EnableSensitiveDataLogging();
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -8,6 +8,7 @@
             public static string DatabaseName => "DB_NAME";
             public static string DatabaseUsername => "DB_USERNAME";
             public static string DatabasePassword => "DB_PASSWORD";
+            public static string DatabaseLogSensitiveInformation => "DB_LOG_SENSITIVE_INFO";
         }
 
         public static class BuiltInObjectTypes
