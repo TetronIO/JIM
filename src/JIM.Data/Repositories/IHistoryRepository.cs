@@ -15,5 +15,9 @@ namespace JIM.Data.Repositories
         public Task CreateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem);
 
         public Task UpdateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem);
+
+        public Task CreateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem);
+
+        public Task UpdateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem);
     }
 }

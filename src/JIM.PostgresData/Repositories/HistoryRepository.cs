@@ -57,5 +57,17 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.ClearConnectedSystemHistoryItems.Update(clearConnectedSystemHistoryItem);
             await Repository.Database.SaveChangesAsync();
         }
+
+        public async Task CreateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem)
+        {
+            Repository.Database.DataGenerationHistoryItems.Update(dataGenerationHistoryItem);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem)
+        {
+            Repository.Database.DataGenerationHistoryItems.Update(dataGenerationHistoryItem);
+            await Repository.Database.SaveChangesAsync();
+        }
     }
 }

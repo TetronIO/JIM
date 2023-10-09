@@ -76,5 +76,25 @@ namespace JIM.Application.Servers
         {
             await Application.Repository.History.UpdateClearConnectedSystemHistoryItemAsync(clearConnectedSystemHistoryItem);
         }
+
+        public async Task<DataGenerationHistoryItem> CreateDataGenerationHistoryItemAsync(int dataGenerationTemplateId, MetaverseObject? initiatedBy)
+        {
+            // create the history object
+            var dataGenerationHistoryItem = new DataGenerationHistoryItem(dataGenerationTemplateId) { Status = HistoryStatus.InProgress };
+
+            if (initiatedBy != null)
+            {
+                dataGenerationHistoryItem.InitiatedBy = initiatedBy;
+                dataGenerationHistoryItem.InitiatedByName = initiatedBy.DisplayName;
+            }
+
+            await Application.Repository.History.CreateDataGenerationHistoryItemAsync(dataGenerationHistoryItem);
+            return dataGenerationHistoryItem;
+        }
+
+        public async Task UpdateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem)
+        {
+            await Application.Repository.History.UpdateDataGenerationHistoryItemAsync(dataGenerationHistoryItem);
+        }
     }
 }

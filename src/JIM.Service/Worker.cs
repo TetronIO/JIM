@@ -131,7 +131,29 @@ namespace JIM.Service
                                 if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
-                                    await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+
+                                    // start creating history
+                                    var dataGenerationHistoryItem = await taskJim.History.CreateDataGenerationHistoryItemAsync(dataGenTemplateServiceTask.TemplateId, initiatedBy);
+
+                                    try
+                                    {
+                                        await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+                                        dataGenerationHistoryItem.Status = HistoryStatus.Complete;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        dataGenerationHistoryItem.ErrorStackTrace = ex.StackTrace;
+                                        dataGenerationHistoryItem.ErrorMessage = ex.Message;
+                                        dataGenerationHistoryItem.Status = HistoryStatus.FailedWithError;
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing data generation template: " + dataGenTemplateServiceTask.TemplateId);
+                                    }
+                                    finally
+                                    {
+                                        stopwatch.Stop();
+                                        dataGenerationHistoryItem.CompletionTime = stopwatch.Elapsed;
+                                        await taskJim.History.UpdateDataGenerationHistoryItemAsync(dataGenerationHistoryItem);
+                                        Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {dataGenerationHistoryItem.CompletionTime}.");
+                                    }
                                 }
                                 else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
                                 {
@@ -238,8 +260,6 @@ namespace JIM.Service
                                         try
                                         {
                                             await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, clearConnectedSystemObjectsTask.InitiatedBy);
-
-                                            // completed successfully
                                             clearConnectedSystemHistoryItem.Status = HistoryStatus.Complete;
                                         }
                                         catch (Exception ex)
