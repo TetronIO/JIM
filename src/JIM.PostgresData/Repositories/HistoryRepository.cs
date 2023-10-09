@@ -1,7 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.History;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 
 namespace JIM.PostgresData.Repositories
 {
