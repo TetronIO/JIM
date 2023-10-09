@@ -223,7 +223,6 @@ namespace JIM.Service
                                 {
                                     // start creating history
                                     var clearConnectedSystemHistoryItem = await taskJim.History.CreateClearConnectedSystemHistoryItemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, initiatedBy);
-
                                     Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
                                     if (clearConnectedSystemObjectsTask.InitiatedBy == null)
                                     {

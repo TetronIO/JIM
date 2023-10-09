@@ -332,22 +332,18 @@ namespace JIM.PostgresData.Repositories
             if (deleteAllConnectedSystemObjectChangeObjects)
             {
                 // it sounds like postgresql cascade delete might auto-delete dependent objects
-                //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjectAttributeValues WHERE ConnectedSystemObjectId IN (SELECT Id FROM ConnectedSystemObjects WHERE ConnectedSystemId = {connectedSystemId})");
-                await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjectChanges WHERE ConnectedSystemId = {connectedSystemId}");
+                await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjectChanges\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
             }
 
             // it sounds like postgresql cascade delete might auto-delete dependent objects
-            //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjectAttributeValues WHERE ConnectedSystemObjectId IN (SELECT Id FROM ConnectedSystemObjects WHERE ConnectedSystemId = {connectedSystemId})");
-            await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM ConnectedSystemObjects WHERE ConnectedSystemId = {connectedSystemId}");            
+            await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjects\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");            
         }
 
         public void DeleteAllPendingExportObjects(int connectedSystemId)
         {
             // it sounds like postgresql cascade delete might auto-delete dependent objects
-            //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM PendingExportAttributeValueChanges WHERE PendingExportId IN (SELECT Id FROM PendingExports WHERE ConnectedSystemId = {connectedSystemId})");
-            Repository.Database.Database.ExecuteSqlRaw($"DELETE FROM PendingExports WHERE ConnectedSystemId = {connectedSystemId}");
-
-            // todo: add double quotes around table names after we have implemented exception logging to history object... \"
+            var command = $"DELETE FROM \"PendingExports\" WHERE \"ConnectedSystemId\" = {connectedSystemId}";
+            Repository.Database.Database.ExecuteSqlRaw(command);
         }
         #endregion
 
