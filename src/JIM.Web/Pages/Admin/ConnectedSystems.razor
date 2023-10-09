@@ -50,8 +50,8 @@
                 StartIcon="@Icons.Material.Filled.Settings"
                 Color="Color.Default"
                 Size="Size.Small"
-                DisableElevation="true">
-                Configure
+                DisableElevation="true" Class="me-2">
+                Settings
             </MudButton>
             <MudButton Href="@($"/admin/connected-systems/{context.Id}/objects")"
                 Variant="Variant.Outlined"
@@ -59,7 +59,7 @@
                 Color="Color.Default"
                 Size="Size.Small"
                 DisableElevation="true">
-                View Objects
+                Objects
             </MudButton>
         </MudTd>
         <MudTd DataLabel="Name">@context.Name</MudTd>
