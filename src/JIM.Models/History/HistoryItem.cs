@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Enums;
 
 namespace JIM.Models.History
 {
@@ -20,6 +21,8 @@ namespace JIM.Models.History
         /// When the task is complete, a value for how long the task took to complete should be stored here.
         /// </summary>
         public TimeSpan? CompletionTime { get; set; }
+
+        public HistoryStatus Status { get; set; }
 
         public HistoryItem()
         {

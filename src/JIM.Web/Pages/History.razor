@@ -1,0 +1,18 @@
+﻿@page "/history"
+@attribute [Authorize(Roles = "Users")]
+<PageTitle>History</PageTitle>
+
+<MudText Typo="Typo.h4">History Systems</MudText>
+<MudText Typo="Typo.subtitle1">
+    See what's been happening, here.
+</MudText>
+
+@* @code {
+    private IList<ConnectedSystemHeader>? connectedSystemHeaders;
+    private string searchString = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+    }
+} *@

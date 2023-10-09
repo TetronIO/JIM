@@ -2,6 +2,7 @@ using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -191,6 +192,9 @@ namespace JIM.Service
                                                 {
                                                     Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
                                                 }
+
+                                                // task completed successfully
+                                                runHistoryItem.Status = HistoryStatus.Complete;
                                             }
                                             catch (Exception ex) 
                                             {
@@ -198,6 +202,7 @@ namespace JIM.Service
                                                 // rather than an admin having to dig through server logs.
                                                 runHistoryItem.ErrorMessage = ex.Message;
                                                 runHistoryItem.ErrorStackTrace = ex.StackTrace;
+                                                runHistoryItem.Status = HistoryStatus.FailedWithError;
                                                 Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
                                             }
                                             finally
@@ -233,11 +238,15 @@ namespace JIM.Service
                                         try
                                         {
                                             await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, clearConnectedSystemObjectsTask.InitiatedBy);
+
+                                            // completed successfully
+                                            clearConnectedSystemHistoryItem.Status = HistoryStatus.Complete;
                                         }
                                         catch (Exception ex)
                                         {
                                             clearConnectedSystemHistoryItem.ErrorStackTrace = ex.StackTrace;
                                             clearConnectedSystemHistoryItem.ErrorMessage = ex.Message;
+                                            clearConnectedSystemHistoryItem.Status = HistoryStatus.FailedWithError;
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
                                         }
                                         finally

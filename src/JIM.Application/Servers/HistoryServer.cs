@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.History;
 
 namespace JIM.Application.Servers
@@ -26,7 +27,8 @@ namespace JIM.Application.Servers
             // then we're able to link the detail object to the history object
             var runHistoryItem = new RunHistoryItem
             {
-                SynchronisationRunHistoryDetailId = syncRunHistoryDetail.Id
+                SynchronisationRunHistoryDetailId = syncRunHistoryDetail.Id,
+                Status = HistoryStatus.InProgress
             };
 
             if (initiatedBy != null)
@@ -58,7 +60,7 @@ namespace JIM.Application.Servers
         public async Task<ClearConnectedSystemHistoryItem> CreateClearConnectedSystemHistoryItemAsync(int connectedSystemId, MetaverseObject? initiatedBy)
         {
             // create the history object
-            var clearConnectedSystemHistoryItem = new ClearConnectedSystemHistoryItem(connectedSystemId);
+            var clearConnectedSystemHistoryItem = new ClearConnectedSystemHistoryItem(connectedSystemId) { Status = HistoryStatus.InProgress };
 
             if (initiatedBy != null)
             {
