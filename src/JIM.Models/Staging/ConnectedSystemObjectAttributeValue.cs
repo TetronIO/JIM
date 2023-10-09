@@ -15,10 +15,9 @@ namespace JIM.Models.Staging
         public ConnectedSystemObjectTypeAttribute Attribute { get; set; }
 
         /// <summary>
-        /// The normal parent connected system object for this attribute value object.
-        /// Might be null if being referenced by a Connected System Object Change object and the CSO has been deleted.
+        /// The parent connected system object for this attribute value object.
         /// </summary>
-        public ConnectedSystemObject? ConnectedSystemObject { get; set; }
+        public ConnectedSystemObject ConnectedSystemObject { get; set; }
 
         public string? StringValue { get; set; }
 
@@ -42,16 +41,16 @@ namespace JIM.Models.Staging
             if (DateTimeValue.HasValue)
                 return DateTimeValue.Value.ToString();
 
-            if (IntValue.HasValue) 
+            if (IntValue.HasValue)
                 return IntValue.Value.ToString();
 
             if (ByteValue != null)
                 return ByteValue.Length.ToString();
 
-            if (GuidValue.HasValue) 
+            if (GuidValue.HasValue)
                 return GuidValue.Value.ToString();
 
-            if (BoolValue.HasValue) 
+            if (BoolValue.HasValue)
                 return BoolValue.Value.ToString();
 
             if (ReferenceValue != null)

@@ -87,7 +87,7 @@ services:
     image: ${DOCKER_REGISTRY-}jim.scheduler
     restart: always
     environment:
-     - LOGGING_LEVEL=Verbose
+     - LOGGING_LEVEL=Error
      - LOGGING_PATH=/var/log/jim
      - DB_HOSTNAME=JIM.Database
      - DB_NAME=${DB_NAME}

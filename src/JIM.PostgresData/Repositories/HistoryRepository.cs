@@ -23,6 +23,12 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.RunHistoryItems.Add(runHistoryItem);
             await Repository.Database.SaveChangesAsync();
         }
+        
+        public async Task CreateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem)
+        {
+            Repository.Database.ClearConnectedSystemHistoryItems.Add(clearConnectedSystemHistoryItem);
+            await Repository.Database.SaveChangesAsync();
+        }
 
         public async Task UpdateSyncRunHistoryDetailAsync(SyncRunHistoryDetail synchronisationRunHistoryDetail)
         {
@@ -30,9 +36,15 @@ namespace JIM.PostgresData.Repositories
             await Repository.Database.SaveChangesAsync();
         }
 
-        public async Task CreateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem)
+        public async Task UpdateRunHistoryItemAsync(RunHistoryItem runHistoryItem)
         {
-            Repository.Database.ClearConnectedSystemHistoryItems.Add(clearConnectedSystemHistoryItem);
+            Repository.Database.RunHistoryItems.Update(runHistoryItem);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem)
+        {
+            Repository.Database.ClearConnectedSystemHistoryItems.Update(clearConnectedSystemHistoryItem);
             await Repository.Database.SaveChangesAsync();
         }
     }

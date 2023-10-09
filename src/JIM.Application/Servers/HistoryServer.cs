@@ -12,7 +12,7 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        public async Task CreateSyncRunHistoryDetailAsync(SyncRunHistoryDetail syncRunHistoryDetail, MetaverseObject? initiatedBy)
+        public async Task<RunHistoryItem> CreateSyncRunHistoryDetailAsync(SyncRunHistoryDetail syncRunHistoryDetail, MetaverseObject? initiatedBy)
         {
             if (syncRunHistoryDetail == null)
                 throw new ArgumentNullException(nameof(syncRunHistoryDetail));
@@ -22,9 +22,12 @@ namespace JIM.Application.Servers
 
             // create the required child detail object
             await Application.Repository.History.CreateSyncRunHistoryDetailAsync(syncRunHistoryDetail);
-            
-            // then we're able to create the history object that references the detail object
-            var runHistoryItem = new RunHistoryItem(syncRunHistoryDetail);
+
+            // then we're able to link the detail object to the history object
+            var runHistoryItem = new RunHistoryItem
+            {
+                SynchronisationRunHistoryDetailId = syncRunHistoryDetail.Id
+            };
 
             if (initiatedBy != null)
             {
@@ -33,6 +36,7 @@ namespace JIM.Application.Servers
             }
 
             await Application.Repository.History.CreateRunHistoryItemAsync(runHistoryItem);
+            return runHistoryItem;
         }
 
         public async Task UpdateSyncRunHistoryDetailAsync(SyncRunHistoryDetail syncRunHistoryDetail)
@@ -43,7 +47,15 @@ namespace JIM.Application.Servers
             await Application.Repository.History.UpdateSyncRunHistoryDetailAsync(syncRunHistoryDetail);
         }
 
-        public async Task CreateClearConnectedSystemHistoryItemAsync(int connectedSystemId, MetaverseObject? initiatedBy)
+        public async Task UpdateRunHistoryItemAsync(RunHistoryItem runHistoryItem)
+        {
+            if (runHistoryItem == null)
+                throw new ArgumentNullException(nameof(runHistoryItem));
+
+            await Application.Repository.History.UpdateRunHistoryItemAsync(runHistoryItem);
+        }
+
+        public async Task<ClearConnectedSystemHistoryItem> CreateClearConnectedSystemHistoryItemAsync(int connectedSystemId, MetaverseObject? initiatedBy)
         {
             // create the history object
             var clearConnectedSystemHistoryItem = new ClearConnectedSystemHistoryItem(connectedSystemId);
@@ -55,6 +67,12 @@ namespace JIM.Application.Servers
             }
 
             await Application.Repository.History.CreateClearConnectedSystemHistoryItemAsync(clearConnectedSystemHistoryItem);
+            return clearConnectedSystemHistoryItem;
+        }
+
+        public async Task UpdateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem)
+        {
+            await Application.Repository.History.UpdateClearConnectedSystemHistoryItemAsync(clearConnectedSystemHistoryItem);
         }
     }
 }

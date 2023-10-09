@@ -10,6 +10,10 @@ namespace JIM.Data.Repositories
 
         public Task UpdateSyncRunHistoryDetailAsync(SyncRunHistoryDetail synchronisationRunHistoryDetail);
 
+        public Task UpdateRunHistoryItemAsync(RunHistoryItem runHistoryItem);
+
         public Task CreateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem);
+
+        public Task UpdateClearConnectedSystemHistoryItemAsync(ClearConnectedSystemHistoryItem clearConnectedSystemHistoryItem);
     }
 }

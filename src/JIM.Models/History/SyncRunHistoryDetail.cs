@@ -35,20 +35,11 @@ namespace JIM.Models.History
 
         public SyncRunHistoryDetailError? Error { get; set; }
 
-        public string? ErrorMessage { get; set; }
-        
-        public string? ErrorStackTrace { get; set; }
-
         // results:
         // what would be useful here is to capture two levels of stats, depending on system settings:
         // - result item with operation type (create/update/delete) and link to mv object
         // - result item with operation type (create/update/delete) and link to mv object and json snapshot of imported/exported object
 
         public List<SyncRunHistoryDetailItem> Items { get; set; } = new List<SyncRunHistoryDetailItem>();
-
-        /// <summary>
-        /// When the synchronisation run is complete, a value for how long the run took should be stored here.
-        /// </summary>
-        public TimeSpan? CompletionTime { get; set; }
     }
 }

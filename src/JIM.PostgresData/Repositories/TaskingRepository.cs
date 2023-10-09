@@ -175,9 +175,11 @@ namespace JIM.PostgresData.Repositories
 
         public async Task DeleteServiceTaskAsync(ServiceTask serviceTask)
         {
-            if (await Repository.Database.ServiceTasks.AnyAsync(q => q.Id == serviceTask.Id))
+            // re-retrieve the service task to avoid issues with EF
+            var localServiceTask = await Repository.Database.ServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
+            if (localServiceTask != null)
             {
-                Repository.Database.ServiceTasks.Remove(serviceTask);
+                Repository.Database.ServiceTasks.Remove(localServiceTask);
                 await Repository.Database.SaveChangesAsync();
             }
             else

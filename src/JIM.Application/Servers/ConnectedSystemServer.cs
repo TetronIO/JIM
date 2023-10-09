@@ -398,7 +398,7 @@ namespace JIM.Application.Servers
                 foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
                 {
                     connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
-                    var attributeChange = GetChangeAttribute(change, pendingAttributeValueAddition.Attribute);
+                    var attributeChange = AddChangeAttribute(change, pendingAttributeValueAddition.Attribute);
 
                     // add an attribute value change to the attribute change object
                     if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Text && pendingAttributeValueAddition.StringValue != null)
@@ -407,7 +407,7 @@ namespace JIM.Application.Servers
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (int)pendingAttributeValueAddition.IntValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueAddition.GuidValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (Guid)pendingAttributeValueAddition.GuidValue));
-                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Boolean && pendingAttributeValueAddition.BoolValue != null)
+                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Boolean && pendingAttributeValueAddition.BoolValue != null) 
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (bool)pendingAttributeValueAddition.BoolValue));
                     else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueAddition.ByteValue != null)
                         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, true, pendingAttributeValueAddition.ByteValue.Length));
@@ -425,7 +425,7 @@ namespace JIM.Application.Servers
                 {
                     // this will cause a cascade delete of the attribute value object
                     connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
-                    var attributeChange = GetChangeAttribute(change, pendingAttributeValueRemoval.Attribute);
+                    var attributeChange = AddChangeAttribute(change, pendingAttributeValueRemoval.Attribute);
 
                     // add an attribute value change to the attribute change object
                     if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Text && pendingAttributeValueRemoval.StringValue != null)
@@ -459,7 +459,6 @@ namespace JIM.Application.Servers
             Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id: " + connectedSystemObjectId);
             Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemObjectId);
 
-
             // delete all connected system objects
             Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id: " + connectedSystemObjectId);
             await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemObjectId, true);
@@ -471,7 +470,7 @@ namespace JIM.Application.Servers
             // admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of correct intended state
         }
 
-        private static ConnectedSystemObjectChangeAttribute GetChangeAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)
+        private static ConnectedSystemObjectChangeAttribute AddChangeAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)
         {
             var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemAttribute.Id);
             if (attributeChange == null)

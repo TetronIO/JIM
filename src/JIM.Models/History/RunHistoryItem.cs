@@ -8,10 +8,5 @@
         {
             // Entity Framework uses this constructor when retrieving objects from the database
         }
-
-        public RunHistoryItem(SyncRunHistoryDetail synchronisationRunHistoryDetail)
-        {
-            SynchronisationRunHistoryDetailId = synchronisationRunHistoryDetail.Id;
-        }
     }
 }

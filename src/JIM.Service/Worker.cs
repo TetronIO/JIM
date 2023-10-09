@@ -1,6 +1,7 @@
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
+using JIM.Models.Core;
 using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -66,6 +67,9 @@ namespace JIM.Service
             foreach (var taskToCancel in await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync())
                 await mainLoopJim.Tasking.DeleteServiceTaskAsync(taskToCancel);
 
+            // DEV: Unsupported scenario:
+            // todo: job is being processed in database but is not in the current tasks, i.e. it's no longer being processed. clear it out
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 // if processing no tasks:
@@ -112,6 +116,17 @@ namespace JIM.Service
                             var task = Task.Run(async () =>
                             {
                                 var taskJim = new JimApplication(new PostgresDataRepository());
+                                
+                                // re-retrieve the initiated-by object using this new task jim instance, otherwise referncing an object from another jim instance
+                                // will result in entityframework thinking the object is new and tries to insert a duplicate into the database.
+                                // obviously this is sub-optimal. is there a better way? attach the object to the new jim instance db context?
+                                MetaverseObject? initiatedBy = null;
+                                if (newServiceTask.InitiatedBy != null)
+                                    initiatedBy = await taskJim.Metaverse.GetMetaverseObjectAsync(newServiceTask.InitiatedBy.Id);
+
+                                // time the service task
+                                var stopwatch = Stopwatch.StartNew();
+
                                 if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
@@ -129,14 +144,14 @@ namespace JIM.Service
                                         if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
                                             connector = new LdapConnector();
                                         else
-                                            throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for service processing");
+                                            throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for service processing.");
 
                                         // work out what type of run profile we're being asked to run
                                         var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
                                         if (runProfile != null)
                                         {
-                                            // create the history item for this run profile execution, then pass it in to the processor for iterative updates for each item processed.
-                                            // we copy some run profile information as run profiles can be user-deleted, but we would want to retain core run profile information for audit purposes.
+                                            // create the history detail item for this run profile execution, then pass it in to the processor for iterative updates for each item processed.
+                                            // we duplicate some run profile information as run profiles can be user-deleted, but we would want to retain core run profile information for audit purposes.
                                             var synchronisationRunHistoryDetail = new SyncRunHistoryDetail
                                             {
                                                 RunProfile = runProfile,
@@ -146,8 +161,7 @@ namespace JIM.Service
                                                 ConnectedSystemName = connectedSystem.Name                                                
                                             };
 
-                                            await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail, newServiceTask.InitiatedBy);
-                                            var stopwatch = Stopwatch.StartNew();
+                                            var runHistoryItem = await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail, initiatedBy);                                            
                                             
                                             try
                                             {
@@ -182,17 +196,17 @@ namespace JIM.Service
                                             {
                                                 // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view issues with connectors through JIM,
                                                 // rather than an admin having to dig through server logs.
-                                                synchronisationRunHistoryDetail.ErrorMessage = ex.Message;
-                                                synchronisationRunHistoryDetail.ErrorStackTrace = ex.StackTrace;
-                                                await taskJim.History.UpdateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
+                                                runHistoryItem.ErrorMessage = ex.Message;
+                                                runHistoryItem.ErrorStackTrace = ex.StackTrace;
                                                 Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
                                             }
                                             finally
                                             {
                                                 // record how long the sync run took, whether it was successful, or not.
                                                 stopwatch.Stop();
-                                                synchronisationRunHistoryDetail.CompletionTime = stopwatch.Elapsed;
-                                                await taskJim.History.UpdateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail);
+                                                runHistoryItem.CompletionTime = stopwatch.Elapsed;
+                                                await taskJim.History.UpdateRunHistoryItemAsync(runHistoryItem);
+                                                Log.Information($"ExecuteAsync: Completed processing of {synchronisationRunHistoryDetail.RunProfileName} sync run on {synchronisationRunHistoryDetail.ConnectedSystemName} in {runHistoryItem.CompletionTime}.");
                                             }
                                         }
                                         else
@@ -207,11 +221,34 @@ namespace JIM.Service
                                 }
                                 else if (newServiceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
                                 {
+                                    // start creating history
+                                    var clearConnectedSystemHistoryItem = await taskJim.History.CreateClearConnectedSystemHistoryItemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, initiatedBy);
+
                                     Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
                                     if (clearConnectedSystemObjectsTask.InitiatedBy == null)
-                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value");
+                                    {
+                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value. Cannot continue processing service task.");
+                                    }
                                     else
-                                        await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, clearConnectedSystemObjectsTask.InitiatedBy);
+                                    {
+                                        try
+                                        {
+                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, clearConnectedSystemObjectsTask.InitiatedBy);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            clearConnectedSystemHistoryItem.ErrorStackTrace = ex.StackTrace;
+                                            clearConnectedSystemHistoryItem.ErrorMessage = ex.Message;
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
+                                        }
+                                        finally
+                                        {
+                                            stopwatch.Stop();
+                                            clearConnectedSystemHistoryItem.CompletionTime = stopwatch.Elapsed;
+                                            await taskJim.History.UpdateClearConnectedSystemHistoryItemAsync(clearConnectedSystemHistoryItem);
+                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {clearConnectedSystemHistoryItem.CompletionTime}.");
+                                        }
+                                    }
                                 }
                         
                                 // very important: we must delete the task once it's completed so we know it's complete
@@ -230,11 +267,13 @@ namespace JIM.Service
             }
 
             if (stoppingToken.IsCancellationRequested)
+            {
                 foreach (var currentTask in CurrentTasks)
                 {
                     Log.Debug($"ExecuteAsync: Cancelling task {currentTask.TaskId} as worker has been cancelled.");
                     currentTask.CancellationTokenSource.Cancel();
                 }
+            }
         }
 
         #region private methods

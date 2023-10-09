@@ -346,6 +346,8 @@ namespace JIM.PostgresData.Repositories
             // it sounds like postgresql cascade delete might auto-delete dependent objects
             //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM PendingExportAttributeValueChanges WHERE PendingExportId IN (SELECT Id FROM PendingExports WHERE ConnectedSystemId = {connectedSystemId})");
             Repository.Database.Database.ExecuteSqlRaw($"DELETE FROM PendingExports WHERE ConnectedSystemId = {connectedSystemId}");
+
+            // todo: add double quotes around table names after we have implemented exception logging to history object... \"
         }
         #endregion
 
