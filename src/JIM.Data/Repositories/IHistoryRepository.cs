@@ -1,4 +1,6 @@
-﻿using JIM.Models.History;
+﻿using JIM.Models.Enums;
+using JIM.Models.History;
+using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories
 {
@@ -19,5 +21,7 @@ namespace JIM.Data.Repositories
         public Task CreateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem);
 
         public Task UpdateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem);
+
+        public Task<PagedResultSet<HistoryItem>> GetHistoryItemsAsync(int page, int pageSize, int maxResults, QuerySortBy querySortBy);
     }
 }

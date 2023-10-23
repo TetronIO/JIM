@@ -1,6 +1,7 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.History;
+using JIM.Models.Utility;
 
 namespace JIM.Application.Servers
 {
@@ -95,6 +96,11 @@ namespace JIM.Application.Servers
         public async Task UpdateDataGenerationHistoryItemAsync(DataGenerationHistoryItem dataGenerationHistoryItem)
         {
             await Application.Repository.History.UpdateDataGenerationHistoryItemAsync(dataGenerationHistoryItem);
+        }
+
+        public async Task<PagedResultSet<HistoryItem>> GetHistoryItemsAsync(int page = 1, int pageSize = 20, int maxResults = 500, QuerySortBy querySortBy = QuerySortBy.DateCreated)
+        {
+            return await Application.Repository.History.GetHistoryItemsAsync(page, pageSize, maxResults, querySortBy);
         }
     }
 }

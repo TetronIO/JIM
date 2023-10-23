@@ -1,5 +1,9 @@
 ﻿@page "/history"
 @attribute [Authorize(Roles = "Users")]
+@using JIM.Application
+@using JIM.Models.History
+@inject JimApplication Jim
+
 <PageTitle>History</PageTitle>
 
 <MudText Typo="Typo.h4">History Systems</MudText>
@@ -7,12 +11,18 @@
     See what's been happening, here.
 </MudText>
 
-@* @code {
-    private IList<ConnectedSystemHeader>? connectedSystemHeaders;
-    private string searchString = "";
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+    
+    private IList<HistoryItem>? historyItems;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        if (Page == null || Page < 1)
+            Page = 1;
+
+        historyItems = await Jim.History.GetHistoryItemsAsync(Page, 20, 500);
     }
-} *@
+}
