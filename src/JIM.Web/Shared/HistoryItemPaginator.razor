@@ -1,0 +1,62 @@
+﻿@using JIM.Models.Core
+@using JIM.Models.History;
+@using JIM.Models.Utility
+@using JIM.Models.Enums
+@inject NavigationManager NavManager
+
+@if (totalPages > 1 && pageNumbers != null)
+{
+    <div class="mt-3">
+        <nav aria-label="Pages">
+            <ul class="pagination justify-content-center">
+                @if (Results.CurrentPage > 1)
+                {
+                    <li class="page-item"><a class="page-link" href="@Results.BuildTagQueryString(Results.CurrentPage - 1, path)">Previous</a></li>
+                }
+
+                @foreach (var p in pageNumbers)
+                {
+                    <li class="page-item@(p == Results.CurrentPage ? " active":"")"><a class="page-link" href="@Results.BuildTagQueryString(p, path)">@p</a></li>
+                }
+
+                @if (Results.CurrentPage < totalPages)
+                {
+                    <li class="page-item"><a class="page-link" href="@Results.BuildTagQueryString(Results.CurrentPage + 1, path)">Next</a></li>
+                }
+                <li class="page-item disabled">
+                    <span class="page-link">
+                        Page @Results.CurrentPage of @Results.TotalPages
+                    </span>
+                </li>
+            </ul>
+        </nav>
+    </div>
+}
+
+@code {
+
+    [Parameter]
+    [EditorRequired]
+    public PagedResultSet<HistoryItem> Results { get; set; }
+
+    string path;
+    const int maxPagesToDisplayInNav = 4;
+    int totalPages;
+    int numPagesToDisplayInNav;
+    int[]? pageNumbers;
+
+    protected override void OnParametersSet()
+    {
+        if (Results == null)
+            return;
+
+        var uri = new Uri(NavManager.Uri);
+        if (uri.PathAndQuery.Contains("?"))
+            path = uri.PathAndQuery.Substring(0, uri.PathAndQuery.IndexOf("?"));
+        else path = uri.PathAndQuery;
+
+        totalPages = Results.TotalPages;
+        numPagesToDisplayInNav = totalPages <= maxPagesToDisplayInNav ? totalPages : maxPagesToDisplayInNav;
+        pageNumbers = Results.GetNavigationPageNumbers(numPagesToDisplayInNav);
+    }
+}
