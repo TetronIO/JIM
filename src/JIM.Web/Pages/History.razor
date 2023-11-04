@@ -2,6 +2,8 @@
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
 @using JIM.Models.History
+@using JIM.Models.Utility;
+@using JIM.Utilities;
 @inject JimApplication Jim
 
 <PageTitle>History</PageTitle>
@@ -11,18 +13,43 @@
     See what's been happening, here.
 </MudText>
 
+@if (historyItems != null)
+{
+    <MudTable T="HistoryItem" Items="@historyItems.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Id</MudTh>
+            <MudTh>Created</MudTh>
+            <MudTh>Initiated By</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Error</MudTh>
+            <MudTh>Completion Time</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Id">@context.Id</MudTd>
+            <MudTd DataLabel="Created">@context.Created</MudTd>
+            <MudTd DataLabel="Initiated By">@context.InitiatedByName</MudTd>
+            <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Error">@context.ErrorMessage</MudTd>
+            <MudTd DataLabel="Completion Time">@context.CompletionTime</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            There is no history to show yet.
+        </NoRecordsContent>
+    </MudTable>
+}
+
 @code {
     [Parameter]
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
     
-    private IList<HistoryItem>? historyItems;
+    private PagedResultSet<HistoryItem>? historyItems;
 
     protected override async Task OnParametersSetAsync()
     {
         if (Page == null || Page < 1)
             Page = 1;
 
-        historyItems = await Jim.History.GetHistoryItemsAsync(Page, 20, 500);
+        historyItems = await Jim.History.GetHistoryItemsAsync(Page.Value, 20, 500);
     }
 }
