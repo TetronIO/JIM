@@ -20,6 +20,7 @@
     <MudTable T="HistoryItem" Items="@historyItems.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
         <HeaderContent>
             <MudTh>Id</MudTh>
+            <MudTh>Type</MudTh>
             <MudTh>Created</MudTh>
             <MudTh>Initiated By</MudTh>
             <MudTh>Status</MudTh>
@@ -28,6 +29,7 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Id">@context.Id</MudTd>
+            <MudTd DataLabel="Type">@(context is DataGenerationHistoryItem? "Data Generation" : "Other")</MudTd>
             <MudTd DataLabel="Created">@context.Created</MudTd>
             <MudTd DataLabel="Initiated By">@context.InitiatedByName</MudTd>
             <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
