@@ -6,7 +6,7 @@ namespace JIM.Data
     {
         public IConnectedSystemRepository ConnectedSystems { get; }
         public IDataGenerationRepository DataGeneration { get; }
-        public IHistoryRepository History { get; }
+        public IActivityRepository Activity { get; }
         public IMetaverseRepository Metaverse { get; }
         public ISearchRepository Search { get; }
         public ISecurityRepository Security { get; }

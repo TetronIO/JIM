@@ -11,7 +11,7 @@ namespace JIM.PostgresData
     {
         public IConnectedSystemRepository ConnectedSystems { get; }
         public IDataGenerationRepository DataGeneration { get; }
-        public IHistoryRepository History { get; }
+        public IActivityRepository Activity { get; }
         public IMetaverseRepository Metaverse { get; }
         public ISearchRepository Search { get; }
         public ISecurityRepository Security { get; }
@@ -30,7 +30,7 @@ namespace JIM.PostgresData
             ConnectedSystems = new ConnectedSystemRepository(this);
             Database = new JimDbContext();
             DataGeneration = new DataGenerationRepository(this);
-            History = new HistoryRepository(this);
+            Activity = new ActivityRepository(this);
             Metaverse = new MetaverseRepository(this);
             Search = new SearchRepository(this);
             Security = new SecurityRepository(this);

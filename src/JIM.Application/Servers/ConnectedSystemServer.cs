@@ -1,13 +1,15 @@
-﻿using JIM.Connectors.LDAP;
+﻿using System.Diagnostics;
+using JIM.Connectors.LDAP;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
-using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Serilog;
 
 namespace JIM.Application.Servers
@@ -453,21 +455,46 @@ namespace JIM.Application.Servers
             connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
         }
 
-        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemObjectId, MetaverseObject? user)
+        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId, MetaverseObject? user)
         {
-            // delete all pending export objects
-            Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id: " + connectedSystemObjectId);
-            Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemObjectId);
+            var connectedSystem = await GetConnectedSystemAsync(connectedSystemId);
+            if (connectedSystem == null)
+            {
+                Log.Warning($"ClearConnectedSystemObjectsAsync: Connected system id {connectedSystemId} doesn't exist. Cannot continue.");
+                return;
+            }
 
-            // delete all connected system objects
-            Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id: " + connectedSystemObjectId);
-            await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemObjectId, true);
+            // create the activity object
+            var activity = new Models.Activities.Activity { 
+                ConnectedSystemId = connectedSystemId,
+                TargetType = ActivityTargetType.ConnectedSystem,
+                TargetName = connectedSystem.Name,
+                TargetOperationType = ActivityTargetOperationType.Clear
+            };
+            await Application.Activities.CreateActivityAsync(activity, user);
 
-            // record this operation in the history
-            await Application.History.CreateClearConnectedSystemHistoryItemAsync(connectedSystemObjectId, user);
-            Log.Verbose("ClearConnectedSystemObjectsAsync: Creating history for connected system id: " + connectedSystemObjectId);
+            try
+            {
+                // delete all pending export objects
+                Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id {connectedSystemId} - {connectedSystem.Name}");
+                Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemId);
 
-            // admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of correct intended state
+                // delete all connected system objects
+                Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id {connectedSystemId} - {connectedSystem.Name}");
+                await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemId, true);
+
+                // finish by completing the activity
+                await Application.Activities.CompleteActivityAsync(activity);
+
+                // advisory: admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of correct intended state
+            }
+            catch (Exception ex)
+            {
+                await Application.Activities.FailActivityWithError(activity, ex);
+                Log.Error("ClearConnectedSystemObjectsAsync failed", ex);
+            }
+
+            // todo: think about returning a status to the UI
         }
 
         private static ConnectedSystemObjectChangeAttribute AddChangeAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)

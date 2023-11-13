@@ -1,4 +1,4 @@
-﻿using JIM.Models.History;
+﻿using JIM.Models.Activities;
 using JIM.Models.Transactional;
 using System.ComponentModel.DataAnnotations;
 
@@ -51,7 +51,7 @@ namespace JIM.Models.Staging
         /// <summary>
         /// EF back-link.
         /// </summary>
-        public List<SyncRunHistoryDetail>? SyncRunHistoryDetails { get; set; }
+        public List<Activity>? Activities { get; set; }
 
         public ConnectedSystem()
         {
