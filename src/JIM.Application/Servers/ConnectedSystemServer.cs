@@ -453,44 +453,21 @@ namespace JIM.Application.Servers
             connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
         }
 
-        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId, MetaverseObject? user)
+        /// <summary>
+        /// Causes all of the connected system objects and pending export objects for a connected system to be deleted.
+        /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of the intended state.
+        /// </summary>
+        /// <remarks>Only intended to be called by JIM.Service, i.e. this action should always be queued. That's why this method is lightweight and doesn't create it's own activity.</remarks>
+        /// <param name="connectedSystemId">The unique identifier for the connected system to clear.</param>
+        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId)
         {
-            var connectedSystem = await GetConnectedSystemAsync(connectedSystemId);
-            if (connectedSystem == null)
-            {
-                Log.Warning($"ClearConnectedSystemObjectsAsync: Connected system id {connectedSystemId} doesn't exist. Cannot continue.");
-                return;
-            }
+            // delete all pending export objects
+            Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id {connectedSystemId}.");
+            Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemId);
 
-            // create the activity object
-            var activity = new Activity { 
-                ConnectedSystemId = connectedSystemId,
-                TargetType = ActivityTargetType.ConnectedSystem,
-                TargetName = connectedSystem.Name,
-                TargetOperationType = ActivityTargetOperationType.Clear
-            };
-            await Application.Activities.CreateActivityAsync(activity, user);
-
-            try
-            {
-                // delete all pending export objects
-                Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id {connectedSystemId} - {connectedSystem.Name}");
-                Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemId);
-
-                // delete all connected system objects
-                Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id {connectedSystemId} - {connectedSystem.Name}");
-                await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemId, true);
-
-                // finish by completing the activity
-                await Application.Activities.CompleteActivityAsync(activity);
-
-                // advisory: admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of correct intended state
-            }
-            catch (Exception ex)
-            {
-                await Application.Activities.FailActivityWithError(activity, ex);
-                Log.Error("ClearConnectedSystemObjectsAsync failed", ex);
-            }
+            // delete all connected system objects
+            Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id {connectedSystemId}.");
+            await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemId, true);
 
             // todo: think about returning a status to the UI
         }

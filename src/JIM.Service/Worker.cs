@@ -1,18 +1,14 @@
-using Activity = JIM.Models.Activities.Activity;
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
-using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.PostgresData;
 using JIM.Service.Processors;
 using Serilog;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace JIM.Service
 {
@@ -248,8 +244,6 @@ namespace JIM.Service
                                 }
                                 else if (newServiceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
                                 {
-                                    // start creating history
-                                    var clearConnectedSystemHistoryItem = await taskJim.History.CreateClearConnectedSystemHistoryItemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, initiatedBy);
                                     Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
                                     if (clearConnectedSystemObjectsTask.InitiatedBy == null)
                                     {
@@ -257,24 +251,36 @@ namespace JIM.Service
                                     }
                                     else
                                     {
+                                        // we need a little more information on the connected systmem, so retrieve it
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                        if (connectedSystem == null)
+                                        {
+                                            Log.Warning($"ExecuteAsync: Connected system id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
+                                            return;
+                                        }
+
+                                        // create the connected system clearing specific activity
+                                        var activity = new Activity { 
+                                            TargetName = connectedSystem.Name,
+                                            TargetType = ActivityTargetType.ConnectedSystem,
+                                            TargetOperationType = ActivityTargetOperationType.Clear,
+                                            ConnectedSystemId = connectedSystem.Id
+                                        };
+                                        await taskJim.Activities.CreateActivityAsync(activity, initiatedBy);
+
                                         try
                                         {
-                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, clearConnectedSystemObjectsTask.InitiatedBy);
-                                            clearConnectedSystemHistoryItem.Status = HistoryStatus.Complete;
+                                            // initiate clearing the connected system
+                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                            
+                                            // finish by completing the activity
+                                            await taskJim.Activities.CompleteActivityAsync(activity);
+                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {activity.CompletionTime}.");
                                         }
                                         catch (Exception ex)
                                         {
-                                            clearConnectedSystemHistoryItem.ErrorStackTrace = ex.StackTrace;
-                                            clearConnectedSystemHistoryItem.ErrorMessage = ex.Message;
-                                            clearConnectedSystemHistoryItem.Status = HistoryStatus.FailedWithError;
+                                            await taskJim.Activities.FailActivityWithError(activity, ex);
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
-                                        }
-                                        finally
-                                        {
-                                            stopwatch.Stop();
-                                            clearConnectedSystemHistoryItem.CompletionTime = stopwatch.Elapsed;
-                                            await taskJim.History.UpdateClearConnectedSystemHistoryItemAsync(clearConnectedSystemHistoryItem);
-                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {clearConnectedSystemHistoryItem.CompletionTime}.");
                                         }
                                     }
                                 }
