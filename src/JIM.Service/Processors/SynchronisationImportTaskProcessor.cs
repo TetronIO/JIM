@@ -1,8 +1,9 @@
-﻿using JIM.Application;
+﻿using Activity = JIM.Models.Activities.Activity;
+using JIM.Application;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
-using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
@@ -16,7 +17,7 @@ namespace JIM.Service.Processors
         private readonly IConnector _connector;
         private readonly ConnectedSystem _connectedSystem;
         private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
-        private readonly SyncRunHistoryDetail _synchronisationRunHistoryDetail;
+        private readonly Activity _activity;
         private readonly CancellationTokenSource _cancellationTokenSource;
 
         internal SynchronisationImportTaskProcessor(
@@ -24,14 +25,14 @@ namespace JIM.Service.Processors
             IConnector connector,
             ConnectedSystem connectedSystem,
             ConnectedSystemRunProfile connectedSystemRunProfile,
-            SyncRunHistoryDetail syncRunHistoryDetail,
+            Activity activity,
             CancellationTokenSource cancellationTokenSource)
         {
             _jim = jimApplication;
             _connector = connector;
             _connectedSystem = connectedSystem;
             _connectedSystemRunProfile = connectedSystemRunProfile;
-            _synchronisationRunHistoryDetail = syncRunHistoryDetail;
+            _activity = activity;
             _cancellationTokenSource = cancellationTokenSource;
         }
 
@@ -69,8 +70,8 @@ namespace JIM.Service.Processors
                     foreach (var importObject in result.ImportObjects)
                     {
                         // this will store the detail for the import object that will persist in the history for the run
-                        var syncRunHistoryDetailItem = new SyncRunHistoryDetailItem();
-                        _synchronisationRunHistoryDetail.Items.Add(syncRunHistoryDetailItem);
+                        var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
+                        _activity.RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
 
                         // is this a new, or existing object as far as JIM is aware?
                         // find the unique id attribute(s) for this connected system object type, and then pull out the right type attribute values from the importobject.
@@ -79,8 +80,8 @@ namespace JIM.Service.Processors
                         var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
                         if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsUniqueIdentifier))
                         {
-                            syncRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.CouldntMatchObjectType;
-                            syncRunHistoryDetailItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldntMatchObjectType;
+                            activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                             continue;
                         }
 
@@ -91,14 +92,14 @@ namespace JIM.Service.Processors
                         // is existing - apply any changes to the cso from the import object
                         if (connectedSystemObject == null)
                         {
-                            syncRunHistoryDetailItem.ObjectChangeType = ObjectChangeType.Create;
-                            await CreateConnectedSystemObjectFromImportObjectAsync(importObject, csObjectType, syncRunHistoryDetailItem);
+                            activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
+                            await CreateConnectedSystemObjectFromImportObjectAsync(importObject, csObjectType, activityRunProfileExecutionItem);
                         }
                         else
                         {
                             // existing connected system object - update from import object if necessary
-                            syncRunHistoryDetailItem.ObjectChangeType = ObjectChangeType.Update;
-                            await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, syncRunHistoryDetailItem);
+                            activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
+                            await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, activityRunProfileExecutionItem);
                         }
                     }
 
@@ -108,8 +109,8 @@ namespace JIM.Service.Processors
                     if (initialPage)
                         initialPage = false;
 
-                    // update the history item with the results from this page processing
-                    await _jim.History.UpdateSyncRunHistoryDetailAsync(_synchronisationRunHistoryDetail);
+                    // update the activity with the results from this page's processing
+                    await _jim.Activities.UpdateActivity(_activity);
                 }                
 
                 callBasedImportConnector.CloseImportConnection();
@@ -164,7 +165,7 @@ namespace JIM.Service.Processors
             throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type unique identifier type: {uniqueIdentifierAttribute.Type}");
         }
 
-        private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, SyncRunHistoryDetailItem synchronisationRunHistoryDetailItem)
+        private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             var stopwatch = Stopwatch.StartNew();
 
@@ -184,9 +185,9 @@ namespace JIM.Service.Processors
                 if (csAttribute == null)
                 {
                     // unexpected import attribute!
-                    synchronisationRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.UnexpectedAttribute;
-                    synchronisationRunHistoryDetailItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
-                    _synchronisationRunHistoryDetail.Items.Add(synchronisationRunHistoryDetailItem);
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
+                    activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
+                    _activity.RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
                     csoIsInvalid = true;
                     break;
                 }
@@ -266,7 +267,7 @@ namespace JIM.Service.Processors
             Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
         }
 
-        private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, SyncRunHistoryDetailItem synchronisationRunHistoryDetailItem)
+        private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             // process known attributes (potential updates)
             // need to work with the fact that we have individual objects for multi-valued attribute values
@@ -284,8 +285,8 @@ namespace JIM.Service.Processors
                     if (importedObjectAttributeList.Count > 1)
                     {
                         // imported objects attributes should be distinct, i.e. one per name
-                        synchronisationRunHistoryDetailItem.Error = SyncRunHistoryDetailItemError.DuplicateImportedAttribute;
-                        synchronisationRunHistoryDetailItem.ErrorMessage = $"Attribute '{csoAttributeName}' was present more than one once the import object. Cannot continue processing this object.";
+                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttribute;
+                        activityRunProfileExecutionItem.ErrorMessage = $"Attribute '{csoAttributeName}' was present more than one once the import object. Cannot continue processing this object.";
                         return;
                     }
                     var importedObjectAttribute = importedObjectAttributeList[0];
@@ -428,7 +429,7 @@ namespace JIM.Service.Processors
             }
 
             // persist the attribute value changes
-            await _jim.ConnectedSystems.UpdateConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, synchronisationRunHistoryDetailItem);
+            await _jim.ConnectedSystems.UpdateConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, activityRunProfileExecutionItem);
         }
     }
 }

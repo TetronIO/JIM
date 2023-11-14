@@ -64,11 +64,6 @@ public class Activity
     public ConnectedSystemRunProfile? RunProfile { get; set; }
 
     /// <summary>
-    /// If the run profile has been deleted, the name of the run profile can be accessed here still.
-    /// </summary>
-    public string? RunProfileName { get; set; }
-
-    /// <summary>
     /// If the run profile has been deleted, the type of sync run this was can be accessed here still.
     /// </summary>
     public ConnectedSystemRunType? RunType { get; set; }
@@ -92,6 +87,7 @@ public class Activity
     public Activity()
     {
         Created = DateTime.UtcNow;
+        RunProfileExecutionItems = new List<ActivityRunProfileExecutionItem>();
     }
     #endregion
 }

@@ -15,6 +15,7 @@ namespace JIM.PostgresData
     {
         internal DbSet<Activity> Activities { get; set; }
         internal DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; }
+        internal DbSet<ClearConnectedSystemObjectsTask> ClearConnectedSystemObjectsTasks { get; set; }
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
         internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }

@@ -1,9 +1,10 @@
+using Activity = JIM.Models.Activities.Activity;
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
-using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -11,6 +12,7 @@ using JIM.PostgresData;
 using JIM.Service.Processors;
 using Serilog;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace JIM.Service
 {
@@ -125,34 +127,40 @@ namespace JIM.Service
                                 if (newServiceTask.InitiatedBy != null)
                                     initiatedBy = await taskJim.Metaverse.GetMetaverseObjectAsync(newServiceTask.InitiatedBy.Id);
 
-                                // time the service task
-                                var stopwatch = Stopwatch.StartNew();
-
                                 if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
 
-                                    // start creating history
-                                    var dataGenerationHistoryItem = await taskJim.History.CreateDataGenerationHistoryItemAsync(dataGenTemplateServiceTask.TemplateId, initiatedBy);
+                                    var dataGenerationTemplate = await taskJim.DataGeneration.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
+                                    if (dataGenerationTemplate == null)
+                                    {
+                                        Log.Warning($"ExecuteAsync: data generation template {dataGenTemplateServiceTask.TemplateId} not found.");
+                                    }
+                                    else
+                                    {
+                                        // create the data-generation specific activity
+                                        var activity = new Activity { 
+                                            TargetName = dataGenerationTemplate.Name,
+                                            TargetType = ActivityTargetType.DataGenerationTemplate,
+                                            TargetOperationType = ActivityTargetOperationType.Execute,                                        
+                                            DataGenerationTemplateId = dataGenTemplateServiceTask.TemplateId 
+                                        };
+                                        await taskJim.Activities.CreateActivityAsync(activity, initiatedBy);
 
-                                    try
-                                    {
-                                        await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
-                                        dataGenerationHistoryItem.Status = HistoryStatus.Complete;
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        dataGenerationHistoryItem.ErrorStackTrace = ex.StackTrace;
-                                        dataGenerationHistoryItem.ErrorMessage = ex.Message;
-                                        dataGenerationHistoryItem.Status = HistoryStatus.FailedWithError;
-                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing data generation template: " + dataGenTemplateServiceTask.TemplateId);
-                                    }
-                                    finally
-                                    {
-                                        stopwatch.Stop();
-                                        dataGenerationHistoryItem.CompletionTime = stopwatch.Elapsed;
-                                        await taskJim.History.UpdateDataGenerationHistoryItemAsync(dataGenerationHistoryItem);
-                                        Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {dataGenerationHistoryItem.CompletionTime}.");
+                                        try
+                                        {
+                                            await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+                                            await taskJim.Activities.CompleteActivityAsync(activity);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            await taskJim.Activities.FailActivityWithError(activity, ex);
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing data generation template: " + dataGenTemplateServiceTask.TemplateId);
+                                        }
+                                        finally
+                                        {
+                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {activity.CompletionTime}.");
+                                        }
                                     }
                                 }
                                 else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
@@ -173,25 +181,22 @@ namespace JIM.Service
                                         var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
                                         if (runProfile != null)
                                         {
-                                            // create the history detail item for this run profile execution, then pass it in to the processor for iterative updates for each item processed.
+                                            // create a synchronisation-specific activity for this run profile execution, then pass it in to the processor for iterative updates for each item processed.
                                             // we duplicate some run profile information as run profiles can be user-deleted, but we would want to retain core run profile information for audit purposes.
-                                            var synchronisationRunHistoryDetail = new SyncRunHistoryDetail
-                                            {
-                                                RunProfile = runProfile,
-                                                RunProfileName = runProfile.Name,
-                                                RunType = runProfile.RunType,
-                                                ConnectedSystem = connectedSystem,
-                                                ConnectedSystemName = connectedSystem.Name                                                
+                                            var activity = new Activity { 
+                                                TargetName = $"{connectedSystem.Name}: {runProfile.Name}",
+                                                TargetType = ActivityTargetType.RunProfile,
+                                                TargetOperationType = ActivityTargetOperationType.Execute,
+                                                RunProfile = runProfile
                                             };
-
-                                            var runHistoryItem = await taskJim.History.CreateSyncRunHistoryDetailAsync(synchronisationRunHistoryDetail, initiatedBy);                                            
+                                            await taskJim.Activities.CreateActivityAsync(activity, initiatedBy);                                    
                                             
                                             try
                                             {
                                                 // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                 if (runProfile.RunType == ConnectedSystemRunType.FullImport)
                                                 {
-                                                    var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, synchronisationRunHistoryDetail, cancellationTokenSource);
+                                                    var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, activity, cancellationTokenSource);
                                                     await synchronisationImportTaskProcessor.PerformFullImportAsync();
                                                 }
                                                 else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
@@ -216,24 +221,19 @@ namespace JIM.Service
                                                 }
 
                                                 // task completed successfully
-                                                runHistoryItem.Status = HistoryStatus.Complete;
+                                                await taskJim.Activities.CompleteActivityAsync(activity);
                                             }
                                             catch (Exception ex) 
                                             {
                                                 // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view issues with connectors through JIM,
                                                 // rather than an admin having to dig through server logs.
-                                                runHistoryItem.ErrorMessage = ex.Message;
-                                                runHistoryItem.ErrorStackTrace = ex.StackTrace;
-                                                runHistoryItem.Status = HistoryStatus.FailedWithError;
+                                                await taskJim.Activities.FailActivityWithError(activity, ex);
                                                 Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
                                             }
                                             finally
                                             {
                                                 // record how long the sync run took, whether it was successful, or not.
-                                                stopwatch.Stop();
-                                                runHistoryItem.CompletionTime = stopwatch.Elapsed;
-                                                await taskJim.History.UpdateRunHistoryItemAsync(runHistoryItem);
-                                                Log.Information($"ExecuteAsync: Completed processing of {synchronisationRunHistoryDetail.RunProfileName} sync run on {synchronisationRunHistoryDetail.ConnectedSystemName} in {runHistoryItem.CompletionTime}.");
+                                                Log.Information($"ExecuteAsync: Completed processing of {activity.TargetName} sync run in {activity.CompletionTime}.");
                                             }
                                         }
                                         else

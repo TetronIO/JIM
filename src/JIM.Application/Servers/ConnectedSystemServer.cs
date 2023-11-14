@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using JIM.Connectors.LDAP;
+﻿using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -9,7 +8,6 @@ using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Serilog;
 
 namespace JIM.Application.Servers
@@ -361,7 +359,7 @@ namespace JIM.Application.Servers
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         }
 
-        public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, SyncRunHistoryDetailItem syncRunHistoryDetailItem)
+        public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             if (connectedSystemObject == null)
                 throw new ArgumentNullException(nameof(connectedSystemObject));
@@ -386,13 +384,13 @@ namespace JIM.Application.Servers
                 ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Update,
-                SyncRunHistoryDetailItem = syncRunHistoryDetailItem
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
             };
 
             // the change object will be persisted by the sync run history detail item further up the stack
             // we just need to associate the change with the detail item.
             // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
-            syncRunHistoryDetailItem.ConnectedSystemObjectChange = change;
+            activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
             // persist new attribute values from addition list and create change
             if (connectedSystemObject.PendingAttributeValueAdditions != null)
@@ -465,7 +463,7 @@ namespace JIM.Application.Servers
             }
 
             // create the activity object
-            var activity = new Models.Activities.Activity { 
+            var activity = new Activity { 
                 ConnectedSystemId = connectedSystemId,
                 TargetType = ActivityTargetType.ConnectedSystem,
                 TargetName = connectedSystem.Name,

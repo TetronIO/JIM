@@ -51,6 +51,11 @@ namespace JIM.Application.Servers
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
+        public async Task UpdateActivity(Activity activity)
+        {
+            await Application.Repository.Activity.UpdateActivityAsync(activity);
+        }
+
         public async Task DeleteActivityAsync(Activity activity)
         {
             await Application.Repository.Activity.DeleteActivityAsync(activity);

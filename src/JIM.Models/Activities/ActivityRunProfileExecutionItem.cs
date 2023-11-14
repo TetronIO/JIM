@@ -10,7 +10,7 @@ public class ActivityRunProfileExecutionItem
     /// <summary>
     /// The parent for this run profile execution item. For EF navigation purposes.
     /// </summary>
-    public Activity ParentActivity { get; set; }
+    public Activity Activity { get; set; }
 
     /// <summary>
     /// What happened with the ConnectedSystemObject? Was it created/updated/deleted?
