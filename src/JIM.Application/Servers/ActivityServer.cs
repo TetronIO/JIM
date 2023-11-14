@@ -30,13 +30,13 @@ namespace JIM.Application.Servers
         public async Task CompleteActivityAsync(Activity activity)
         {
             activity.Status = ActivityStatus.Complete;
-            activity.CompletionTime = activity.Created - DateTime.UtcNow;
+            activity.CompletionTime = DateTime.UtcNow - activity.Created;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
         public async Task CompleteActivityWithError(Activity activity, Exception exception)
         {
-            activity.CompletionTime = activity.Created - DateTime.UtcNow;
+            activity.CompletionTime = DateTime.UtcNow - activity.Created;
             activity.ErrorMessage = exception.Message;
             activity.ErrorStackTrace = exception.StackTrace;
             activity.Status = ActivityStatus.CompleteWithError;
