@@ -84,7 +84,7 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemHeaderAsync(id);
         }
 
-        public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)
+        public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
         {
             if (connectedSystem == null)
                 throw new ArgumentNullException(nameof(connectedSystem));
@@ -98,8 +98,7 @@ namespace JIM.Application.Servers
             // create the connected system setting value objects from the connected system definition settings
             foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
             {
-                var settingValue = new ConnectedSystemSettingValue
-                {
+                var settingValue = new ConnectedSystemSettingValue {
                     Setting = connectedSystemDefinitionSetting
                 };
 
@@ -115,7 +114,15 @@ namespace JIM.Application.Servers
                 connectedSystem.SettingValues.Add(settingValue);
             }
 
+            var activity = new Activity
+            {
+                TargetName = connectedSystem.Name,
+                TargetType = ActivityTargetType.ConnectedSystem,
+                TargetOperationType = ActivityTargetOperationType.Create
+            };
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+            await Application.Activities.CompleteActivityAsync(activity);
         }
 
         public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)

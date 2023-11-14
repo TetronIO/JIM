@@ -31,9 +31,10 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask { get; set; }
     private IList<ConnectorDefinitionHeader>? connectorDefinitionHeaders;
     private ConnectedSystemCreateViewModel model = new ConnectedSystemCreateViewModel();
-
     private bool isFormValid;
     private string[] formErrors = { };
 
@@ -44,14 +45,20 @@
 
     private async Task HandleValidSubmit()
     {
+        var connectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId));
+        if (connectorDefinition == null)
+            return;
+
         var connectedSystem = new JIM.Models.Staging.ConnectedSystem
         {
             Name = model.Name,
             Description = model.Description,
-            ConnectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId))
+            ConnectorDefinition = connectorDefinition
         };
 
-        await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        // attribute the execution to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user);
         NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}");
     }
 }
