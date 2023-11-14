@@ -1,6 +1,6 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.DataGeneration;
-using JIM.Models.History;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Security;
@@ -8,13 +8,13 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
-using System.Diagnostics.Metrics;
 
 namespace JIM.PostgresData
 {
     public class JimDbContext : DbContext
     {
-        internal DbSet<ClearConnectedSystemHistoryItem> ClearConnectedSystemHistoryItems { get; set; }
+        internal DbSet<Activity> Activities { get; set; }
+        internal DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; }
         internal DbSet<ClearConnectedSystemObjectsTask> ClearConnectedSystemObjectsTasks { get; set; }
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
         internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
@@ -30,14 +30,12 @@ namespace JIM.PostgresData
         internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
         internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; }
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
-        internal DbSet<DataGenerationHistoryItem> DataGenerationHistoryItems { get; set; }
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
         internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
         internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
         internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
-        internal DbSet<HistoryItem> HistoryItems { get; set; }
         internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
         internal DbSet<MetaverseObject> MetaverseObjects { get; set; }
         internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }
@@ -51,12 +49,10 @@ namespace JIM.PostgresData
         internal DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; }
         internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; }
         internal DbSet<Role> Roles { get; set; }
-        internal DbSet<RunHistoryItem> RunHistoryItems { get; set; }
         internal DbSet<ServiceSettings> ServiceSettings { get; set; }
         internal DbSet<ServiceTask> ServiceTasks { get; set; }
         internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; }
         internal DbSet<SyncRule> SyncRules { get; set; }
-        internal DbSet<SyncRunHistoryDetail> SyncRunHistoryDetails { get; set; }
 
         private readonly string _connectionString;
 
@@ -118,9 +114,9 @@ namespace JIM.PostgresData
             modelBuilder.Entity<MetaverseObjectType>()
                 .HasMany(mot => mot.Attributes);
 
-            modelBuilder.Entity<SyncRunHistoryDetailItem>()
+            modelBuilder.Entity<ActivityRunProfileExecutionItem>()
                 .HasOne(a => a.ConnectedSystemObjectChange)
-                .WithOne(a => a.SyncRunHistoryDetailItem)
+                .WithOne(a => a.ActivityRunProfileExecutionItem)
                 .HasForeignKey<ConnectedSystemObjectChange>(csoc => csoc.SyncRunHistoryDetailItemId);
 
             // reduce the chance of concurrency issues by using a system attribute to identify row versions

@@ -1,5 +1,5 @@
 ﻿@using JIM.Models.Core
-@using JIM.Models.History;
+@using JIM.Models.Activities;
 @using JIM.Models.Utility
 @using JIM.Models.Enums
 @inject NavigationManager NavManager
@@ -37,7 +37,7 @@
 
     [Parameter]
     [EditorRequired]
-    public PagedResultSet<HistoryItem> Results { get; set; }
+    public PagedResultSet<Activity> Results { get; set; }
 
     string path;
     const int maxPagesToDisplayInNav = 4;

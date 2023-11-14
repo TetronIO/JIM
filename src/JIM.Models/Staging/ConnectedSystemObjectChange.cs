@@ -1,5 +1,5 @@
+using JIM.Models.Activities;
 using JIM.Models.Enums;
-using JIM.Models.History;
 
 namespace JIM.Models.Staging
 {
@@ -11,11 +11,11 @@ namespace JIM.Models.Staging
         public Guid Id { get; set; }
 
         /// <summary>
-        /// The connected system object change would have been caused by a synchronisation run, access that here if it still exists. 
+        /// The connected system object change would have been caused by a sync run profile execution, access that here if it still exists. 
         /// It's worth bearing in mind that sync run history can be cleared down so a reference may not always be present,
         /// depending on how old the connected system object change is.
         /// </summary>
-        public SyncRunHistoryDetailItem? SyncRunHistoryDetailItem { get; set; }
+        public ActivityRunProfileExecutionItem? ActivityRunProfileExecutionItem { get; set; }
 
         /// <summary>
         /// Needed for EF linking.

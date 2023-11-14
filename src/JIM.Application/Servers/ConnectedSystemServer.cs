@@ -1,7 +1,7 @@
 ﻿using JIM.Connectors.LDAP;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
-using JIM.Models.History;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -359,7 +359,7 @@ namespace JIM.Application.Servers
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         }
 
-        public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, SyncRunHistoryDetailItem syncRunHistoryDetailItem)
+        public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             if (connectedSystemObject == null)
                 throw new ArgumentNullException(nameof(connectedSystemObject));
@@ -384,13 +384,13 @@ namespace JIM.Application.Servers
                 ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Update,
-                SyncRunHistoryDetailItem = syncRunHistoryDetailItem
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
             };
 
             // the change object will be persisted by the sync run history detail item further up the stack
             // we just need to associate the change with the detail item.
             // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
-            syncRunHistoryDetailItem.ConnectedSystemObjectChange = change;
+            activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
             // persist new attribute values from addition list and create change
             if (connectedSystemObject.PendingAttributeValueAdditions != null)
@@ -453,21 +453,23 @@ namespace JIM.Application.Servers
             connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
         }
 
-        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemObjectId, MetaverseObject? user)
+        /// <summary>
+        /// Causes all of the connected system objects and pending export objects for a connected system to be deleted.
+        /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of the intended state.
+        /// </summary>
+        /// <remarks>Only intended to be called by JIM.Service, i.e. this action should always be queued. That's why this method is lightweight and doesn't create it's own activity.</remarks>
+        /// <param name="connectedSystemId">The unique identifier for the connected system to clear.</param>
+        public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId)
         {
             // delete all pending export objects
-            Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id: " + connectedSystemObjectId);
-            Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemObjectId);
+            Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id {connectedSystemId}.");
+            Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemId);
 
             // delete all connected system objects
-            Log.Verbose("ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id: " + connectedSystemObjectId);
-            await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemObjectId, true);
+            Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id {connectedSystemId}.");
+            await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemId, true);
 
-            // record this operation in the history
-            await Application.History.CreateClearConnectedSystemHistoryItemAsync(connectedSystemObjectId, user);
-            Log.Verbose("ClearConnectedSystemObjectsAsync: Creating history for connected system id: " + connectedSystemObjectId);
-
-            // admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of correct intended state
+            // todo: think about returning a status to the UI
         }
 
         private static ConnectedSystemObjectChangeAttribute AddChangeAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)

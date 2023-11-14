@@ -1,26 +1,28 @@
-﻿@page "/history"
+﻿@page "/activity"
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
-@using JIM.Models.History
+@using JIM.Models.Activities
 @using JIM.Models.Utility;
 @using JIM.Utilities;
 @inject JimApplication Jim
 
-<PageTitle>History</PageTitle>
+<PageTitle>Activity</PageTitle>
 
-<MudText Typo="Typo.h4">History</MudText>
+<MudText Typo="Typo.h4">Activity</MudText>
 <MudText Typo="Typo.subtitle1">
-    See what actions have been performed in JIM recently here. Events could have been initiated by an individual, or by the system via automation in response to synchronisation schedules, workflows, etc.
+    See what activities have been performed in JIM recently here. Activities could have been initiated by an individual, or by the system via automation in response to synchronisation schedules, workflows, etc.
 </MudText>
 
-@if (historyItems != null)
+@if (activities != null)
 {
-    <HistoryItemPaginator Results="@historyItems" />
+    <ActivityItemPaginator Results="@activities" />
 
-    <MudTable T="HistoryItem" Items="@historyItems.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+    <MudTable T="JIM.Models.Activities.Activity" Items="@activities.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
         <HeaderContent>
             <MudTh>Id</MudTh>
-            <MudTh>Type</MudTh>
+            <MudTh>Target Type</MudTh>
+            <MudTh>Target Operation</MudTh>
+            <MudTh>Target Name</MudTh>
             <MudTh>Created</MudTh>
             <MudTh>Initiated By</MudTh>
             <MudTh>Status</MudTh>
@@ -29,7 +31,9 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Id">@context.Id</MudTd>
-            <MudTd DataLabel="Type">@(context is DataGenerationHistoryItem? "Data Generation" : "Other")</MudTd>
+            <MudTd DataLabel="Type">@context.TargetType</MudTd>
+            <MudTd DataLabel="Operation">@context.TargetOperationType</MudTd>
+            <MudTd DataLabel="Name">@context.TargetName</MudTd>
             <MudTd DataLabel="Created">@context.Created</MudTd>
             <MudTd DataLabel="Initiated By">@context.InitiatedByName</MudTd>
             <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
@@ -37,7 +41,7 @@
             <MudTd DataLabel="Completion Time">@context.CompletionTime</MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            There is no history to show yet.
+            There is no activity to show yet.
         </NoRecordsContent>
     </MudTable>
 }
@@ -47,13 +51,13 @@
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
     
-    private PagedResultSet<HistoryItem>? historyItems;
+    private PagedResultSet<JIM.Models.Activities.Activity>? activities;
 
     protected override async Task OnParametersSetAsync()
     {
         if (Page == null || Page < 1)
             Page = 1;
 
-        historyItems = await Jim.History.GetHistoryItemsAsync(Page.Value, 20, 500);
+        activities = await Jim.Activities.GetActivitiesAsync(Page.Value, 20, 500);
     }
 }
