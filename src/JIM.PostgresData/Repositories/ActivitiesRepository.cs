@@ -1,5 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +57,12 @@ namespace JIM.PostgresData.Repositories
                 maxResults = 500;
 
             var objects = from o in Repository.Database.Activities
-                          select o;
+                .Include(a => a.InitiatedBy)
+                .ThenInclude(ib => ib.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(av => av.Attribute)
+                .Include(st => st.InitiatedBy)
+                .ThenInclude(ib => ib.Type)
+                select o;
 
             switch (querySortBy)
             {
