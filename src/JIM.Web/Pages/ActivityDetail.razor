@@ -1,0 +1,101 @@
+﻿@page "/activity/{Id:guid}"
+@attribute [Authorize(Roles = "Users")]
+@using JIM.Application
+@using JIM.Models.Activities;
+@using JIM.Models.Core
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Utilities;
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Activity: @activity?.TargetOperationType @activity?.TargetType.ToString().SplitOnCapitalLetters(): @activity?.TargetName</PageTitle>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Activity:</span> @activity?.TargetOperationType @activity?.TargetType.ToString().SplitOnCapitalLetters(): @activity?.TargetName</MudText>
+
+@if (activity != null)
+{
+    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">ID:</MudText>
+                <MudText>@activity.Id</MudText>
+                </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">When:</MudText>
+                <MudText>@activity.Created</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Initiated By:</MudText>
+                @if (activity.InitiatedBy != null)
+                {
+                    <MudText>
+                        <MudLink Href="@Utilities.GetMetaverseObjectHref(activity.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(activity.InitiatedBy)</MudLink>
+                    </MudText>
+                }
+                else if (!string.IsNullOrEmpty(activity.InitiatedByName))
+                {
+                    <MudText>@activity.InitiatedByName</MudText>
+                }
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Status:</MudText>
+                <MudText>@activity.Status.ToString().SplitOnCapitalLetters()</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.button">Completion Time:</MudText>
+                <MudText>@activity.CompletionTime</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+    
+    @if (!string.IsNullOrEmpty(activity.ErrorMessage) || !string.IsNullOrEmpty(activity.ErrorStackTrace))
+    {
+        <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
+            @if (!string.IsNullOrEmpty(activity.ErrorMessage))
+            {
+                <MudText Typo="Typo.button">Error Message:</MudText>
+                <MudText>@activity.ErrorMessage</MudText>
+                <br />
+            }
+
+            @if (!string.IsNullOrEmpty(activity.ErrorStackTrace))
+            {
+                <MudText Typo="Typo.button">Error Message:</MudText>
+                <pre>
+@activity.ErrorStackTrace
+                </pre>
+            }
+        </MudPaper>
+    }
+
+    @if (activity.TargetType == ActivityTargetType.RunProfile)
+    {
+        <MudText Typo="Typo.h5" Class="mt-5">Additional Info</MudText>
+        <MudPaper Class="pa-5 mt-5" Outlined="true">
+
+        </MudPaper>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private JIM.Models.Activities.Activity? activity;
+    private ConnectedSystemHeader? connectedSystemHeader;
+
+    protected override async Task OnInitializedAsync()
+    {
+        activity = await Jim.Activities.GetActivityAsync(Id);
+        if (activity == null)
+        {
+            // object type not found, redirect to index page
+            NavManager.NavigateTo("../");
+            return;
+        }
+
+        if (activity.ConnectedSystemId.HasValue)
+            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(activity.ConnectedSystemId.Value);
+    }
+}

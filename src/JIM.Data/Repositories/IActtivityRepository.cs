@@ -13,6 +13,7 @@ namespace JIM.Data.Repositories
 
         public Task DeleteActivityAsync(Activity activity);
 
+        public Task<Activity?> GetActivityAsync(Guid id);
 
         public Task<PagedResultSet<Activity>> GetActivitiesAsync(int page, int pageSize, int maxResults, QuerySortBy querySortBy);
     }

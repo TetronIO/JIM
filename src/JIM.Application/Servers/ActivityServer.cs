@@ -61,6 +61,11 @@ namespace JIM.Application.Servers
             await Application.Repository.Activity.DeleteActivityAsync(activity);
         }
 
+        public async Task<Activity?> GetActivityAsync(Guid id)
+        {
+            return await Application.Repository.Activity.GetActivityAsync(id);
+        }
+
         public async Task<PagedResultSet<Activity>> GetActivitiesAsync(int page = 1, int pageSize = 20, int maxResults = 500, QuerySortBy querySortBy = QuerySortBy.DateCreated)
         {
             return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, maxResults, querySortBy);

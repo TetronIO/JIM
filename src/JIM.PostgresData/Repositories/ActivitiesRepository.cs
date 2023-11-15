@@ -102,5 +102,17 @@ namespace JIM.PostgresData.Repositories
 
             return pagedResultSet;
         }
+
+        public async Task<Activity?> GetActivityAsync(Guid id)
+        {
+            return await Repository.Database.Activities
+                .Include(a => a.InitiatedBy)
+                .ThenInclude(ib => ib.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(av => av.Attribute)
+                .Include(st => st.InitiatedBy)
+                .ThenInclude(ib => ib.Type)
+                .Include(a => a.RunProfile)
+                .SingleOrDefaultAsync(a => a.Id == id);
+        }
     }
 }
