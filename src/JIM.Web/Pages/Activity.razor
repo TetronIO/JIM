@@ -10,7 +10,7 @@
 
 <MudText Typo="Typo.h4">Activity</MudText>
 <MudText Typo="Typo.subtitle1">
-    See what JIM has been doing here. Everything that happens in JIM is tracked by an Activity. 
+    See what JIM has been used for here. Everything that happens in JIM is tracked by an Activity. 
     Activities can be initiated by an individual, or by the system via automation in response to synchronisation schedules, workflows, etc.
 </MudText>
 
@@ -20,10 +20,9 @@
 
     <MudTable T="JIM.Models.Activities.Activity" Items="@activities.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
         <HeaderContent>
-            <MudTh>Id</MudTh>
+            <MudTh>Name</MudTh>
             <MudTh>Type</MudTh>
             <MudTh>Operation</MudTh>
-            <MudTh>Name</MudTh>
             <MudTh>Created</MudTh>
             <MudTh>Initiated By</MudTh>
             <MudTh>Status</MudTh>
@@ -31,10 +30,11 @@
             <MudTh>Error</MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Id">@context.Id</MudTd>
+            <MudTd DataLabel="Name">
+                <MudLink Href="@($"/activity/{context.Id}")">@context.TargetName</MudLink>
+            </MudTd>
             <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Operation">@context.TargetOperationType</MudTd>
-            <MudTd DataLabel="Name">@context.TargetName</MudTd>
             <MudTd DataLabel="Created">@context.Created</MudTd>
             <MudTd DataLabel="Initiated By">
                 @if (context.InitiatedBy != null)
