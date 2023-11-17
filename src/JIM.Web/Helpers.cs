@@ -1,7 +1,9 @@
 ﻿using JIM.Application;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Components.Authorization;
+using MudBlazor;
 
 namespace JIM.Web
 {
@@ -44,5 +46,20 @@ namespace JIM.Web
             var user = await jimApplication.Metaverse.GetMetaverseObjectAsync(userId);
             return user ?? throw new Exception($"User not found for user id: {userId}");
         }
+
+        #region mudblazor related
+        public static Color GetActivityMudBlazorColorForStatus(ActivityStatus status)
+        {
+            switch (status)
+            {
+                case ActivityStatus.Complete: return Color.Success;
+                case ActivityStatus.InProgress: return Color.Primary;
+                case ActivityStatus.CompleteWithError: return Color.Warning;
+                case ActivityStatus.FailedWithError: return Color.Error;
+            }
+
+            return Color.Default;
+        }
+        #endregion
     }
 }
