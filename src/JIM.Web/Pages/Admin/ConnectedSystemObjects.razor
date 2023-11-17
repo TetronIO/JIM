@@ -12,7 +12,8 @@
 
 <PageTitle>Connected System Objects: @connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @connectedSystemHeader?.Name</MudText>
-<MudText Typo="Typo.subtitle1">A view of the connected system objects imported from the connected system.</MudText>
+<MudText Typo="Typo.subtitle1">A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation, 
+    or where changes from the system are staged before being committed to the Metaverse within JIM.</MudText>
 
 @if (connectedSystemObjectHeaders != null)
 {
@@ -70,7 +71,7 @@
             The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
         </MessageContent>
         <YesButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteForever">Delete all objects!</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" DisableElevation="true" StartIcon="@Icons.Material.Filled.DeleteForever" Class="ml-2">Delete all objects</MudButton>
         </YesButton>
     </MudMessageBox>
 }
