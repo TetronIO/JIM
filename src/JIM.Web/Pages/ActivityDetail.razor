@@ -19,11 +19,11 @@
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">ID:</MudText>
-                <MudText>@activity.Id</MudText>
-                </MudItem>
+                <MudText Class="mud-text-secondary">@activity.Id</MudText>
+            </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">When:</MudText>
-                <MudText>@activity.Created</MudText>
+                <MudText Class="mud-text-secondary">@activity.Created</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Initiated By:</MudText>
@@ -39,12 +39,12 @@
                 }
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Status:</MudText>
-                <MudText>@activity.Status.ToString().SplitOnCapitalLetters()</MudText>
+                <MudText Typo="Typo.button">Status:</MudText><br />
+                <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(activity.Status)" Class="ml-0">@activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button">Completion Time:</MudText>
-                <MudText>@activity.CompletionTime</MudText>
+                <MudText Typo="Typo.button">Completion Time:</MudText>
+                <MudText Class="mud-text-secondary">@activity.CompletionTime</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>

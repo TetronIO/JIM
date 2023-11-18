@@ -23,10 +23,10 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
-        <MudTd DataLabel="Has Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Created">@context.Created</MudTd>
+        <MudTd DataLabel="Attributes"><MudText Class="mud-text-secondary">@context.AttributesCount</MudText></MudTd>
+        <MudTd DataLabel="Has Predefined Searches?"><MudText Class="mud-text-secondary">@(context.HasPredefinedSearches ? "Yes" : "No")</MudText></MudTd>
+        <MudTd DataLabel="Built-in?"><MudText Class="mud-text-secondary">@(context.BuiltIn ? "Yes" : "No")</MudText></MudTd>
+        <MudTd DataLabel="Created"><MudText Class="mud-text-secondary">@context.Created</MudText></MudTd>
     </RowTemplate>
 </MudTable>
 

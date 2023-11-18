@@ -63,11 +63,11 @@
             </MudButton>
         </MudTd>
         <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Description">@context.Description</MudTd>
-        <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>
-        <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
-        <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
-        <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
+        <MudTd DataLabel="Description"><MudText Class="mud-text-secondary">@context.Description</MudText></MudTd>
+        <MudTd DataLabel="Objects"><MudText Class="mud-text-secondary">@context.ObjectCount.ToString("N0")</MudText></MudTd>
+        <MudTd DataLabel="Connected Objects (%)"><MudText Class="mud-text-secondary">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudText></MudTd>
+        <MudTd DataLabel="Pending Exports (%)"><MudText Class="mud-text-secondary">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudText></MudTd>
+        <MudTd DataLabel="Connector"><MudText Class="mud-text-secondary">@context.ConnectorName</MudText></MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no connected systems

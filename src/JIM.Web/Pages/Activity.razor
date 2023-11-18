@@ -32,9 +32,9 @@
             <MudTd DataLabel="Name">
                 <MudLink Href="@($"/activity/{context.Id}")">@context.TargetName</MudLink>
             </MudTd>
-            <MudTd DataLabel="Target">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
-            <MudTd DataLabel="Operation">@context.TargetOperationType</MudTd>
-            <MudTd DataLabel="Created">@context.Created</MudTd>
+            <MudTd DataLabel="Target"><MudText Class="mud-text-secondary">@context.TargetType.ToString().SplitOnCapitalLetters()</MudText></MudTd>
+            <MudTd DataLabel="Operation"><MudText Class="mud-text-secondary">@context.TargetOperationType</MudText></MudTd>
+            <MudTd DataLabel="Created"><MudText Class="mud-text-secondary">@context.Created</MudText></MudTd>
             <MudTd DataLabel="Initiated By">
                 @if (context.InitiatedBy != null)
                 {
@@ -48,7 +48,7 @@
             <MudTd DataLabel="Status">
                 <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">@context.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudTd>
-            <MudTd DataLabel="Completion Time">@context.CompletionTime</MudTd>
+            <MudTd DataLabel="Completion Time"><MudText Class="mud-text-secondary">@context.CompletionTime</MudText></MudTd>
         </RowTemplate>
         <NoRecordsContent>
             There is no activity to show yet.

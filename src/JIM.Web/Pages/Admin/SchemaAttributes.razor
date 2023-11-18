@@ -30,10 +30,10 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Type">@context.Type.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Plurality">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudTd>
-        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Created">@context.Created</MudTd>
+        <MudTd DataLabel="Type"><MudText Class="mud-text-secondary">@context.Type.ToString().SplitOnCapitalLetters()</MudText></MudTd>
+        <MudTd DataLabel="Plurality"><MudText Class="mud-text-secondary">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudText></MudTd>
+        <MudTd DataLabel="Built-in?"><MudText Class="mud-text-secondary">@(context.BuiltIn ? "Yes" : "No")</MudText></MudTd>
+        <MudTd DataLabel="Created"><MudText Class="mud-text-secondary">@context.Created</MudText></MudTd>
         <MudTd DataLabel="Object Types">
             @if (context.MetaverseObjectTypes != null)
             {

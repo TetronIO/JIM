@@ -35,10 +35,10 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Description">@context.Description</MudTd>
-        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Version(s)">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudTd>
-        <MudTd DataLabel="In-use?">@(context.InUse ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Description"><MudText Class="mud-text-secondary">@context.Description</MudText></MudTd>
+        <MudTd DataLabel="Built-in?"><MudText Class="mud-text-secondary">@(context.BuiltIn ? "Yes" : "No")</MudText></MudTd>
+        <MudTd DataLabel="Version(s)"><MudText Class="mud-text-secondary">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudText></MudTd>
+        <MudTd DataLabel="In-use?"><MudText Class="mud-text-secondary">@(context.InUse ? "Yes" : "No")</MudText></MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no connectors
