@@ -35,7 +35,7 @@
     </MudPaper>
 
     <MudText Typo="Typo.h5" Class="mt-5">Metaverse Attributes</MudText>
-    <MudText Typo="Typo.subtitle1">These will be the attributes shown in the search results:</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">These will be the attributes shown in the search results:</MudText>
 
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         @foreach (var psa in predefinedSearch.Attributes)
@@ -47,7 +47,7 @@
     @if (predefinedSearch.CriteriaGroups.Count > 0)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Criteria</MudText>
-        <MudText Typo="Typo.subtitle1">This search has criteria to filter the results:</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">This search has criteria to filter the results:</MudText>
 
         <MudStack Class="mt-5">
             @foreach (var criteriaGroup in predefinedSearch.CriteriaGroups)

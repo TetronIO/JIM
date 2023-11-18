@@ -9,7 +9,7 @@
 <PageTitle>Activity</PageTitle>
 
 <MudText Typo="Typo.h4">Activity</MudText>
-<MudText Typo="Typo.subtitle1">
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     See what JIM has been used for here. Everything that happens in JIM is tracked by an Activity. 
     Activities can be initiated by an individual, or by the system via automation in response to synchronisation schedules, workflows, etc.
 </MudText>
@@ -20,8 +20,8 @@
 
     <MudTable T="JIM.Models.Activities.Activity" Items="@activities.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
         <HeaderContent>
-            <MudTh>Name</MudTh>
             <MudTh>Target</MudTh>
+            <MudTh>Type</MudTh>
             <MudTh>Operation</MudTh>
             <MudTh>Created</MudTh>
             <MudTh>Initiated By</MudTh>
@@ -29,12 +29,12 @@
             <MudTh>Completion Time</MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Name">
+            <MudTd DataLabel="Target">
                 <MudLink Href="@($"/activity/{context.Id}")">@context.TargetName</MudLink>
             </MudTd>
-            <MudTd DataLabel="Target"><MudText Class="mud-text-secondary">@context.TargetType.ToString().SplitOnCapitalLetters()</MudText></MudTd>
-            <MudTd DataLabel="Operation"><MudText Class="mud-text-secondary">@context.TargetOperationType</MudText></MudTd>
-            <MudTd DataLabel="Created"><MudText Class="mud-text-secondary">@context.Created</MudText></MudTd>
+            <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Operation">@context.TargetOperationType</MudTd>
+            <MudTd DataLabel="Created">@context.Created</MudTd>
             <MudTd DataLabel="Initiated By">
                 @if (context.InitiatedBy != null)
                 {
@@ -48,7 +48,7 @@
             <MudTd DataLabel="Status">
                 <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">@context.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudTd>
-            <MudTd DataLabel="Completion Time"><MudText Class="mud-text-secondary">@context.CompletionTime</MudText></MudTd>
+            <MudTd DataLabel="Completion Time">@context.CompletionTime</MudTd>
         </RowTemplate>
         <NoRecordsContent>
             There is no activity to show yet.

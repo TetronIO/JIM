@@ -8,7 +8,7 @@
 
 <PageTitle>Schema: Attributes</PageTitle>
 <MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Schema:</span> Attributes</MudText>
-<MudText Typo="Typo.subtitle1">Manage metaverse object types and their attributes.</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Manage metaverse object types and their attributes.</MudText>
 
 <br />
 <MudButton Variant="Variant.Filled" Href="/admin/schema" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Object Types</MudButton>
@@ -30,10 +30,10 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Type"><MudText Class="mud-text-secondary">@context.Type.ToString().SplitOnCapitalLetters()</MudText></MudTd>
-        <MudTd DataLabel="Plurality"><MudText Class="mud-text-secondary">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudText></MudTd>
-        <MudTd DataLabel="Built-in?"><MudText Class="mud-text-secondary">@(context.BuiltIn ? "Yes" : "No")</MudText></MudTd>
-        <MudTd DataLabel="Created"><MudText Class="mud-text-secondary">@context.Created</MudText></MudTd>
+        <MudTd DataLabel="Type">@context.Type.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Plurality">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Created">@context.Created</MudTd>
         <MudTd DataLabel="Object Types">
             @if (context.MetaverseObjectTypes != null)
             {

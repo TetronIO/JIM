@@ -8,7 +8,7 @@
 
 <PageTitle>Connected Systems</PageTitle>
 <MudText Typo="Typo.h4">Connected Systems</MudText>
-<MudText Typo="Typo.subtitle1">
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     JIM imports from and exports data to connected systems using Connectors.
     @if (connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
     {
@@ -35,39 +35,33 @@
         <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ObjectCount)">Objects</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorsCount)">Connected Objects (%)</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.PendingExportObjectsCount)">Pending Exports (%)</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)">Connector</MudTableSortLabel></MudTh>
+        <MudTh>Action</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Options">
-            <MudButton Href="@($"/admin/connected-systems/{context.Id}/")"
-                Variant="Variant.Outlined"
-                StartIcon="@Icons.Material.Filled.Settings"
-                Color="Color.Default"
-                Size="Size.Small"
-                DisableElevation="true" Class="me-2">
-                Settings
-            </MudButton>
-            <MudButton Href="@($"/admin/connected-systems/{context.Id}/objects")"
-                Variant="Variant.Outlined"
-                StartIcon="@Icons.Material.Filled.List"
-                Color="Color.Default"
-                Size="Size.Small"
-                DisableElevation="true">
-                Objects
-            </MudButton>
+        <MudTd DataLabel="Name">
+            <MudLink Href="@($"/admin/connected-systems/{context.Id}/")">@context.Name</MudLink>
         </MudTd>
-        <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Description"><MudText Class="mud-text-secondary">@context.Description</MudText></MudTd>
-        <MudTd DataLabel="Objects"><MudText Class="mud-text-secondary">@context.ObjectCount.ToString("N0")</MudText></MudTd>
-        <MudTd DataLabel="Connected Objects (%)"><MudText Class="mud-text-secondary">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudText></MudTd>
-        <MudTd DataLabel="Pending Exports (%)"><MudText Class="mud-text-secondary">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudText></MudTd>
-        <MudTd DataLabel="Connector"><MudText Class="mud-text-secondary">@context.ConnectorName</MudText></MudTd>
+        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>
+        <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
+        <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
+        <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
+            <MudTd DataLabel="Action">
+                <MudButton Href="@($"/admin/connected-systems/{context.Id}/objects")"
+                           Variant="Variant.Outlined"
+                           StartIcon="@Icons.Material.Filled.List"
+                           Color="Color.Default"
+                           Size="Size.Small"
+                           DisableElevation="true">
+                    Objects
+                </MudButton>
+            </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no connected systems

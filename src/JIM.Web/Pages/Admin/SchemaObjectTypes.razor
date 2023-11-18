@@ -7,7 +7,7 @@
 
 <PageTitle>Schema: Object Types</PageTitle>
 <MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Schema:</span> Object Types</MudText>
-<MudText Typo="Typo.subtitle1">Manage metaverse object types and their attributes.</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Manage metaverse object types and their attributes.</MudText>
 
 <br />
 <MudButton Variant="Variant.Filled" Href="/admin/schema" Disabled="true" Size="Size.Small" Color="Color.Primary">Object Types</MudButton>
@@ -23,10 +23,10 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Attributes"><MudText Class="mud-text-secondary">@context.AttributesCount</MudText></MudTd>
-        <MudTd DataLabel="Has Predefined Searches?"><MudText Class="mud-text-secondary">@(context.HasPredefinedSearches ? "Yes" : "No")</MudText></MudTd>
-        <MudTd DataLabel="Built-in?"><MudText Class="mud-text-secondary">@(context.BuiltIn ? "Yes" : "No")</MudText></MudTd>
-        <MudTd DataLabel="Created"><MudText Class="mud-text-secondary">@context.Created</MudText></MudTd>
+        <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
+        <MudTd DataLabel="Has Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Created">@context.Created</MudTd>
     </RowTemplate>
 </MudTable>
 

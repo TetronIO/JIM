@@ -8,7 +8,7 @@
 
 <PageTitle>Connectors</PageTitle>
 <MudText Typo="Typo.h4">Connectors</MudText>
-<MudText Typo="Typo.subtitle1">
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     JIM uses Connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors.
     From here you can see which are installed and if any have updates that can be applied.
 </MudText>
@@ -35,10 +35,10 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Description"><MudText Class="mud-text-secondary">@context.Description</MudText></MudTd>
-        <MudTd DataLabel="Built-in?"><MudText Class="mud-text-secondary">@(context.BuiltIn ? "Yes" : "No")</MudText></MudTd>
-        <MudTd DataLabel="Version(s)"><MudText Class="mud-text-secondary">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudText></MudTd>
-        <MudTd DataLabel="In-use?"><MudText Class="mud-text-secondary">@(context.InUse ? "Yes" : "No")</MudText></MudTd>
+        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Version(s)">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudTd>
+        <MudTd DataLabel="In-use?">@(context.InUse ? "Yes" : "No")</MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no connectors

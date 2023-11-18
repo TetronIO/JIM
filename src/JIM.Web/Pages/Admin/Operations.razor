@@ -13,13 +13,13 @@
 
 <PageTitle>Operations</PageTitle>
 <MudText Typo="Typo.h4">Operations</MudText>
-<MudText Typo="Typo.subtitle1">
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     JIM executes tasks on a queue. You can see what tasks are queued here. Tasks are made up of different types of operations within JIM, i.e. Synchronisation Tasks and Data Generation Tasks.
 </MudText>
 
 <MudPaper Outlined="true" Class="pa-4 mt-5">
     <MudText Typo="Typo.h6">Execute a Run Profile</MudText>
-    <MudText>Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
 
     @if (connectedSystemHeaders != null && connectedSystemHeaders.Count > 0)
     {
