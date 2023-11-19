@@ -10,14 +10,18 @@
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
     configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.
-    <br />
-    <br />
+</MudText>
+
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     Example datasets provide the raw values that are used to construct example data in Example Data Templates.
 </MudText>
 
-<br />
-<MudButton Variant="Variant.Filled" Href="/admin/example-data" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Templates</MudButton>
-<MudButton Variant="Variant.Filled" Href="/admin/example-data/datasets" Size="Size.Small" Color="Color.Primary" Disabled="true">Data Sets</MudButton>
+<MudPaper Elevation="0" Class="mt-2" Outlined="true">
+    <MudToolBar>
+        <MudButton Href="/admin/example-data" Color="Color.Primary" DisableElevation="true">Templates</MudButton>
+        <MudButton Href="/admin/example-data/datasets" Color="Color.Primary" DisableElevation="true" Disabled="true">Data Sets</MudButton>
+    </MudToolBar>
+</MudPaper>
 
 <MudTable Items="@datasets" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ExampleDataSetHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>

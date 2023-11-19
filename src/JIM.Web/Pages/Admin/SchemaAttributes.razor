@@ -10,9 +10,13 @@
 <MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Schema:</span> Attributes</MudText>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Manage metaverse object types and their attributes.</MudText>
 
-<br />
-<MudButton Variant="Variant.Filled" Href="/admin/schema" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Object Types</MudButton>
-<MudButton Variant="Variant.Filled" Href="/admin/schema/attributes" Disabled="true" Size="Size.Small" Color="Color.Primary">Attributes</MudButton>
+<MudPaper Elevation="0" Class="mt-2" Outlined="true">
+    <MudToolBar>
+        <MudButton Href="/admin/schema" Color="Color.Primary" DisableElevation="true">Object Types</MudButton>
+        <MudButton Href="/admin/schema/attributes" Color="Color.Primary" DisableElevation="true" Disabled="true">Attributes</MudButton>
+        <MudSpacer />
+    </MudToolBar>
+</MudPaper>
 
 <MudTable Items="@attributeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<MetaverseAttributeHeader,bool>(FilterFunc1)" Elevation="0" Outlined="true">
     <ToolBarContent>

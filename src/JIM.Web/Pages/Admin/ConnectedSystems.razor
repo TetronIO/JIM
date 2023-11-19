@@ -16,18 +16,14 @@
     }
 </MudText>
 
-<MudGrid Class="mt-5">
-    <MudItem xs="6">
-        <MudText Typo="Typo.overline">
-            <MudLink Href="/admin/connected-systems" Disabled="true">Connected Systems</MudLink> 
-            <span class="ms-1 me-1">|</span>
-            <MudLink Href="/admin/connected-systems/connectors">Connectors</MudLink>
-        </MudText>
-    </MudItem>
-    <MudItem xs="6" Class="d-flex justify-end">
+<MudPaper Elevation="0" Class="mt-2" Outlined="true">
+    <MudToolBar>
+        <MudButton Href="/admin/connected-systems" Color="Color.Primary" DisableElevation="true" Disabled="true">Connected Systems</MudButton>
+        <MudButton Href="/admin/connected-systems/connectors" Color="Color.Primary" DisableElevation="true">Connectors</MudButton>
+        <MudSpacer />
         <MudButton StartIcon="@Icons.Material.Filled.AddBox" Variant="Variant.Filled" Href="/admin/connected-systems/create" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Create Connected System</MudButton>
-    </MudItem>
-</MudGrid>
+    </MudToolBar>
+</MudPaper>
 
 <MudTable Items="@connectedSystemHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
