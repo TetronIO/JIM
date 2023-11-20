@@ -648,11 +648,6 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfileHeaderAsync(connectedSystemRunProfileId);
         }
-
-        internal async Task<ConnectedSystemRunProfile> GetConnectedSystemRunProfileAsync(int connectedSystemRunProfileId)
-        {
-
-        }
         #endregion
 
         #region Sync Rules
