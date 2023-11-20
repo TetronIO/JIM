@@ -114,6 +114,7 @@ namespace JIM.Application.Servers
                 connectedSystem.SettingValues.Add(settingValue);
             }
 
+            // every CRUD operation requires tracking with an activity...
             var activity = new Activity
             {
                 TargetName = connectedSystem.Name,
@@ -125,7 +126,7 @@ namespace JIM.Application.Servers
             await Application.Activities.CompleteActivityAsync(activity);
         }
 
-        public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
+        public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy, Activity? parentActivity = null)
         {
             if (connectedSystem == null)
                 throw new ArgumentNullException(nameof(connectedSystem));
@@ -135,7 +136,18 @@ namespace JIM.Application.Servers
             connectedSystem.SettingValuesValid = !validationResults.Any(q => q.IsValid == false);
 
             connectedSystem.LastUpdated = DateTime.Now;
+
+            // every CRUD operation requires tracking with an activity...
+            var activity = new Activity
+            {
+                TargetName = connectedSystem.Name,
+                TargetType = ActivityTargetType.ConnectedSystem,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                ParentActivityId = parentActivity?.Id
+            };
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            await Application.Activities.CompleteActivityAsync(activity);
         }
         #endregion
 
@@ -256,7 +268,7 @@ namespace JIM.Application.Servers
         /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
         /// <remarks>Do not make static, it needs to be available on the instance</remarks>
 #pragma warning disable CA1822 // Mark members as static
-        public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem)
+        public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
 #pragma warning restore CA1822 // Mark members as static
         {
             ValidateConnectedSystemParameter(connectedSystem);
@@ -264,6 +276,15 @@ namespace JIM.Application.Servers
             // work out what connector we need to instantiate, so that we can use its internal validation method
             // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
             // especially when we need to support uploaded connectors, not just built-in ones
+
+            // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
+            var activity = new Activity
+            {
+                TargetName = connectedSystem.Name,
+                TargetType = ActivityTargetType.ConnectedSystem,
+                TargetOperationType = ActivityTargetOperationType.ImportHierarchy
+            };
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
             List<ConnectorPartition> partitions;
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
@@ -289,8 +310,12 @@ namespace JIM.Application.Servers
                 });
             }
 
+            // finish the activity
+            await Application.Activities.CompleteActivityAsync(activity);
+
             // for now though, we will just persist and let the user select containers later
-            await UpdateConnectedSystemAsync(connectedSystem);
+            // pass in this user-initiated activity, so that sub-operations can be associated with it, i.e. the partition persiting operation
+            await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
         }
 
         private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
@@ -555,28 +580,58 @@ namespace JIM.Application.Servers
         #endregion
 
         #region Connected System Run Profiles
-        public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+        public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
         {
             if (connectedSystemRunProfile == null)
                 throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+            // every CRUD operation requires tracking with an activity...
+            var activity = new Activity
+            {
+                TargetName = connectedSystemRunProfile.Name,
+                TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+                TargetOperationType = ActivityTargetOperationType.Create
+            };
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+
+            // now the run profile has been persisted, associated it with the activity and complete it.
+            activity.RunProfile = connectedSystemRunProfile;
+            await Application.Activities.CompleteActivityAsync(activity);
         }
 
-        public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+        public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
         {
             if (connectedSystemRunProfile == null)
                 return;
 
+            // every CRUD operation requires tracking with an activity...
+            var activity = new Activity
+            {
+                TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+                TargetOperationType = ActivityTargetOperationType.Delete,
+                RunProfile = connectedSystemRunProfile
+            };
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+            await Application.Activities.CompleteActivityAsync(activity);
         }
 
-        public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+        public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
         {
             if (connectedSystemRunProfile == null)
                 throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+            // every CRUD operation requires tracking with an activity...
+            var activity = new Activity
+            {
+                TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                RunProfile = connectedSystemRunProfile
+            };
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+            await Application.Activities.CompleteActivityAsync(activity);
         }
 
         public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
@@ -592,6 +647,11 @@ namespace JIM.Application.Servers
         public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfileHeaderAsync(connectedSystemRunProfileId);
+        }
+
+        internal async Task<ConnectedSystemRunProfile> GetConnectedSystemRunProfileAsync(int connectedSystemRunProfileId)
+        {
+
         }
         #endregion
 

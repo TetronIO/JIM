@@ -19,6 +19,12 @@ public class Activity
     public Guid? ParentActivityId { get; set; }
 
     public DateTime Created { get; set; }
+    
+    /// <summary>
+    /// Activities that are not executed in real-time, such as those initiated by JIM.Service procesing a queue to get to a task for the activity will have an Executed time
+    /// noticably later than the created time for the Activity. This enables you to see what the overall, user-experienced activity completion time is, and the actual system execution time.
+    /// </summary>
+    public DateTime Executed {  get; set; }
 
     public MetaverseObject? InitiatedBy { get; set; }
 
@@ -29,9 +35,17 @@ public class Activity
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
-    /// When the activity is complete, a value for how long it took to complete should be stored here.
+    /// When the activity is complete, a value for how long the activity took to complete should be stored here. 
+    /// This may be a noticably smaller value than the total activity time, as some activities take a while before they
+    /// are executed, i.e. those processed by JIM.Service which employs a queue and may take time to get round to 
+    /// executing the task the activity is for.
     /// </summary>
-    public TimeSpan? CompletionTime { get; set; }
+    public TimeSpan? ExecutionTime { get; set; }
+
+    /// <summary>
+    /// When the 
+    /// </summary>
+    public TimeSpan? TotalActivityTime { get; set; }
 
     public ActivityStatus Status { get; set; }
 
@@ -57,9 +71,9 @@ public class Activity
 
     // --------------------------------------------------------
     // run profile execution related...
-        
+
     /// <summary>
-    /// The run-profile that caused the synchronisation run.
+    /// The run-profile that was created, updated, deleted or executed..
     /// </summary>
     public ConnectedSystemRunProfile? RunProfile { get; set; }
 

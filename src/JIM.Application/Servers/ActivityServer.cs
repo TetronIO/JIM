@@ -16,12 +16,29 @@ namespace JIM.Application.Servers
 
         public async Task CreateActivityAsync(Activity activity, MetaverseObject? initiatedBy)
         {
-            activity.Status = ActivityStatus.InProgress;            
+            activity.Status = ActivityStatus.InProgress;
+            activity.Executed = DateTime.UtcNow;
 
             if (initiatedBy != null)
             {
                 activity.InitiatedBy = initiatedBy;
                 activity.InitiatedByName = initiatedBy.DisplayName;
+            }
+
+            if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
+            {
+                if (activity.RunProfile == null)
+                    throw new InvalidDataException("Activity.RunProfile has not been set. Cannot continue.");
+
+                // we want to retain some basic info about run profiles when they're being deleted
+                activity.TargetName = activity.RunProfile.Name;
+                if (activity.TargetOperationType == ActivityTargetOperationType.Delete)
+                    activity.RunType = activity.RunProfile.RunType;
+            } 
+            else if (activity.TargetType == ActivityTargetType.ConnectedSystem)
+            {
+                if (activity.ConnectedSystemId == null)
+                    throw new InvalidDataException("Activity.ConnectedSysetmId has not been set. Cannot continue.");
             }
 
             await Application.Repository.Activity.CreateActivityAsync(activity);
@@ -30,13 +47,13 @@ namespace JIM.Application.Servers
         public async Task CompleteActivityAsync(Activity activity)
         {
             activity.Status = ActivityStatus.Complete;
-            activity.CompletionTime = DateTime.UtcNow - activity.Created;
+            activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
         public async Task CompleteActivityWithError(Activity activity, Exception exception)
         {
-            activity.CompletionTime = DateTime.UtcNow - activity.Created;
+            activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
             activity.ErrorMessage = exception.Message;
             activity.ErrorStackTrace = exception.StackTrace;
             activity.Status = ActivityStatus.CompleteWithError;
@@ -66,6 +83,9 @@ namespace JIM.Application.Servers
             return await Application.Repository.Activity.GetActivityAsync(id);
         }
 
+        /// <summary>
+        /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
+        /// </summary>
         public async Task<PagedResultSet<Activity>> GetActivitiesAsync(int page = 1, int pageSize = 20, int maxResults = 500, QuerySortBy querySortBy = QuerySortBy.DateCreated)
         {
             return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, maxResults, querySortBy);

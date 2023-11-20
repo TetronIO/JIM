@@ -468,6 +468,8 @@
 @code {
     [Parameter]
     public int Id { get; set; }
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask { get; set; }
     private bool IsDetailsFormValid { get; set; }
     private string[] DetailsFormErrors { get; set; } = { };
     private bool IsSettingsFormValid { get; set; }
@@ -539,7 +541,9 @@
             return;
         }
 
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        // attribute the update to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("Your details changes have been saved.", Severity.Success);
     }
 
@@ -574,7 +578,9 @@
             return;
         }
 
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        // attribute the update to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);
         settingsBeingSaved = false;
     }
@@ -628,8 +634,11 @@
         if (connectedSystem == null)
             return;
 
+        // attribute the import to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+
         hierarchyBeingRetrieved = true;
-        await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem);
+        await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, user);
         hierarchyBeingRetrieved = false;
     }
 

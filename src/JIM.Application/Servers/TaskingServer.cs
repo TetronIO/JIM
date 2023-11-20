@@ -1,4 +1,5 @@
-﻿using JIM.Models.Tasking;
+﻿using JIM.Models.Activities;
+using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 
 namespace JIM.Application.Servers
@@ -28,6 +29,23 @@ namespace JIM.Application.Servers
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
         {
+            if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
+            {
+                // every CRUD operation requires tracking with an activity...
+                var activity = new Activity
+                {
+                    TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+                    TargetOperationType = ActivityTargetOperationType.Execute,
+                    RunProfile = 
+
+                };
+                await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
+            }
+
+
+
+
+
             await Application.Repository.Tasking.CreateServiceTaskAsync(serviceTask);
         }
 

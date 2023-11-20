@@ -80,11 +80,11 @@ namespace JIM.Service
                 if (CurrentTasks.Count > 0)
                 {
                     // check the database to see if we need to cancel any tasks we're currently processing...
-                    var serviceTaskIds = CurrentTasks.Select(q => q.TaskId).ToArray();
+                    var serviceTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
                     var serviceTasksToCancel = await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
                     foreach (var serviceTaskToCancel in serviceTasksToCancel)
                     {
-                        var taskTask = CurrentTasks.SingleOrDefault(q => q.TaskId == serviceTaskToCancel.Id);
+                        var taskTask = CurrentTasks.SingleOrDefault(t => t.TaskId == serviceTaskToCancel.Id);
                         if (taskTask != null)
                         {
                             Log.Information($"ExecuteAsync: Cancelling task {serviceTaskToCancel.Id}...");
@@ -155,7 +155,7 @@ namespace JIM.Service
                                         }
                                         finally
                                         {
-                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {activity.CompletionTime}.");
+                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {activity.ExecutionTime}.");
                                         }
                                     }
                                 }
@@ -181,7 +181,7 @@ namespace JIM.Service
                                             // we duplicate some run profile information as run profiles can be user-deleted, but we would want to retain core run profile information for audit purposes.
                                             var activity = new Activity { 
                                                 TargetName = $"{connectedSystem.Name}: {runProfile.Name}",
-                                                TargetType = ActivityTargetType.RunProfile,
+                                                TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                                                 TargetOperationType = ActivityTargetOperationType.Execute,
                                                 RunProfile = runProfile
                                             };
@@ -229,7 +229,7 @@ namespace JIM.Service
                                             finally
                                             {
                                                 // record how long the sync run took, whether it was successful, or not.
-                                                Log.Information($"ExecuteAsync: Completed processing of {activity.TargetName} sync run in {activity.CompletionTime}.");
+                                                Log.Information($"ExecuteAsync: Completed processing of {activity.TargetName} sync run in {activity.ExecutionTime}.");
                                             }
                                         }
                                         else
@@ -275,7 +275,7 @@ namespace JIM.Service
                                             
                                             // finish by completing the activity
                                             await taskJim.Activities.CompleteActivityAsync(activity);
-                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {activity.CompletionTime}.");
+                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {activity.ExecutionTime}.");
                                         }
                                         catch (Exception ex)
                                         {

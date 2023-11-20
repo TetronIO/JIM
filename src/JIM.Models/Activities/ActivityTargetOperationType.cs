@@ -7,5 +7,9 @@ public enum ActivityTargetOperationType
     Update = 2,
     Delete = 3,
     Clear = 4,
-    Execute = 5
+    Execute = 5,
+    /// <summary>
+    /// Relates to Connected Systems
+    /// </summary>
+    ImportHierarchy = 6
 }

@@ -34,6 +34,9 @@ namespace JIM.PostgresData.Repositories
             await Repository.Database.SaveChangesAsync();
         }
 
+        /// <summary>
+        /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
+        /// </summary>
         public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
             int page, 
             int pageSize, 
@@ -62,6 +65,7 @@ namespace JIM.PostgresData.Repositories
                 .ThenInclude(av => av.Attribute)
                 .Include(st => st.InitiatedBy)
                 .ThenInclude(ib => ib.Type)
+                .Where(a => a.ParentActivityId == null)
                 select o;
 
             switch (querySortBy)

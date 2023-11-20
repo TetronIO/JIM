@@ -26,7 +26,7 @@
             <MudTh>Created</MudTh>
             <MudTh>Initiated By</MudTh>
             <MudTh>Status</MudTh>
-            <MudTh>Completion Time</MudTh>
+            <MudTh>Execution Time</MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Target">
@@ -48,7 +48,7 @@
             <MudTd DataLabel="Status">
                 <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">@context.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudTd>
-            <MudTd DataLabel="Completion Time">@context.CompletionTime</MudTd>
+            <MudTd DataLabel="Execution Time">@context.ExecutionTime</MudTd>
         </RowTemplate>
         <NoRecordsContent>
             There is no activity to show yet.

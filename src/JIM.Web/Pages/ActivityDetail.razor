@@ -43,8 +43,12 @@
                 <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(activity.Status)" Class="ml-0">@activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Completion Time:</MudText>
-                <MudText Class="mud-text-secondary">@activity.CompletionTime</MudText>
+                <MudText Typo="Typo.button">Execution Time:</MudText>
+                <MudText Class="mud-text-secondary">@activity.ExecutionTime</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Total Activity Time:</MudText>
+                <MudText Class="mud-text-secondary">@activity.TotalActivityTime</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -69,7 +73,7 @@
         </MudPaper>
     }
 
-    @if (activity.TargetType == ActivityTargetType.RunProfile)
+    @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Additional Info</MudText>
         <MudPaper Class="pa-5 mt-5" Outlined="true">
