@@ -40,9 +40,25 @@ namespace JIM.PostgresData.Repositories
             }
         }
 
+        public async Task<ServiceTask?> GetServiceTaskAsync(Guid id)
+        {
+            return await Repository.Database.ServiceTasks.
+                Include(st => st.Activity).
+                Include(st => st.InitiatedBy).
+                ThenInclude(ib => ib.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+                ThenInclude(av => av.Attribute).
+                Include(st => st.InitiatedBy).
+                ThenInclude(ib => ib.Type).
+                SingleOrDefaultAsync(st => st.Id == id);
+        }
+
         public async Task<List<ServiceTask>> GetServiceTasksAsync()
         {
-            return await Repository.Database.ServiceTasks.Include(st => st.InitiatedBy).ThenInclude(ib => ib.Type).ToListAsync();
+            return await Repository.Database.ServiceTasks
+                .Include(st => st.Activity)
+                .Include(st => st.InitiatedBy)
+                .ThenInclude(ib => ib.Type)
+                .ToListAsync();
         }
 
         public async Task<List<ServiceTaskHeader>> GetServiceTaskHeadersAsync()
@@ -74,21 +90,23 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ServiceTask?> GetNextServiceTaskAsync()
         {
-            return await Repository.Database.ServiceTasks.
-                Where(q => q.Status == ServiceTaskStatus.Queued).
-                OrderBy(q => q.Timestamp).
-                FirstOrDefaultAsync();
+            return await Repository.Database.ServiceTasks
+                .Include(st => st.Activity)
+                .Where(st => st.Status == ServiceTaskStatus.Queued)
+                .OrderBy(st => st.Timestamp)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync()
         {
             var tasks = new List<ServiceTask>();
             foreach (var task in await Repository.Database.ServiceTasks
-                .Include(q => q.InitiatedBy)
+                .Include(st => st.Activity)
+                .Include(st => st.InitiatedBy)
                 .ThenInclude(ib => ib.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                 .ThenInclude(av => av.Attribute)
-                .Where(q => q.Status == ServiceTaskStatus.Queued)
-                .OrderBy(q => q.Timestamp).ToListAsync())
+                .Where(st => st.Status == ServiceTaskStatus.Queued)
+                .OrderBy(st => st.Timestamp).ToListAsync())
             {
                 if (task.ExecutionMode == ServiceTaskExecutionMode.Sequential)
                 {
@@ -110,7 +128,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync()
         {
-            return await Repository.Database.ServiceTasks.Where(q => q.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
+            return await Repository.Database.ServiceTasks.Where(st => st.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
         }
 
         public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds)

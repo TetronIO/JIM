@@ -625,7 +625,9 @@
         if (connectedSystem == null)
             return;
 
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        // attribute the update to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
     }
 
@@ -647,7 +649,9 @@
         if (connectedSystem == null)
             return;
 
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        // attribute the actiont to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
     }
 
@@ -810,7 +814,9 @@
             PageSize = newRunProfile.PageSize
         });
 
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        // attribute the action to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("New run profile added.", Severity.Success);
         newRunProfile = new ConnectedSystemRunProfile();
     }
@@ -821,11 +827,14 @@
             return;
 
         connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
-        await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+
+        // attribute the action to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile, user);
         Snackbar.Add("Run profile removed.", Severity.Success);
     }
 
-    private async Task HandleAttributeCsvSubmit()
+    private void HandleAttributeCsvSubmit()
     {
         if (selectedObjectType == null)
         {

@@ -17,6 +17,7 @@ namespace JIM.Service.Processors
         private readonly IConnector _connector;
         private readonly ConnectedSystem _connectedSystem;
         private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
+        private readonly MetaverseObject _initiatedBy;
         private readonly Activity _activity;
         private readonly CancellationTokenSource _cancellationTokenSource;
 
@@ -25,6 +26,7 @@ namespace JIM.Service.Processors
             IConnector connector,
             ConnectedSystem connectedSystem,
             ConnectedSystemRunProfile connectedSystemRunProfile,
+            MetaverseObject initiatedBy,
             Activity activity,
             CancellationTokenSource cancellationTokenSource)
         {
@@ -32,6 +34,7 @@ namespace JIM.Service.Processors
             _connector = connector;
             _connectedSystem = connectedSystem;
             _connectedSystemRunProfile = connectedSystemRunProfile;
+            _initiatedBy = initiatedBy;
             _activity = activity;
             _cancellationTokenSource = cancellationTokenSource;
         }
@@ -64,7 +67,7 @@ namespace JIM.Service.Processors
                         _connectedSystem.PersistedConnectorData = result.PersistedConnectorData;
 
 
-                        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem);
+                        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedBy, _activity);
                     }
 
                     // decision: do we want to load the whole connector space into memory to maximise performance? for now, let's keep it db-centric.
@@ -112,7 +115,7 @@ namespace JIM.Service.Processors
                         initialPage = false;
 
                     // update the activity with the results from this page's processing
-                    await _jim.Activities.UpdateActivity(_activity);
+                    await _jim.Activities.UpdateActivityAsync(_activity);
                 }                
 
                 callBasedImportConnector.CloseImportConnection();

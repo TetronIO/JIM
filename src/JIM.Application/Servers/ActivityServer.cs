@@ -60,7 +60,7 @@ namespace JIM.Application.Servers
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
-        public async Task FailActivityWithError(Activity activity, Exception exception)
+        public async Task FailActivityWithErrorAsync(Activity activity, Exception exception)
         {
             activity.ErrorMessage = exception.Message;
             activity.ErrorStackTrace = exception.StackTrace;
@@ -68,7 +68,13 @@ namespace JIM.Application.Servers
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
-        public async Task UpdateActivity(Activity activity)
+        public async Task CancelActivityAsync(Activity activity)
+        {
+            activity.Status = ActivityStatus.FailedWithCancelled;
+            await Application.Repository.Activity.UpdateActivityAsync(activity);
+        }
+
+        public async Task UpdateActivityAsync(Activity activity)
         {
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }

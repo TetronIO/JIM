@@ -1,6 +1,7 @@
 ﻿using JIM.Models.Activities;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
+using Serilog;
 
 namespace JIM.Application.Servers
 {
@@ -11,6 +12,11 @@ namespace JIM.Application.Servers
         internal TaskingServer(JimApplication application)
         {
             Application = application;
+        }
+
+        public async Task<ServiceTask?> GetServiceTaskAsync(Guid id)
+        {
+            return await Application.Repository.Tasking.GetServiceTaskAsync(id);
         }
 
         public async Task<List<ServiceTask>> GetServiceTasksAsync()
@@ -32,19 +38,20 @@ namespace JIM.Application.Servers
             if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
             {
                 // every CRUD operation requires tracking with an activity...
+                var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationServiceTask.ConnectedSystemId);
+                var runProfile = runProfiles.Single(rp => rp.Id == synchronisationServiceTask.ConnectedSystemRunProfileId);
                 var activity = new Activity
                 {
                     TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                     TargetOperationType = ActivityTargetOperationType.Execute,
-                    RunProfile = 
-
+                    ConnectedSystemId = synchronisationServiceTask.ConnectedSystemId,
+                    RunProfile = runProfile              
                 };
                 await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
+
+                // associate the activity with the service task so the service task processor can complete the activity when done.
+                serviceTask.Activity = activity;
             }
-
-
-
-
 
             await Application.Repository.Tasking.CreateServiceTaskAsync(serviceTask);
         }
@@ -94,11 +101,29 @@ namespace JIM.Application.Servers
 
         public async Task CancelServiceTaskAsync(Guid serviceTaskId)
         {
-            await Application.Repository.Tasking.CancelServiceTaskAsync(serviceTaskId);
+            var serviceTask = await GetServiceTaskAsync(serviceTaskId);
+            if (serviceTask == null)
+            {
+                Log.Warning($"CancelServiceTaskAsync: no activity for id {serviceTaskId} exists. Aborting.");
+                return;
+            }
+
+            if (serviceTask.Activity != null)
+                await Application.Activities.CancelActivityAsync(serviceTask.Activity);
+
+            await Application.Repository.Tasking.CancelServiceTaskAsync(serviceTask.Id);
         }
 
-        public async Task DeleteServiceTaskAsync(ServiceTask serviceTask)
+        public async Task CancelServiceTaskAsync(ServiceTask serviceTask)
         {
+            await CancelServiceTaskAsync(serviceTask.Id);
+        }
+
+        public async Task CompleteServiceTaskAsync(ServiceTask serviceTask)
+        {
+            if (serviceTask.Activity != null)
+                await Application.Activities.CompleteActivityAsync(serviceTask.Activity);
+
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
         }
 

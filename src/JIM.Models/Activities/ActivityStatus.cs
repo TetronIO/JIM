@@ -6,5 +6,6 @@ public enum ActivityStatus
     InProgress = 1,
     Complete = 2,
     CompleteWithError = 3,
-    FailedWithError = 4
+    FailedWithError = 4,
+    FailedWithCancelled = 5
 }

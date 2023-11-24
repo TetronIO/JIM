@@ -62,9 +62,9 @@ namespace JIM.Service
             await mainLoopJim.InitialiseDatabaseAsync();
 
             // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
-            // this scenario is expected to be for when the worker unexpectedly quits and doesn't complete cancellation.
+            // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
             foreach (var taskToCancel in await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync())
-                await mainLoopJim.Tasking.DeleteServiceTaskAsync(taskToCancel);
+                await mainLoopJim.Tasking.CancelServiceTaskAsync(taskToCancel);
 
             // DEV: Unsupported scenario:
             // todo: job is being processed in database but is not in the current tasks, i.e. it's no longer being processed. clear it out
@@ -89,7 +89,7 @@ namespace JIM.Service
                         {
                             Log.Information($"ExecuteAsync: Cancelling task {serviceTaskToCancel.Id}...");
                             taskTask.CancellationTokenSource.Cancel();
-                            await mainLoopJim.Tasking.DeleteServiceTaskAsync(serviceTaskToCancel);
+                            await mainLoopJim.Tasking.CancelServiceTaskAsync(serviceTaskToCancel);
                             CurrentTasks.Remove(taskTask);
                         }
                         else
@@ -123,10 +123,13 @@ namespace JIM.Service
                                 if (newServiceTask.InitiatedBy != null)
                                     initiatedBy = await taskJim.Metaverse.GetMetaverseObjectAsync(newServiceTask.InitiatedBy.Id);
 
+                                // mark the activity as being executed, i.e. when the work actually started
+                                newServiceTask.Activity.Executed = DateTime.UtcNow;
+                                await taskJim.Activities.UpdateActivityAsync(newServiceTask.Activity);
+
                                 if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
-
                                     var dataGenerationTemplate = await taskJim.DataGeneration.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
                                     if (dataGenerationTemplate == null)
                                     {
@@ -134,112 +137,100 @@ namespace JIM.Service
                                     }
                                     else
                                     {
-                                        // create the data-generation specific activity
-                                        var activity = new Activity { 
-                                            TargetName = dataGenerationTemplate.Name,
-                                            TargetType = ActivityTargetType.DataGenerationTemplate,
-                                            TargetOperationType = ActivityTargetOperationType.Execute,                                        
-                                            DataGenerationTemplateId = dataGenTemplateServiceTask.TemplateId 
-                                        };
-                                        await taskJim.Activities.CreateActivityAsync(activity, initiatedBy);
-
                                         try
                                         {
                                             await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
-                                            await taskJim.Activities.CompleteActivityAsync(activity);
+                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
                                         }
                                         catch (Exception ex)
                                         {
-                                            await taskJim.Activities.FailActivityWithError(activity, ex);
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing data generation template: " + dataGenTemplateServiceTask.TemplateId);
                                         }
                                         finally
                                         {
-                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {activity.ExecutionTime}.");
+                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {newServiceTask.Activity.ExecutionTime}.");
                                         }
                                     }
                                 }
                                 else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
-                                    var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncServiceTask.ConnectedSystemId);
-                                    if (connectedSystem != null)
+                                    if (syncServiceTask.InitiatedBy == null)
                                     {
-                                        // work out what connector we need to use
-                                        // todo: run through built-in connectors first, then do a lookup for user-supplied connectors
-                                        IConnector connector;
-                                        if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
-                                            connector = new LdapConnector();
-                                        else
-                                            throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for service processing.");
-
-                                        // work out what type of run profile we're being asked to run
-                                        var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
-                                        if (runProfile != null)
-                                        {
-                                            // create a synchronisation-specific activity for this run profile execution, then pass it in to the processor for iterative updates for each item processed.
-                                            // we duplicate some run profile information as run profiles can be user-deleted, but we would want to retain core run profile information for audit purposes.
-                                            var activity = new Activity { 
-                                                TargetName = $"{connectedSystem.Name}: {runProfile.Name}",
-                                                TargetType = ActivityTargetType.ConnectedSystemRunProfile,
-                                                TargetOperationType = ActivityTargetOperationType.Execute,
-                                                RunProfile = runProfile
-                                            };
-                                            await taskJim.Activities.CreateActivityAsync(activity, initiatedBy);                                    
-                                            
-                                            try
-                                            {
-                                                // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
-                                                if (runProfile.RunType == ConnectedSystemRunType.FullImport)
-                                                {
-                                                    var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, activity, cancellationTokenSource);
-                                                    await synchronisationImportTaskProcessor.PerformFullImportAsync();
-                                                }
-                                                else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
-                                                {
-                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                                }
-                                                else if (runProfile.RunType == ConnectedSystemRunType.Export)
-                                                {
-                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                                }
-                                                else if (runProfile.RunType == ConnectedSystemRunType.FullSynchronisation)
-                                                {
-                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                                }
-                                                else if (runProfile.RunType == ConnectedSystemRunType.DeltaSynchronisation)
-                                                {
-                                                    Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                                }
-                                                else
-                                                {
-                                                    Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
-                                                }
-
-                                                // task completed successfully
-                                                await taskJim.Activities.CompleteActivityAsync(activity);
-                                            }
-                                            catch (Exception ex) 
-                                            {
-                                                // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view issues with connectors through JIM,
-                                                // rather than an admin having to dig through server logs.
-                                                await taskJim.Activities.FailActivityWithError(activity, ex);
-                                                Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
-                                            }
-                                            finally
-                                            {
-                                                // record how long the sync run took, whether it was successful, or not.
-                                                Log.Information($"ExecuteAsync: Completed processing of {activity.TargetName} sync run in {activity.ExecutionTime}.");
-                                            }
-                                        }
-                                        else
-                                        {
-                                            Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncServiceTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncServiceTask.ConnectedSystemId}.");
-                                        }
+                                        Log.Error("ExecuteAsync: syncServiceTask.InitiatedBy was null. Cannot execute sync task");
                                     }
                                     else
                                     {
-                                        Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncServiceTask.ConnectedSystemId} but no such connected system found.");
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncServiceTask.ConnectedSystemId);
+                                        if (connectedSystem != null)
+                                        {
+                                            // work out what connector we need to use
+                                            // todo: run through built-in connectors first, then do a lookup for user-supplied connectors
+                                            IConnector connector;
+                                            if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
+                                                connector = new LdapConnector();
+                                            else
+                                                throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for service processing.");
+
+                                            // work out what type of run profile we're being asked to run
+                                            var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
+                                            if (runProfile != null)
+                                            {
+                                                try
+                                                {
+                                                    // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
+                                                    if (runProfile.RunType == ConnectedSystemRunType.FullImport)
+                                                    {
+                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, syncServiceTask.InitiatedBy, newServiceTask.Activity, cancellationTokenSource);
+                                                        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+                                                    }
+                                                    else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
+                                                    {
+                                                        Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                    }
+                                                    else if (runProfile.RunType == ConnectedSystemRunType.Export)
+                                                    {
+                                                        Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                    }
+                                                    else if (runProfile.RunType == ConnectedSystemRunType.FullSynchronisation)
+                                                    {
+                                                        Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                    }
+                                                    else if (runProfile.RunType == ConnectedSystemRunType.DeltaSynchronisation)
+                                                    {
+                                                        Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                    }
+                                                    else
+                                                    {
+                                                        Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
+                                                    }
+
+                                                    // task completed successfully
+                                                    await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view issues with connectors through JIM,
+                                                    // rather than an admin having to dig through server logs.
+                                                    await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
+                                                    Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
+                                                }
+                                                finally
+                                                {
+                                                    // record how long the sync run took, whether it was successful, or not.
+                                                    Log.Information($"ExecuteAsync: Completed processing of {newServiceTask.Activity.TargetName} sync run in {newServiceTask.Activity.ExecutionTime}.");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncServiceTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncServiceTask.ConnectedSystemId}.");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncServiceTask.ConnectedSystemId} but no such connected system found.");
+                                        }
                                     }
                                 }
                                 else if (newServiceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
@@ -259,34 +250,29 @@ namespace JIM.Service
                                             return;
                                         }
 
-                                        // create the connected system clearing specific activity
-                                        var activity = new Activity { 
-                                            TargetName = connectedSystem.Name,
-                                            TargetType = ActivityTargetType.ConnectedSystem,
-                                            TargetOperationType = ActivityTargetOperationType.Clear,
-                                            ConnectedSystemId = connectedSystem.Id
-                                        };
-                                        await taskJim.Activities.CreateActivityAsync(activity, initiatedBy);
-
                                         try
                                         {
                                             // initiate clearing the connected system
                                             await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
-                                            
-                                            // finish by completing the activity
-                                            await taskJim.Activities.CompleteActivityAsync(activity);
-                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {activity.ExecutionTime}.");
+
+                                            // task completed successfully, complete the activity
+                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
                                         }
                                         catch (Exception ex)
                                         {
-                                            await taskJim.Activities.FailActivityWithError(activity, ex);
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
+                                        }
+                                        finally
+                                        {
+                                            // record how long the sync run took, whether it was successful, or not.
+                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {newServiceTask.Activity.ExecutionTime}.");
                                         }
                                     }
                                 }
                         
-                                // very important: we must delete the task once it's completed so we know it's complete
-                                await taskJim.Tasking.DeleteServiceTaskAsync(newServiceTask);
+                                // very important: we must mark the task as complete once we're done
+                                await taskJim.Tasking.CompleteServiceTaskAsync(newServiceTask);
 
                                 // remove from the current tasks list after locking it for thread safety
                                 lock (_currentTasksLock)
