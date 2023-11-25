@@ -14,7 +14,7 @@ namespace JIM.Models.DataGeneration
 
         public DataGenerationTemplate()
         {
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
             ObjectTypes = new List<DataGenerationObjectType>();
         }
 

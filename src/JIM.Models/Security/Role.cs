@@ -19,7 +19,7 @@ namespace JIM.Models.Security
         public Role()
         {
             StaticMembers = new List<MetaverseObject>();
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
         }
     }
 }

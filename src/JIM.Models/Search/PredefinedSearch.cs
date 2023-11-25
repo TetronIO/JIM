@@ -30,7 +30,7 @@ namespace JIM.Models.Search
         {
             Attributes = new List<PredefinedSearchAttribute>();
             CriteriaGroups = new List<PredefinedSearchCriteriaGroup>();
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
         }
     }
 }

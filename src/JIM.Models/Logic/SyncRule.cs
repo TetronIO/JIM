@@ -23,6 +23,7 @@ namespace JIM.Models.Logic
 
         public SyncRule()
         {
+            Created = DateTime.UtcNow;
             Mappings = new List<SyncRuleMapping>();
         }
     }

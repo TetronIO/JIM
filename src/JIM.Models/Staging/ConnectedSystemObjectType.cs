@@ -15,7 +15,7 @@
 
         public ConnectedSystemObjectType()
         {
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
             Attributes = new List<ConnectedSystemObjectTypeAttribute>();
         }
     }

@@ -51,7 +51,7 @@ namespace JIM.Models.Core
 
         public ServiceSettings()
         {
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
             SSOEnableLogOut = true;
             IsServiceInMaintenanceMode = true;
             HistoryRetentionPeriod = TimeSpan.FromDays(30);

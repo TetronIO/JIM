@@ -25,7 +25,7 @@ namespace JIM.Models.DataGeneration
 
         public ExampleDataSet()
         {
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
             Values = new List<ExampleDataSetValue>();
         }
     }

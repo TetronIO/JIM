@@ -50,7 +50,6 @@ namespace JIM.Models.Staging
         public ConnectedSystemObjectHeader()
         {
             Created = DateTime.UtcNow;
-            //AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
             Status = ConnectedSystemObjectStatus.Normal;
             JoinType = ConnectedSystemObjectJoinType.NotJoined;
         }

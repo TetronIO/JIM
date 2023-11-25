@@ -59,7 +59,7 @@ namespace JIM.Models.Staging
             Objects = new List<ConnectedSystemObject>();
             ObjectTypes = new List<ConnectedSystemObjectType>();
             SettingValues = new List<ConnectedSystemSettingValue>();
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
         }
     }
 }

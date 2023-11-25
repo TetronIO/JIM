@@ -15,6 +15,7 @@
 
         public FunctionLibrary()
         {
+            Created = DateTime.UtcNow;
         }
     }
 }

@@ -17,7 +17,7 @@ namespace JIM.Models.Core
 
         public MetaverseObjectType()
         {
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
             Attributes = new List<MetaverseAttribute>();
         }
     }

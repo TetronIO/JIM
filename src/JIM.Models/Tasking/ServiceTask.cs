@@ -35,7 +35,7 @@ namespace JIM.Models.Tasking
 
         public ServiceTask()
         {
-			Timestamp = DateTime.Now;
+			Timestamp = DateTime.UtcNow;
 			Status = ServiceTaskStatus.Queued;
 			ExecutionMode = ServiceTaskExecutionMode.Sequential;
         }

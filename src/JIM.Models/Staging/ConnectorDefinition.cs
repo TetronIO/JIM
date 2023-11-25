@@ -23,7 +23,7 @@
         {
             Files = new List<ConnectorDefinitionFile>();
             Settings = new List<ConnectorDefinitionSetting>();
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
         }
 
         #region Capabilities

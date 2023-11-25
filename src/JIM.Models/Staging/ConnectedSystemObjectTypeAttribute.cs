@@ -39,7 +39,7 @@ namespace JIM.Models.Staging
 
         public ConnectedSystemObjectTypeAttribute()
         {
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
         }
     }
 }

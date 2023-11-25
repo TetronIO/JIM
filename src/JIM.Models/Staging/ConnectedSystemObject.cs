@@ -64,7 +64,7 @@ namespace JIM.Models.Staging
         #region constructors
         public ConnectedSystemObject()
         {
-            Created = DateTime.Now;
+            Created = DateTime.UtcNow;
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
             Status = ConnectedSystemObjectStatus.Normal;
             JoinType = ConnectedSystemObjectJoinType.NotJoined;
