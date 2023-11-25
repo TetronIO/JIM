@@ -283,7 +283,7 @@ namespace JIM.Models.Tests
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
-                MinDate = DateTime.Now
+                MinDate = DateTime.UtcNow
             };
             Assert.DoesNotThrow(subject2.Validate);
 
@@ -291,7 +291,7 @@ namespace JIM.Models.Tests
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
-                MaxDate = DateTime.Now
+                MaxDate = DateTime.UtcNow
             };
             Assert.DoesNotThrow(subject3.Validate);
 
@@ -299,8 +299,8 @@ namespace JIM.Models.Tests
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
-                MinDate = DateTime.Now,
-                MaxDate = DateTime.Now.AddDays(10)
+                MinDate = DateTime.UtcNow,
+                MaxDate = DateTime.UtcNow.AddDays(10)
             };
             Assert.DoesNotThrow(subject4.Validate);
         }

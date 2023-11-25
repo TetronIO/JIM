@@ -23,7 +23,7 @@ namespace JIM.PostgresData
 
         public PostgresDataRepository()
         {
-            // needed to enable DateTime.Now assignments to work. Without it, the database will
+            // needed to enable DateTime.UtcNow assignments to work. Without it, the database will
             // throw errors when trying to set dates. This is a .NET/Postgres type mapping issue.
             AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 

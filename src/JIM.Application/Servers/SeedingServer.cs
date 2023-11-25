@@ -787,8 +787,8 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.StartDate),
-                    MinDate = DateTime.Now.AddYears(-20),
-                    MaxDate = DateTime.Now.AddMonths(3),
+                    MinDate = DateTime.UtcNow.AddYears(-20),
+                    MaxDate = DateTime.UtcNow.AddMonths(3),
                     PopulatedValuesPercentage = 75
                 });
             }
@@ -799,8 +799,8 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EndDate),
-                    MinDate = DateTime.Now.AddMonths(-11),
-                    MaxDate = DateTime.Now.AddYears(1),
+                    MinDate = DateTime.UtcNow.AddMonths(-11),
+                    MaxDate = DateTime.UtcNow.AddYears(1),
                     PopulatedValuesPercentage = 10
                 });
             }

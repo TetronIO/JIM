@@ -135,7 +135,7 @@ namespace JIM.Application.Servers
             var validationResults = ValidateConnectedSystemSettings(connectedSystem);
             connectedSystem.SettingValuesValid = !validationResults.Any(q => q.IsValid == false);
 
-            connectedSystem.LastUpdated = DateTime.Now;
+            connectedSystem.LastUpdated = DateTime.UtcNow;
 
             // every CRUD operation requires tracking with an activity...
             var activity = new Activity

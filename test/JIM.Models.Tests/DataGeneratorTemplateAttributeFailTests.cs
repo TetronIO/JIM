@@ -80,8 +80,8 @@ namespace JIM.Models.Tests
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
-                MinDate = DateTime.Now.AddDays(1),
-                MaxDate = DateTime.Now
+                MinDate = DateTime.UtcNow.AddDays(1),
+                MaxDate = DateTime.UtcNow
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
 
@@ -89,8 +89,8 @@ namespace JIM.Models.Tests
             {
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
                 PopulatedValuesPercentage = 100,
-                MinDate = DateTime.Now,
-                MaxDate = DateTime.Now.AddDays(-1)
+                MinDate = DateTime.UtcNow,
+                MaxDate = DateTime.UtcNow.AddDays(-1)
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
         }
@@ -110,7 +110,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
                 PopulatedValuesPercentage = 100,
-                MinDate = DateTime.Now                
+                MinDate = DateTime.UtcNow                
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
 
@@ -147,7 +147,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Boolean },
                 PopulatedValuesPercentage = 100,
-                MinDate = DateTime.Now
+                MinDate = DateTime.UtcNow
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
 
@@ -227,7 +227,7 @@ namespace JIM.Models.Tests
             {
                 ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
                 PopulatedValuesPercentage = 100,
-                MinDate = DateTime.Now
+                MinDate = DateTime.UtcNow
             };
             Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
         }

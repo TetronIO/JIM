@@ -184,13 +184,13 @@ namespace JIM.PostgresData.Repositories
                 switch (queryRange)
                 {
                     case QueryRange.LastYear:
-                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(365));
+                        objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(365));
                         break;
                     case QueryRange.LastMonth:
-                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(30));
+                        objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(30));
                         break;
                     case QueryRange.LastWeek:
-                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(7));
+                        objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(7));
                         break;
                 }
             }
@@ -317,13 +317,13 @@ namespace JIM.PostgresData.Repositories
                 switch (queryRange)
                 {
                     case QueryRange.LastYear:
-                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(365));
+                        objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(365));
                         break;
                     case QueryRange.LastMonth:
-                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(30));
+                        objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(30));
                         break;
                     case QueryRange.LastWeek:
-                        objects = objects.Where(q => q.Created >= DateTime.Now - TimeSpan.FromDays(7));
+                        objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(7));
                         break;
                 }
             }
