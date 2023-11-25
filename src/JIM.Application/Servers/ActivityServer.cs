@@ -46,25 +46,33 @@ namespace JIM.Application.Servers
 
         public async Task CompleteActivityAsync(Activity activity)
         {
+            var now = DateTime.UtcNow;
             activity.Status = ActivityStatus.Complete;
-            activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
+            activity.ExecutionTime = now - activity.Executed;
+            activity.TotalActivityTime = now - activity.Created;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
         public async Task CompleteActivityWithError(Activity activity, Exception exception)
         {
+            var now = DateTime.UtcNow;
             activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
             activity.ErrorMessage = exception.Message;
             activity.ErrorStackTrace = exception.StackTrace;
+            activity.ExecutionTime = now - activity.Executed;
+            activity.TotalActivityTime = now - activity.Created;
             activity.Status = ActivityStatus.CompleteWithError;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
         public async Task FailActivityWithErrorAsync(Activity activity, Exception exception)
         {
+            var now = DateTime.UtcNow;
             activity.ErrorMessage = exception.Message;
             activity.ErrorStackTrace = exception.StackTrace;
             activity.Status = ActivityStatus.FailedWithError;
+            activity.ExecutionTime = now - activity.Executed;
+            activity.TotalActivityTime = now - activity.Created;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
@@ -72,7 +80,10 @@ namespace JIM.Application.Servers
         {
             if (activity.Status == ActivityStatus.Cancelled)
                 return;
-
+            
+            var now = DateTime.UtcNow;
+            activity.ExecutionTime = now - activity.Executed;
+            activity.TotalActivityTime = now - activity.Created;
             activity.Status = ActivityStatus.Cancelled;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
