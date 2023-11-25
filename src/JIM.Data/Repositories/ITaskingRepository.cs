@@ -33,8 +33,6 @@ namespace JIM.Data.Repositories
 
         public Task UpdateServiceTaskAsync(ServiceTask serviceTask);
 
-        public Task CancelServiceTaskAsync(Guid serviceTaskId);
-
         public Task DeleteServiceTaskAsync(ServiceTask serviceTask);
     }
 }

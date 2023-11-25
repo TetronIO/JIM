@@ -7,5 +7,5 @@ public enum ActivityStatus
     Complete = 2,
     CompleteWithError = 3,
     FailedWithError = 4,
-    FailedWithCancelled = 5
+    Cancelled = 5
 }

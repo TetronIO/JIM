@@ -143,7 +143,8 @@ namespace JIM.Application.Servers
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
                 TargetOperationType = ActivityTargetOperationType.Update,
-                ParentActivityId = parentActivity?.Id
+                ParentActivityId = parentActivity?.Id,
+                ConnectedSystemId = connectedSystem.Id
             };
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);

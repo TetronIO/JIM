@@ -19,6 +19,9 @@ namespace JIM.PostgresData.Repositories
 
         public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
         {
+            if (serviceTask.Activity == null)
+                throw new InvalidDataException("CreateServiceTaskAsync: serviceTask.Activity was null. Cannot continue.");
+
             if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
             {
                 Repository.Database.DataGenerationTemplateServiceTasks.Add(dataGenerationTemplateServiceTask);
@@ -128,12 +131,12 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync()
         {
-            return await Repository.Database.ServiceTasks.Where(st => st.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
+            return await Repository.Database.ServiceTasks.Include(st => st.Activity).Where(st => st.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
         }
 
         public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds)
         {
-            return await Repository.Database.ServiceTasks.Where(q => serviceTaskIds.Contains(q.Id) && q.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
+            return await Repository.Database.ServiceTasks.Include(st => st.Activity).Where(q => serviceTaskIds.Contains(q.Id) && q.Status == ServiceTaskStatus.CancellationRequested).ToListAsync();
         }
 
         public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId)
@@ -178,16 +181,6 @@ namespace JIM.PostgresData.Repositories
                 Repository.Database.Entry(dbSynchronisationServiceTask).CurrentValues.SetValues(synchronisationServiceTask);
             }
 
-            await Repository.Database.SaveChangesAsync();
-        }
-
-        public async Task CancelServiceTaskAsync(Guid serviceTaskId)
-        {
-            var serviceTask = Repository.Database.ServiceTasks.SingleOrDefault(q => q.Id == serviceTaskId);
-            if (serviceTask == null)
-                return;
-
-            serviceTask.Status = ServiceTaskStatus.CancellationRequested;
             await Repository.Database.SaveChangesAsync();
         }
 

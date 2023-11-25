@@ -52,6 +52,24 @@ namespace JIM.Application.Servers
                 // associate the activity with the service task so the service task processor can complete the activity when done.
                 serviceTask.Activity = activity;
             }
+            else if (serviceTask is DataGenerationTemplateServiceTask dataGenerationServiceTask)
+            {
+                var template = await Application.DataGeneration.GetTemplateAsync(dataGenerationServiceTask.TemplateId) ?? 
+                    throw new InvalidDataException("CreateServiceTaskAsync: template not found for id " + dataGenerationServiceTask.TemplateId);
+
+                // every data generation operation requires tracking with an activity...
+                var activity = new Activity
+                {
+                    TargetType = ActivityTargetType.DataGenerationTemplate,
+                    TargetOperationType = ActivityTargetOperationType.Execute,
+                    DataGenerationTemplateId = template.Id,
+                    TargetName = template.Name
+                };
+                await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
+
+                // associate the activity with the service task so the service task processor can complete the activity when done.
+                serviceTask.Activity = activity;
+            }
 
             await Application.Repository.Tasking.CreateServiceTaskAsync(serviceTask);
         }
@@ -111,7 +129,7 @@ namespace JIM.Application.Servers
             if (serviceTask.Activity != null)
                 await Application.Activities.CancelActivityAsync(serviceTask.Activity);
 
-            await Application.Repository.Tasking.CancelServiceTaskAsync(serviceTask.Id);
+            await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
         }
 
         public async Task CancelServiceTaskAsync(ServiceTask serviceTask)

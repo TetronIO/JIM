@@ -1,7 +1,6 @@
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
-using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -124,8 +123,13 @@ namespace JIM.Service
                                     initiatedBy = await taskJim.Metaverse.GetMetaverseObjectAsync(newServiceTask.InitiatedBy.Id);
 
                                 // mark the activity as being executed, i.e. when the work actually started
-                                newServiceTask.Activity.Executed = DateTime.UtcNow;
-                                await taskJim.Activities.UpdateActivityAsync(newServiceTask.Activity);
+                                // retrieve the activity from this instance of JIM to avoid EF errors..
+                                var activity = await taskJim.Activities.GetActivityAsync(newServiceTask.Activity.Id) ?? 
+                                    throw new InvalidDataException($"ExecuteAsync: Activity id {newServiceTask.Activity.Id} could not be retrieved. This should not be possible.");
+
+                                activity.Executed = DateTime.UtcNow;
+                                await taskJim.Activities.UpdateActivityAsync(activity);
+                                newServiceTask.Activity = activity; // re-associating for consistency and so subsequent uses of this activity on this JIM instance do not fail
 
                                 if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {

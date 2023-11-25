@@ -30,7 +30,7 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Target">
-                <MudLink Href="@($"/activity/{context.Id}")">@context.TargetName</MudLink>
+                <MudLink Href="@($"/activity/{context.Id}")">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudLink>
             </MudTd>
             <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Operation">@context.TargetOperationType</MudTd>

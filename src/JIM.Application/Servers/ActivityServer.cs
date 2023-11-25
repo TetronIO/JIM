@@ -37,8 +37,8 @@ namespace JIM.Application.Servers
             } 
             else if (activity.TargetType == ActivityTargetType.ConnectedSystem)
             {
-                if (activity.ConnectedSystemId == null)
-                    throw new InvalidDataException("Activity.ConnectedSysetmId has not been set. Cannot continue.");
+                if (activity.ConnectedSystemId == null && activity.TargetOperationType != ActivityTargetOperationType.Create)
+                    throw new InvalidDataException("Activity.ConnectedSysetmId has not been set and must be for UPDATE and DELETE operations. Cannot continue.");
             }
 
             await Application.Repository.Activity.CreateActivityAsync(activity);
@@ -70,7 +70,10 @@ namespace JIM.Application.Servers
 
         public async Task CancelActivityAsync(Activity activity)
         {
-            activity.Status = ActivityStatus.FailedWithCancelled;
+            if (activity.Status == ActivityStatus.Cancelled)
+                return;
+
+            activity.Status = ActivityStatus.Cancelled;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 

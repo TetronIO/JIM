@@ -10,7 +10,7 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Activity: @activity?.TargetOperationType @activity?.TargetType.ToString().SplitOnCapitalLetters(): @activity?.TargetName</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Activity:</span> @activity?.TargetOperationType @activity?.TargetType.ToString().SplitOnCapitalLetters(): @activity?.TargetName</MudText>
+<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Activity:</span> @activity?.TargetOperationType @activity?.TargetType.ToString().SplitOnCapitalLetters(): @(!string.IsNullOrEmpty(activity?.TargetName) ? activity?.TargetName : "(no name)")</MudText>
 
 @if (activity != null)
 {
