@@ -69,6 +69,10 @@ public class Activity
 
     public int? ConnectedSystemId { get; set; }
 
+    public int? SyncRuleId { get; set; }
+
+    public Guid? MetaverseObjectId {  get; set; }
+
     // --------------------------------------------------------
     // run profile execution related...
 

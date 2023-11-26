@@ -21,6 +21,8 @@ namespace JIM.Data.Repositories
         #region objects
         public Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id);
 
+        public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
+
         public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
         public Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject);

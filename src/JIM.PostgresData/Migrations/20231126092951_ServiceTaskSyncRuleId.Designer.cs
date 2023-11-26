@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20231126092951_ServiceTaskSyncRuleId")]
+    partial class ServiceTaskSyncRuleId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -105,8 +107,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("MetaverseObjectId");
 
                     b.HasIndex("RunProfileId");
-
-                    b.HasIndex("SyncRuleId");
 
                     b.ToTable("Activities");
                 });
@@ -1854,10 +1854,6 @@ namespace JIM.PostgresData.Migrations
                         .WithMany()
                         .HasForeignKey("RunProfileId");
 
-                    b.HasOne("JIM.Models.Logic.SyncRule", null)
-                        .WithMany("Activities")
-                        .HasForeignKey("SyncRuleId");
-
                     b.Navigation("InitiatedBy");
 
                     b.Navigation("RunProfile");
@@ -2624,8 +2620,6 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRule", b =>
                 {
-                    b.Navigation("Activities");
-
                     b.Navigation("Mappings");
                 });
 

@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Logic
@@ -16,6 +17,9 @@ namespace JIM.Models.Logic
         public bool? ProvisionToConnectedSystem { get; set; }
         public bool? ProjectToMetaverse { get; set; }
         public List<SyncRuleMapping> Mappings { get; set; }
+
+        // back-link for EF
+        public List<Activity> Activities { get; set; }
 
         // todo: scoping filters
         // what happens when an object is in scope, then falls out of scope?

@@ -3,6 +3,7 @@
 @using JIM.Application
 @using JIM.Models.Activities;
 @using JIM.Models.Core
+@using JIM.Models.Core.DTOs;
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities;
@@ -21,6 +22,35 @@
                 <MudText Typo="Typo.button">ID:</MudText>
                 <MudText Class="mud-text-secondary">@activity.Id</MudText>
             </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Target:</MudText>
+                <MudText Class="mud-text-secondary">
+
+                    @if (activity.TargetType == ActivityTargetType.DataGenerationTemplate)
+                    {
+                        <MudLink Href="@($"/admin/example-data/templates/{activity.DataGenerationTemplateId}")">@activity.TargetName</MudLink>
+                    }
+                    else if (activity.TargetType == ActivityTargetType.ConnectedSystem)
+                    {
+                        <MudLink Href="@($"/admin/connected-systems/{activity.ConnectedSystemId}/")">@activity.TargetName</MudLink>
+                    }
+                    else if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
+                    {
+                        <MudLink Href="@($"/admin/connected-systems/{activity.ConnectedSystemId}/")">@activity.TargetName</MudLink> <text>/ @activity.TargetName</text>
+                    }
+                    else if (activity.TargetType == ActivityTargetType.MetaverseObject && metaverseObjectHeader != null)
+                    {
+                        <MudLink Href="@Utilities.GetMetaverseObjectHref(metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(metaverseObjectHeader)</MudLink>
+                    }
+                    else if (activity.TargetType == ActivityTargetType.SynchronisationRule)
+                    {
+                        <MudLink Href="@($"/admin/connected-systems/sync-rules/{activity.SyncRuleId}")">@activity.TargetName</MudLink>
+                    }
+
+                </MudText>
+            </MudItem>
+
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">When:</MudText>
                 <MudText Class="mud-text-secondary">@activity.Created</MudText>
@@ -88,6 +118,7 @@
 
     private JIM.Models.Activities.Activity? activity;
     private ConnectedSystemHeader? connectedSystemHeader;
+    private MetaverseObjectHeader? metaverseObjectHeader;
 
     protected override async Task OnInitializedAsync()
     {
@@ -101,5 +132,8 @@
 
         if (activity.ConnectedSystemId.HasValue)
             connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(activity.ConnectedSystemId.Value);
+
+        if ((activity.TargetType == ActivityTargetType.MetaverseObject || activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile) && activity.MetaverseObjectId != null)
+            metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(activity.MetaverseObjectId.Value);
     }
 }

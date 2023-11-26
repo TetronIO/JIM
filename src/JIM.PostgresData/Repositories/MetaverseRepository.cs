@@ -113,6 +113,23 @@ namespace JIM.PostgresData.Repositories
                 SingleOrDefaultAsync(mo => mo.Id == id);
         }
 
+        public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
+        {
+            return await Repository.Database.MetaverseObjects
+                .Include(mo => mo.Type)
+                .Include(mo => mo.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+                .ThenInclude(rv => rv.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .Select(d => new MetaverseObjectHeader
+                {
+                    Id = d.Id,
+                    Created = d.Created,
+                    Status = d.Status,
+                    TypeId = d.Type.Id,
+                    TypeName = d.Type.Name
+                }).SingleOrDefaultAsync(mo => mo.Id == id);
+        }
+
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
             await Repository.Database.SaveChangesAsync();

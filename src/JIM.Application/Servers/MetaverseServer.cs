@@ -68,6 +68,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.Metaverse.GetMetaverseObjectAsync(id);
         }
 
+        public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
+        {
+            return await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(id);
+        }
+
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
             await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
