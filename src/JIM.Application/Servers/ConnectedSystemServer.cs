@@ -106,13 +106,17 @@ namespace JIM.Application.Servers
                     settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
 
                 if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String && !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
-                    settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue;
+                    settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
 
                 if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.Integer && connectedSystemDefinitionSetting.DefaultIntValue.HasValue)
                     settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
 
                 connectedSystem.SettingValues.Add(settingValue);
             }
+
+            connectedSystem.Name = connectedSystem.Name.Trim();
+            if (!string.IsNullOrEmpty(connectedSystem.Description))
+                connectedSystem.Description = connectedSystem.Description.Trim();
 
             // every CRUD operation requires tracking with an activity...
             var activity = new Activity
