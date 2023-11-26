@@ -268,9 +268,7 @@ namespace JIM.Application.Servers
         /// </summary>
         /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
         /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-#pragma warning disable CA1822 // Mark members as static
         public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
-#pragma warning restore CA1822 // Mark members as static
         {
             ValidateConnectedSystemParameter(connectedSystem);
 
@@ -283,7 +281,8 @@ namespace JIM.Application.Servers
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
-                TargetOperationType = ActivityTargetOperationType.ImportHierarchy
+                TargetOperationType = ActivityTargetOperationType.ImportHierarchy,
+                ConnectedSystemId = connectedSystem.Id
             };
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -291,6 +290,10 @@ namespace JIM.Application.Servers
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
             {
                 partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+                if (partitions.Count == 0)
+                {
+                    // todo: report to the user we attempted to retrieve partitions, but got none back
+                }
             }
             else
             {
