@@ -114,9 +114,7 @@ namespace JIM.Application.Servers
                 connectedSystem.SettingValues.Add(settingValue);
             }
 
-            connectedSystem.Name = connectedSystem.Name.Trim();
-            if (!string.IsNullOrEmpty(connectedSystem.Description))
-                connectedSystem.Description = connectedSystem.Description.Trim();
+            SanitiseConnectedSystemUserInput(connectedSystem);
 
             // every CRUD operation requires tracking with an activity...
             var activity = new Activity
@@ -151,8 +149,25 @@ namespace JIM.Application.Servers
                 ConnectedSystemId = connectedSystem.Id
             };
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            
+            SanitiseConnectedSystemUserInput(connectedSystem);
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            
             await Application.Activities.CompleteActivityAsync(activity);
+        }
+
+        /// <summary>
+        /// Try and prevent the user from supplying unusable input.
+        /// </summary>
+        private static void SanitiseConnectedSystemUserInput(ConnectedSystem connectedSystem)
+        {
+            connectedSystem.Name = connectedSystem.Name.Trim();
+            if (!string.IsNullOrEmpty(connectedSystem.Description))
+                connectedSystem.Description = connectedSystem.Description.Trim();
+
+            foreach (var settingValue in connectedSystem.SettingValues)
+                if (!string.IsNullOrEmpty(settingValue.StringValue))
+                    settingValue.StringValue = settingValue.StringValue.Trim();
         }
         #endregion
 
