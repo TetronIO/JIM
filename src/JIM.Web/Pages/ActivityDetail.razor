@@ -95,7 +95,7 @@
 
             @if (!string.IsNullOrEmpty(activity.ErrorStackTrace))
             {
-                <MudText Typo="Typo.button">Error Message:</MudText>
+                <MudText Typo="Typo.button">Error Stack:</MudText>
                 <pre>
 @activity.ErrorStackTrace
                 </pre>
@@ -103,9 +103,9 @@
         </MudPaper>
     }
 
-    @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
+    @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute)
     {
-        <MudText Typo="Typo.h5" Class="mt-5">Additional Info</MudText>
+        <MudText Typo="Typo.h5" Class="mt-5">Synchronisation Results</MudText>
         <MudPaper Class="pa-5 mt-5" Outlined="true">
 
         </MudPaper>

@@ -42,6 +42,7 @@ namespace JIM.Application.Servers
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationServiceTask.ConnectedSystemRunProfileId);
                 var activity = new Activity
                 {
+                    TargetName = runProfile.Name,
                     TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                     TargetOperationType = ActivityTargetOperationType.Execute,
                     ConnectedSystemId = synchronisationServiceTask.ConnectedSystemId,
@@ -60,10 +61,10 @@ namespace JIM.Application.Servers
                 // every data generation operation requires tracking with an activity...
                 var activity = new Activity
                 {
+                    TargetName = template.Name,
                     TargetType = ActivityTargetType.DataGenerationTemplate,
                     TargetOperationType = ActivityTargetOperationType.Execute,
-                    DataGenerationTemplateId = template.Id,
-                    TargetName = template.Name
+                    DataGenerationTemplateId = template.Id                    
                 };
                 await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
 
@@ -88,18 +89,20 @@ namespace JIM.Application.Servers
 
         public async Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync()
         {
-            var tasks = await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
-            if (tasks.Count == 0)
-                return tasks;
+            return  await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
+            
+            //var tasks = await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
+            //if (tasks.Count == 0)
+            //    return tasks;
 
-            // we need to mark the tasks as being processed, so it's not picked up again by any other queue clients
-            foreach (var task in tasks)
-            {
-                task.Status = ServiceTaskStatus.Processing;
-                await Application.Repository.Tasking.UpdateServiceTaskAsync(task);
-            }
+            // we need to mark the tasks as being processed, so they're not picked up again by any other queue clients
+            //foreach (var task in tasks)
+            //{
+            //    task.Status = ServiceTaskStatus.Processing;
+            //    await Application.Repository.Tasking.UpdateServiceTaskAsync(task);
+            //}            
 
-            return tasks;
+            //return tasks;
         }
 
         public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync()
@@ -139,7 +142,7 @@ namespace JIM.Application.Servers
 
         public async Task CompleteServiceTaskAsync(ServiceTask serviceTask)
         {
-            if (serviceTask.Activity != null)
+            if (serviceTask.Activity != null && serviceTask.Activity.Status == ActivityStatus.InProgress)
                 await Application.Activities.CompleteActivityAsync(serviceTask.Activity);
 
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);

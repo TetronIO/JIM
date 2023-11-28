@@ -68,13 +68,13 @@ namespace JIM.PostgresData.Repositories
         {
             // todo: find a way to retrieve a stub user, i.e. just mvo with id and displayname
             var serviceTaskHeaders = new List<ServiceTaskHeader>();
-            var serviceTasks = Repository.Database.ServiceTasks.
+            var serviceTasks = await Repository.Database.ServiceTasks.
                 Include(st => st.InitiatedBy).
                 ThenInclude(ib => ib.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
                 ThenInclude(av => av.Attribute).
                 Include(st => st.InitiatedBy).
                 ThenInclude(ib => ib.Type).
-                OrderByDescending(q => q.Timestamp);
+                OrderByDescending(q => q.Timestamp).ToListAsync();
 
             foreach (var serviceTask in serviceTasks)
             {
@@ -126,6 +126,7 @@ namespace JIM.PostgresData.Repositories
                 }
             }
 
+            await UpdateServiceTasksAsProcessingAsync(tasks);
             return tasks;
         }
 
@@ -158,7 +159,7 @@ namespace JIM.PostgresData.Repositories
         {
             if (serviceTask is DataGenerationTemplateServiceTask dataGenerationTemplateServiceTask)
             {
-                var dbDataGenerationTemplateServiceTask = await Repository.Database.DataGenerationTemplateServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
+                var dbDataGenerationTemplateServiceTask = await Repository.Database.DataGenerationTemplateServiceTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
                 if (dbDataGenerationTemplateServiceTask == null)
                 {
                     Log.Error("UpdateServiceTaskAsync: Could not retrieve a DataGenerationTemplateServiceTask object to update.");
@@ -170,7 +171,7 @@ namespace JIM.PostgresData.Repositories
             }
             else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
             {
-                var dbSynchronisationServiceTask = await Repository.Database.SynchronisationServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
+                var dbSynchronisationServiceTask = await Repository.Database.SynchronisationServiceTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
                 if (dbSynchronisationServiceTask == null)
                 {
                     Log.Error("UpdateServiceTaskAsync: Could not retrieve a SynchronisationServiceTask object to update.");
@@ -242,6 +243,23 @@ namespace JIM.PostgresData.Repositories
                 return nameof(ClearConnectedSystemObjectsTask).SplitOnCapitalLetters();
             else
                 return "Unknown Service Task Type";
+        }
+
+        private async Task UpdateServiceTasksAsProcessingAsync(List<ServiceTask> serviceTasks)
+        {
+            // this is 100% sub-optimal, but I had issues with EF thinking an Activity on the serviceTasks came from another db context, when it hadn't.
+            foreach (var serviceTask in serviceTasks)
+            {
+                serviceTask.Status = ServiceTaskStatus.Processing;
+                var dbServiceTask = await Repository.Database.ServiceTasks.SingleOrDefaultAsync(q => q.Id == serviceTask.Id);
+                if (dbServiceTask != null)
+                {
+                    dbServiceTask.Status = ServiceTaskStatus.Processing;
+                    Repository.Database.ServiceTasks.Update(dbServiceTask);
+                }
+            }
+
+            await Repository.Database.SaveChangesAsync();
         }
         #endregion
     }
