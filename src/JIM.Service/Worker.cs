@@ -129,7 +129,7 @@ namespace JIM.Service
 
                                 activity.Executed = DateTime.UtcNow;
                                 await taskJim.Activities.UpdateActivityAsync(activity);
-                                newServiceTask.Activity = activity; // re-associating for consistency and so subsequent uses of this activity on this JIM instance do not fail
+                                //newServiceTask.Activity = activity; // re-associating for consistency and so subsequent uses of this activity on this JIM instance do not result in an EF error
 
                                 if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {
@@ -160,7 +160,7 @@ namespace JIM.Service
                                 else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
-                                    if (syncServiceTask.InitiatedBy == null)
+                                    if (initiatedBy == null)
                                     {
                                         Log.Error("ExecuteAsync: syncServiceTask.InitiatedBy was null. Cannot execute sync task");
                                     }
@@ -186,7 +186,7 @@ namespace JIM.Service
                                                     // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                     if (runProfile.RunType == ConnectedSystemRunType.FullImport)
                                                     {
-                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, syncServiceTask.InitiatedBy, newServiceTask.Activity, cancellationTokenSource);
+                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, initiatedBy, activity, cancellationTokenSource);
                                                         await synchronisationImportTaskProcessor.PerformFullImportAsync();
                                                     }
                                                     else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
@@ -211,13 +211,13 @@ namespace JIM.Service
                                                     }
 
                                                     // task completed successfully
-                                                    await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
+                                                    await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity.Id);
                                                 }
                                                 catch (Exception ex)
                                                 {
                                                     // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view issues with connectors through JIM,
                                                     // rather than an admin having to dig through server logs.
-                                                    await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
+                                                    await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity.Id, ex);
                                                     Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
                                                 }
                                                 finally
@@ -260,11 +260,11 @@ namespace JIM.Service
                                             await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
 
                                             // task completed successfully, complete the activity
-                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
+                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity.Id);
                                         }
                                         catch (Exception ex)
                                         {
-                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity.Id, ex);
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
                                         }
                                         finally

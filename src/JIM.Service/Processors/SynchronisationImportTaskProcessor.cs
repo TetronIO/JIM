@@ -66,7 +66,6 @@ namespace JIM.Service.Processors
                         Log.Debug($"ExecuteAsync: updating persisted connector data. old value: '{_connectedSystem.PersistedConnectorData}', new value: '{result.PersistedConnectorData}'");
                         _connectedSystem.PersistedConnectorData = result.PersistedConnectorData;
 
-
                         await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedBy, _activity);
                     }
 

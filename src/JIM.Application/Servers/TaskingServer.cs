@@ -71,6 +71,22 @@ namespace JIM.Application.Servers
                 // associate the activity with the service task so the service task processor can complete the activity when done.
                 serviceTask.Activity = activity;
             }
+            else if (serviceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
+            {
+                // every crud operation requires tracking with an activity...
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                var activity = new Activity
+                {
+                    TargetName = connectedSystem?.Name,
+                    TargetType = ActivityTargetType.ConnectedSystem,
+                    TargetOperationType = ActivityTargetOperationType.Clear,
+                    ConnectedSystemId = clearConnectedSystemObjectsTask.ConnectedSystemId,
+                };
+                await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
+
+                // associate the activity with the service task so the service task processor can complete the activity when done.
+                serviceTask.Activity = activity;
+            }
 
             await Application.Repository.Tasking.CreateServiceTaskAsync(serviceTask);
         }
@@ -89,7 +105,7 @@ namespace JIM.Application.Servers
 
         public async Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync()
         {
-            return  await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
+            return await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
             
             //var tasks = await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
             //if (tasks.Count == 0)
@@ -130,7 +146,7 @@ namespace JIM.Application.Servers
             }
 
             if (serviceTask.Activity != null)
-                await Application.Activities.CancelActivityAsync(serviceTask.Activity);
+                await Application.Activities.CancelActivityAsync(serviceTask.Activity.Id);
 
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
         }
@@ -143,7 +159,7 @@ namespace JIM.Application.Servers
         public async Task CompleteServiceTaskAsync(ServiceTask serviceTask)
         {
             if (serviceTask.Activity != null && serviceTask.Activity.Status == ActivityStatus.InProgress)
-                await Application.Activities.CompleteActivityAsync(serviceTask.Activity);
+                await Application.Activities.CompleteActivityAsync(serviceTask.Activity.Id);
 
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
         }
