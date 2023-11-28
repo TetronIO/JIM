@@ -18,7 +18,7 @@ public class Activity
     /// </summary>
     public Guid? ParentActivityId { get; set; }
 
-    public DateTime Created { get; set; }
+    public DateTime Created { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// Activities that are not executed in real-time, such as those initiated by JIM.Service procesing a queue to get to a task for the activity will have an Executed time
@@ -79,12 +79,12 @@ public class Activity
     /// <summary>
     /// The run-profile that was created, updated, deleted or executed..
     /// </summary>
-    public ConnectedSystemRunProfile? RunProfile { get; set; }
+    public ConnectedSystemRunProfile? ConnectedSystemRunProfile { get; set; }
 
     /// <summary>
     /// If the run profile has been deleted, the type of sync run this was can be accessed here still.
     /// </summary>
-    public ConnectedSystemRunType? RunType { get; set; }
+    public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
 
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
@@ -100,12 +100,4 @@ public class Activity
     // - json blob that contains object changes (might regret this later, but it seems quicker to get going this way)
     // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the audit log be 
     //   able to see sensitive attribute values? 
-
-    #region constructors
-    public Activity()
-    {
-        Created = DateTime.UtcNow;
-        RunProfileExecutionItems = new List<ActivityRunProfileExecutionItem>();
-    }
-    #endregion
 }

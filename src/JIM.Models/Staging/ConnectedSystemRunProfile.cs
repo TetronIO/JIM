@@ -1,4 +1,4 @@
-﻿using JIM.Models.Transactional;
+﻿using JIM.Models.Activities;
 
 namespace JIM.Models.Staging
 {
@@ -8,7 +8,10 @@ namespace JIM.Models.Staging
 
         public string Name { get; set; }
         
-        public ConnectedSystem ConnectedSystem { get; set; }
+        /// <summary>
+        /// Unique identifier for the parent object.
+        /// </summary>
+        public int ConnectedSystemId { get; set; }
         
         /// <summary>
         /// If the connected system implements partitions, then a run profile needs to target a partition.
@@ -21,6 +24,13 @@ namespace JIM.Models.Staging
         /// How many items to process in one go via the Connector.
         /// </summary>
         public int PageSize { get; set; }
+
+        /// <summary>
+        /// Back-link to depedent activity objects. 
+        /// Optional relationship.
+        /// Used by EntityFramework.
+        /// </summary>
+        public List<Activity>? Activities { get; set; }
 
         public override string ToString() => Name;
     }

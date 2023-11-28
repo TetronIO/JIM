@@ -7,7 +7,7 @@ using System.Diagnostics;
 
 namespace JIM.PostgresData
 {
-    public class PostgresDataRepository : IRepository, IDisposable
+    public class PostgresDataRepository : IRepository
     {
         public IConnectedSystemRepository ConnectedSystems { get; }
         public IDataGenerationRepository DataGeneration { get; }
@@ -65,12 +65,6 @@ namespace JIM.PostgresData
         {
             if (Database.Database.GetPendingMigrations().Any())
                 await Database.Database.MigrateAsync();
-        }
-
-        public void Dispose()
-        {
-            //if (Database != null)
-            //    Database.Dispose();
         }
     }
 }

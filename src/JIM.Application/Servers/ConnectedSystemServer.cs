@@ -613,13 +613,14 @@ namespace JIM.Application.Servers
             {
                 TargetName = connectedSystemRunProfile.Name,
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
-                TargetOperationType = ActivityTargetOperationType.Create
+                TargetOperationType = ActivityTargetOperationType.Create,
+                ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
             };
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
 
             // now the run profile has been persisted, associated it with the activity and complete it.
-            activity.RunProfile = connectedSystemRunProfile;
+            activity.ConnectedSystemRunProfile = connectedSystemRunProfile;
             await Application.Activities.CompleteActivityAsync(activity);
         }
 
@@ -631,12 +632,14 @@ namespace JIM.Application.Servers
             // every CRUD operation requires tracking with an activity...
             var activity = new Activity
             {
+                TargetName = connectedSystemRunProfile.Name,
+                ConnectedSystemRunType = connectedSystemRunProfile.RunType,
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                 TargetOperationType = ActivityTargetOperationType.Delete,
-                RunProfile = connectedSystemRunProfile
+                ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
             };
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
-            await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+            //await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
             await Application.Activities.CompleteActivityAsync(activity);
         }
 
@@ -650,7 +653,8 @@ namespace JIM.Application.Servers
             {
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                 TargetOperationType = ActivityTargetOperationType.Update,
-                RunProfile = connectedSystemRunProfile
+                ConnectedSystemRunProfile = connectedSystemRunProfile,
+                ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
             };
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);

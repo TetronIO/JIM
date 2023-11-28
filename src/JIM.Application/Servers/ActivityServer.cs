@@ -25,20 +25,10 @@ namespace JIM.Application.Servers
                 activity.InitiatedByName = initiatedBy.DisplayName;
             }
 
-            if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
-            {
-                if (activity.RunProfile == null)
-                    throw new InvalidDataException("Activity.RunProfile has not been set. Cannot continue.");
-
-                // we want to retain some basic info about run profiles when they're being deleted
-                activity.TargetName = activity.RunProfile.Name;
-                if (activity.TargetOperationType == ActivityTargetOperationType.Delete)
-                    activity.RunType = activity.RunProfile.RunType;
-            } 
-            else if (activity.TargetType == ActivityTargetType.ConnectedSystem)
+            if (activity.TargetType == ActivityTargetType.ConnectedSystem)
             {
                 if (activity.ConnectedSystemId == null && activity.TargetOperationType != ActivityTargetOperationType.Create)
-                    throw new InvalidDataException("Activity.ConnectedSysetmId has not been set and must be for UPDATE and DELETE operations. Cannot continue.");
+                    throw new InvalidDataException("Activity.ConnectedSystemId has not been set and must be for UPDATE and DELETE operations. Cannot continue.");
             }
 
             await Application.Repository.Activity.CreateActivityAsync(activity);

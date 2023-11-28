@@ -1,4 +1,5 @@
-﻿using JIM.Data.Repositories;
+﻿using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -137,7 +138,7 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(sv => sv.Setting).
                 SingleOrDefaultAsync(x => x.Id == id);
 
-            runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+            runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
 
             types = await Repository.Database.ConnectedSystemObjectTypes
                 .Include(ot => ot.Attributes)
@@ -405,6 +406,13 @@ namespace JIM.PostgresData.Repositories
 
         public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
         {
+            // for some reason, EF doesn't seem to reliably be able to null Activity.ConnectedSystemRunProfile values as part of it's cascading feature
+            // we need to manually remove the references to this run profile from any activities referencing it, before deleting the run profile.
+
+            foreach (var dependentActivity in Repository.Database.Activities.Include(a => a.ConnectedSystemRunProfile).Where(a => a.ConnectedSystemRunProfile != null && a.ConnectedSystemRunProfile.Id == runProfile.Id))
+                dependentActivity.ConnectedSystemRunProfile = null;
+            await Repository.Database.SaveChangesAsync();
+
             Repository.Database.ConnectedSystemRunProfiles.Remove(runProfile);
             await Repository.Database.SaveChangesAsync();
         }
@@ -423,7 +431,7 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.ConnectedSystemRunProfiles.
                 Include(q => q.Partition).
-                Where(q => q.ConnectedSystem.Id == connectedSystemId).ToListAsync();
+                Where(q => q.ConnectedSystemId == connectedSystemId).ToListAsync();
         }
         
         public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
@@ -432,7 +440,7 @@ namespace JIM.PostgresData.Repositories
             return await db.ConnectedSystemRunProfiles.Select(rph => new ConnectedSystemRunProfileHeader
             {
                 Id = rph.Id,
-                ConnectedSystemName = rph.ConnectedSystem.Name,
+                ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == rph.ConnectedSystemId).Name,
                 ConnectedSystemRunProfileName = rph.Name
             }).SingleOrDefaultAsync(q => q.Id == connectedSystemRunProfileId);
         }

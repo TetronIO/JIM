@@ -35,9 +35,9 @@
                     {
                         <MudLink Href="@($"/admin/connected-systems/{activity.ConnectedSystemId}/")">@activity.TargetName</MudLink>
                     }
-                    else if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
+                    else if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && connectedSystemHeader != null)
                     {
-                        <MudLink Href="@($"/admin/connected-systems/{activity.ConnectedSystemId}/")">@activity.TargetName</MudLink> <text>/ @activity.TargetName</text>
+                        <MudLink Href="@($"/admin/connected-systems/{activity.ConnectedSystemId}/")">@connectedSystemHeader.Name</MudLink> <text>/ @activity.TargetName</text>
                     }
                     else if (activity.TargetType == ActivityTargetType.MetaverseObject && metaverseObjectHeader != null)
                     {
@@ -135,5 +135,8 @@
 
         if ((activity.TargetType == ActivityTargetType.MetaverseObject || activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile) && activity.MetaverseObjectId != null)
             metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(activity.MetaverseObjectId.Value);
+
+        if (activity.ConnectedSystemRunProfile != null)
+            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(activity.ConnectedSystemRunProfile.ConnectedSystemId);
     }
 }

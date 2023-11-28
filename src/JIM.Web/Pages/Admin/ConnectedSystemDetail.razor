@@ -806,18 +806,29 @@
         if (connectedSystem == null || connectedSystem.RunProfiles == null)
             return;
 
-        connectedSystem.RunProfiles.Add(new ConnectedSystemRunProfile { 
-            ConnectedSystem = connectedSystem,
+        // copy the form bound object to a new one we can persist separately from the form bind
+        var runProfile = new ConnectedSystemRunProfile { 
+            ConnectedSystemId = connectedSystem.Id,
             Name = newRunProfile.Name,
             RunType = newRunProfile.RunType,
             Partition = newRunProfile.Partition,
             PageSize = newRunProfile.PageSize
-        });
+        };
 
-        // attribute the action to the user
+        // attribute the action to the user and create the run profile
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
+        await Jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, user);
+        
+        // retrieve the connected system again, now we've updated it
+        //connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystem.Id);
+
+        // to save a round-trip and a form re-bind, add the new run profile to the existing connected system object we're binding to
+        //connectedSystem.RunProfiles.Add(runProfile);
+
+        //await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("New run profile added.", Severity.Success);
+
+        // reset the object we've bound to the form so a new run profile can be created if the user chooses
         newRunProfile = new ConnectedSystemRunProfile();
     }
 

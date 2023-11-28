@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20231127204712_RunProfileParentIdChange")]
+    partial class RunProfileParentIdChange
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -47,12 +49,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ConnectedSystemId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("ConnectedSystemRunProfileId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ConnectedSystemRunType")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
@@ -80,6 +76,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ParentActivityId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("RunProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RunType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -102,9 +104,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemId");
 
-                    b.HasIndex("ConnectedSystemRunProfileId");
-
                     b.HasIndex("MetaverseObjectId");
+
+                    b.HasIndex("RunProfileId");
 
                     b.HasIndex("SyncRuleId");
 
@@ -1846,21 +1848,21 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("Activities")
                         .HasForeignKey("ConnectedSystemId");
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemRunProfile", "ConnectedSystemRunProfile")
-                        .WithMany("Activities")
-                        .HasForeignKey("ConnectedSystemRunProfileId");
-
                     b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedBy")
                         .WithMany()
                         .HasForeignKey("MetaverseObjectId");
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemRunProfile", "RunProfile")
+                        .WithMany()
+                        .HasForeignKey("RunProfileId");
 
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany("Activities")
                         .HasForeignKey("SyncRuleId");
 
-                    b.Navigation("ConnectedSystemRunProfile");
-
                     b.Navigation("InitiatedBy");
+
+                    b.Navigation("RunProfile");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
@@ -2698,11 +2700,6 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
                 {
                     b.Navigation("Containers");
-                });
-
-            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
-                {
-                    b.Navigation("Activities");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinition", b =>

@@ -2,7 +2,7 @@
 
 namespace JIM.Data
 {
-    public interface IRepository: IDisposable
+    public interface IRepository
     {
         public IConnectedSystemRepository ConnectedSystems { get; }
         public IDataGenerationRepository DataGeneration { get; }

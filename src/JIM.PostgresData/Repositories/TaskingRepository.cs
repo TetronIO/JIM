@@ -213,7 +213,7 @@ namespace JIM.PostgresData.Repositories
             }
             else if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
             {
-                var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = q.ConnectedSystem.Name }).
+                var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == q.ConnectedSystemId).Name }).
                     SingleOrDefaultAsync(q => q.Id == synchronisationServiceTask.ConnectedSystemRunProfileId);
 
                 if (runProfilePart != null)
