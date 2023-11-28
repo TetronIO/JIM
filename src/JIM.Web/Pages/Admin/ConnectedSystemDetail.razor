@@ -489,7 +489,7 @@
     private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile { PageSize = 500 };
     private IEnumerable<string> attributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
     private bool attributeSelectedFilter;
-    private string attributeSelectionCsv = "";
+    private string? attributeSelectionCsv;
 
     protected override async Task OnInitializedAsync()
     {
