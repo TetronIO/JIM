@@ -115,7 +115,6 @@ namespace JIM.PostgresData.Repositories
                 .ThenInclude(av => av.Attribute)
                 .Include(st => st.InitiatedBy)
                 .ThenInclude(ib => ib.Type)
-                .Include(a => a.ConnectedSystemRunProfile)
                 .SingleOrDefaultAsync(a => a.Id == id);
         }
     }

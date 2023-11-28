@@ -136,7 +136,7 @@
         if ((activity.TargetType == ActivityTargetType.MetaverseObject || activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile) && activity.MetaverseObjectId != null)
             metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(activity.MetaverseObjectId.Value);
 
-        if (activity.ConnectedSystemRunProfile != null)
-            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(activity.ConnectedSystemRunProfile.ConnectedSystemId);
+        if (activity.ConnectedSystemId.HasValue)
+            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(activity.ConnectedSystemId.Value);
     }
 }

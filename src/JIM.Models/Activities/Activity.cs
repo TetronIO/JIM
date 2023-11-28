@@ -79,7 +79,7 @@ public class Activity
     /// <summary>
     /// The run-profile that was created, updated, deleted or executed..
     /// </summary>
-    public ConnectedSystemRunProfile? ConnectedSystemRunProfile { get; set; }
+    public int? ConnectedSystemRunProfileId { get; set; }
 
     /// <summary>
     /// If the run profile has been deleted, the type of sync run this was can be accessed here still.

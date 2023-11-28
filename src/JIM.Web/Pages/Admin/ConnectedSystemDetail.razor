@@ -819,13 +819,6 @@
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
         await Jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, user);
         
-        // retrieve the connected system again, now we've updated it
-        //connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystem.Id);
-
-        // to save a round-trip and a form re-bind, add the new run profile to the existing connected system object we're binding to
-        //connectedSystem.RunProfiles.Add(runProfile);
-
-        //await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("New run profile added.", Severity.Success);
 
         // reset the object we've bound to the form so a new run profile can be created if the user chooses
@@ -842,6 +835,7 @@
         // attribute the action to the user
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
         await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile, user);
+
         Snackbar.Add("Run profile removed.", Severity.Success);
     }
 

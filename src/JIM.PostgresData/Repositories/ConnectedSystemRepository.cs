@@ -406,12 +406,9 @@ namespace JIM.PostgresData.Repositories
 
         public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
         {
-            // for some reason, EF doesn't seem to reliably be able to null Activity.ConnectedSystemRunProfile values as part of it's cascading feature
-            // we need to manually remove the references to this run profile from any activities referencing it, before deleting the run profile.
-
-            foreach (var dependentActivity in Repository.Database.Activities.Include(a => a.ConnectedSystemRunProfile).Where(a => a.ConnectedSystemRunProfile != null && a.ConnectedSystemRunProfile.Id == runProfile.Id))
-                dependentActivity.ConnectedSystemRunProfile = null;
-            await Repository.Database.SaveChangesAsync();
+            // is there any work to do?
+            if (!Repository.Database.ConnectedSystemRunProfiles.Any(q => q.Id == runProfile.Id))
+                return;
 
             Repository.Database.ConnectedSystemRunProfiles.Remove(runProfile);
             await Repository.Database.SaveChangesAsync();
