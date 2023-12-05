@@ -2,10 +2,12 @@
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
 @using JIM.Models.Activities;
+@using JIM.Models.Activities.DTOs;
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs;
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Utility;
 @using JIM.Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -26,7 +28,6 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Target:</MudText>
                 <MudText Class="mud-text-secondary">
-
                     @if (activity.TargetType == ActivityTargetType.DataGenerationTemplate)
                     {
                         <MudLink Href="@($"/admin/example-data/templates/{activity.DataGenerationTemplateId}")">@activity.TargetName</MudLink>
@@ -47,7 +48,6 @@
                     {
                         <MudLink Href="@($"/admin/connected-systems/sync-rules/{activity.SyncRuleId}")">@activity.TargetName</MudLink>
                     }
-
                 </MudText>
             </MudItem>
 
@@ -103,12 +103,36 @@
         </MudPaper>
     }
 
-    @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute)
+    @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute && activityRunProfileExecutionItemHeaders != null)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Synchronisation Results</MudText>
         <MudPaper Class="pa-5 mt-5" Outlined="true">
-
+            <!-- sync summary to go here -->
+            Sync summary will go here
         </MudPaper>
+
+        <MudTable Items="@activityRunProfileExecutionItemHeaders.Results" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ActivityRunProfileExecutionItemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">Sync Results</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Unique Idenifier</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName)">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ObjectChangeType)">Change Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType)">Error Type</MudTableSortLabel></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Unique Identifier">todo...</MudTd>
+                <MudTd DataLabel="Display Name"><MudLink Href="@("/activity/run-profiles/execution-items/"+context.Id)">@context.DisplayName</MudLink></MudTd>
+                <MudTd DataLabel="Change Type">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudTd>
+                <MudTd DataLabel="Error Type">@(context.ErrorType != null ? context.ErrorType.ToString().SplitOnCapitalLetters() : "")</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                There are no sync results to show
+            </NoRecordsContent>
+        </MudTable>
     }
 }
 
@@ -116,12 +140,21 @@
     [Parameter]
     public Guid Id { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+
     private JIM.Models.Activities.Activity? activity;
     private ConnectedSystemHeader? connectedSystemHeader;
     private MetaverseObjectHeader? metaverseObjectHeader;
+    private PagedResultSet<ActivityRunProfileExecutionItemHeader>? activityRunProfileExecutionItemHeaders;
+    private string searchString = "";
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        if (Page == null || Page < 1)
+            Page = 1;
+
         activity = await Jim.Activities.GetActivityAsync(Id);
         if (activity == null)
         {
@@ -136,7 +169,20 @@
         if ((activity.TargetType == ActivityTargetType.MetaverseObject || activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile) && activity.MetaverseObjectId != null)
             metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(activity.MetaverseObjectId.Value);
 
-        if (activity.ConnectedSystemId.HasValue)
-            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(activity.ConnectedSystemId.Value);
+        if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute)
+            activityRunProfileExecutionItemHeaders = await Jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(activity.Id, Page.Value, 20, 500);
+    }
+
+    private bool FilterFunc1(ActivityRunProfileExecutionItemHeader element) => FilterFunc(element, searchString);
+
+    private bool FilterFunc(ActivityRunProfileExecutionItemHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (!string.IsNullOrEmpty(element.DisplayName) && element.DisplayName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }

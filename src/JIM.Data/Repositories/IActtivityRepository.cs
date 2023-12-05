@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
 
@@ -16,5 +17,7 @@ namespace JIM.Data.Repositories
         public Task<Activity?> GetActivityAsync(Guid id);
 
         public Task<PagedResultSet<Activity>> GetActivitiesAsync(int page, int pageSize, int maxResults, QuerySortBy querySortBy);
+
+        public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize, int maxResults);
     }
 }

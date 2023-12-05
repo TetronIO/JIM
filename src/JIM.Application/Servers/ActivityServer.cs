@@ -1,8 +1,8 @@
 ﻿using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
-using System;
 
 namespace JIM.Application.Servers
 {
@@ -129,5 +129,15 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, maxResults, querySortBy);
         }
+
+        #region synchronisation related
+        /// <summary>
+        /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
+        /// </summary>
+        public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page = 1, int pageSize = 20, int maxResults = 500)
+        {
+            return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(activityId, page, pageSize, maxResults);
+        }
+        #endregion
     }
 }

@@ -114,11 +114,6 @@ namespace JIM.PostgresData
             modelBuilder.Entity<MetaverseObjectType>()
                 .HasMany(mot => mot.Attributes);
 
-            modelBuilder.Entity<ActivityRunProfileExecutionItem>()
-                .HasOne(a => a.ConnectedSystemObjectChange)
-                .WithOne(a => a.ActivityRunProfileExecutionItem)
-                .HasForeignKey<ConnectedSystemObjectChange>(csoc => csoc.SyncRunHistoryDetailItemId);
-
             // reduce the chance of concurrency issues by using a system attribute to identify row versions
             // for our most heavily updated objects.
             // https://www.npgsql.org/efcore/modeling/concurrency.html?tabs=data-annotations

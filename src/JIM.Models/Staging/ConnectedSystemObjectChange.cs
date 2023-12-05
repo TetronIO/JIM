@@ -16,11 +16,7 @@ namespace JIM.Models.Staging
         /// depending on how old the connected system object change is.
         /// </summary>
         public ActivityRunProfileExecutionItem? ActivityRunProfileExecutionItem { get; set; }
-
-        /// <summary>
-        /// Needed for EF linking.
-        /// </summary>
-        public Guid? SyncRunHistoryDetailItemId { get; set; }
+        public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
         /// <summary>
         /// Which Connected System did/does the Connected System Object in question relate to.

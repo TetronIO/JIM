@@ -1,5 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
@@ -117,5 +118,63 @@ namespace JIM.PostgresData.Repositories
                 .ThenInclude(ib => ib.Type)
                 .SingleOrDefaultAsync(a => a.Id == id);
         }
+
+        #region synchronisation related
+        public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize, int maxResults)
+        {
+            if (pageSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+            if (page < 1)
+                page = 1;
+
+            // limit page size to avoid increasing latency unecessarily
+            if (pageSize > 100)
+                pageSize = 100;
+
+            // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
+            if (maxResults > 500)
+                maxResults = 500;
+
+            var objects = from o in Repository.Database.ActivityRunProfileExecutionItems
+                .Include(a => a.ConnectedSystemObject)
+                .Where(a => a.Activity.Id == activityId)
+                select o;
+
+            // now just retrieve a page's worth of images from the results
+            var grossCount = objects.Count();
+            var offset = (page - 1) * pageSize;
+            var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
+            var results = await objects.Skip(offset).Take(itemsToGet).Select(i => new ActivityRunProfileExecutionItemHeader
+            {
+                Id = i.Id,
+                DisplayName = i.ConnectedSystemObject != null && i.ConnectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? i.ConnectedSystemObject.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
+                ErrorType = i.ErrorType,
+                ObjectChangeType = i.ObjectChangeType                
+            }).ToListAsync();
+
+            // now with all the ids we know how many total results there are and so can populate paging info
+            var pagedResultSet = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
+            {
+                PageSize = pageSize,
+                TotalResults = grossCount,
+                CurrentPage = page,
+                Results = results
+            };
+
+            if (page == 1 && pagedResultSet.TotalPages == 0)
+                return pagedResultSet;
+
+            // don't let users try and request a page that doesn't exist
+            if (page > pagedResultSet.TotalPages)
+            {
+                pagedResultSet.TotalResults = 0;
+                pagedResultSet.Results.Clear();
+                return pagedResultSet;
+            }
+
+            return pagedResultSet;
+        }
+        #endregion
     }
 }
