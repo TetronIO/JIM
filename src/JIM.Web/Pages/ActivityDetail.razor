@@ -107,25 +107,25 @@
     {
         <MudText Typo="Typo.h5" Class="mt-5">Synchronisation Results</MudText>
         <MudPaper Class="pa-5 mt-5" Outlined="true">
-            <!-- sync summary to go here -->
             Sync summary will go here
         </MudPaper>
 
         <MudTable Items="@activityRunProfileExecutionItemHeaders.Results" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ActivityRunProfileExecutionItemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
             <ToolBarContent>
-                <MudText Typo="Typo.h6">Sync Results</MudText>
                 <MudSpacer />
                 <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
             </ToolBarContent>
             <HeaderContent>
                 <MudTh>Unique Idenifier</MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName)">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType)">Connected System Oject Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ObjectChangeType)">Change Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType)">Error Type</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Unique Identifier">todo...</MudTd>
                 <MudTd DataLabel="Display Name"><MudLink Href="@("/activity/run-profiles/execution-items/"+context.Id)">@context.DisplayName</MudLink></MudTd>
+                <MudTd DataLabel="Connected System Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "")</MudTd>
                 <MudTd DataLabel="Change Type">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudTd>
                 <MudTd DataLabel="Error Type">@(context.ErrorType != null ? context.ErrorType.ToString().SplitOnCapitalLetters() : "")</MudTd>
             </RowTemplate>
@@ -148,7 +148,7 @@
     private ConnectedSystemHeader? connectedSystemHeader;
     private MetaverseObjectHeader? metaverseObjectHeader;
     private PagedResultSet<ActivityRunProfileExecutionItemHeader>? activityRunProfileExecutionItemHeaders;
-    private string searchString = "";
+    private string searchString = null!;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -158,7 +158,7 @@
         activity = await Jim.Activities.GetActivityAsync(Id);
         if (activity == null)
         {
-            // object type not found, redirect to index page
+            // activity not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
@@ -173,6 +173,7 @@
             activityRunProfileExecutionItemHeaders = await Jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(activity.Id, Page.Value, 20, 500);
     }
 
+    // this search feature needs to change to support searching all results, not just what's on the page, so needs to do a server side search
     private bool FilterFunc1(ActivityRunProfileExecutionItemHeader element) => FilterFunc(element, searchString);
 
     private bool FilterFunc(ActivityRunProfileExecutionItemHeader element, string searchString)

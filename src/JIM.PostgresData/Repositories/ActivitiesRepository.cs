@@ -149,6 +149,7 @@ namespace JIM.PostgresData.Repositories
             {
                 Id = i.Id,
                 DisplayName = i.ConnectedSystemObject != null && i.ConnectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? i.ConnectedSystemObject.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
+                ConnectedSystemObjectType = i.ConnectedSystemObject != null ? i.ConnectedSystemObject.Type.Name : null,
                 ErrorType = i.ErrorType,
                 ObjectChangeType = i.ObjectChangeType                
             }).ToListAsync();

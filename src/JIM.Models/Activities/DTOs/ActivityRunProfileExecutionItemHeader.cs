@@ -9,9 +9,11 @@ namespace JIM.Models.Activities.DTOs
 
         public string? DisplayName { get; set; }
 
+        public string? ConnectedSystemObjectType { get; set; }
+
         public ObjectChangeType ObjectChangeType { get; set; }
 
-        public ConnectedSystemObjectTypeAttribute UniqueIdentifierAttribute { get; set ;} = new ConnectedSystemObjectTypeAttribute();
+        public ConnectedSystemObjectTypeAttribute UniqueIdentifierAttribute { get; set; } = null!;
 
         public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; }
     }

@@ -18,13 +18,13 @@ public class ActivityRunProfileExecutionItem
     public ObjectChangeType ObjectChangeType { get; set; }
 
     /// <summary>
-    /// What CSO does this sync run history detail item relate to?
+    /// What CSO does this sync operation item relate to?
     /// Note: If the change was a delete, then there will be no CSO to reference.
     /// </summary>
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
     /// <summary>
-    /// What change(s), if any were made to the connected system object in question?
+    /// What changes, if any were made to the connected system object in question?
     /// This needs populating for update and delete scenarios.
     /// </summary>
     public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
