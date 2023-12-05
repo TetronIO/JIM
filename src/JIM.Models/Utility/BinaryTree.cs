@@ -15,15 +15,10 @@ namespace JIM.Models.Utility
 
         public BinaryTree(List<MetaverseObject> values, int index)
         {
-            Load(this, values, index);
-        }
-
-        void Load(BinaryTree tree, List<MetaverseObject> values, int index)
-        {
             MetaverseObject = values[index];
             if (index * 2 + 1 < values.Count)
                 Left = new BinaryTree(values, index * 2 + 1);
-            
+
             if (index * 2 + 2 < values.Count)
                 Right = new BinaryTree(values, index * 2 + 2);
         }
