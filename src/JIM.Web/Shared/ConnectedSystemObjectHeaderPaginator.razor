@@ -18,12 +18,11 @@
 }
 
 @code {
-
     [Parameter]
     [EditorRequired]
-    public PagedResultSet<ConnectedSystemObjectHeader> Results { get; set; }
+    public PagedResultSet<ConnectedSystemObjectHeader> Results { get; set; } = null!;
 
-    string path;
+    string path = null!;
     const int maxPagesToDisplayInNav = 4;
     int totalPages;
     int numPagesToDisplayInNav;

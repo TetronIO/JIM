@@ -25,7 +25,7 @@
             @Body
 
             <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5">
-                &copy; 2023 Tetron Limited
+                &copy; @DateTime.UtcNow.Year Tetron Limited
             </MudText>
 
         </MudContainer>
@@ -51,14 +51,14 @@
                     FontSize = "16px"
                 }
             },
-            Palette = new Palette()
+            Palette = new PaletteLight()
             {
                 AppbarBackground = new MudColor("rgb(60,148,255)"),
                 Background = new MudColor("#f6f9fc"),
                 DrawerBackground = new MudColor("#eef2f6"),
                 Primary = new MudColor("rgb(60,148,255)")
             },
-            PaletteDark = new Palette()
+            PaletteDark = new PaletteDark()
             {
                 ActionDefault = new MudColor("#acb0b3"), // pagination arrow link text
                 ActionDisabled = new MudColor("#2c3441"),
