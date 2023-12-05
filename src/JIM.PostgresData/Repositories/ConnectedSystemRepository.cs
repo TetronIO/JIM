@@ -251,7 +251,7 @@ namespace JIM.PostgresData.Repositories
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
                 DisplayName = cso.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? cso.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
-                UniqueIdentifierAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.UniqueIdentifierAttributeId)
+                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId)
             });
             var results = await selectedObjects.ToListAsync();
 
@@ -387,7 +387,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
         {
-            return await Repository.Database.ConnectedSystemContainers.Where(q => q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
+            return await Repository.Database.ConnectedSystemContainers.Where(q => q.ConnectedSystem != null && q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
         }
 
         public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)

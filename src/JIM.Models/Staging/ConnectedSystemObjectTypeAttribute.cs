@@ -33,9 +33,9 @@ namespace JIM.Models.Staging
         public bool Selected { get; set; }
 
         /// <summary>
-        /// Indicates if this attribute is a unique identifier for the object type.
+        /// Indicates if this attribute is a unique identifier for the object type in a connected system.
         /// </summary>
-        public bool IsUniqueIdentifier { get; set; }
+        public bool IsExternalId { get; set; }
 
         public ConnectedSystemObjectTypeAttribute()
         {

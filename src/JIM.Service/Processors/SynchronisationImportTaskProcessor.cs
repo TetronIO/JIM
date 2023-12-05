@@ -82,7 +82,7 @@ namespace JIM.Service.Processors
 
                         // match the string object type to a name of an object type in the schema..
                         var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
-                        if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsUniqueIdentifier))
+                        if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldntMatchObjectType;
                             activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
@@ -133,7 +133,7 @@ namespace JIM.Service.Processors
         private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
         {
             // todo: add support for multiple unique identifier attributes, i.e. compound primary keys
-            var uniqueIdentifierAttribute = connectedSystemObjectType.Attributes.First(a => a.IsUniqueIdentifier);
+            var uniqueIdentifierAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
 
             // find the matching import object attribute
             var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(uniqueIdentifierAttribute.Name, StringComparison.OrdinalIgnoreCase)) ?? 
@@ -178,7 +178,7 @@ namespace JIM.Service.Processors
             var connectedSystemObject = new ConnectedSystemObject
             {
                 ConnectedSystem = _connectedSystem,
-                UniqueIdentifierAttributeId = connectedSystemObjectType.Attributes.First(a => a.IsUniqueIdentifier).Id,
+                ExternalIdAttributeId = connectedSystemObjectType.Attributes.First(a => a.IsExternalId).Id,
                 Type = connectedSystemObjectType
             };
 

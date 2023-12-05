@@ -269,11 +269,11 @@ namespace JIM.Application.Servers
                 };
 
                 // take the unique identifier attribute recommendation as the default, and allow the user to potentially change it later if they want/need
-                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedUniqueIdentifierAttribute.Name);
+                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedExternalIdAttribute.Name);
                 if (attribute != null)
-                    attribute.IsUniqueIdentifier = true;
+                    attribute.IsExternalId = true;
                 else
-                    Log.Error($"Recommended attribute '{objectType.RecommendedUniqueIdentifierAttribute.Name}' was not found in the objects list of attributes!");
+                    Log.Error($"Recommended attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes!");
 
                 connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
             }

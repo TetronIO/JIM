@@ -22,7 +22,7 @@ namespace JIM.Models.Staging
         /// The connected system may author it and be made available to JIM after import, or you may specify it at provisioning time, depending on the needs of the connected system.
         /// This is a convenience accessor. It's defined as a property on one of the connected system object type attributes. i.e. ConnectedSystemObjectTypeAttribute.IsUniqueIDentifier
         /// </summary>
-        public int UniqueIdentifierAttributeId { get; set; }
+        public int ExternalIdAttributeId { get; set; }
 
         public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; }
 

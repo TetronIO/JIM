@@ -195,7 +195,7 @@ namespace JIM.Connectors.LDAP
             var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
 
             // ensure we are also retriving the unique identifier attribute(s)
-            attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsUniqueIdentifier).Select(a => a.Name));
+            attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
 
             // we also need the objectClass for type matching purposes
             attributes.Add("objectClass");

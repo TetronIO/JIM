@@ -43,7 +43,7 @@
             <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.UniqueIdentifierAttributeValue)">Unique Identifier</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue)">External Id</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName)">Display Name</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
@@ -52,7 +52,7 @@
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined)">Date Joined</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Unique Identifier">@context.UniqueIdentifierAttributeValue</MudTd>
+            <MudTd DataLabel="External Id">@context.ExternalIdAttributeValue</MudTd>
             <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">@context.Created</MudTd>
@@ -69,7 +69,7 @@
         <MessageContent>
             Deleting the connected system objects does not cause objects to be deleted in the external system. 
             It just removes the objects from JIM. A full-import on this connect system and full-synchrnisation on all connected system is needed to rebuild the correct state.
-            <br><br>
+            <br/><br/>
             The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
         </MessageContent>
         <YesButton>
