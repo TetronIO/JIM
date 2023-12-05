@@ -7,9 +7,9 @@
     {
         public int Id { get; set; }
         
-        public ConnectedSystem ConnectedSystem { get; set; }
+        public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
-        public ConnectorDefinitionSetting Setting { get; set; }
+        public ConnectorDefinitionSetting Setting { get; set; } = null!;
 
         public string? StringValue { get; set; }
         

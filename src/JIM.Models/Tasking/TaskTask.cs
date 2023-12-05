@@ -17,7 +17,6 @@
         /// </summary>
         public CancellationTokenSource CancellationTokenSource { get; set; }
 
-
         public TaskTask(Guid taskId, Task task, CancellationTokenSource cancellationTokenSource)
         {
             TaskId = taskId;

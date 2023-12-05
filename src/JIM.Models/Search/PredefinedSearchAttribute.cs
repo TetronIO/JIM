@@ -5,13 +5,11 @@ namespace JIM.Models.Search
     public class PredefinedSearchAttribute
     {
         public int Id { get; set; }
-        public PredefinedSearch PredefinedSearch { get; set; }
-        public MetaverseAttribute MetaverseAttribute { get; set; }
-        public int Position { get; set; }
 
-        public PredefinedSearchAttribute()
-        {
-            Position = 0;
-        }
+        public PredefinedSearch PredefinedSearch { get; set; } = null!;
+
+        public MetaverseAttribute MetaverseAttribute { get; set; } = null!;
+
+        public int Position { get; set; } = 0;
     }
 }

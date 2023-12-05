@@ -10,6 +10,6 @@
         /// <summary>
         /// Backwards navigation link for EF. Do not use.
         /// </summary>
-        public List<ConnectedSystemSettingValue> Values { get; set; }
+        public List<ConnectedSystemSettingValue> Values { get; set; } = null!;
     }
 }

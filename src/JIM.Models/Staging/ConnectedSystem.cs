@@ -9,7 +9,7 @@ namespace JIM.Models.Staging
         public int Id { get; set; }
 
         [Required(ErrorMessage = "Please provide a name for the connected system")]
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
 
         public string? Description { get; set; }
 
@@ -23,9 +23,9 @@ namespace JIM.Models.Staging
 
         public List<ConnectedSystemObjectType>? ObjectTypes { get; set; }
 
-        public List<PendingExport> PendingExports { get; set; }
+        public List<PendingExport> PendingExports { get; set; } = null!;
 
-        public ConnectorDefinition ConnectorDefinition { get; set; }
+        public ConnectorDefinition ConnectorDefinition { get; set; } = null!;
 
         public List<ConnectedSystemSettingValue> SettingValues { get; set; }
 

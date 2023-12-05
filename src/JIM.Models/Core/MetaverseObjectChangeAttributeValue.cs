@@ -11,7 +11,7 @@ namespace JIM.Models.Core
         /// The parent for this object.
         /// Required for establishing an Entity Framework relationship.
         /// </summary>
-        public MetaverseObjectChangeAttribute MetaverseObjectChangeAttribute { get; set; }
+        public MetaverseObjectChangeAttribute MetaverseObjectChangeAttribute { get; set; } = null!;
 
         /// <summary>
         /// Was the value being added, or removed?

@@ -21,12 +21,12 @@ namespace JIM.Models.Staging
         /// The unique identifier for this container in the connected system.
         /// For LDAP systems, this would be the DN (Distinguished Name).
         /// </summary>
-        public string ExternalId { get; set; }
+        public string ExternalId { get; set; } = null!;
 
         /// <summary>
         /// The human-readable name for the container.
         /// </summary>
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
 
         /// <summary>
         /// An optional description for the container

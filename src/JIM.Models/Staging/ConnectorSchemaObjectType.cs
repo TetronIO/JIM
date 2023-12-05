@@ -15,7 +15,7 @@
         /// The recommended attribute should be immutable for the lifetime of the object so that JIM can always identify it and not see connected system objects as being deleted or created when unique ids change in the connected system.
         /// Generally, it's best to use a system-generated attribute for this where appropriate, rather than using business-generated attribute as system-generated attributes are less likely to change value over time.
         /// </summary>
-        public ConnectorSchemaAttribute RecommendedUniqueIdentifierAttribute { get; set; }
+        public ConnectorSchemaAttribute RecommendedUniqueIdentifierAttribute { get; set; } = null!;
 
         public ConnectorSchemaObjectType(string name)
         {

@@ -7,9 +7,13 @@ namespace JIM.Models.Security
     public class Role
     {
         public int Id { get; set; }
-        public string Name { get; set; }
+
+        public string Name { get; set; } = null!;
+
         public bool BuiltIn { get; set; }
+
         public DateTime Created { get; set; }
+
         public List<MetaverseObject> StaticMembers { get; set; }
 
         // todo: resource scope

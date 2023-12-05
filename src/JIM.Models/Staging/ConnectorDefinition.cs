@@ -3,17 +3,26 @@
     public class ConnectorDefinition
     {
         public int Id { get; set; }
-        public string Name { get; set; }
+
+        public string Name { get; set; } = null!;
+
         public string? Description { get; set; }
+
         public string? Url { get; set; }
+
         public DateTime Created { get; set; }
+
         public DateTime? LastUpdated { get; set; }
+
         /// <summary>
         /// Is this a Connector built-in to JIM itself, or third-party supplied?
         /// </summary>
         public bool BuiltIn { get; set; }
+
         public List<ConnectorDefinitionFile> Files { get; }
+
         public List<ConnectorDefinitionSetting> Settings { get; set; }
+
         /// <summary>
         /// Backwards navigation link for EF.
         /// </summary>

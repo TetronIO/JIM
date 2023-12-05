@@ -3,9 +3,13 @@
     public class ConnectedSystemObjectType
     {
         public int Id { get; set; }
-        public string Name { get; set; }
+
+        public string Name { get; set; } = null!;
+
         public DateTime Created { get; set; }
-        public ConnectedSystem ConnectedSystem { get; set; }
+
+        public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
         public List<ConnectedSystemObjectTypeAttribute> Attributes { get; set; }
 
         /// <summary>

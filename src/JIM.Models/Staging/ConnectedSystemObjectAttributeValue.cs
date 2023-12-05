@@ -12,12 +12,12 @@ namespace JIM.Models.Staging
         /// <summary>
         /// The parent attribute for this attribute value object.
         /// </summary>
-        public ConnectedSystemObjectTypeAttribute Attribute { get; set; }
+        public ConnectedSystemObjectTypeAttribute Attribute { get; set; } = null!;
 
         /// <summary>
         /// The parent connected system object for this attribute value object.
         /// </summary>
-        public ConnectedSystemObject ConnectedSystemObject { get; set; }
+        public ConnectedSystemObject ConnectedSystemObject { get; set; } = null!;
 
         public string? StringValue { get; set; }
 

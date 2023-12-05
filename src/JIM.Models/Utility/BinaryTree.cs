@@ -7,9 +7,9 @@ namespace JIM.Models.Utility
     /// </summary>
     public class BinaryTree
     {
-        public MetaverseObject MetaverseObject;
-        public BinaryTree Left;
-        public BinaryTree Right;
+        public MetaverseObject MetaverseObject = null!;
+        public BinaryTree Left = null!;
+        public BinaryTree Right = null!;
 
         public BinaryTree(List<MetaverseObject> values) : this(values, 0) { }
 
@@ -22,13 +22,10 @@ namespace JIM.Models.Utility
         {
             MetaverseObject = values[index];
             if (index * 2 + 1 < values.Count)
-            {
                 Left = new BinaryTree(values, index * 2 + 1);
-            }
+            
             if (index * 2 + 2 < values.Count)
-            {
                 Right = new BinaryTree(values, index * 2 + 2);
-            }
         }
     }
 }

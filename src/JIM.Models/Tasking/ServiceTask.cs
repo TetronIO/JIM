@@ -31,7 +31,7 @@ namespace JIM.Models.Tasking
 		/// If this service task has already resulted in an activity being created, then it can be found here, and when the service task
 		/// is initiated then the execution time must be set, and when complete, the activity must also be completed.
 		/// </summary>
-		public Activity Activity { get; set; }
+		public Activity Activity { get; set; } = null!;
 
         public ServiceTask()
         {

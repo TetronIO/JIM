@@ -11,7 +11,7 @@ namespace JIM.Models.Staging
         /// The parent for this object.
         /// Required for establishing an Entity Framework relationship.
         /// </summary>
-        public ConnectedSystemObjectChangeAttribute ConnectedSystemObjectChangeAttribute { get; set; }
+        public ConnectedSystemObjectChangeAttribute ConnectedSystemObjectChangeAttribute { get; set; } = null!;
 
         /// <summary>
         /// Was the value being added, or removed?

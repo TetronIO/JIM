@@ -13,18 +13,18 @@
         /// <summary>
         /// The ConnectedSystem this Partition relates to. For EF navigation.
         /// </summary>
-        public ConnectedSystem ConnectedSystem { get; set; }
+        public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
         /// <summary>
         /// The unique identifier for this partition in the connected system.
         /// For example, with LDAP systems this would be the DN (Distinguished Name).
         /// </summary>
-        public string ExternalId { get; set; }
+        public string ExternalId { get; set; } = null!;
 
         /// <summary>
         /// the human-readable name for this partition.
         /// </summary>
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
         public override string ToString() => Name;
 
         /// <summary>

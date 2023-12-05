@@ -3,7 +3,9 @@
     public class ConnectedSystemPaginationToken
     {
         public string Name { get; set; }
+
         public string? StringValue { get; set; }
+
         public byte[]? ByteValue { get; set; }
 
         public ConnectedSystemPaginationToken(string name, byte[] byteValue)

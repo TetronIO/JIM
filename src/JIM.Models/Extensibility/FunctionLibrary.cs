@@ -6,9 +6,13 @@
     public class FunctionLibrary
     {
         public int Id { get; set; }
-        public string Filename { get; set; }
-        public string Version { get; set; }
+
+        public string Filename { get; set; } = null!;
+
+        public string Version { get; set; } = null!;
+
         public DateTime Created { get; set; }
+
         public DateTime LastUpdated { get; set; }
 
         // todo: signing info?

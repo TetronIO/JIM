@@ -6,8 +6,8 @@ namespace JIM.Models.Staging
     {
         public int Id { get; set; }
 
-        public string Name { get; set; }
-        
+        public string Name { get; set; } = null!;
+
         /// <summary>
         /// Unique identifier for the parent object.
         /// </summary>

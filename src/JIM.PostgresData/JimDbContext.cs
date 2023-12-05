@@ -13,46 +13,46 @@ namespace JIM.PostgresData
 {
     public class JimDbContext : DbContext
     {
-        internal DbSet<Activity> Activities { get; set; }
-        internal DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; }
-        internal DbSet<ClearConnectedSystemObjectsTask> ClearConnectedSystemObjectsTasks { get; set; }
-        internal DbSet<ConnectedSystem> ConnectedSystems { get; set; }
-        internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; }
-        internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
-        internal DbSet<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValues { get; set; }
-        internal DbSet<ConnectedSystemObjectChange> ConnectedSystemObjectChanges { get; set; }
-        internal DbSet<ConnectedSystemObjectChangeAttribute> ConnectedSystemObjectChangeAttributes { get; set; }
-        internal DbSet<ConnectedSystemObjectChangeAttributeValue> ConnectedSystemObjectChangeAttributeValues { get; set; }
-        internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; }
-        internal DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; }
-        internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; }
-        internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; }
-        internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; }
-        internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; }
-        internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; }
-        internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; }
-        internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; }
-        internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; }
-        internal DbSet<ExampleDataSet> ExampleDataSets { get; set; }
-        internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
-        internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; }
-        internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; }
-        internal DbSet<MetaverseObject> MetaverseObjects { get; set; }
-        internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; }
-        internal DbSet<MetaverseObjectChange> MetaverseObjectChanges { get; set; }
-        internal DbSet<MetaverseObjectChangeAttribute> MetaverseObjectChangeAttributes { get; set; }
-        internal DbSet<MetaverseObjectChangeAttributeValue> MetaverseObjectChangeAttributeValues { get; set; }
-        internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; }
-        internal DbSet<PendingExport> PendingExports { get; set; }
-        internal DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; }
-        internal DbSet<PredefinedSearch> PredefinedSearches { get; set; }
-        internal DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; }
-        internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; }
-        internal DbSet<Role> Roles { get; set; }
-        internal DbSet<ServiceSettings> ServiceSettings { get; set; }
-        internal DbSet<ServiceTask> ServiceTasks { get; set; }
-        internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; }
-        internal DbSet<SyncRule> SyncRules { get; set; }
+        internal DbSet<Activity> Activities { get; set; } = null!;
+        internal DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
+        internal DbSet<ClearConnectedSystemObjectsTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
+        internal DbSet<ConnectedSystem> ConnectedSystems { get; set; } = null!;
+        internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; } = null!;
+        internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = null!;
+        internal DbSet<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValues { get; set; } = null!;
+        internal DbSet<ConnectedSystemObjectChange> ConnectedSystemObjectChanges { get; set; } = null!;
+        internal DbSet<ConnectedSystemObjectChangeAttribute> ConnectedSystemObjectChangeAttributes { get; set; } = null!;
+        internal DbSet<ConnectedSystemObjectChangeAttributeValue> ConnectedSystemObjectChangeAttributeValues { get; set; } = null!;
+        internal DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; } = null!;
+        internal DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; } = null!;
+        internal DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
+        internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
+        internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; } = null!;
+        internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; } = null!;
+        internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; } = null!;
+        internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; } = null!;
+        internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;
+        internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; } = null!;
+        internal DbSet<ExampleDataSet> ExampleDataSets { get; set; } = null!;
+        internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
+        internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; } = null!;
+        internal DbSet<MetaverseAttribute> MetaverseAttributes { get; set; } = null!;
+        internal DbSet<MetaverseObject> MetaverseObjects { get; set; } = null!;
+        internal DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; } = null!;
+        internal DbSet<MetaverseObjectChange> MetaverseObjectChanges { get; set; } = null!;
+        internal DbSet<MetaverseObjectChangeAttribute> MetaverseObjectChangeAttributes { get; set; } = null!;
+        internal DbSet<MetaverseObjectChangeAttributeValue> MetaverseObjectChangeAttributeValues { get; set; } = null!;
+        internal DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
+        internal DbSet<PendingExport> PendingExports { get; set; } = null!;
+        internal DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
+        internal DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
+        internal DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; } = null!;
+        internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; } = null!;
+        internal DbSet<Role> Roles { get; set; } = null!;
+        internal DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
+        internal DbSet<ServiceTask> ServiceTasks { get; set; } = null!;
+        internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; } = null!;
+        internal DbSet<SyncRule> SyncRules { get; set; } = null!;
 
         private readonly string _connectionString;
 

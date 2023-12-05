@@ -9,9 +9,9 @@
         /// The unique identifier for this partition in the connected system.
         /// For example, with LDAP systems this would be the DN (Distinguished Name).
         /// </summary>
-        public string Id { get; set; }
+        public string Id { get; set; } = null!;
 
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
 
         /// <summary>
         /// Should the partition be hidden by default? For example, Active Directory Configuration and Schema partitions shouldn't be visible ordinarily.

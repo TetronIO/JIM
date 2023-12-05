@@ -3,11 +3,17 @@
     public class MetaverseObjectHeader
     {
         public Guid Id { get; set; }
+
         public DateTime Created { get; set; }
-        public string TypeName { get; set; }
+
+        public string TypeName { get; set; } = null!;
+
         public int TypeId { get; set; }
+
         public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
+
         public MetaverseObjectStatus Status { get; set; }
+
         public string? DisplayName 
         { 
             get

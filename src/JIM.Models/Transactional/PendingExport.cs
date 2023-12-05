@@ -23,7 +23,7 @@ namespace JIM.Models.Transactional
         /// <summary>
         /// If the change type is create, then it's essential we know what connected system this applies to :)
         /// </summary>
-        public ConnectedSystem ConnectedSystem { get; set; }
+        public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
         /// <summary>
         /// If the change type is delete or update, then we can link an existing connector space object.

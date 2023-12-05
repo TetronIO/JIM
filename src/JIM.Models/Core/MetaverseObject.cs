@@ -5,12 +5,19 @@ namespace JIM.Models.Core
     public class MetaverseObject
     {
         public Guid Id { get; set; }
+
         public DateTime Created { get; set; }
+
         public DateTime? LastUpdated { get; set; }
-        public MetaverseObjectType Type { get; set; }
+
+        public MetaverseObjectType Type { get; set; } = null!;
+
         public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
-        public List<Role> Roles { get; set; }
+
+        public List<Role> Roles { get; set; } = null!;
+
         public MetaverseObjectStatus Status { get; set; }
+
         public List<MetaverseObjectChange> Changes { get; set; }
 
         public string? DisplayName 

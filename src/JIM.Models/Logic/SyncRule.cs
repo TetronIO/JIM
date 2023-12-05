@@ -7,19 +7,19 @@ namespace JIM.Models.Logic
     public class SyncRule
     {
         public int Id { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
         public DateTime Created { get; set; }
         public DateTime? LastUpdated { get; set; }
-        public ConnectedSystem ConnectedSystem { get; set; }
-        public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; }
-        public MetaverseObjectType MetaverseObjectType { get; set; }
+        public ConnectedSystem ConnectedSystem { get; set; } = null!;
+        public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; } = null!;
+        public MetaverseObjectType MetaverseObjectType { get; set; } = null!;
         public SyncRuleDirection Direction { get; set; }
         public bool? ProvisionToConnectedSystem { get; set; }
         public bool? ProjectToMetaverse { get; set; }
         public List<SyncRuleMapping> Mappings { get; set; }
 
         // back-link for EF
-        public List<Activity> Activities { get; set; }
+        public List<Activity> Activities { get; set; } = null!;
 
         // todo: scoping filters
         // what happens when an object is in scope, then falls out of scope?

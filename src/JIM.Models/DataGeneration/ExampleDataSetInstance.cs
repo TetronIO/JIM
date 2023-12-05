@@ -10,9 +10,9 @@ namespace JIM.Models.DataGeneration
         public int Id { get; set; }
 
         [JsonIgnore]
-        public DataGenerationTemplateAttribute DataGenerationTemplateAttribute { get; set; }
+        public DataGenerationTemplateAttribute DataGenerationTemplateAttribute { get; set; } = null!;
 
-        public ExampleDataSet ExampleDataSet { get; set; }
+        public ExampleDataSet ExampleDataSet { get; set; } = null!;
 
         /// <summary>
         /// Used to set an order compared to other ExampleDataSetInstances so that they can be referenced reliably via numeric attribute pattern variables (i.e. "{0} {1}")

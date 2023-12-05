@@ -10,7 +10,7 @@ namespace JIM.Models.Core
 
         public DateTime Created { set; get; }
 
-        public string Name { get; set; }
+        public string Name { get; set; } = null!;
 
         public AttributeDataType Type { get; set; }
 
@@ -18,9 +18,9 @@ namespace JIM.Models.Core
 
         public bool BuiltIn { get; set; }
 
-        public List<MetaverseObjectType> MetaverseObjectTypes { get; set; }
-        
-        public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; }
+        public List<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
+
+        public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; } = null!;
 
         public MetaverseAttribute()
         {

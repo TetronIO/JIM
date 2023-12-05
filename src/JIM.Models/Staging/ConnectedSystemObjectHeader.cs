@@ -1,7 +1,4 @@
-﻿using JIM.Models.Core;
-using System.ComponentModel.DataAnnotations.Schema;
-
-namespace JIM.Models.Staging
+﻿namespace JIM.Models.Staging
 {
     public class ConnectedSystemObjectHeader
     {

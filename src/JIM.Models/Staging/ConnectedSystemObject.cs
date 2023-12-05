@@ -12,9 +12,9 @@ namespace JIM.Models.Staging
 
         public DateTime? LastUpdated { get; set; }
 
-        public ConnectedSystemObjectType Type { get; set; }
+        public ConnectedSystemObjectType Type { get; set; } = null!;
 
-        public ConnectedSystem ConnectedSystem { get; set; }
+        public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
         /// <summary>
         /// The attribute that uniquely identifies this object in the connected system.
@@ -46,7 +46,7 @@ namespace JIM.Models.Staging
         /// <summary>
         /// A list of the changes made to this connected system object.
         /// </summary>
-        public List<ConnectedSystemObjectChange> Changes { get; set; }
+        public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;
 
         /// <summary>
         /// Only for use by JIM.Service to determine what attribute values need adding and and recording.

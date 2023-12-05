@@ -7,9 +7,9 @@
         /// <summary>
         /// The parent for this metaverse object change item.
         /// </summary>
-        public MetaverseObjectChange MetaverseObjectChange { get; set; }
+        public MetaverseObjectChange MetaverseObjectChange { get; set; } = null!;
 
-        public MetaverseAttribute Attribute { get; set; }
+        public MetaverseAttribute Attribute { get; set; } = null!;
 
         /// <summary>
         /// A list of what values were added to or removed from this attribute.

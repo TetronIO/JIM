@@ -8,8 +8,8 @@ namespace JIM.Models.Staging
         
         public DateTime Created { set; get; }
         
-        public string Name { get; set; }
-        
+        public string Name { get; set; } = null!;
+
         public string? Description { get; set; }
 
         /// <summary>
@@ -25,7 +25,7 @@ namespace JIM.Models.Staging
         /// <summary>
         /// The Connected System Object Type this attribute belongs to.
         /// </summary>
-        public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; }
+        public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; } = null!;
 
         /// <summary>
         /// Whether or not an administrator has selected this attribute to be synchronised by JIM.
