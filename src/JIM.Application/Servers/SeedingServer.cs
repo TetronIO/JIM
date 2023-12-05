@@ -765,7 +765,7 @@ namespace JIM.Application.Servers
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Type),
-                    Pattern = "Human",
+                    Pattern = "Person",
                     PopulatedValuesPercentage = 100
                 });
             }
