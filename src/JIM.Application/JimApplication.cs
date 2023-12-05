@@ -143,7 +143,7 @@ namespace JIM.Application
                 {
                     MetaverseObject = user,
                     Attribute = typeAttribute,
-                    StringValue = "Human"
+                    StringValue = "Person"
                 });
 
                 Log.Information($"InitialiseSSOAsync: Creating metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigning the {Constants.BuiltInRoles.Administrators} role.");

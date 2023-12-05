@@ -317,7 +317,7 @@ namespace JIM.Application.Servers
                         new PredefinedSearchCriteria {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
-                            StringValue = "Human"
+                            StringValue = "Person"
                         }
                     }
                 });
