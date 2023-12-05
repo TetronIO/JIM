@@ -103,6 +103,7 @@ namespace JIM.Service.Processors
                         {
                             // existing connected system object - update from import object if necessary
                             activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
+                            activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                             await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, activityRunProfileExecutionItem);
                         }
                     }
@@ -267,6 +268,10 @@ namespace JIM.Service.Processors
 
             // persist the new cso
             await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+
+            // now associate the persisted cso (now it has an id) with the activityRunProfileExecutionItem
+            activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+
             stopwatch.Stop();
             Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
         }

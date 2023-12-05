@@ -108,28 +108,21 @@ namespace JIM.Service
                     }
                     else
                     {
-                        foreach (var newServiceTask in newServiceTasksToProcess)
+                        foreach (var mainLoopNewServiceTask in newServiceTasksToProcess)
                         {
                             var cancellationTokenSource = new CancellationTokenSource();
                             var task = Task.Run(async () =>
                             {
+                                // create an instance of JIM, specific to the processing of this task.
+                                // we can't use the main-loop instance, due to EF having connection sharing issues.
                                 var taskJim = new JimApplication(new PostgresDataRepository());
-                                
-                                // re-retrieve the initiated-by object using this new task jim instance, otherwise referncing an object from another jim instance
-                                // will result in entityframework thinking the object is new and tries to insert a duplicate into the database.
-                                // obviously this is sub-optimal. is there a better way? attach the object to the new jim instance db context?
-                                MetaverseObject? initiatedBy = null;
-                                if (newServiceTask.InitiatedBy != null)
-                                    initiatedBy = await taskJim.Metaverse.GetMetaverseObjectAsync(newServiceTask.InitiatedBy.Id);
 
-                                // mark the activity as being executed, i.e. when the work actually started
-                                // retrieve the activity from this instance of JIM to avoid EF errors..
-                                var activity = await taskJim.Activities.GetActivityAsync(newServiceTask.Activity.Id) ?? 
-                                    throw new InvalidDataException($"ExecuteAsync: Activity id {newServiceTask.Activity.Id} could not be retrieved. This should not be possible.");
+                                // we want to re-retrieve the service task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
+                                var newServiceTask = await taskJim.Tasking.GetServiceTaskAsync(mainLoopNewServiceTask.Id) ?? 
+                                    throw new InvalidDataException($"ServiceTask '{mainLoopNewServiceTask.Id}' could not be retrieved.");
 
-                                activity.Executed = DateTime.UtcNow;
-                                await taskJim.Activities.UpdateActivityAsync(activity);
-                                //newServiceTask.Activity = activity; // re-associating for consistency and so subsequent uses of this activity on this JIM instance do not result in an EF error
+                                newServiceTask.Activity.Executed = DateTime.UtcNow;
+                                await taskJim.Activities.UpdateActivityAsync(newServiceTask.Activity);
 
                                 if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
                                 {
@@ -160,7 +153,7 @@ namespace JIM.Service
                                 else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
-                                    if (initiatedBy == null)
+                                    if (newServiceTask.InitiatedBy == null)
                                     {
                                         Log.Error("ExecuteAsync: syncServiceTask.InitiatedBy was null. Cannot execute sync task");
                                     }
@@ -186,7 +179,7 @@ namespace JIM.Service
                                                     // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                     if (runProfile.RunType == ConnectedSystemRunType.FullImport)
                                                     {
-                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, initiatedBy, activity, cancellationTokenSource);
+                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newServiceTask.InitiatedBy, newServiceTask.Activity, cancellationTokenSource);
                                                         await synchronisationImportTaskProcessor.PerformFullImportAsync();
                                                     }
                                                     else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
@@ -211,13 +204,13 @@ namespace JIM.Service
                                                     }
 
                                                     // task completed successfully
-                                                    await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity.Id);
+                                                    await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
                                                 }
                                                 catch (Exception ex)
                                                 {
-                                                    // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view issues with connectors through JIM,
-                                                    // rather than an admin having to dig through server logs.
-                                                    await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity.Id, ex);
+                                                    // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view
+                                                    // issues with connectors through JIM, rather than an admin having to dig through server logs.
+                                                    await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
                                                     Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
                                                 }
                                                 finally
@@ -260,11 +253,11 @@ namespace JIM.Service
                                             await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
 
                                             // task completed successfully, complete the activity
-                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity.Id);
+                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
                                         }
                                         catch (Exception ex)
                                         {
-                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity.Id, ex);
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
                                         }
                                         finally
@@ -284,7 +277,7 @@ namespace JIM.Service
 
                             }, cancellationTokenSource.Token);
 
-                            CurrentTasks.Add(new TaskTask(newServiceTask.Id, task, cancellationTokenSource));
+                            CurrentTasks.Add(new TaskTask(mainLoopNewServiceTask.Id, task, cancellationTokenSource));
                         }
                     }
                 }

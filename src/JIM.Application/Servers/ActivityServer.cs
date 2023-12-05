@@ -44,13 +44,6 @@ namespace JIM.Application.Servers
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
-        public async Task CompleteActivityAsync(Guid id)
-        {
-            var activity = await GetActivityAsync(id);
-            if (activity != null)
-                await CompleteActivityAsync(activity);
-        }
-
         public async Task CompleteActivityWithError(Activity activity, Exception exception)
         {
             var now = DateTime.UtcNow;
@@ -61,13 +54,6 @@ namespace JIM.Application.Servers
             activity.TotalActivityTime = now - activity.Created;
             activity.Status = ActivityStatus.CompleteWithError;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
-        }
-
-        public async Task CompleteActivityWithError(Guid id, Exception exception)
-        {
-            var activity = await GetActivityAsync(id);
-            if (activity != null)
-                await CompleteActivityWithError(activity, exception);
         }
 
         public async Task FailActivityWithErrorAsync(Activity activity, Exception exception)
@@ -81,13 +67,6 @@ namespace JIM.Application.Servers
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
-        public async Task FailActivityWithErrorAsync(Guid id, Exception exception)
-        {
-            var activity = await GetActivityAsync(id);
-            if (activity != null)
-                await FailActivityWithErrorAsync(activity, exception);
-        }
-
         public async Task CancelActivityAsync(Activity activity)
         {
             if (activity.Status == ActivityStatus.Cancelled)
@@ -98,13 +77,6 @@ namespace JIM.Application.Servers
             activity.TotalActivityTime = now - activity.Created;
             activity.Status = ActivityStatus.Cancelled;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
-        }
-
-        public async Task CancelActivityAsync(Guid id)
-        {
-            var activity = await GetActivityAsync(id);
-            if (activity != null)
-                await CancelActivityAsync(activity);
         }
 
         public async Task UpdateActivityAsync(Activity activity)

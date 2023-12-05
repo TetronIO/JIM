@@ -146,7 +146,7 @@ namespace JIM.Application.Servers
             }
 
             if (serviceTask.Activity != null)
-                await Application.Activities.CancelActivityAsync(serviceTask.Activity.Id);
+                await Application.Activities.CancelActivityAsync(serviceTask.Activity);
 
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
         }
@@ -159,7 +159,7 @@ namespace JIM.Application.Servers
         public async Task CompleteServiceTaskAsync(ServiceTask serviceTask)
         {
             if (serviceTask.Activity != null && serviceTask.Activity.Status == ActivityStatus.InProgress)
-                await Application.Activities.CompleteActivityAsync(serviceTask.Activity.Id);
+                await Application.Activities.CompleteActivityAsync(serviceTask.Activity);
 
             await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
         }

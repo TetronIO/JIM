@@ -447,6 +447,9 @@ namespace JIM.Application.Servers
             // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
             activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
+            // make sure the CSO is linked to the execution item
+            activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+
             // persist new attribute values from addition list and create change
             if (connectedSystemObject.PendingAttributeValueAdditions != null)
             {
