@@ -110,6 +110,8 @@
             Sync summary will go here
         </MudPaper>
 
+        <ActivityRunProfileExecutionItemHeaderPaginator Results="@activityRunProfileExecutionItemHeaders" />
+
         <MudTable Items="@activityRunProfileExecutionItemHeaders.Results" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ActivityRunProfileExecutionItemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
             <ToolBarContent>
                 <MudSpacer />
@@ -127,7 +129,7 @@
                 <MudTd DataLabel="Display Name"><MudLink Href="@("/activity/run-profiles/execution-items/"+context.Id)">@context.DisplayName</MudLink></MudTd>
                 <MudTd DataLabel="Connected System Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "")</MudTd>
                 <MudTd DataLabel="Change Type">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudTd>
-                <MudTd DataLabel="Error Type">@(context.ErrorType != null ? context.ErrorType.ToString().SplitOnCapitalLetters() : "")</MudTd>
+                <MudTd DataLabel="Error Type">@(context.ErrorType.HasValue ? context.ErrorType.Value.ToString().SplitOnCapitalLetters() : "")</MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 There are no sync results to show

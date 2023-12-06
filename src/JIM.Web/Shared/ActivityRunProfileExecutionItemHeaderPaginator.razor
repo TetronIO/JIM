@@ -1,24 +1,27 @@
-﻿@using JIM.Models.Staging;
+﻿@using JIM.Models.Activities.DTOs
+@using JIM.Models.Core
 @using JIM.Models.Utility
 @using JIM.Models.Enums
 @inject NavigationManager NavManager
 
 @if (totalPages > 1 && pageNumbers != null)
 {
-    <MudPagination 
-        ShowFirstButton="true" 
-        ShowLastButton="true" 
-        Count="@Results.TotalPages"
-        ControlButtonClicked="ControlButtonClickedHandler"
-        SelectedChanged="SelectedChangedHandler"
-        Rectangular="true"
-        DisableElevation="true"/>
+    <div class="d-flex flex-column align-center">
+        <MudPagination 
+            ShowFirstButton="true" 
+            ShowLastButton="true" 
+            Count="@Results.TotalPages"
+            ControlButtonClicked="ControlButtonClickedHandler"
+            SelectedChanged="SelectedChangedHandler"
+            Rectangular="true"
+            DisableElevation="true" />
+    </div>
 }
 
 @code {
     [Parameter]
     [EditorRequired]
-    public PagedResultSet<ConnectedSystemObjectHeader> Results { get; set; } = null!;
+    public PagedResultSet<ActivityRunProfileExecutionItemHeader> Results { get; set; } = null!;
 
     string path = null!;
     const int maxPagesToDisplayInNav = 4;
