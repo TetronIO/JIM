@@ -50,15 +50,14 @@ namespace JIM.Web
         #region mudblazor related
         public static Color GetActivityMudBlazorColorForStatus(ActivityStatus status)
         {
-            switch (status)
+            return status switch
             {
-                case ActivityStatus.Complete: return Color.Success;
-                case ActivityStatus.InProgress: return Color.Primary;
-                case ActivityStatus.CompleteWithError: return Color.Warning;
-                case ActivityStatus.FailedWithError: return Color.Error;
-            }
-
-            return Color.Default;
+                ActivityStatus.Complete => Color.Success,
+                ActivityStatus.InProgress => Color.Primary,
+                ActivityStatus.CompleteWithError => Color.Warning,
+                ActivityStatus.FailedWithError => Color.Error,
+                _ => Color.Default,
+            };
         }
         #endregion
     }
