@@ -1,5 +1,4 @@
 ﻿using JIM.Models.Enums;
-using JIM.Models.Staging;
 
 namespace JIM.Models.Activities.DTOs
 {
@@ -7,13 +6,13 @@ namespace JIM.Models.Activities.DTOs
     {
         public Guid Id { get; set; }
 
+        public string? ExternalIdValue { get; set; }
+
         public string? DisplayName { get; set; }
 
         public string? ConnectedSystemObjectType { get; set; }
 
         public ObjectChangeType ObjectChangeType { get; set; }
-
-        public ConnectedSystemObjectTypeAttribute UniqueIdentifierAttribute { get; set; } = null!;
 
         public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; }
     }

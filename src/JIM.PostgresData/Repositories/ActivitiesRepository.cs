@@ -148,6 +148,7 @@ namespace JIM.PostgresData.Repositories
             var results = await objects.Skip(offset).Take(itemsToGet).Select(i => new ActivityRunProfileExecutionItemHeader
             {
                 Id = i.Id,
+                ExternalIdValue = i.ConnectedSystemObject != null && i.ConnectedSystemObject.AttributeValues.Any(av => av.Attribute.IsExternalId) ? i.ConnectedSystemObject.AttributeValues.Single(av => av.Attribute.IsExternalId).ToString() : null,
                 DisplayName = i.ConnectedSystemObject != null && i.ConnectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? i.ConnectedSystemObject.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
                 ConnectedSystemObjectType = i.ConnectedSystemObject != null ? i.ConnectedSystemObject.Type.Name : null,
                 ErrorType = i.ErrorType,
