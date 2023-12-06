@@ -11,7 +11,7 @@ namespace JIM.Web.Pages
             await HttpContext.SignOutAsync("oidc", AuthProps());
         }
 
-        private AuthenticationProperties AuthProps() => new AuthenticationProperties
+        private AuthenticationProperties AuthProps() => new()
         {
             RedirectUri = Url.Content("~/")
         };
