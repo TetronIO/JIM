@@ -6,7 +6,8 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Metaverse Object Type: @metaverseObjectType?.Name</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Metaverse Object Type:</span> @metaverseObjectType?.Name</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Metaverse Object Type:</span> @metaverseObjectType?.Name</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (metaverseObjectType != null)
 {
@@ -38,6 +39,7 @@
     public int Id { get; set; }
 
     private JIM.Models.Core.MetaverseObjectType? metaverseObjectType;
+    private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -48,5 +50,12 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Schema", href: "/admin/schema/"),
+            new BreadcrumbItem(metaverseObjectType.Name, href: null, disabled: true)
+        };
     }
 }

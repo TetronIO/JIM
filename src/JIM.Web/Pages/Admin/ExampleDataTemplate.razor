@@ -10,6 +10,7 @@
 
 <PageTitle>Data Generation Template: @template?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Data Generation Template:</span> @template?.Name</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (template != null)
 {
@@ -189,6 +190,7 @@
     private DataGenerationTemplate? template;
     private DataGenerationTemplateServiceTask? task;
     private ServiceTaskStatus? status;
+    private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -199,6 +201,13 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Eaxmple Data", href: "/admin/example-data/"),
+            new BreadcrumbItem(template.Name, href: null, disabled: true)
+        };
 
         // has this template already been scheduled, or is already being processed on the service queue?
         // continuously update the UI to show any change in status

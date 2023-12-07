@@ -13,7 +13,8 @@
 
 <PageTitle>Operations</PageTitle>
 <MudText Typo="Typo.h4">Operations</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     JIM executes tasks on a queue. You can see what tasks are queued here. Tasks are made up of different types of operations within JIM, i.e. Synchronisation Tasks and Data Generation Tasks.
 </MudText>
 
@@ -88,6 +89,12 @@
     private ConnectedSystemRunProfile? selectedConnectedSystemRunProfile;
     private List<ServiceTaskHeader> serviceTaskHeaders = new List<ServiceTaskHeader>();
     private CancellationTokenSource pollingCancellationTokenSource = new CancellationTokenSource();
+
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Operations", href: null, disabled: true)
+    };
 
     protected override async Task OnInitializedAsync()
     {

@@ -14,7 +14,8 @@
 
 <PageTitle>Connected System: @connectedSystem?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @connectedSystem?.Name</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</MudText>
 
 @if (connectedSystem != null)
 {
@@ -490,6 +491,7 @@
     private IEnumerable<string> attributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
     private bool attributeSelectedFilter;
     private string? attributeSelectionCsv;
+    private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -500,6 +502,13 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+            new BreadcrumbItem(connectedSystem.Name, href: null, disabled: true)
+        };
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
         settingCategories = connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();

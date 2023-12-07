@@ -9,7 +9,8 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Example Data Set: @exampleDataSet?.Name</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Example Data Sets:</span> @exampleDataSet?.Name</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Example Data Sets:</span> @exampleDataSet?.Name</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (exampleDataSet != null)
 {
@@ -46,6 +47,7 @@
 
     private JIM.Models.DataGeneration.ExampleDataSet? exampleDataSet;
     private string? builtIn;
+    private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -56,6 +58,14 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Example Data", href: "/admin/example-data/"),
+            new BreadcrumbItem("Datasets", href: "/admin/example-data/datasets/"),
+            new BreadcrumbItem(exampleDataSet.Name, href: null, disabled: true)
+        };
 
         builtIn = exampleDataSet.BuiltIn ? "Yes" : "No";
     }

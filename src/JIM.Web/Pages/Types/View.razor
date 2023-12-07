@@ -56,15 +56,11 @@
 
 @code {
     [Parameter]
-    public string TypeNameUrlParam { get; set; }
-
+    public string TypeNameUrlParam { get; set; } = null!;
     [Parameter]
     public Guid IdParam { get; set; }
-
     private MetaverseObject? MetaverseObject { get; set; }
-
     private MetaverseObjectType? MetaverseObjectType { get; set; }
-
     private string? displayName;
 
     protected override async Task OnParametersSetAsync()

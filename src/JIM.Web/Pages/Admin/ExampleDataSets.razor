@@ -7,7 +7,8 @@
 
 <PageTitle>Example Data Sets</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Example Data:</span> Data Sets</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
     configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.
 </MudText>
@@ -16,7 +17,7 @@
     Example datasets provide the raw values that are used to construct example data in Example Data Templates.
 </MudText>
 
-<MudPaper Elevation="0" Class="mt-2" Outlined="true">
+<MudPaper Elevation="0" Class="mt-5" Outlined="true">
     <MudToolBar>
         <MudButton Href="/admin/example-data" Color="Color.Primary" DisableElevation="true">Templates</MudButton>
         <MudButton Href="/admin/example-data/datasets" Color="Color.Primary" DisableElevation="true" Disabled="true">Data Sets</MudButton>
@@ -51,6 +52,13 @@
 @code {
     private List<ExampleDataSetHeader>? datasets;
     private string searchString = "";
+
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Example Data", href: "/admin/example-data/"),
+        new BreadcrumbItem("Data Sets", href: null, disabled: true)
+    };
 
     protected override async Task OnInitializedAsync()
     {

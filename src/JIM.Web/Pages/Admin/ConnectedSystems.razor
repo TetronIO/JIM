@@ -8,7 +8,8 @@
 
 <PageTitle>Connected Systems</PageTitle>
 <MudText Typo="Typo.h4">Connected Systems</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     JIM imports from and exports data to connected systems using Connectors.
     @if (connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
     {
@@ -67,6 +68,12 @@
 @code {
     private IList<ConnectedSystemHeader>? connectedSystemHeaders;
     private string searchString = "";
+
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Connected Systems", href: null, disabled: true),
+    };
 
     protected override async Task OnInitializedAsync()
     {

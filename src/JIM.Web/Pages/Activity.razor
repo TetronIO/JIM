@@ -7,8 +7,9 @@
 @inject JimApplication Jim
 
 <PageTitle>Activity</PageTitle>
-
 <MudText Typo="Typo.h4">Activity</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2 mb-2">
     See what JIM has been used for here. Everything that happens in JIM is tracked by an Activity. 
     Activities can be initiated by an individual, or by the system via automation in response to synchronisation schedules, workflows, etc.
@@ -60,8 +61,13 @@
     [Parameter]
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
-    
     private PagedResultSet<JIM.Models.Activities.Activity>? activities;
+
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Activity", href: null, disabled: true),
+    };
 
     protected override async Task OnParametersSetAsync()
     {

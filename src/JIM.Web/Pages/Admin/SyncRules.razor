@@ -8,8 +8,9 @@
 @inject JimApplication Jim
 
 <PageTitle>Synchronisation Rules</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5">Synchronisation Rules</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
+<MudText Typo="Typo.h4">Synchronisation Rules</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Synchronisation Rules are used to define the flow of information between JIM and connected systems.
 </MudText>
 
@@ -53,6 +54,12 @@
 @code {
     private IList<SyncRuleHeader>? syncRuleHeaders;
     private string searchString = "";
+
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Synchronisation Rules", href: null, disabled: true)
+    };
 
     protected override async Task OnInitializedAsync()
     {

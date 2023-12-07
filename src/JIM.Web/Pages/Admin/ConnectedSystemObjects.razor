@@ -12,7 +12,8 @@
 
 <PageTitle>Connected System Objects: @connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @connectedSystemHeader?.Name</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation, 
     or where changes from the system are staged before being committed to the Metaverse within JIM.
 </MudText>
@@ -81,15 +82,19 @@
 @code {
     [Parameter]
     public int Id { get; set; }
+
     [Parameter]
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
+
     [CascadingParameter]
     private Task<AuthenticationState>? authenticationStateTask { get; set; }
+
     private MudMessageBox? DeleteAllObjectsMessageBox { get; set; }
     private ConnectedSystemHeader? connectedSystemHeader;
     private PagedResultSet<ConnectedSystemObjectHeader>? connectedSystemObjectHeaders;
     private string searchString = "";
+    private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -101,6 +106,14 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+            new BreadcrumbItem(connectedSystemHeader.Name, href: $"/admin/connected-systems/{connectedSystemHeader.Id}/"),
+            new BreadcrumbItem("Objects", href: null, disabled: true)
+        };
 
         if (Page == null || Page < 1)
             Page = 1;

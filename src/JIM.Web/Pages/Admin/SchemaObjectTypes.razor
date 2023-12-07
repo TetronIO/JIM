@@ -6,10 +6,11 @@
 @inject JimApplication Jim
 
 <PageTitle>Schema: Object Types</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5"><span class="mud-secondary-text">Schema:</span> Object Types</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Manage metaverse object types and their attributes.</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Schema:</span> Object Types</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage metaverse object types and their attributes.</MudText>
 
-<MudPaper Elevation="0" Class="mt-2" Outlined="true">
+<MudPaper Elevation="0" Class="mt-5" Outlined="true">
     <MudToolBar>
         <MudButton Href="/admin/schema" Color="Color.Primary" DisableElevation="true" Disabled="true">Object Types</MudButton>
         <MudButton Href="/admin/schema/attributes" Color="Color.Primary" DisableElevation="true">Attributes</MudButton>
@@ -36,6 +37,11 @@
 
 @code {
     private IList<MetaverseObjectTypeHeader>? metaverseObjectTypeHeaders;
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Schema", href: null, disabled: true)
+    };
 
     protected override async Task OnInitializedAsync()
     {

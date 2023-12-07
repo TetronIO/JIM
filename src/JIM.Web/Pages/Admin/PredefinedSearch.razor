@@ -9,7 +9,8 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Predefined Search: @predefinedSearch?.Name</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-3"><span class="mud-secondary-text">Predefined Search:</span> @predefinedSearch?.Name</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Predefined Search:</span> @predefinedSearch?.Name</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (predefinedSearch != null)
 {
@@ -72,6 +73,7 @@
     public string? Uri { get; set; }
 
     private JIM.Models.Search.PredefinedSearch? predefinedSearch;
+    private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,5 +91,12 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Predefined Searches", href: "/admin/predefined-searches/"),
+            new BreadcrumbItem(predefinedSearch.Name, href: null, disabled: true)
+        };
     }
 }

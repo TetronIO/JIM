@@ -11,7 +11,8 @@
 
 <PageTitle>Create a Connected System</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected Systems:</span> New</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Provide some basic details here, and then we'll move on to configuring the Connected System.
 </MudText>
  
@@ -39,6 +40,13 @@
     private ConnectedSystemCreateViewModel model = new ConnectedSystemCreateViewModel();
     private bool isFormValid;
     private string[] formErrors = { };
+
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+        new BreadcrumbItem("New", href: null, disabled: true),
+    };
 
     protected override async Task OnInitializedAsync()
     {

@@ -8,7 +8,8 @@
 
 <PageTitle>Connectors</PageTitle>
 <MudText Typo="Typo.h4">Connectors</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     JIM uses Connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors.
     From here you can see which are installed and if any have updates that can be applied.
 </MudText>
@@ -48,6 +49,13 @@
 @code {
     private IList<ConnectorDefinitionHeader>? headers;
     private string searchString = "";
+
+    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+        new BreadcrumbItem("Connectors", href: null, disabled: true),
+    };
 
     protected override async Task OnInitializedAsync()
     {
