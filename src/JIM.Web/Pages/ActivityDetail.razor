@@ -106,7 +106,7 @@
     @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute && activityRunProfileExecutionItemHeaders != null)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Synchronisation Results</MudText>
-        <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
             Sync summary will go here
         </MudPaper>
 
@@ -120,12 +120,12 @@
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ExternalIdValue)">External Id</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName)">Name</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType)">Connected System Oject Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType)">External Oject Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ObjectChangeType)">Change Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType)">Error Type</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="External Id"><MudLink Href="@("/activity/run-profiles/execution-items/"+context.Id)">@context.ExternalIdValue</MudLink></MudTd>
+                <MudTd DataLabel="External Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.ExternalIdValue</MudLink></MudTd>
                 <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
                 <MudTd DataLabel="Connected System Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "")</MudTd>
                 <MudTd DataLabel="Change Type">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudTd>
