@@ -11,8 +11,9 @@
 @inject NavigationManager NavManager
 
 <PageTitle>@PageTitle</PageTitle>
-<MudText Typo="Typo.h4" Class="mt-5">@PageTitle</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Search, or browse for @ObjectTypeName</MudText>
+<MudText Typo="Typo.h4">@PageTitle</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
 @if (PredefinedSearch != null)
 {
@@ -78,6 +79,7 @@ else
     private PredefinedSearch? PredefinedSearch { get; set; }
     private string? PageTitle { get; set; }
     private string? ObjectTypeName { get; set; }
+    private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -112,6 +114,24 @@ else
             MetaverseObjectHeaders = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(PredefinedSearch, Page.Value, 20, 500);
             PageTitle = PredefinedSearch.Name;
             ObjectTypeName = PredefinedSearch.Name.ToLower();
+        }
+
+        if (PredefinedSearch == null || PredefinedSearch.IsDefaultForMetaverseObjectType)
+        {
+            breadcrumbs = new List<BreadcrumbItem>
+            {
+                new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new BreadcrumbItem(MetaverseObjectType.Name, href: null, disabled: true)
+            };
+        }
+        else
+        {
+            breadcrumbs = new List<BreadcrumbItem>
+            {
+                new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new BreadcrumbItem(MetaverseObjectType.Name, href: $"/t/{MetaverseObjectType.Name.ToLower()}"),
+                new BreadcrumbItem(PredefinedSearch.Name, href: null, disabled: true)
+            };
         }
     }
 }
