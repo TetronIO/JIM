@@ -162,7 +162,9 @@
                 <MudTd DataLabel="External Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.ExternalIdValue</MudLink></MudTd>
                 <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
                 <MudTd DataLabel="Connected System Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "")</MudTd>
-                <MudTd DataLabel="Change Type">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudTd>
+                <MudTd DataLabel="Change Type">
+                    <MudChip Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudChip>
+                </MudTd>
                 <MudTd DataLabel="Error Type">@(context.ErrorType.HasValue ? context.ErrorType.Value.ToString().SplitOnCapitalLetters() : "")</MudTd>
             </RowTemplate>
             <NoRecordsContent>

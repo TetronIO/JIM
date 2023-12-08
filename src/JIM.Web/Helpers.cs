@@ -1,6 +1,7 @@
 ﻿using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
@@ -56,6 +57,17 @@ namespace JIM.Web
                 ActivityStatus.InProgress => Color.Primary,
                 ActivityStatus.CompleteWithError => Color.Warning,
                 ActivityStatus.FailedWithError => Color.Error,
+                _ => Color.Default,
+            };
+        }
+
+        public static Color GetRunItemMudBlazorColorForType(ObjectChangeType objectChangeType)
+        {
+            return objectChangeType switch
+            {
+                ObjectChangeType.Create => Color.Primary,
+                ObjectChangeType.Update => Color.Default,
+                ObjectChangeType.Delete => Color.Error,
                 _ => Color.Default,
             };
         }
