@@ -19,5 +19,7 @@ namespace JIM.Data.Repositories
         public Task<PagedResultSet<Activity>> GetActivitiesAsync(int page, int pageSize, int maxResults, QuerySortBy querySortBy);
 
         public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize, int maxResults);
+
+        public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
     }
 }

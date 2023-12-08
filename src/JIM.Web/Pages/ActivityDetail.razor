@@ -106,10 +106,43 @@
 
     @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute && activityRunProfileExecutionItemHeaders != null)
     {
-        <MudText Typo="Typo.h5" Class="mt-5">Synchronisation Results</MudText>
-        <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
-            Sync summary will go here
-        </MudPaper>
+        @if (activityRunProfileExecutionStats != null)
+        {
+            <MudText Typo="Typo.h5" Class="mt-5">Synchronisation Results</MudText>
+            <MudStack Row="true" Class="mt-5 mb-5">
+
+                <MudPaper Class="pa-5" Outlined="true">
+                    <MudText Typo="Typo.overline">Total Objects</MudText>
+                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectChangeCount</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-5" Outlined="true">
+                    <MudText Typo="Typo.overline">Objects Created</MudText>
+                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectCreates</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-5" Outlined="true">
+                    <MudText Typo="Typo.overline">Objects Updated</MudText>
+                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectUpdates</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-5" Outlined="true">
+                    <MudText Typo="Typo.overline">Objects Deleted</MudText>
+                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-5" Outlined="true">
+                    <MudText Typo="Typo.overline">Object Types</MudText>
+                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectTypes</MudText>
+                </MudPaper>
+
+                <MudPaper Class="pa-5" Outlined="true" Style="@(activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
+                    <MudText Typo="Typo.overline">Errors</MudText>
+                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectErrors</MudText>
+                </MudPaper>
+
+            </MudStack>
+        }
 
         <ActivityRunProfileExecutionItemHeaderPaginator Results="@activityRunProfileExecutionItemHeaders" />
 
@@ -151,6 +184,7 @@
     private ConnectedSystemHeader? connectedSystemHeader;
     private MetaverseObjectHeader? metaverseObjectHeader;
     private PagedResultSet<ActivityRunProfileExecutionItemHeader>? activityRunProfileExecutionItemHeaders;
+    private ActivityRunProfileExecutionStats? activityRunProfileExecutionStats;
     private string searchString = null!;
 
     private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
@@ -180,7 +214,10 @@
             metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(activity.MetaverseObjectId.Value);
 
         if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute)
+        {
+            activityRunProfileExecutionStats = await Jim.Activities.GetActivityRunProfileExecutionStatsAsync(activity.Id);
             activityRunProfileExecutionItemHeaders = await Jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(activity.Id, Page.Value, 20, 500);
+        }
     }
 
     // this search feature needs to change to support searching all results, not just what's on the page, so needs to do a server side search
