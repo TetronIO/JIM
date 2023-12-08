@@ -115,6 +115,11 @@ namespace JIM.Application.Servers
         {
             return await Application.Repository.Activity.GetActivityRunProfileExecutionStatsAsync(activityId);
         }
+
+        public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
+        {
+            return await Application.Repository.Activity.GetActivityRunProfileExecutionItemAsync(id);
+        }
         #endregion
     }
 }

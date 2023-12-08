@@ -191,6 +191,14 @@ namespace JIM.PostgresData.Repositories
                 TotalObjectTypes = await Repository.Database.ActivityRunProfileExecutionItems.Where(q => q.Activity.Id == activityId && q.ConnectedSystemObject != null).Select(q => q.ConnectedSystemObject.Type).Distinct().CountAsync(),
             };
         }
+
+        public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
+        {
+            return await Repository.Database.ActivityRunProfileExecutionItems
+                .Include(q => q.ConnectedSystemObject)
+                .Include(q => q.ConnectedSystemObjectChange)
+                .SingleOrDefaultAsync(q => q.Id == id);
+        }
         #endregion
     }
 }

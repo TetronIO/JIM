@@ -11,6 +11,7 @@ public class ActivityRunProfileExecutionItem
     /// The parent for this run profile execution item. For EF navigation purposes.
     /// </summary>
     public Activity Activity { get; set; } = null!;
+    public Guid ActivityId { get; set; }
 
     /// <summary>
     /// What happened with the ConnectedSystemObject? Was it created/updated/deleted?

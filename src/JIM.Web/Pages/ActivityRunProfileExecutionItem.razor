@@ -1,0 +1,52 @@
+﻿@page "/activity/sync/{Id:guid}"
+@attribute [Authorize(Roles = "Users")]
+@using JIM.Application
+@using JIM.Models.Activities;
+@using JIM.Models.Activities.DTOs;
+@using JIM.Models.Core
+@using JIM.Models.Core.DTOs;
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Models.Utility;
+@using JIM.Utilities;
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Run Profile Execution: @activityRunProfileExecutionItem.?Id</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution:</span> @(activityRunProfileExecutionItem != null ? activityRunProfileExecutionItem.Id : null)</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+Show:
+Connected System / Run Profile / Time
+Object / Operation
+Changes (if update)
+
+
+
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private JIM.Models.Activities.ActivityRunProfileExecutionItem? activityRunProfileExecutionItem;
+    private List<BreadcrumbItem> breadcrumbs = null!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        activityRunProfileExecutionItem = await Jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
+        if (activityRunProfileExecutionItem == null)
+        {
+            // ActivityRunProfileExecutionItem not found, redirect to index page
+            NavManager.NavigateTo("/activity");
+            return;
+        }
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Activity", href: "/activity"),
+            new BreadcrumbItem("Acivity Detail", href: $"/activity/{activityRunProfileExecutionItem.ActivityId}"),
+            new BreadcrumbItem(activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
+        };
+    }
+}
