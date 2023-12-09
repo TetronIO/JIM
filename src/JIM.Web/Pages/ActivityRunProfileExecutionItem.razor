@@ -68,29 +68,18 @@ Changes (if update) *@
             </MudPaper>
         }
 
-
-
-
-@*         <MudPaper Class="pa-5" Outlined="true">
-            <MudText Typo="Typo.overline">Objects Deleted</MudText>
-            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
-        </MudPaper>
-
-        <MudPaper Class="pa-5" Outlined="true">
-            <MudText Typo="Typo.overline">Object Types</MudText>
-            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectTypes</MudText>
-        </MudPaper>
-
-        <MudPaper Class="pa-5" Outlined="true" Style="@(activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
-            <MudText Typo="Typo.overline">Errors</MudText>
-            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectErrors</MudText>
-        </MudPaper> *@
-
     </MudStack>
+
+    @if (activityRunProfileExecutionItem.ConnectedSystemObject != null)
+    {
+        <MudPaper Class="pa-5" Outlined="true">
+            <MudText Typo="Typo.overline">Connected System Object</MudText>
+            <MudText><MudLink Href="@(Utilities.GetConnectedSystemObjectHref(activityRunProfileExecutionItem.ConnectedSystemObject))">@externalId</MudLink></MudText>
+        </MudPaper>
+    }
+
+    <!-- attribute change table -->
 }
-
-
-
 
 @code {
     [Parameter]
