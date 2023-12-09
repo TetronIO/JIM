@@ -45,7 +45,30 @@ Changes (if update) *@
                 <MudText Typo="Typo.h5">@activity.Executed</MudText>
             </MudPaper>
         }
-        
+
+        @if (activity != null && activity.InitiatedBy != null)
+        {
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Initiated By</MudText>
+                <MudText><MudLink Href="@(Utilities.GetMetaverseObjectHref(activity.InitiatedBy))" Typo="Typo.h5">@activity.InitiatedBy.DisplayName</MudLink></MudText>
+            </MudPaper>
+        }
+        else if (activity != null && !string.IsNullOrEmpty(activity.InitiatedByName))
+        {
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Initiated By</MudText>
+                <MudText Typo="Typo.h5">@activity.InitiatedByName</MudText>
+            </MudPaper>
+        }
+        else
+        {
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Initiated By</MudText>
+                <MudText Typo="Typo.h5">System</MudText>
+            </MudPaper>
+        }
+
+
 
 
 @*         <MudPaper Class="pa-5" Outlined="true">
@@ -77,7 +100,7 @@ Changes (if update) *@
     private JIM.Models.Activities.Activity? activity;
     private ConnectedSystemHeader? connectedSystemHeader;
     private List<BreadcrumbItem> breadcrumbs = null!;
-    private string? externalId;    
+    private string? externalId;
 
     protected override async Task OnParametersSetAsync()
     {
