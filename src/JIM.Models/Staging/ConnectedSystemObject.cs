@@ -72,6 +72,14 @@ namespace JIM.Models.Staging
         #endregion
 
         #region public methods
+        public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
+        {
+            if (AttributeValues == null || AttributeValues.Count == 0)
+                return null;
+
+            return AttributeValues[ExternalIdAttributeId];
+        }
+
         public void UpdateSingleValuedAttribute<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T newAttributeValue)
         {
             if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)

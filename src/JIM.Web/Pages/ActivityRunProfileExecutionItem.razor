@@ -16,10 +16,30 @@
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution:</span> @(activityRunProfileExecutionItem != null ? activityRunProfileExecutionItem.Id : null)</MudText>
 <MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-Show:
+@* Show:
 Connected System / Run Profile / Time
-Object / Operation
-Changes (if update)
+Object Extnrnal Id / Operation Type
+Changes (if update) *@
+
+@if (activityRunProfileExecutionItem != null)
+{
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        @if (activityRunProfileExecutionItem.ConnectedSystemObject != null)
+        {
+            // populated for creates
+            <MudText>@externalId</MudText>
+            
+        }
+        else if (activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
+        {
+            // populated for updates and deletes
+        }
+        else
+        {
+            <MudText>Something went wrong</MudText>
+        }
+    </MudPaper>
+}
 
 
 
@@ -30,6 +50,7 @@ Changes (if update)
 
     private JIM.Models.Activities.ActivityRunProfileExecutionItem? activityRunProfileExecutionItem;
     private List<BreadcrumbItem> breadcrumbs = null!;
+    private string? externalId;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -48,5 +69,9 @@ Changes (if update)
             new BreadcrumbItem("Acivity Detail", href: $"/activity/{activityRunProfileExecutionItem.ActivityId}"),
             new BreadcrumbItem(activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
         };
+
+        // try and get the external id in string form
+        var externalIdAttributeValue = activityRunProfileExecutionItem.GetExternalIdAttributeValue();
+        externalId = externalIdAttributeValue != null ? externalIdAttributeValue.ToString() : null;
     }
 }

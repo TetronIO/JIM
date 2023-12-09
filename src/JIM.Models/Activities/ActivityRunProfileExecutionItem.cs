@@ -45,4 +45,15 @@ public class ActivityRunProfileExecutionItem
     public string? ErrorMessage { get; set; }
     
     public string? ErrorStackTrace { get; set; }
+
+    public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
+    {
+        // try and get an external id for the target object
+        // one should exist for updates and deletes, but isn't guaranteed for creates if the connected system is responsible for generating it and a confirming import hasn't been completed.
+        if (ConnectedSystemObject != null)
+            return ConnectedSystemObject.GetExternalIdAttributeValue();
+        else if (ConnectedSystemObjectChange != null)
+            return ConnectedSystemObjectChange.DeletedObjectUniqueIdentifierAttributeValue; 
+        else return null;
+    }
 }
