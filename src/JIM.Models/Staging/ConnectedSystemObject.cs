@@ -15,6 +15,7 @@ namespace JIM.Models.Staging
         public ConnectedSystemObjectType Type { get; set; } = null!;
 
         public ConnectedSystem ConnectedSystem { get; set; } = null!;
+        public int ConnectedSystemId { get; set; }
 
         /// <summary>
         /// The attribute that uniquely identifies this object in the connected system.

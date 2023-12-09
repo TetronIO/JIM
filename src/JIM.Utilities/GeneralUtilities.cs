@@ -1,5 +1,7 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using System.Text.RegularExpressions;
 
 namespace JIM.Utilities
@@ -37,6 +39,16 @@ namespace JIM.Utilities
         public static string? GetMetaverseObjectHrefText(MetaverseObjectHeader metaverseObjectHeader)
         {
             return metaverseObjectHeader.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue;
+        }
+
+        public static string GetConnectedSystemHref(ConnectedSystem connectedSystem)
+        {
+            return $"/admin/connected-systems/{connectedSystem.Id}";
+        }
+
+        public static string GetConnectedSystemHref(ConnectedSystemHeader connectedSystemHeader)
+        {
+            return $"/admin/connected-systems/{connectedSystemHeader.Id}";
         }
     }
 }

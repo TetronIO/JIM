@@ -18,27 +18,52 @@
 
 @* Show:
 Connected System / Run Profile / Time
-Object Extnrnal Id / Operation Type
+Object External Id / Operation Type
 Changes (if update) *@
 
 @if (activityRunProfileExecutionItem != null)
 {
-    <MudPaper Class="pa-5 mt-5" Outlined="true">
-        @if (activityRunProfileExecutionItem.ConnectedSystemObject != null)
+    <MudStack Row="true" Class="mt-5 mb-5">
+
+        @if (connectedSystemHeader != null)
         {
-            // populated for creates
-            <MudText>@externalId</MudText>
-            
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Connected System</MudText>
+                <MudText><MudLink Href="@Utilities.GetConnectedSystemHref(connectedSystemHeader)" Typo="Typo.h5">@connectedSystemHeader.Name</MudLink></MudText>
+            </MudPaper>
         }
-        else if (activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
+
+        @if (activity != null)
         {
-            // populated for updates and deletes
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Run Profile</MudText>
+                <MudText Typo="Typo.h5">@activity.TargetName</MudText>
+            </MudPaper>
+
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Execution Time</MudText>
+                <MudText Typo="Typo.h5">@activity.Executed</MudText>
+            </MudPaper>
         }
-        else
-        {
-            <MudText>Something went wrong</MudText>
-        }
-    </MudPaper>
+        
+
+
+@*         <MudPaper Class="pa-5" Outlined="true">
+            <MudText Typo="Typo.overline">Objects Deleted</MudText>
+            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
+        </MudPaper>
+
+        <MudPaper Class="pa-5" Outlined="true">
+            <MudText Typo="Typo.overline">Object Types</MudText>
+            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectTypes</MudText>
+        </MudPaper>
+
+        <MudPaper Class="pa-5" Outlined="true" Style="@(activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
+            <MudText Typo="Typo.overline">Errors</MudText>
+            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectErrors</MudText>
+        </MudPaper> *@
+
+    </MudStack>
 }
 
 
@@ -49,8 +74,10 @@ Changes (if update) *@
     public Guid Id { get; set; }
 
     private JIM.Models.Activities.ActivityRunProfileExecutionItem? activityRunProfileExecutionItem;
+    private JIM.Models.Activities.Activity? activity;
+    private ConnectedSystemHeader? connectedSystemHeader;
     private List<BreadcrumbItem> breadcrumbs = null!;
-    private string? externalId;
+    private string? externalId;    
 
     protected override async Task OnParametersSetAsync()
     {
@@ -70,8 +97,15 @@ Changes (if update) *@
             new BreadcrumbItem(activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
         };
 
+        activity = await Jim.Activities.GetActivityAsync(activityRunProfileExecutionItem.ActivityId);
+
         // try and get the external id in string form
         var externalIdAttributeValue = activityRunProfileExecutionItem.GetExternalIdAttributeValue();
         externalId = externalIdAttributeValue != null ? externalIdAttributeValue.ToString() : null;
+
+        // try and get the connected system this relates to (might not exist if it's been deleted)
+        var connectedSystemId = activityRunProfileExecutionItem.GetConnectedSystemId();
+        if (connectedSystemId != null)
+            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
     }
 }

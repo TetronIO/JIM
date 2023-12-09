@@ -56,4 +56,14 @@ public class ActivityRunProfileExecutionItem
             return ConnectedSystemObjectChange.DeletedObjectUniqueIdentifierAttributeValue; 
         else return null;
     }
+
+    public int? GetConnectedSystemId()
+    {
+        if (ConnectedSystemObject != null)
+            return ConnectedSystemObject.ConnectedSystemId;
+        else if (ConnectedSystemObjectChange != null)
+            return ConnectedSystemObjectChange.ConnectedSystemId;
+        else
+            return null;
+    }
 }
