@@ -92,7 +92,7 @@
             </MudPaper>
         }
 
-        <MudPaper Class="pa-5" Outlined="true">
+        <MudPaper Class="pa-5" Outlined="true" Style="@(activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Delete ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
             <MudText Typo="Typo.overline">Change Type</MudText>
             <MudText Typo="Typo.h5">@activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudText>
         </MudPaper>
