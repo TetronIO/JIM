@@ -36,6 +36,32 @@ namespace JIM.Models.Staging
         public ConnectedSystemObject? ReferenceValue { get; set; }
         #endregion
 
+        public override string ToString()
+        {
+            if (!string.IsNullOrEmpty(StringValue))
+                return StringValue;
+
+            if (DateTimeValue.HasValue)
+                return DateTimeValue.Value.ToString();
+
+            if (IntValue.HasValue)
+                return IntValue.Value.ToString();
+
+            if (ByteValueLength.HasValue)
+                return ByteValueLength.Value.ToString();
+
+            if (GuidValue.HasValue)
+                return GuidValue.Value.ToString();
+
+            if (BoolValue.HasValue)
+                return BoolValue.Value.ToString();
+
+            if (ReferenceValue != null)
+                return ReferenceValue.Id.ToString();
+
+            return string.Empty;
+        }
+
         #region constructors
         public ConnectedSystemObjectChangeAttributeValue()
         {

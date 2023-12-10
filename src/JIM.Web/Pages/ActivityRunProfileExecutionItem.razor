@@ -14,12 +14,7 @@
 
 <PageTitle>Run Profile Execution: @activityRunProfileExecutionItem.?Id</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution:</span> @(activityRunProfileExecutionItem != null ? activityRunProfileExecutionItem.Id : null)</MudText>
-    <MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-
-    @* Show:
-Connected System / Run Profile / Time
-Object External Id / Operation Type
-Changes (if update) *@
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
     @if (activityRunProfileExecutionItem != null)
 {
@@ -98,7 +93,24 @@ Changes (if update) *@
 
     </MudStack>
 
-    <!-- attribute change table -->
+    // update scenario
+    @if (activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
+    {
+        foreach (var changeAttribute in activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges)
+        {
+            <MudText Typo="Typo.h5">@changeAttribute.Attribute.Name (@changeAttribute.Attribute.Type)</MudText>
+            <MudTable Items="@changeAttribute.ValueChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true">
+                <HeaderContent>
+                    <MudTh>Change Type</MudTh>
+                    <MudTh>Value</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Change Type">@context.ValueChangeType.ToString().SplitOnCapitalLetters()</MudTd>
+                    <MudTd DataLabel="Value">@context.ToString()</MudTd> @* Todo: link to reference object *@
+                </RowTemplate>
+            </MudTable>
+        }
+    }
 }
 
 @code {
