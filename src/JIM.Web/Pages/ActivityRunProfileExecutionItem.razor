@@ -14,14 +14,14 @@
 
 <PageTitle>Run Profile Execution: @activityRunProfileExecutionItem.?Id</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution:</span> @(activityRunProfileExecutionItem != null ? activityRunProfileExecutionItem.Id : null)</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+    <MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@* Show:
+    @* Show:
 Connected System / Run Profile / Time
 Object External Id / Operation Type
 Changes (if update) *@
 
-@if (activityRunProfileExecutionItem != null)
+    @if (activityRunProfileExecutionItem != null)
 {
     <MudStack Row="true" Class="mt-5 mb-5">
 
@@ -75,7 +75,7 @@ Changes (if update) *@
                 <MudText>
 
                     <MudTooltip Text="Object Type">
-                        <MudChip Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema" >@activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
+                        <MudChip Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema">@activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
                     </MudTooltip>
 
                     <MudChip Color="Color.Info" Variant="Variant.Outlined" Label="true">
