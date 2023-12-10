@@ -78,7 +78,7 @@ namespace JIM.Models.Staging
             if (AttributeValues == null || AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues[ExternalIdAttributeId];
+            return AttributeValues.SingleOrDefault(q => q.AttributeId == ExternalIdAttributeId);
         }
 
         public void UpdateSingleValuedAttribute<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T newAttributeValue)

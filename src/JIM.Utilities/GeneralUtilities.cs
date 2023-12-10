@@ -50,5 +50,10 @@ namespace JIM.Utilities
         {
             return $"/admin/connected-systems/{connectedSystemHeader.Id}";
         }
+
+        public static string GetConnectedSystemObjectHref(ConnectedSystemObject connectedSystemObject)
+        {
+            return $"/admin/connected-systems/{connectedSystemObject.ConnectedSystemId}/objects/{connectedSystemObject.Id}";
+        }
     }
 }

@@ -68,29 +68,38 @@ Changes (if update) *@
             </MudPaper>
         }
 
+        @if (activityRunProfileExecutionItem.ConnectedSystemObject != null)
+        {
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Connected System Object</MudText>
+                <MudText>
 
+                    <MudTooltip Text="Object Type">
+                        <MudChip Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema" >@activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
+                    </MudTooltip>
 
-
-@*         <MudPaper Class="pa-5" Outlined="true">
-            <MudText Typo="Typo.overline">Objects Deleted</MudText>
-            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
-        </MudPaper>
-
-        <MudPaper Class="pa-5" Outlined="true">
-            <MudText Typo="Typo.overline">Object Types</MudText>
-            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectTypes</MudText>
-        </MudPaper>
-
-        <MudPaper Class="pa-5" Outlined="true" Style="@(activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
-            <MudText Typo="Typo.overline">Errors</MudText>
-            <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectErrors</MudText>
-        </MudPaper> *@
+                    <MudChip Color="Color.Info" Variant="Variant.Outlined" Label="true">
+                        @if (externalIdAttributeValue != null)
+                        {
+                            <MudTooltip Text="External Id Attribute Name">
+                                <MudText>@(externalIdAttributeValue.Attribute.Name):</MudText>
+                            </MudTooltip>
+                            <span>&nbsp;</span>
+                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(activityRunProfileExecutionItem.ConnectedSystemObject))">@externalIdAttributeValue.ToString()</MudLink>
+                        }
+                        else
+                        {
+                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(activityRunProfileExecutionItem.ConnectedSystemObject))">Connected System Object (No External Id yet)</MudLink>
+                        }
+                    </MudChip>
+                </MudText>
+            </MudPaper>
+        }
 
     </MudStack>
+
+    <!-- attribute change table -->
 }
-
-
-
 
 @code {
     [Parameter]
@@ -100,7 +109,7 @@ Changes (if update) *@
     private JIM.Models.Activities.Activity? activity;
     private ConnectedSystemHeader? connectedSystemHeader;
     private List<BreadcrumbItem> breadcrumbs = null!;
-    private string? externalId;
+    private ConnectedSystemObjectAttributeValue? externalIdAttributeValue;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -122,9 +131,8 @@ Changes (if update) *@
 
         activity = await Jim.Activities.GetActivityAsync(activityRunProfileExecutionItem.ActivityId);
 
-        // try and get the external id in string form
-        var externalIdAttributeValue = activityRunProfileExecutionItem.GetExternalIdAttributeValue();
-        externalId = externalIdAttributeValue != null ? externalIdAttributeValue.ToString() : null;
+        // try and get the external id attribute value. we'll need the value and attribute name
+        externalIdAttributeValue = activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
         // try and get the connected system this relates to (might not exist if it's been deleted)
         var connectedSystemId = activityRunProfileExecutionItem.GetConnectedSystemId();

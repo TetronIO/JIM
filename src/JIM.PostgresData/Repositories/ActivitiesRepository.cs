@@ -196,6 +196,10 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.ActivityRunProfileExecutionItems
                 .Include(q => q.ConnectedSystemObject)
+                .ThenInclude(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+                .Include(q => q.ConnectedSystemObject)
+                .ThenInclude(cso => cso.Type)
                 .Include(q => q.ConnectedSystemObjectChange)
                 .SingleOrDefaultAsync(q => q.Id == id);
         }
