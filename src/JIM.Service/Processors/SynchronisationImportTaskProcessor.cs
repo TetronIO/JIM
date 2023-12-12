@@ -77,8 +77,8 @@ namespace JIM.Service.Processors
                         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
                         _activity.RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
 
-                        // is this a new, or existing object as far as JIM is aware?
-                        // find the unique id attribute(s) for this connected system object type, and then pull out the right type attribute values from the importobject.
+                        // is this a new, or existing object for the Connected System within JIM?
+                        // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
 
                         // match the string object type to a name of an object type in the schema..
                         var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
@@ -267,10 +267,22 @@ namespace JIM.Service.Processors
                 return;
 
             // persist the new cso
-            await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject, activityRunProfileExecutionItem);
 
-            // now associate the persisted cso (now it has an id) with the activityRunProfileExecutionItem
+            // now associate the persisted cso (now it has a db-generated id) with the activityRunProfileExecutionItem
             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+
+            // create the activity run profile execution item change object from the cso so we have a record of what the cso looked like when it was first created
+            // todo...
+            // move this to a private function...
+            var change = new ConnectedSystemObjectChange
+            {
+                ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+                ConnectedSystemObject = connectedSystemObject,
+                ChangeType = ObjectChangeType.Create,
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+            };
+            activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
             stopwatch.Stop();
             Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");

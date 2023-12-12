@@ -409,9 +409,24 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
         }
 
-        public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+
+            // now populate the activity run profile execution item change object with the cso attribute values
+            // create a change object we can add attribute changes to
+            var change = new ConnectedSystemObjectChange
+            {
+                ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+                ConnectedSystemObject = connectedSystemObject,
+                ChangeType = ObjectChangeType.Create,
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+            };
+
+            foreach (var attributeValue in connectedSystemObject.AttributeValues)
+                AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
+
+            // don't persist the activity run profile exection, let that be done further up the stack in bulk for efficiency.
         }
 
         public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
@@ -442,37 +457,23 @@ namespace JIM.Application.Servers
                 ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
             };
 
-            // the change object will be persisted by the sync run history detail item further up the stack
+            // the change object will be persisted by the activity run profile execution item further up the stack
             // we just need to associate the change with the detail item.
             // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
             activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
-            // make sure the CSO is linked to the execution item
+            // make sure the CSO is linked to the activity run profile execution item
             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
-            // persist new attribute values from addition list and create change
+            // persist new attribute values from addition list and create change object
             if (connectedSystemObject.PendingAttributeValueAdditions != null)
             {
                 foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
                 {
                     connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
-                    var attributeChange = AddChangeAttribute(change, pendingAttributeValueAddition.Attribute);
-
-                    // add an attribute value change to the attribute change object
-                    if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Text && pendingAttributeValueAddition.StringValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, pendingAttributeValueAddition.StringValue));
-                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Number && pendingAttributeValueAddition.IntValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (int)pendingAttributeValueAddition.IntValue));
-                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueAddition.GuidValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (Guid)pendingAttributeValueAddition.GuidValue));
-                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Boolean && pendingAttributeValueAddition.BoolValue != null) 
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, (bool)pendingAttributeValueAddition.BoolValue));
-                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueAddition.ByteValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, true, pendingAttributeValueAddition.ByteValue.Length));
-                    else if (pendingAttributeValueAddition.Attribute.Type == AttributeDataType.Reference && pendingAttributeValueAddition.ReferenceValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, pendingAttributeValueAddition.ReferenceValue));
-                    else
-                        throw new InvalidDataException("UpdateConnectedSystemObjectAttributeValuesAsync:  Invalid addition attribute type or null attribute value");
+                    
+                    // trigger auditing of this change
+                    AddChangeAttributeValueObject(change, pendingAttributeValueAddition, ValueChangeType.Add);
                 }
             }
 
@@ -483,25 +484,13 @@ namespace JIM.Application.Servers
                 {
                     // this will cause a cascade delete of the attribute value object
                     connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
-                    var attributeChange = AddChangeAttribute(change, pendingAttributeValueRemoval.Attribute);
 
-                    // add an attribute value change to the attribute change object
-                    if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Text && pendingAttributeValueRemoval.StringValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, pendingAttributeValueRemoval.StringValue));
-                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Number && pendingAttributeValueRemoval.IntValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (int)pendingAttributeValueRemoval.IntValue));
-                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Guid && pendingAttributeValueRemoval.GuidValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (Guid)pendingAttributeValueRemoval.GuidValue));
-                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Boolean && pendingAttributeValueRemoval.BoolValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, (bool)pendingAttributeValueRemoval.BoolValue));
-                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Binary && pendingAttributeValueRemoval.ByteValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, true, pendingAttributeValueRemoval.ByteValue.Length));
-                    else if (pendingAttributeValueRemoval.Attribute.Type == AttributeDataType.Reference && pendingAttributeValueRemoval.ReferenceValue != null)
-                        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Remove, pendingAttributeValueRemoval.ReferenceValue));
-                    else
-                        throw new InvalidDataException("UpdateConnectedSystemObjectAttributeValuesAsync:  Invalid removal attribute type or null attribute value");
+                    // trigger auditing of this change
+                    AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
                 }
             }
+
+            // don't persist the activity run profile exection, let that be done further up the stack in bulk for efficiency.
 
             // update the cso, which will create/delete the attribute value objects
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
@@ -529,21 +518,41 @@ namespace JIM.Application.Servers
 
             // todo: think about returning a status to the UI
         }
-
-        private static ConnectedSystemObjectChangeAttribute AddChangeAttribute(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectTypeAttribute connectedSystemAttribute)
+        
+        /// <summary>
+        /// Creates the necessary attribute change audit item for when a CSO is created, updated, or deleted, and adds it to the change object.
+        /// </summary>
+        /// <param name="connectedSystemObjectChange">The ConnectedSystemObjectChange that's associated with a ActivityRunProfileExecutionItem (the audit object for a sync run).</param>
+        /// <param name="connectedSystemObjectAttributeValue">The attribute and value pair for the new value.</param>
+        /// <param name="valueChangeType">The type of change, i.e. CREATE/UPDATE/DELETE.</param>
+        private static void AddChangeAttributeValueObject(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue, ValueChangeType valueChangeType)
         {
-            var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemAttribute.Id);
+            var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemObjectAttributeValue.Attribute.Id);
             if (attributeChange == null)
             {
                 // create the attribute change object
                 attributeChange = new ConnectedSystemObjectChangeAttribute
                 {
-                    Attribute = connectedSystemAttribute,
+                    Attribute = connectedSystemObjectAttributeValue.Attribute,
                     ConnectedSystemChange = connectedSystemObjectChange
                 };
                 connectedSystemObjectChange.AttributeChanges.Add(attributeChange);
             }
-            return attributeChange;
+
+            if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Text && connectedSystemObjectAttributeValue.StringValue != null)
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.StringValue));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Number && connectedSystemObjectAttributeValue.IntValue != null)
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (int)connectedSystemObjectAttributeValue.IntValue));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Guid && connectedSystemObjectAttributeValue.GuidValue != null)
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Boolean && connectedSystemObjectAttributeValue.BoolValue != null)
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)connectedSystemObjectAttributeValue.BoolValue));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Binary && connectedSystemObjectAttributeValue.ByteValue != null)
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.ReferenceValue != null)
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
+            else
+                throw new InvalidDataException("AddChangeAttributeValueObject:  Invalid removal attribute type or null attribute value");
         }
         #endregion
 

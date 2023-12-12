@@ -91,6 +91,11 @@ namespace JIM.PostgresData
                 .HasMany(cso => cso.AttributeValues)
                 .WithOne(csoav => csoav.ConnectedSystemObject);
 
+            modelBuilder.Entity<ConnectedSystemObject>()
+                .HasMany(cso => cso.ActivityRunProfileExecutionItems)
+                .WithOne(i => i.ConnectedSystemObject)
+                .OnDelete(DeleteBehavior.Cascade);
+
             modelBuilder.Entity<ConnectedSystemObjectType>()
                 .HasMany(csot => csot.Attributes)
                 .WithOne(csa => csa.ConnectedSystemObjectType);

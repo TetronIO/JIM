@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JIM.Models.Staging
@@ -16,6 +17,11 @@ namespace JIM.Models.Staging
 
         public ConnectedSystem ConnectedSystem { get; set; } = null!;
         public int ConnectedSystemId { get; set; }
+
+        /// <summary>
+        /// Backlink for EF navigation. Do not use.
+        /// </summary>
+        public ICollection<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; } = new List<ActivityRunProfileExecutionItem>();
 
         /// <summary>
         /// The attribute that uniquely identifies this object in the connected system.
