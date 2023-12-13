@@ -272,18 +272,6 @@ namespace JIM.Service.Processors
             // now associate the persisted cso (now it has a db-generated id) with the activityRunProfileExecutionItem
             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
-            // create the activity run profile execution item change object from the cso so we have a record of what the cso looked like when it was first created
-            // todo...
-            // move this to a private function...
-            var change = new ConnectedSystemObjectChange
-            {
-                ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
-                ConnectedSystemObject = connectedSystemObject,
-                ChangeType = ObjectChangeType.Create,
-                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
-            };
-            activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
-
             stopwatch.Stop();
             Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
         }

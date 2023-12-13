@@ -13,8 +13,8 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Run Profile Execution: @activityRunProfileExecutionItem.?Id</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution:</span> @(activityRunProfileExecutionItem != null ? activityRunProfileExecutionItem.Id : null)</MudText>
+<PageTitle>Run Profile Execution Item: @activityRunProfileExecutionItem.?Id</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution Item:</span> @(activityRunProfileExecutionItem != null ? activityRunProfileExecutionItem.Id : null)</MudText>
 <MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
     @if (activityRunProfileExecutionItem != null)
@@ -99,17 +99,10 @@
 
     </MudStack>
 
-    @if (activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Create)
-    {
-        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary d-flex align-center justify-left">
-            <MudIcon Icon="@Icons.Material.Filled.Info"></MudIcon>&nbsp;&nbsp;Attribute changes are only recorded for updates.
-             <!-- we should reconsider this once we have a handle on bulk-create performance -->
-        </MudText>
-    }    
-
-    // update scenario
+    // display a table for what attribute values were changed as a result of this activity
     @if (activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
+        <MudText Typo="Typo.h5">Changes:</MudText>
         foreach (var changeAttribute in activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges)
         {
             <MudText Typo="Typo.h5">@changeAttribute.Attribute.Name (@changeAttribute.Attribute.Type)</MudText>

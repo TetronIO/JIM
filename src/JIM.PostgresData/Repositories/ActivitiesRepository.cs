@@ -201,6 +201,11 @@ namespace JIM.PostgresData.Repositories
                 .Include(q => q.ConnectedSystemObject)
                 .ThenInclude(cso => cso.Type)
                 .Include(q => q.ConnectedSystemObjectChange)
+                .ThenInclude(c => c.AttributeChanges)
+                .ThenInclude(ac => ac.Attribute)
+                .Include(q => q.ConnectedSystemObjectChange)
+                .ThenInclude(c => c.AttributeChanges)
+                .ThenInclude(ac => ac.ValueChanges)
                 .SingleOrDefaultAsync(q => q.Id == id);
         }
         #endregion
