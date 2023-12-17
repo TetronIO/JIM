@@ -100,4 +100,14 @@ public class Activity
     // - json blob that contains object changes (might regret this later, but it seems quicker to get going this way)
     // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the audit log be 
     //   able to see sensitive attribute values? 
+
+    public ActivityRunProfileExecutionItem AddRunProfileExecutionItem()
+    {
+        var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem {
+            Activity = this,
+            ActivityId = Id
+        };
+        RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
+        return activityRunProfileExecutionItem;
+    }
 }

@@ -113,7 +113,7 @@ namespace JIM.Application
                 await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
             }
 
-            // check for a matching user, if not create, and check admin role assignment
+            // check for a matching user, if not create the initial admin user, and check admin role assignment
             // get user by attribute = get metaverse object by attribute value
             var objectType = await Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false) ?? 
                 throw new Exception($"{Constants.BuiltInObjectTypes.Users} object type could not be found. Something went wrong with db seeding.");

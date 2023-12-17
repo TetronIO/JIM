@@ -74,8 +74,7 @@ namespace JIM.Service.Processors
                     foreach (var importObject in result.ImportObjects)
                     {
                         // this will store the detail for the import object that will persist in the history for the run
-                        var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
-                        _activity.RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
+                        var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
 
                         // is this a new, or existing object for the Connected System within JIM?
                         // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
@@ -192,7 +191,6 @@ namespace JIM.Service.Processors
                     // unexpected import attribute!
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
                     activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
-                    _activity.RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
                     csoIsInvalid = true;
                     break;
                 }

@@ -420,7 +420,8 @@ namespace JIM.Application.Servers
                 ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Create,
-                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
+                ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
             };
 
             foreach (var attributeValue in connectedSystemObject.AttributeValues)

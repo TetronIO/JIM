@@ -132,6 +132,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
+            Repository.Database.Update(metaverseObject);
             await Repository.Database.SaveChangesAsync();
         }
 

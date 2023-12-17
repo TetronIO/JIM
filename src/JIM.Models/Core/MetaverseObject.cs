@@ -27,6 +27,7 @@ namespace JIM.Models.Core
                 if (AttributeValues == null || AttributeValues.Count == 0)
                     return null;
 
+                // as a built-in attribute, we know DisplayName is a single-valued attribute, so no need to do a attribute plurality check
                 var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
                 if (av != null && ! string.IsNullOrEmpty(av.StringValue))
                     return av.StringValue;
