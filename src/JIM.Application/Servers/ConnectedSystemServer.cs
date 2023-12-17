@@ -423,6 +423,7 @@ namespace JIM.Application.Servers
                 ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
                 ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
             };
+            activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
             foreach (var attributeValue in connectedSystemObject.AttributeValues)
                 AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
