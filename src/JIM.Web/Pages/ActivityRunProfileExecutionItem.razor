@@ -100,12 +100,13 @@
     </MudStack>
 
     // display a table for what attribute values were changed as a result of this activity
+    // todo: change this to a single table and consider multiple columns, i.e. one for remove, one for add
     @if (activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
         <MudText Typo="Typo.h5">Changes:</MudText>
         foreach (var changeAttribute in activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges)
         {
-            <MudText Typo="Typo.h5">@changeAttribute.Attribute.Name (@changeAttribute.Attribute.Type)</MudText>
+            <MudText Typo="Typo.h6" Class="mt-5">@changeAttribute.Attribute.Name (@changeAttribute.Attribute.Type)</MudText>
             <MudTable Items="@changeAttribute.ValueChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true">
                 <HeaderContent>
                     <MudTh>Change Type</MudTh>
