@@ -71,6 +71,17 @@ namespace JIM.Web
                 _ => Color.Default,
             };
         }
+
+        public static Color GetMudBlazorColorForValueChangeType(ValueChangeType valueChangeType)
+        {
+            return valueChangeType switch
+            {
+                ValueChangeType.Add => Color.Primary,
+                ValueChangeType.Remove => Color.Secondary,
+                ValueChangeType.NotSet => Color.Error,
+                _ => Color.Default,
+            };
+        }
         #endregion
     }
 }

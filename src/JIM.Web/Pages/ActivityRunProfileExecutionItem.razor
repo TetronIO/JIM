@@ -103,21 +103,36 @@
     // todo: change this to a single table and consider multiple columns, i.e. one for remove, one for add
     @if (activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
-        <MudText Typo="Typo.h5">Changes:</MudText>
-        foreach (var changeAttribute in activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges)
-        {
-            <MudText Typo="Typo.h6" Class="mt-5">@changeAttribute.Attribute.Name (@changeAttribute.Attribute.Type)</MudText>
-            <MudTable Items="@changeAttribute.ValueChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true">
-                <HeaderContent>
-                    <MudTh>Change Type</MudTh>
-                    <MudTh>Value</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Change Type">@context.ValueChangeType.ToString().SplitOnCapitalLetters()</MudTd>
-                    <MudTd DataLabel="Value">@context.ToString()</MudTd> @* Todo: link to reference object *@
-                </RowTemplate>
-            </MudTable>
-        }
+        <MudText Typo="Typo.h5" Class="mb-5">Changes:</MudText>
+        <MudSimpleTable Style="overflow-x: auto;" Elevation="0" Outlined="true" Dense="true">
+            <thead>
+                <tr>
+                    <th>External Attribute Name</th>
+                    <th>Change Type</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var changeAttribute in activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges.OrderBy(q => q.Attribute.Name))
+                {
+                    for (int i = 0; i < changeAttribute.ValueChanges.Count; i++)
+                    {
+                        <tr>
+                            @if (changeAttribute.ValueChanges.Count == 1)
+                            {
+                                <td>@changeAttribute.Attribute.Name</td>
+                            }
+                            else if (i == 0)
+                            {
+                                <td rowspan="@changeAttribute.ValueChanges.Count">@changeAttribute.Attribute.Name</td>
+                            }
+                            <td><MudChip Variant="Variant.Text" Color="Helpers.GetMudBlazorColorForValueChangeType(changeAttribute.ValueChanges[i].ValueChangeType)" Class="ml-0">@changeAttribute.ValueChanges[i-1].ValueChangeType</MudChip></td>
+                            <td>@changeAttribute.ValueChanges[i].ToString()</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </MudSimpleTable>
     }
 }
 
