@@ -268,12 +268,12 @@ namespace JIM.Application.Servers
                     }).ToList()
                 };
 
-                // take the unique identifier attribute recommendation as the default, and allow the user to potentially change it later if they want/need
+                // take the External Id attribute recommendation as the default, and allow the user to potentially change it later if they want/need
                 var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedExternalIdAttribute.Name);
                 if (attribute != null)
                     attribute.IsExternalId = true;
                 else
-                    Log.Error($"Recommended attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes!");
+                    Log.Error($"Recommended External Id attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes!");
 
                 connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
             }
@@ -384,19 +384,19 @@ namespace JIM.Application.Servers
                 maxResults);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByUniqueIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
         public async Task<int> GetConnectedSystemObjectCountAsync()

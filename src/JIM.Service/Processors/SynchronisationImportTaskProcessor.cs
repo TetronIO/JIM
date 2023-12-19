@@ -131,42 +131,42 @@ namespace JIM.Service.Processors
 
         private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
         {
-            // todo: add support for multiple unique identifier attributes, i.e. compound primary keys
-            var uniqueIdentifierAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
+            // todo: add support for multiple external id attributes, i.e. compound primary keys
+            var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
 
             // find the matching import object attribute
-            var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(uniqueIdentifierAttribute.Name, StringComparison.OrdinalIgnoreCase)) ?? 
-                throw new MissingUniqueIdentifierAttributeException($"The imported object is missing the unique identifier attribute '{uniqueIdentifierAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
+            var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ?? 
+                throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
             if (importObjectAttribute.IntValues.Count > 1 ||
                 importObjectAttribute.StringValues.Count > 1 ||
                 importObjectAttribute.GuidValues.Count > 1)
-                throw new UniqueIdentifierAttributeNotSingleValuedException($"Unique identifier attribute ({uniqueIdentifierAttribute.Name}) on the imported object has multiple values! The Unique Identifier attribute must be single-valued.");
+                throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
-            if (uniqueIdentifierAttribute.Type == AttributeDataType.Text)
+            if (externalIdAttribute.Type == AttributeDataType.Text)
             {
                 if (importObjectAttribute.StringValues.Count == 0)
-                    throw new UniqueIdentifierAttributeValueMissingException($"Unique identifier string attribute ({uniqueIdentifierAttribute.Name}) on the imported object has no value.");
+                    throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value.");
 
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, uniqueIdentifierAttribute.Id, importObjectAttribute.StringValues[0]);
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]);
             }
-            else if (uniqueIdentifierAttribute.Type == AttributeDataType.Number)
+            else if (externalIdAttribute.Type == AttributeDataType.Number)
             {
                 if (importObjectAttribute.IntValues.Count == 0)
-                    throw new UniqueIdentifierAttributeValueMissingException($"Unique identifier number attribute({uniqueIdentifierAttribute.Name}) on the imported object has no value.");
+                    throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value.");
 
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, uniqueIdentifierAttribute.Id, importObjectAttribute.IntValues[0]);
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]);
             }
-            else if (uniqueIdentifierAttribute.Type == AttributeDataType.Guid)
+            else if (externalIdAttribute.Type == AttributeDataType.Guid)
             {
                 if (importObjectAttribute.GuidValues.Count == 0)
-                    throw new UniqueIdentifierAttributeValueMissingException($"Unique identifier guid attribute ({uniqueIdentifierAttribute.Name}) on the imported object has no value.");
+                    throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value.");
 
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByUniqueIdAsync(_connectedSystem.Id, uniqueIdentifierAttribute.Id, importObjectAttribute.GuidValues[0]);
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]);
             }
 
-            // should never happen, but covering our bases
-            throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type unique identifier type: {uniqueIdentifierAttribute.Type}");
+            // should never happen, but it's worth covering all possible scenarios
+            throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}");
         }
 
         private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
