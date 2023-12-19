@@ -304,7 +304,7 @@ namespace JIM.Service.Processors
                         case AttributeDataType.Text:
 
                             // find values on the cso of type string that aren't on the imported object and remove them first
-                            var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && !(importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))));
+                            var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingStringAttributeValues.Any(msav => msav.Id == av.Id)));
 
                             // find imported values of type string that aren't on the cso and add them
@@ -316,7 +316,7 @@ namespace JIM.Service.Processors
                         case AttributeDataType.Number:
 
                             // find values on the cso of type int that aren't on the imported object and remove them first
-                            var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && !(importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue))));
+                            var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && !importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingIntAttributeValues.Any(msav => msav.Id == av.Id)));
 
                             // find imported values of type int that aren't on the cso and add them
@@ -328,7 +328,7 @@ namespace JIM.Service.Processors
                         case AttributeDataType.DateTime:
 
                             // find values on the cso of type DateTime that aren't on the imported object and remove them first
-                            var missingDateTimeAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && !(importedObjectAttribute.DateTimeValues.Any(i => i.Equals(av.DateTimeValue))));
+                            var missingDateTimeAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && !importedObjectAttribute.DateTimeValues.Any(i => i.Equals(av.DateTimeValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingDateTimeAttributeValues.Any(msav => msav.Id == av.Id)));
 
                             // find imported values of type DateTime that aren't on the cso and add them
@@ -360,7 +360,7 @@ namespace JIM.Service.Processors
                         case AttributeDataType.Guid:
 
                             // find values on the cso of type Guid that aren't on the imported object and remove them first
-                            var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && !(importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue))));
+                            var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingGuidAttributeValues.Any(msav => msav.Id == av.Id)));
 
                             // find imported values of type Guid that aren't on the cso and add them
