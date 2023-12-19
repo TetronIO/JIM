@@ -85,7 +85,7 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.MetaverseAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.ConnectedSystemAttribute).
+                ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).
@@ -126,7 +126,7 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.MetaverseAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.ConnectedSystemAttribute).
+                ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.WeightedStringValues).
@@ -157,7 +157,7 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(ta => ta.MetaverseAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
-                ThenInclude(ta => ta.ConnectedSystemAttribute).
+                ThenInclude(ta => ta.ConnectedSystemObjectTypeAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ReferenceMetaverseObjectTypes).

@@ -9,7 +9,7 @@ namespace JIM.Models.DataGeneration
         #region accessors
         public int Id { get; set; }
 
-        public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
+        public ConnectedSystemObjectTypeAttribute? ConnectedSystemObjectTypeAttribute { get; set; }
 
         public MetaverseAttribute? MetaverseAttribute { get; set; }
 
@@ -127,7 +127,7 @@ namespace JIM.Models.DataGeneration
             var usingWeightedStringValues = WeightedStringValues != null && WeightedStringValues.Count > 0;
 
             // need either a cs or mv attribute reference
-            if (ConnectedSystemAttribute == null && MetaverseAttribute == null)
+            if (ConnectedSystemObjectTypeAttribute == null && MetaverseAttribute == null)
                 throw new DataGeneratationTemplateAttributeException("ConnectedSystemAttribute and MetaverseAttribute are null");
 
             // needs to be within a 1-100 range
@@ -139,11 +139,11 @@ namespace JIM.Models.DataGeneration
             AttributePlurality attributePlurality;
             string attributeName;
 
-            if (ConnectedSystemAttribute != null)
+            if (ConnectedSystemObjectTypeAttribute != null)
             {
-                attributeDataType = ConnectedSystemAttribute.Type;
-                attributePlurality = ConnectedSystemAttribute.AttributePlurality;
-                attributeName = ConnectedSystemAttribute.Name;
+                attributeDataType = ConnectedSystemObjectTypeAttribute.Type;
+                attributePlurality = ConnectedSystemObjectTypeAttribute.AttributePlurality;
+                attributeName = ConnectedSystemObjectTypeAttribute.Name;
             }
             else if (MetaverseAttribute != null)
             {
