@@ -57,9 +57,9 @@
         /// </summary>
         CouldNotDetermineObjectType,
         /// <summary>
-        /// The attribute used to uniquely identify the object could not be found on the object we got from the connected system.
+        /// The attribute(s) used to uniquely identify the object could not be found on the object we got from the connected system.
         /// </summary>
-        MissingUniqueIdentifierAttributes,
+        ExternalIdAttributes,
         /// <summary>
         /// There's been an issue with the configuration of JIM and import cannot complete.
         /// </summary>

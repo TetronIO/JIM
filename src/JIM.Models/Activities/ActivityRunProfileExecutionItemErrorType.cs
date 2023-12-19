@@ -3,9 +3,9 @@
 public enum ActivityRunProfileExecutionItemErrorType
 {
         NotSet,
-        MissingUniqueIdentifierAttributeValue,
+        MissingExternalIdAttributeValue,
         CouldntMatchObjectType,
-        UnsupportedUniqueIdentifierAttribyteType,
+        UnsupportedExternalIdAttribyteType,
         UnexpectedAttribute,
         DuplicateImportedAttribute
 }

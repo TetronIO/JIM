@@ -53,7 +53,7 @@ public class ActivityRunProfileExecutionItem
         if (ConnectedSystemObject != null)
             return ConnectedSystemObject.GetExternalIdAttributeValue();
         else if (ConnectedSystemObjectChange != null)
-            return ConnectedSystemObjectChange.DeletedObjectUniqueIdentifierAttributeValue; 
+            return ConnectedSystemObjectChange.DeletedObjectExternalIdAttributeValue; 
         else return null;
     }
 

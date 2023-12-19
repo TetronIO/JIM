@@ -52,8 +52,8 @@ namespace JIM.Models.Staging
         public ConnectedSystemObjectType? DeletedObjectType { get; set; }
 
         /// <summary>
-        /// If the object was deleted, the unique identifier attribute will be copied here to make it possible to identify which object was deleted.
+        /// If the object was deleted, the External Id attribute will be copied here to make it possible to identify which object was deleted.
         /// </summary>
-        public ConnectedSystemObjectAttributeValue? DeletedObjectUniqueIdentifierAttributeValue { get; set; }
+        public ConnectedSystemObjectAttributeValue? DeletedObjectExternalIdAttributeValue { get; set; }
     }
 }
