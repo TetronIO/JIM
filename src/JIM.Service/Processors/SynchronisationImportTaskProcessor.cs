@@ -353,7 +353,7 @@ namespace JIM.Service.Processors
                         case AttributeDataType.Reference:
                             // todo: handle references...
                             // what will we get back? full references for objects either in, or potentially out of OU selection scope?
-                            // reconcile this against selected OUs. what kind of response and information do we want to pass back to sync admins in this scenario? 
+                            // reconcile this against selected OUs. what kind of response do we want to pass back to sync admins in this scenario? 
                             var x = 1;
                             break;
 
