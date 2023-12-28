@@ -195,11 +195,11 @@
                         {
                             <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                                 <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
-                                    @foreach (var objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
+                                    @foreach (ConnectedSystemObjectType objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
                                     {
                                         <MudButton 
                                             OnClick="@((e) => HandleActiveObjectTypeClick(objectType))" 
-                                            Disabled="@(selectedObjectType != null && selectedObjectType.Id == objectType.Id)" 
+                                            Disabled="DisableSelectedSchemaObjectType(objectType)" 
                                             DisableElevation="true">@objectType.Name</MudButton>
                                     }
                                 </MudButtonGroup>
@@ -833,7 +833,7 @@
         // attribute the action to the user and create the run profile
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
         await Jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, user);
-        
+
         Snackbar.Add("New run profile added.", Severity.Success);
 
         // reset the object we've bound to the form so a new run profile can be created if the user chooses
@@ -891,5 +891,16 @@
 
         // all done, let the user know
         Snackbar.Add("Attributes selected.", Severity.Success);
+    }
+
+    private bool DisableSelectedSchemaObjectType(ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        if (selectedObjectType == null)
+            return false;
+
+        if (connectedSystemObjectType.Id.Equals(selectedObjectType.Id))
+            return true; // BOTH IDS ARE 0 WHEN THEY'RE DIFFERENT TYPES! HOW?! - BECAUSE THEY HAVEN'T BEEN PERSISTED YET!
+
+        return false;
     }
 }
