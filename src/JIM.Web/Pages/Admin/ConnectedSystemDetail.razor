@@ -275,7 +275,9 @@
                         Breakpoint="Breakpoint.Sm" 
                         SortLabel="Sort By" 
                         Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
-                        Class="mt-5">
+                        Class="mt-5"
+                        Outlined="true"
+                        Elevation="0">
                         <HeaderContent>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
@@ -295,7 +297,11 @@
                             <MudTd DataLabel="Description">@context.Description</MudTd>
                         </RowTemplate>
                         <NoRecordsContent>
-                            There are no attributes
+                            @if (attributeSelectedFilter) {
+                                <MudText>There are no selected attributes for this object type.</MudText>
+                            } else {
+                                <MudText>There are no attributes to show.</MudText>
+                            }
                         </NoRecordsContent>
                     </MudTable>
                 }               
