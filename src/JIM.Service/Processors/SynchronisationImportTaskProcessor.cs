@@ -65,7 +65,6 @@ namespace JIM.Service.Processors
                         // the connector wants to persist some data between sync runs. update the connected system with the new value
                         Log.Debug($"ExecuteAsync: updating persisted connector data. old value: '{_connectedSystem.PersistedConnectorData}', new value: '{result.PersistedConnectorData}'");
                         _connectedSystem.PersistedConnectorData = result.PersistedConnectorData;
-
                         await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedBy, _activity);
                     }
 
