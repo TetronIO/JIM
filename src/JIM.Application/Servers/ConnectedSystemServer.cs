@@ -231,13 +231,23 @@ namespace JIM.Application.Servers
         #region Connected System Schema
         /// <summary>
         /// Causes the associated Connector to be instantiated and the schema imported from the connected system.
-        /// You will need update the ConnectedSystem after if happy with the changes.
+        /// Changes will be persisted, even if they are destructive, i.e. an attribute is removed.
         /// </summary>
         /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new schema.</returns>
         /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-        public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
+        public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
         {
             ValidateConnectedSystemParameter(connectedSystem);
+
+            // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
+            var activity = new Activity
+            {
+                TargetName = connectedSystem.Name,
+                TargetType = ActivityTargetType.ConnectedSystem,
+                TargetOperationType = ActivityTargetOperationType.ImportSchema,
+                ConnectedSystemId = connectedSystem.Id
+            };
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
             // work out what connector we need to instantiate, so that we can use its internal validation method
             // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
@@ -249,10 +259,15 @@ namespace JIM.Application.Servers
             else
                 throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
 
-            // this point could potentially be a good point to check for data-loss if persisted and return a report object
-            // that the user could decide whether or not to take action upon, i.e. cancel or persist.
+            // this could potentially be a good point to check for data-loss if persisted and return a report object
+            // that the user could use to decide if they need to take corrective steps, i.e. adjust attribute flow on sync rules.
 
-            connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>(); // super destructive at this point. this is for mvp only
+            // super destructive at this point. this is for MVP only. will result in all prior  user object type and attribute selections to be lost!
+            // todo: work out dependent changes required, i.e. sync rules will rely on connected system object type attributes. if they get removed from the schema
+            // then we need to break any sync rule attribute flow relationships. this could be done gracefully to allow the user the opportunity to revise them, 
+            // i.e. instead of just deleting the attribute flow and the user not knowing what they've lost, perhaps disable the attribute flow and leave a copy of the cs attrib name in place, 
+            // so they can see it's not valid anymore and have information that will enable them to work out what to do about it.
+            connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>(); 
             foreach (var objectType in schema.ObjectTypes)
             {
                 var connectedSystemObjectType = new ConnectedSystemObjectType
@@ -277,6 +292,11 @@ namespace JIM.Application.Servers
 
                 connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
             }
+
+            await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
+
+            // finish the activity
+            await Application.Activities.CompleteActivityAsync(activity);
         }
         #endregion
 
@@ -322,7 +342,7 @@ namespace JIM.Application.Servers
             // this point could potentially be a good point to check for data-loss if persisted and return a report object
             // that the user could decide whether or not to take action against, i.e. cancel or persist.
 
-            connectedSystem.Partitions = new List<ConnectedSystemPartition>(); // super destructive at this point. this is for mvp only
+            connectedSystem.Partitions = new List<ConnectedSystemPartition>(); // super destructive at this point. this is for mvp only. this causes all user partition/OU selections to be lost!
             foreach (var partition in partitions)
             {
                 connectedSystem.Partitions.Add(new ConnectedSystemPartition
@@ -333,12 +353,12 @@ namespace JIM.Application.Servers
                 });
             }
 
-            // finish the activity
-            await Application.Activities.CompleteActivityAsync(activity);
-
             // for now though, we will just persist and let the user select containers later
             // pass in this user-initiated activity, so that sub-operations can be associated with it, i.e. the partition persiting operation
             await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
+
+            // finish the activity
+            await Application.Activities.CompleteActivityAsync(activity);
         }
 
         private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
@@ -518,7 +538,7 @@ namespace JIM.Application.Servers
             Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id {connectedSystemId}.");
             await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemId, true);
 
-            // todo: think about returning a status to the UI
+            // todo: think about returning a status to the UI. perhaps return the job id and allow the job status to be polled/streamed?
         }
         
         /// <summary>
