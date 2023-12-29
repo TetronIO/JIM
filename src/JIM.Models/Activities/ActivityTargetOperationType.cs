@@ -11,5 +11,9 @@ public enum ActivityTargetOperationType
     /// <summary>
     /// Relates to Connected Systems
     /// </summary>
-    ImportHierarchy = 6
+    ImportHierarchy = 6,
+    /// <summary>
+    /// Relates to Connected Systems
+    /// </summary>
+    ImportSchema = 7
 }

@@ -605,8 +605,11 @@
         if (connectedSystem == null)
             return;
 
+        // attribute the import to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+
         schemaBeingRetrieved = true;
-        await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem);
+        await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, user);
         schemaBeingRetrieved = false;
     }
 
