@@ -31,6 +31,13 @@ namespace JIM.Models.Staging
         /// </summary>
         public int ExternalIdAttributeId { get; set; }
 
+        /// <summary>
+        /// The attribute that may also identify the object in an connected system.
+        /// Whether or not this exists depends if the connected system supports secondary external ids or not. 
+        /// For instance, an LDAP system will use the DN for references to other objects, even though this is not a good identifier as it's not immutable.
+        /// </summary>
+        public int? SecondaryExternalIdAttributeId { get; set; }
+
         public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; }
 
         public ConnectedSystemObjectStatus Status { get; set; }

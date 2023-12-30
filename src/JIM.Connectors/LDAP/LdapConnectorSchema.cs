@@ -53,6 +53,10 @@ namespace JIM.Connectors.LDAP
                         var objectGuidSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("objectguid", StringComparison.CurrentCultureIgnoreCase));
                         objectType.RecommendedExternalIdAttribute = objectGuidSchemaAttribute;
 
+                        // say what the secondary external identifier needs to be for LDAP systems
+                        var dnSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("distinguishedname", StringComparison.CurrentCultureIgnoreCase));
+                        objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
+
                         // object type looks good to go, add it to the schema
                         _schema.ObjectTypes.Add(objectType);
                     }

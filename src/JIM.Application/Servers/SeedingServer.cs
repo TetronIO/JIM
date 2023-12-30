@@ -644,7 +644,8 @@ namespace JIM.Application.Servers
                 SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport,
                 SupportsExport = connectorCapabilities.SupportsExport,
                 SupportsPartitions = connectorCapabilities.SupportsPartitions,
-                SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers
+                SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
+                SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId
             };
 
             Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);

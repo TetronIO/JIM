@@ -1,5 +1,4 @@
-﻿using JIM.Data;
-using JIM.Data.Repositories;
+﻿using JIM.Data.Repositories;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -251,7 +250,8 @@ namespace JIM.PostgresData.Repositories
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
                 DisplayName = cso.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? cso.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
-                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId)
+                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
+                SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId)
             });
             var results = await selectedObjects.ToListAsync();
 

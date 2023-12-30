@@ -25,6 +25,7 @@ namespace JIM.Connectors.LDAP
         public bool SupportsExport { get => false; }
         public bool SupportsPartitions { get => true; }
         public bool SupportsPartitionContainers { get => true; }
+        public bool SupportsSecondaryExternalId { get => true; }
         #endregion
 
         #region IConnectorSettings members

@@ -33,5 +33,11 @@
         /// Note, a Connector must support partitions as well when supporting partition containers.
         /// </summary>
         public bool SupportsPartitionContainers { get; }
+
+        /// <summary>
+        /// Some connected systems, such as LDAP-based directories, make use of a secondary identifier when referencing other objects, i.e. a DN, 
+        /// even though this is not an immutable identifier, but still has to be used to do things like resolve references. If the connected system needs to use a secondary ID, set this to true.
+        /// </summary>
+        public bool SupportsSecondaryExternalId { get; }
     }
 }

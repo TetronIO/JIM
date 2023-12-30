@@ -194,7 +194,7 @@ namespace JIM.Connectors.LDAP
             // add user selected attributes
             var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
 
-            // ensure we are also retriving the unique identifier attribute(s)
+            // ensure we are also retrieving the unique identifier attribute(s)
             attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
 
             // we also need the objectClass for type matching purposes
@@ -266,6 +266,26 @@ namespace JIM.Connectors.LDAP
                     importObject.ObjectType = objectType.Name;
                 }
 
+                // TODO: fix issue with us writing secondary external id value as a string, but it's down as a reference in the schema.
+                // which one needs to change? what's the tradeoffs of either change?            
+
+                // we have to manually populate the DN as an attribute as it's handled separately by SearchResultEntry
+                var schemaDnAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals("distinguishedname", StringComparison.CurrentCultureIgnoreCase));
+                if (schemaDnAttribute == null)
+                {
+                    importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
+                    importObject.ErrorMessage = $"Search result attribute 'distinguishedName' not found in schema!";
+                    importObjects.Add(importObject);
+                    continue;
+                }
+                var dnAttribute = new ConnectedSystemImportObjectAttribute
+                {
+                    Name = schemaDnAttribute.Name,
+                    Type = schemaDnAttribute.Type,
+                };
+                dnAttribute.StringValues.Add(searchResult.DistinguishedName);
+                importObject.Attributes.Add(dnAttribute);
+
                 // start populating import object attribute values from the search result
                 foreach (string attributeName in searchResult.Attributes.AttributeNames)
                 {
@@ -275,7 +295,6 @@ namespace JIM.Connectors.LDAP
                     {
                         importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
                         importObject.ErrorMessage = $"Search result attribute '{attributeName}' not found in schema!";
-                        importObjects.Add(importObject);
                         break;
                     }
 
@@ -322,7 +341,7 @@ namespace JIM.Connectors.LDAP
                                 importObjectAttribute.ByteValues.AddRange(binaryValues);
                             break;
 
-                            // todo: reference data type
+                        // todo: reference data type
                     }
 
                     importObject.Attributes.Add(importObjectAttribute);
