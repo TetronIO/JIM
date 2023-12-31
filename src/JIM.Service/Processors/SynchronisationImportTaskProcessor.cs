@@ -180,6 +180,10 @@ namespace JIM.Service.Processors
                 Type = connectedSystemObjectType
             };
 
+            var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId);
+            if (secondaryExternalIdAttribute != null)
+                connectedSystemObject.SecondaryExternalIdAttributeId = secondaryExternalIdAttribute.Id;
+
             var csoIsInvalid = false;
             foreach (var importObjectAttribute in connectedSystemImportObject.Attributes)
             {
@@ -255,8 +259,16 @@ namespace JIM.Service.Processors
                             BoolValue = importObjectAttribute.BoolValue
                         });
                         break;
-                        //case AttributeDataType.Reference:
-                        //    break;
+                    case AttributeDataType.Reference:
+                        foreach (var importObjectAttributeReferenceValue in importObjectAttribute.ReferenceValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                UnresolvedReference = importObjectAttributeReferenceValue
+                            });
+                        }
+                        break;
                 }
             }
 
@@ -351,8 +363,7 @@ namespace JIM.Service.Processors
 
                         case AttributeDataType.Reference:
                             // todo: handle references...
-                            // what will we get back? full references for objects either in, or potentially out of OU selection scope?
-                            // reconcile this against selected OUs. what kind of response do we want to pass back to sync admins in this scenario? 
+                            // probably: update UnresolvedReferences, then let the sync processor resolve the reference updates later in processing.
                             var x = 1;
                             break;
 

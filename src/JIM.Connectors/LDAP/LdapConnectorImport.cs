@@ -266,9 +266,6 @@ namespace JIM.Connectors.LDAP
                     importObject.ObjectType = objectType.Name;
                 }
 
-                // TODO: fix issue with us writing secondary external id value as a string, but it's down as a reference in the schema.
-                // which one needs to change? what's the tradeoffs of either change?            
-
                 // we have to manually populate the DN as an attribute as it's handled separately by SearchResultEntry
                 var schemaDnAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals("distinguishedname", StringComparison.CurrentCultureIgnoreCase));
                 if (schemaDnAttribute == null)
@@ -281,7 +278,7 @@ namespace JIM.Connectors.LDAP
                 var dnAttribute = new ConnectedSystemImportObjectAttribute
                 {
                     Name = schemaDnAttribute.Name,
-                    Type = schemaDnAttribute.Type,
+                    Type = schemaDnAttribute.Type    
                 };
                 dnAttribute.StringValues.Add(searchResult.DistinguishedName);
                 importObject.Attributes.Add(dnAttribute);

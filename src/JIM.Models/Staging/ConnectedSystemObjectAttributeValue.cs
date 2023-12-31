@@ -34,6 +34,8 @@ namespace JIM.Models.Staging
 
         public ConnectedSystemObject? ReferenceValue { get; set; }
 
+        public string? UnresolvedReference { get; set; }
+
         public override string ToString()
         {
             if (!string.IsNullOrEmpty(StringValue))

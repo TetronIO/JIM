@@ -56,6 +56,10 @@ namespace JIM.Connectors.LDAP
                         // say what the secondary external identifier needs to be for LDAP systems
                         var dnSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("distinguishedname", StringComparison.CurrentCultureIgnoreCase));
                         objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
+                        
+                        // override the object type for distinguishedName, we want to handle it as a string, not a reference type
+                        // we do this as a DN on an object cannot reference itself. that would make no sense.
+                        dnSchemaAttribute.Type = AttributeDataType.Text;
 
                         // object type looks good to go, add it to the schema
                         _schema.ObjectTypes.Add(objectType);
