@@ -134,6 +134,26 @@
             </tbody>
         </MudSimpleTable>
     }
+
+    @if (activityRunProfileExecutionItem.ErrorType.HasValue)
+    {
+        <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
+            @if (!string.IsNullOrEmpty(activityRunProfileExecutionItem.ErrorMessage))
+            {
+                <MudText Typo="Typo.button">Error Message:</MudText>
+                <MudText>@activityRunProfileExecutionItem.ErrorMessage</MudText>
+                <br />
+            }
+
+            @if (!string.IsNullOrEmpty(activityRunProfileExecutionItem.ErrorStackTrace))
+            {
+                <MudText Typo="Typo.button">Error Stack:</MudText>
+                <pre>
+                    @activityRunProfileExecutionItem.ErrorStackTrace
+                </pre>
+            }
+        </MudPaper>
+    }
 }
 
 @code {

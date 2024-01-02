@@ -152,20 +152,27 @@
                 <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
             </ToolBarContent>
             <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.Id)">Internal Id</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ExternalIdValue)">External Id</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName)">Name</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType)">External Oject Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType)">External Object Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ObjectChangeType)">Change Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType)">Error Type</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="External Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.ExternalIdValue</MudLink></MudTd>
-                <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
-                <MudTd DataLabel="Connected System Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "")</MudTd>
+                <MudTd DataLabel="Internal Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.Id</MudLink></MudTd>
+                <MudTd DataLabel="External Id">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
+                <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
+                <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
                 <MudTd DataLabel="Change Type">
                     <MudChip Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudChip>
                 </MudTd>
-                <MudTd DataLabel="Error Type">@(context.ErrorType.HasValue ? context.ErrorType.Value.ToString().SplitOnCapitalLetters() : "")</MudTd>
+                <MudTd DataLabel="Error Type">
+                    @if (context.ErrorType.HasValue)
+                    {
+                        <MudChip Variant="Variant.Text" Color="Color.Error">@context.ErrorType.Value.ToString().SplitOnCapitalLetters()</MudChip>
+                    }
+                </MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 There are no sync results to show
