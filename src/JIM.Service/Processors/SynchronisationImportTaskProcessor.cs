@@ -77,7 +77,7 @@ namespace JIM.Service.Processors
 
                         // validate the results.
                         // are any of the attribute values duplicated? stop processing if so
-                        var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name.ToLower()).Where(g => g.Count() > 1).Select(n => n).ToList();
+                        var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.InvariantCultureIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
                         if (duplicateAttributeNames != null && duplicateAttributeNames.Count > 0)
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
