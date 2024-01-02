@@ -8,7 +8,7 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Connected System Object: @(ConnectedSystemObject != null ? ConnectedSystemObject.Id : null)</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Object:</span> @ConnectedSystemObject.?Id</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Object:</span> @(ConnectedSystemObject != null ? ConnectedSystemObject.Id : null)</MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
