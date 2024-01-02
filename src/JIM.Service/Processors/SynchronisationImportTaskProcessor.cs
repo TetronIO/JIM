@@ -75,6 +75,17 @@ namespace JIM.Service.Processors
                         // this will store the detail for the import object that will persist in the history for the run
                         var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
 
+                        // validate the results.
+                        // are any of the attribute values duplicated? stop processing if so
+                        var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name.ToLower()).Where(g => g.Count() > 1).Select(n => n).ToList();
+                        if (duplicateAttributeNames != null && duplicateAttributeNames.Count > 0)
+                        {
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
+                            activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+                            // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                            continue;
+                        }
+
                         // is this a new, or existing object for the Connected System within JIM?
                         // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
 
@@ -300,13 +311,6 @@ namespace JIM.Service.Processors
                     // work out what data type this attribute is and get the matching imported object attribute
                     var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase));
                     var importedObjectAttributeList = connectedSystemImportObject.Attributes.Where(a => a.Name != null && a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase)).ToList();
-                    if (importedObjectAttributeList.Count > 1)
-                    {
-                        // imported objects attributes should be distinct, i.e. one per name
-                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttribute;
-                        activityRunProfileExecutionItem.ErrorMessage = $"Attribute '{csoAttributeName}' was present more than one once the import object. Cannot continue processing this object.";
-                        return;
-                    }
                     var importedObjectAttribute = importedObjectAttributeList[0];
 
                     // process attribute additions and removals...

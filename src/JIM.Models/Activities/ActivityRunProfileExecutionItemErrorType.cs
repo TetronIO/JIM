@@ -7,5 +7,5 @@ public enum ActivityRunProfileExecutionItemErrorType
         CouldntMatchObjectType,
         UnsupportedExternalIdAttribyteType,
         UnexpectedAttribute,
-        DuplicateImportedAttribute
+        DuplicateImportedAttributes
 }
