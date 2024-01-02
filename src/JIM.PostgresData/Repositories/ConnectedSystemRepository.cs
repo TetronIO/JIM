@@ -242,6 +242,7 @@ namespace JIM.PostgresData.Repositories
             var selectedObjects = pagedObjects.Select(cso => new ConnectedSystemObjectHeader
             {
                 Id = cso.Id,
+                ConnectedSystemId = cso.ConnectedSystemId,
                 Created = cso.Created,
                 DateJoined = cso.DateJoined,
                 JoinType = cso.JoinType,
@@ -282,7 +283,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
-            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+            return await Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues).SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)

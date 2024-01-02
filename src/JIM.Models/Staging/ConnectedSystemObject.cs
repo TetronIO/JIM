@@ -91,7 +91,21 @@ namespace JIM.Models.Staging
             if (AttributeValues == null || AttributeValues.Count == 0)
                 return null;
 
+            // todo: work out why we are duplicating the DN attribute!
+
             return AttributeValues.SingleOrDefault(q => q.AttributeId == ExternalIdAttributeId);
+        }
+
+        /// <summary>
+        /// If the Connector for this Connected System supports a Secondary External Id, then the attribute value can be retrieved here.
+        /// Not all Connectors support this. It depends on the Connected System architecture.
+        /// </summary>
+        public ConnectedSystemObjectAttributeValue? GetSecondaryExternalIdAttributeValue()
+        {
+            if (AttributeValues == null || AttributeValues.Count == 0)
+                return null;
+
+            return AttributeValues.SingleOrDefault(q => q.AttributeId == SecondaryExternalIdAttributeId);
         }
 
         public void UpdateSingleValuedAttribute<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T newAttributeValue)

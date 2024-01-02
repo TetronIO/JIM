@@ -58,7 +58,7 @@ namespace JIM.Connectors.LDAP
                         objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
                         
                         // override the object type for distinguishedName, we want to handle it as a string, not a reference type
-                        // we do this as a DN on an object cannot reference itself. that would make no sense.
+                        // we do this as a DN attribute on an object cannot be a reference to itself. that would make no sense.
                         dnSchemaAttribute.Type = AttributeDataType.Text;
 
                         // object type looks good to go, add it to the schema

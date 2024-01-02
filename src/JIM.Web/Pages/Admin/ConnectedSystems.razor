@@ -4,6 +4,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Staging.DTOs
+@using JIM.Utilities;
 @inject JimApplication Jim
 
 <PageTitle>Connected Systems</PageTitle>
@@ -41,16 +42,14 @@
         <MudTh>Action</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Name">
-            <MudLink Href="@($"/admin/connected-systems/{context.Id}/")">@context.Name</MudLink>
-        </MudTd>
+        <MudTd DataLabel="Name"><MudLink Href="@(Utilities.GetConnectedSystemHref(context))">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Description">@context.Description</MudTd>
         <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>
         <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
         <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
             <MudTd DataLabel="Action">
-                <MudButton Href="@($"/admin/connected-systems/{context.Id}/objects")"
+                <MudButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
                            Variant="Variant.Outlined"
                            StartIcon="@Icons.Material.Filled.List"
                            Color="Color.Default"

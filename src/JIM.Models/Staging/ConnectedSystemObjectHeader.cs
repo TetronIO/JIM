@@ -5,6 +5,8 @@
         #region accessors
         public Guid Id { get; set; }
 
+        public int ConnectedSystemId { get; set; }
+
         public string? DisplayName { get; set; }
 
         public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue { get; set; }
