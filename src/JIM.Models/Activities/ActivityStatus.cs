@@ -5,7 +5,8 @@ public enum ActivityStatus
     NotSet = 0,
     InProgress = 1,
     Complete = 2,
-    CompleteWithError = 3,
-    FailedWithError = 4,
-    Cancelled = 5
+    CompleteWithWarning = 3,
+    CompleteWithError = 4,
+    FailedWithError = 5,
+    Cancelled = 6
 }

@@ -55,7 +55,8 @@ namespace JIM.Web
             {
                 ActivityStatus.Complete => Color.Success,
                 ActivityStatus.InProgress => Color.Primary,
-                ActivityStatus.CompleteWithError => Color.Warning,
+                ActivityStatus.CompleteWithWarning => Color.Warning,
+                ActivityStatus.CompleteWithError => Color.Tertiary,
                 ActivityStatus.FailedWithError => Color.Error,
                 _ => Color.Default,
             };
