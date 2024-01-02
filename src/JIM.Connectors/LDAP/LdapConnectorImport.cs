@@ -266,23 +266,6 @@ namespace JIM.Connectors.LDAP
                     importObject.ObjectType = objectType.Name;
                 }
 
-                // we have to manually populate the DN as an attribute as it's handled separately by SearchResultEntry
-                var schemaDnAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals("distinguishedname", StringComparison.CurrentCultureIgnoreCase));
-                if (schemaDnAttribute == null)
-                {
-                    importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
-                    importObject.ErrorMessage = $"Search result attribute 'distinguishedName' not found in schema!";
-                    importObjects.Add(importObject);
-                    continue;
-                }
-                var dnAttribute = new ConnectedSystemImportObjectAttribute
-                {
-                    Name = schemaDnAttribute.Name,
-                    Type = schemaDnAttribute.Type    
-                };
-                dnAttribute.StringValues.Add(searchResult.DistinguishedName);
-                importObject.Attributes.Add(dnAttribute);
-
                 // start populating import object attribute values from the search result
                 foreach (string attributeName in searchResult.Attributes.AttributeNames)
                 {
