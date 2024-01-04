@@ -44,7 +44,17 @@ namespace JIM.Application.Servers
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 
-        public async Task CompleteActivityWithError(Activity activity, Exception exception)
+        public async Task CompleteActivityWithWarningAsync(Activity activity)
+        {
+            var now = DateTime.UtcNow;
+            activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
+            activity.ExecutionTime = now - activity.Executed;
+            activity.TotalActivityTime = now - activity.Created;
+            activity.Status = ActivityStatus.CompleteWithWarning;
+            await Application.Repository.Activity.UpdateActivityAsync(activity);
+        }
+
+        public async Task CompleteActivityWithErrorAsync(Activity activity, Exception exception)
         {
             var now = DateTime.UtcNow;
             activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
@@ -53,6 +63,17 @@ namespace JIM.Application.Servers
             activity.ExecutionTime = now - activity.Executed;
             activity.TotalActivityTime = now - activity.Created;
             activity.Status = ActivityStatus.CompleteWithError;
+            await Application.Repository.Activity.UpdateActivityAsync(activity);
+        }
+
+        public async Task FailActivityWithErrorAsync(Activity activity, string errorMessage)
+        {
+            var now = DateTime.UtcNow;
+            activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
+            activity.ErrorMessage = errorMessage;
+            activity.ExecutionTime = now - activity.Executed;
+            activity.TotalActivityTime = now - activity.Created;
+            activity.Status = ActivityStatus.FailedWithError;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
         }
 

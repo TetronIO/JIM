@@ -290,6 +290,16 @@ namespace JIM.Application.Servers
                 else
                     Log.Error($"Recommended External Id attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes!");
 
+                // if the connector supports it (requires it), take the secondary external id from the schema and mark the attribute as such
+                if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && objectType.RecommendedSecondaryExternalIdAttribute != null)
+                {
+                    var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedSecondaryExternalIdAttribute.Name);
+                    if (secondaryExternalIdAttribute != null)
+                        secondaryExternalIdAttribute.IsSecondaryExternalId = true;
+                    else
+                        Log.Error($"Recommended Secondary External Id attribute '{objectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
+                }
+
                 connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
             }
 
@@ -571,8 +581,8 @@ namespace JIM.Application.Servers
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)connectedSystemObjectAttributeValue.BoolValue));
             else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Binary && connectedSystemObjectAttributeValue.ByteValue != null)
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
-            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.ReferenceValue != null)
-                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.StringValue != null) 
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.StringValue));
             else
                 throw new InvalidDataException("AddChangeAttributeValueObject:  Invalid removal attribute type or null attribute value");
         }

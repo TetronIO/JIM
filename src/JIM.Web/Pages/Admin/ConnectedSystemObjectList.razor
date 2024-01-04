@@ -45,6 +45,7 @@
         </ToolBarContent>
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue)">External Id</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue)">Secondary External Id</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName)">Display Name</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
@@ -53,7 +54,10 @@
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined)">Date Joined</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="External Id">@context.ExternalIdAttributeValue</MudTd>
+            <MudTd DataLabel="External Id">
+                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(context))">@context.ExternalIdAttributeValue</MudLink>
+            </MudTd>
+            <MudTd DataLabel="Secondary External Id">@context.SecondaryExternalIdAttributeValue</MudTd>
             <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">@context.Created</MudTd>
@@ -111,7 +115,7 @@
         {
             new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
             new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
-            new BreadcrumbItem(connectedSystemHeader.Name, href: $"/admin/connected-systems/{connectedSystemHeader.Id}/"),
+            new BreadcrumbItem(connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(connectedSystemHeader)),
             new BreadcrumbItem("Objects", href: null, disabled: true)
         };
 

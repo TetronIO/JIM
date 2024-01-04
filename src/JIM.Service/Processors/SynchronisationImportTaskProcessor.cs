@@ -75,6 +75,17 @@ namespace JIM.Service.Processors
                         // this will store the detail for the import object that will persist in the history for the run
                         var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
 
+                        // validate the results.
+                        // are any of the attribute values duplicated? stop processing if so
+                        var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.InvariantCultureIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
+                        if (duplicateAttributeNames != null && duplicateAttributeNames.Count > 0)
+                        {
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
+                            activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+                            // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                            continue;
+                        }
+
                         // is this a new, or existing object for the Connected System within JIM?
                         // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
 
@@ -180,6 +191,10 @@ namespace JIM.Service.Processors
                 Type = connectedSystemObjectType
             };
 
+            var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId);
+            if (secondaryExternalIdAttribute != null)
+                connectedSystemObject.SecondaryExternalIdAttributeId = secondaryExternalIdAttribute.Id;
+
             var csoIsInvalid = false;
             foreach (var importObjectAttribute in connectedSystemImportObject.Attributes)
             {
@@ -255,8 +270,16 @@ namespace JIM.Service.Processors
                             BoolValue = importObjectAttribute.BoolValue
                         });
                         break;
-                        //case AttributeDataType.Reference:
-                        //    break;
+                    case AttributeDataType.Reference:
+                        foreach (var importObjectAttributeReferenceValue in importObjectAttribute.ReferenceValues)
+                        {
+                            connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                            {
+                                Attribute = csAttribute,
+                                UnresolvedReference = importObjectAttributeReferenceValue
+                            });
+                        }
+                        break;
                 }
             }
 
@@ -288,13 +311,6 @@ namespace JIM.Service.Processors
                     // work out what data type this attribute is and get the matching imported object attribute
                     var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase));
                     var importedObjectAttributeList = connectedSystemImportObject.Attributes.Where(a => a.Name != null && a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase)).ToList();
-                    if (importedObjectAttributeList.Count > 1)
-                    {
-                        // imported objects attributes should be distinct, i.e. one per name
-                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttribute;
-                        activityRunProfileExecutionItem.ErrorMessage = $"Attribute '{csoAttributeName}' was present more than one once the import object. Cannot continue processing this object.";
-                        return;
-                    }
                     var importedObjectAttribute = importedObjectAttributeList[0];
 
                     // process attribute additions and removals...
@@ -351,8 +367,7 @@ namespace JIM.Service.Processors
 
                         case AttributeDataType.Reference:
                             // todo: handle references...
-                            // what will we get back? full references for objects either in, or potentially out of OU selection scope?
-                            // reconcile this against selected OUs. what kind of response do we want to pass back to sync admins in this scenario? 
+                            // probably: update UnresolvedReferences, then let the sync processor resolve the reference updates later in processing.
                             var x = 1;
                             break;
 

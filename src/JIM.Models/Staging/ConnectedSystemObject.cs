@@ -31,6 +31,13 @@ namespace JIM.Models.Staging
         /// </summary>
         public int ExternalIdAttributeId { get; set; }
 
+        /// <summary>
+        /// The attribute that may also identify the object in an connected system.
+        /// Whether or not this exists depends if the connected system supports secondary external ids or not. 
+        /// For instance, an LDAP system will use the DN for references to other objects, even though this is not a good identifier as it's not immutable.
+        /// </summary>
+        public int? SecondaryExternalIdAttributeId { get; set; }
+
         public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; }
 
         public ConnectedSystemObjectStatus Status { get; set; }
@@ -84,7 +91,21 @@ namespace JIM.Models.Staging
             if (AttributeValues == null || AttributeValues.Count == 0)
                 return null;
 
+            // todo: work out why we are duplicating the DN attribute!
+
             return AttributeValues.SingleOrDefault(q => q.AttributeId == ExternalIdAttributeId);
+        }
+
+        /// <summary>
+        /// If the Connector for this Connected System supports a Secondary External Id, then the attribute value can be retrieved here.
+        /// Not all Connectors support this. It depends on the Connected System architecture.
+        /// </summary>
+        public ConnectedSystemObjectAttributeValue? GetSecondaryExternalIdAttributeValue()
+        {
+            if (AttributeValues == null || AttributeValues.Count == 0)
+                return null;
+
+            return AttributeValues.SingleOrDefault(q => q.AttributeId == SecondaryExternalIdAttributeId);
         }
 
         public void UpdateSingleValuedAttribute<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T newAttributeValue)

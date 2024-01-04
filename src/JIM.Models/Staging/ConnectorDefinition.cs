@@ -64,6 +64,12 @@
         /// If Partition Containers are supported, then Partitions must also be supported.
         /// </summary>
         public bool SupportsPartitionContainers { get; set; }
+
+        /// <summary>
+        /// Some connected systems, such as LDAP-based directories, make use of a secondary identifier when referencing other objects, i.e. a DN, 
+        /// even though this is not an immutable identifier, but still has to be used to do things like resolve references. If the connected system needs to use a secondary ID, set this to true.
+        /// </summary>
+        public bool SupportsSecondaryExternalId { get; set; }
         #endregion
     }
 }

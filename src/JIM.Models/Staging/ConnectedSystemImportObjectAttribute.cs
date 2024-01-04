@@ -10,6 +10,8 @@ namespace JIM.Models.Staging
 
         public List<string> StringValues { get; set; } = new List<string>();
 
+        public List<string> ReferenceValues { get; set; } = new List<string>();
+
         public List<int> IntValues { get; set; } = new List<int>();
 
         public List<DateTime> DateTimeValues { get; set; } = new List<DateTime>();
@@ -18,9 +20,6 @@ namespace JIM.Models.Staging
 
         public List<byte[]> ByteValues { get; set; } = new List<byte[]>();
 
-        public bool? BoolValue { get; set; }
-
-        // todo: what are we going to do about about references?
-        // probably - they need to be imported as unresolved_references and then resolved to references to other import objects once the import is done
+        public bool? BoolValue { get; set; }   
     }
 }

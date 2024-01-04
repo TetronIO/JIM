@@ -1,5 +1,4 @@
-﻿using JIM.Data;
-using JIM.Data.Repositories;
+﻿using JIM.Data.Repositories;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -243,6 +242,7 @@ namespace JIM.PostgresData.Repositories
             var selectedObjects = pagedObjects.Select(cso => new ConnectedSystemObjectHeader
             {
                 Id = cso.Id,
+                ConnectedSystemId = cso.ConnectedSystemId,
                 Created = cso.Created,
                 DateJoined = cso.DateJoined,
                 JoinType = cso.JoinType,
@@ -251,7 +251,8 @@ namespace JIM.PostgresData.Repositories
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
                 DisplayName = cso.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? cso.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
-                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId)
+                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
+                SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId)
             });
             var results = await selectedObjects.ToListAsync();
 
@@ -282,7 +283,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
-            return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+            return await Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute).SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)

@@ -202,9 +202,14 @@ namespace JIM.Service
                                                     {
                                                         Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
                                                     }
-
-                                                    // task completed successfully
-                                                    await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
+                                                                                                      
+                                                    // task completed. determine final status, depending on how the run profile execution went
+                                                    if (newServiceTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue))
+                                                        await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
+                                                    else if (newServiceTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue))
+                                                        await taskJim.Activities.CompleteActivityWithWarningAsync(newServiceTask.Activity);
+                                                    else
+                                                        await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
                                                 }
                                                 catch (Exception ex)
                                                 {

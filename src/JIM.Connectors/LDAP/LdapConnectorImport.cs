@@ -194,7 +194,7 @@ namespace JIM.Connectors.LDAP
             // add user selected attributes
             var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
 
-            // ensure we are also retriving the unique identifier attribute(s)
+            // ensure we are also retrieving the unique identifier attribute(s)
             attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
 
             // we also need the objectClass for type matching purposes
@@ -275,7 +275,6 @@ namespace JIM.Connectors.LDAP
                     {
                         importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
                         importObject.ErrorMessage = $"Search result attribute '{attributeName}' not found in schema!";
-                        importObjects.Add(importObject);
                         break;
                     }
 
@@ -322,7 +321,7 @@ namespace JIM.Connectors.LDAP
                                 importObjectAttribute.ByteValues.AddRange(binaryValues);
                             break;
 
-                            // todo: reference data type
+                        // todo: reference data type
                     }
 
                     importObject.Attributes.Add(importObjectAttribute);

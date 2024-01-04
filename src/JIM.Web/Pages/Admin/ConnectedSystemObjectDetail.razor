@@ -1,0 +1,107 @@
+﻿@page "/admin/connected-systems/{CsId:int}/objects/{CsoId}"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Utilities;
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Connected System Object: @(ConnectedSystemObject != null ? ConnectedSystemObject.Id : null)</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Object:</span> @(ConnectedSystemObject != null ? ConnectedSystemObject.Id : null)</MudText>
+<MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+@if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
+{
+    <MudStack Row="true" Class="mt-5 mb-5">
+
+        <MudPaper Class="pa-5" Outlined="true">
+            <MudText Typo="Typo.overline">Connected System</MudText>
+            <MudText><MudLink Href="@Utilities.GetConnectedSystemHref(ConnectedSystemHeader)" Typo="Typo.h5">@ConnectedSystemHeader.Name</MudLink></MudText>
+        </MudPaper>
+
+        <MudPaper Class="pa-5" Outlined="true">
+            <MudText Typo="Typo.overline">Id</MudText>
+            <MudText Typo="Typo.h5">@ConnectedSystemObject.Id</MudText>
+        </MudPaper>
+
+        @if (ExternalIdAttributeValue != null)
+        {
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">External Id (@ExternalIdAttributeValue.Attribute.Name)</MudText>
+                <MudText Typo="Typo.h5">@ExternalIdAttributeValue</MudText>
+            </MudPaper>
+        }
+
+        @if (SecondaryExternalIdAttributeValue != null)
+        {
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Secondary External Id (@SecondaryExternalIdAttributeValue.Attribute.Name):</MudText>
+                <MudText Typo="Typo.h5">@SecondaryExternalIdAttributeValue</MudText>
+            </MudPaper>
+        }
+
+    </MudStack>
+}
+
+@code {
+    /// <summary>
+    /// Connected System Id.
+    /// </summary>
+    [Parameter]
+    public int CsId { get; set; }
+
+    /// <summary>
+    /// Connected System Object Id.
+    /// </summary>
+    [Parameter]
+    public string CsoId { get; set; } = null!;
+
+    private ConnectedSystemHeader? ConnectedSystemHeader { get; set; }
+
+    private ConnectedSystemObject? ConnectedSystemObject { get; set; }
+
+    private ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue { get; set; }
+
+    private ConnectedSystemObjectAttributeValue? SecondaryExternalIdAttributeValue { get; set; }
+
+    private List<BreadcrumbItem> Breadcrumbs { get; set; } = null!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ConnectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(CsId);
+        if (ConnectedSystemHeader == null)
+        {
+            // ConnectedSystem not found, redirect to the Connected Systems index page
+            NavManager.NavigateTo($"/admin/connected-systems/");
+            return;
+        }
+
+        var csoIdValid = Guid.TryParse(CsoId, out Guid connectedSystemObjectId);
+        if (!csoIdValid)
+        {
+            NavManager.NavigateTo(Utilities.GetConnectedSystemObjectsHref(CsId));
+            return;
+        }
+
+        ConnectedSystemObject = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(CsId, connectedSystemObjectId);
+        if (ConnectedSystemObject == null)
+        {
+            // ConnectedSystemObject not found, redirect to Connected System Objects index page
+            NavManager.NavigateTo(Utilities.GetConnectedSystemObjectsHref(CsId));
+            return;
+        }
+
+        Breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+            new BreadcrumbItem(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
+            new BreadcrumbItem("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
+            new BreadcrumbItem(CsoId.ToString(), href: null, disabled: true)
+        };
+
+        ExternalIdAttributeValue = ConnectedSystemObject.GetExternalIdAttributeValue();
+        SecondaryExternalIdAttributeValue = ConnectedSystemObject.GetSecondaryExternalIdAttributeValue();
+    }
+}
