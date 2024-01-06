@@ -22,3 +22,7 @@ html, body {
 .jim-no-wrap {
     white-space: nowrap;
 }
+
+.jim-text-code {
+    font-family: "Lucida Console", "Courier New", monospace;
+}

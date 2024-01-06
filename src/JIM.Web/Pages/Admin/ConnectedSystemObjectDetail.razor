@@ -50,18 +50,19 @@
 
     <MudPaper Class="pa-5" Outlined="true">
         <MudTable Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0"
-                    Items="@(ConnectedSystemObject.AttributeValues)"
-                    GroupBy="@_groupDefinition"
-                    GroupHeaderStyle="background-color:var(--mud-palette-background-grey)"
-                    GroupFooterClass="mb-4"
-                    Dense="true">
+            Items="@(ConnectedSystemObject.AttributeValues)"
+            GroupBy="@_groupDefinition"
+            GroupHeaderStyle="background-color:var(--mud-palette-background-grey)"
+            GroupFooterClass="mb-4"
+            Dense="true">
             <ColGroup>
+                <col style="width: 60px;" />
                 <col />
                 <col />
             </ColGroup>
             <HeaderContent>
-                <MudTh>Type</MudTh>
-                <MudTh>Value</MudTh>
+                <MudTh>Attribute Value Type</MudTh>
+                <MudTh>Attribute Value</MudTh>
             </HeaderContent>
             <GroupHeaderTemplate>
                 <MudTh Class="mud-table-cell-custom-group" colspan="5">@(context.GroupName): <span class="mud-secondary-text">@(context.Key)</span></MudTh>
@@ -75,7 +76,6 @@
             </GroupFooterTemplate>
         </MudTable>
     </MudPaper>
-
 }
 
 @code {
@@ -143,7 +143,7 @@
         {
             GroupName = "Group",
             Indentation = false,
-            Expandable = false,
+            Expandable = true,
             Selector = (e) => e.Attribute.Name
         };
 }
