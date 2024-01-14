@@ -321,7 +321,11 @@ namespace JIM.Connectors.LDAP
                                 importObjectAttribute.ByteValues.AddRange(binaryValues);
                             break;
 
-                        // todo: reference data type
+                        case AttributeDataType.Reference:
+                            var referenceValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
+                            if (referenceValues != null && referenceValues.Count > 0)
+                                importObjectAttribute.ReferenceValues.AddRange(referenceValues);
+                            break;
                     }
 
                     importObject.Attributes.Add(importObjectAttribute);

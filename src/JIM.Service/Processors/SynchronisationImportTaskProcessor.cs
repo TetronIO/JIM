@@ -137,6 +137,8 @@ namespace JIM.Service.Processors
             {
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
             }
+
+            
         }
 
         private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
@@ -276,7 +278,7 @@ namespace JIM.Service.Processors
                             connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                             {
                                 Attribute = csAttribute,
-                                UnresolvedReference = importObjectAttributeReferenceValue
+                                UnresolvedReferenceValue = importObjectAttributeReferenceValue
                             });
                         }
                         break;
@@ -293,7 +295,7 @@ namespace JIM.Service.Processors
             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
             stopwatch.Stop();
-            Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
+            Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for {connectedSystemObject.Type.Name} '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
         }
 
         private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)

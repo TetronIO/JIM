@@ -32,9 +32,16 @@ namespace JIM.Models.Staging
 
         public bool? BoolValue { get; set; }
 
+        /// <summary>
+        /// This holds a link to the referenced object immediately after provisioning from the Metaverse, or after unresolved references are resolved at the end of imports.
+        /// Termed as a hard reference, as the soft reference will have been resolved to a Connected System Object as part of setting this value.
+        /// </summary>
         public ConnectedSystemObject? ReferenceValue { get; set; }
 
-        public string? UnresolvedReference { get; set; }
+        /// <summary>
+        /// This holds the soft (aka raw) reference value from the Connected System before it gets resolved into a hard reference to another Connected System Object as part of an Import operation.
+        /// </summary>
+        public string? UnresolvedReferenceValue { get; set; }
 
         public override string ToString()
         {
@@ -58,6 +65,9 @@ namespace JIM.Models.Staging
 
             if (ReferenceValue != null)
                 return ReferenceValue.Id.ToString();
+
+            if (!string.IsNullOrEmpty(UnresolvedReferenceValue))
+                return UnresolvedReferenceValue;
 
             return string.Empty;
         }

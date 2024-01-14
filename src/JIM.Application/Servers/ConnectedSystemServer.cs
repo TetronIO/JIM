@@ -401,11 +401,7 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
         }
 
-        public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
-            int connectedSystemId,
-            int page = 1,
-            int pageSize = 20,
-            int maxResults = 500)
+        public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page = 1, int pageSize = 20, int maxResults = 500)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
                 connectedSystemId,
@@ -581,8 +577,11 @@ namespace JIM.Application.Servers
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)connectedSystemObjectAttributeValue.BoolValue));
             else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Binary && connectedSystemObjectAttributeValue.ByteValue != null)
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
-            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.StringValue != null) 
-                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.StringValue));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.ReferenceValue != null)
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
+            else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null)
+                // we do not log changes for unresolved references. only resolved references get change tracked.
+                Log.Verbose("AddChangeAttributeValueObject: Unresolved reference value being skipped: " + connectedSystemObjectAttributeValue.UnresolvedReferenceValue);
             else
                 throw new InvalidDataException("AddChangeAttributeValueObject:  Invalid removal attribute type or null attribute value");
         }
