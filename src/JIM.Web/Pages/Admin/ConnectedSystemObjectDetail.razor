@@ -11,7 +11,7 @@
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Object:</span> @(ConnectedSystemObject != null ? ConnectedSystemObject.Id : null)</MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+<MudText Typo="Typo.subtitle1">
     This is the representation of the object as it is in the Connected System as seen after the last import. It does not include any pending export changes.
 </MudText>
 
@@ -69,7 +69,16 @@
             </GroupHeaderTemplate>
             <RowTemplate>
                 <MudTd DataLabel="Type">@context.Attribute.Type</MudTd>
-                <MudTd DataLabel="Value">@context.ToString()</MudTd>
+                <MudTd DataLabel="Value">
+                    @if (context.UnresolvedReferenceValue != null)
+                    {
+                        <Text>Unresolved reference: <span Style="@($"color:{Colors.Grey.Darken2};")">@context.ToString()</span></Text>
+                    }
+                    else
+                    {
+                        @context.ToString()
+                    }
+                </MudTd>
             </RowTemplate>
             <GroupFooterTemplate>
                 <MudTh Class="mud-table-cell-custom-group mud-table-cell-custom-group-footer" colspan="5">Total Values: @context.Items.Count()</MudTh>
