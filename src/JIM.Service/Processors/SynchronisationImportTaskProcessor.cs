@@ -138,7 +138,9 @@ namespace JIM.Service.Processors
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
             }
 
-            
+            // now that all objects have been imported, we can attempt to resolve unresolved references
+            // i.e. attempt to convert unresolved reference strings into links to other connected system objects
+            await ResolveReferencesAsync();
         }
 
         private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
@@ -453,6 +455,21 @@ namespace JIM.Service.Processors
 
             // persist the attribute value changes
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, activityRunProfileExecutionItem);
+        }
+
+        /// <summary>
+        /// Enumerate each connected system object with an unresolved reference string value and attempts to convert it to a resolved reference to another connected system object.
+        /// </summary>
+        private async Task ResolveReferencesAsync()
+        {
+            // get all csos with an unresolved reference value
+            // see if we can get a cso that has a external id or secondary external id matching the string value
+            // add the cso id as the reference value
+            // remove the unresolved reference value
+            // update the cso
+            // create a connected system object change for this
+
+            
         }
     }
 }
