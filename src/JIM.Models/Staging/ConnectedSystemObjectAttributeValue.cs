@@ -37,6 +37,7 @@ namespace JIM.Models.Staging
         /// Termed as a hard reference, as the soft reference will have been resolved to a Connected System Object as part of setting this value.
         /// </summary>
         public ConnectedSystemObject? ReferenceValue { get; set; }
+        public Guid? ReferenceValueId { get; set; }
 
         /// <summary>
         /// This holds the soft (aka raw) reference value from the Connected System before it gets resolved into a hard reference to another Connected System Object as part of an Import operation.

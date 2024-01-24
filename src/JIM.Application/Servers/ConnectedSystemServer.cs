@@ -9,6 +9,7 @@ using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
 using Serilog;
+using System.Diagnostics;
 
 namespace JIM.Application.Servers
 {
@@ -425,6 +426,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
+        public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(connectedSystemId , connectedSystemAttributeId, attributeValue);
+        }
+
         public async Task<int> GetConnectedSystemObjectCountAsync()
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync();
@@ -433,6 +439,15 @@ namespace JIM.Application.Servers
         public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(ConnectedSystemObjectType connectedSystemObjectType)
         {
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
+        }
+
+        public async Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var ids = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(connectedSystemId);
+            stopwatch.Stop();
+            Log.Debug($"GetConnectedSystemObjectsWithUnresolvedReferencesAsync: completed for CS id {connectedSystemId} in {stopwatch.Elapsed}");
+            return ids;
         }
 
         public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)

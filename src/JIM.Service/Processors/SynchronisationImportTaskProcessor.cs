@@ -462,14 +462,39 @@ namespace JIM.Service.Processors
         /// </summary>
         private async Task ResolveReferencesAsync()
         {
-            // get all csos with an unresolved reference value
+            // get all csos with attributes that have unresolved reference values
             // see if we can get a cso that has a external id or secondary external id matching the string value
             // add the cso id as the reference value
             // remove the unresolved reference value
             // update the cso
             // create a connected system object change for this
 
-            
+            var csoIds = await _jim.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(_connectedSystem.Id);
+            foreach (var csoId in csoIds)
+            {
+                var cso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, csoId);
+                if (cso == null)
+                {
+                    Log.Error($"ResolveReferencesAsync: Couldn't retrieve CSO when we had just received its id. Connected System: {_connectedSystem.Id}, Connected System Object: {csoId}");
+                    continue;
+                }
+                
+                foreach (var referenceAttributeValue in cso.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
+                {
+                    // try and find an object in the Connected System that has an identifier mentioned in the UnresolvedReferenceValue property
+                    // what type of external id is this?
+                    // by default, systems use the anchor attribute for references, but connectors that use a secondary id use the secondary external id for references. 
+                    if (_connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId)
+                    {
+                        var secondaryExternalIdAttribute = 
+                        _jim.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(_connectedSystem.Id, )
+                    }
+                    else
+                    {
+
+                    }
+                }
+            }
         }
     }
 }

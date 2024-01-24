@@ -183,9 +183,9 @@ namespace JIM.PostgresData.Repositories
 
         #region Connected System Objects
         public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
-            int connectedSystemId, 
-            int page, 
-            int pageSize, 
+            int connectedSystemId,
+            int page,
+            int pageSize,
             int maxResults,
             QuerySortBy querySortBy = QuerySortBy.DateCreated,
             QueryRange queryRange = QueryRange.Forever)
@@ -281,6 +281,23 @@ namespace JIM.PostgresData.Repositories
             return pagedResultSet;
         }
 
+        /// <summary>
+        /// Returns an array of ids for Connected System Objects that have attributes where the value is an unresolved reference.
+        /// </summary>
+        /// <param name="connectedSystemId">The unique identifier for the Connected System to find objects within.</param>
+        /// <returns>An array of Connected System Object unique identifiers</returns>
+        public async Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId)
+        {
+            return await Repository.Database.ConnectedSystemObjects.Where(cso => cso.ConnectedSystem.Id == connectedSystemId && cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))).Select(cso => cso.Id).ToArrayAsync();
+        }
+
+        public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
+        {
+            return await Repository.Database.ConnectedSystemObjects.Where(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == attributeValue.ToLower())).Select(cso => cso.Id).SingleOrDefaultAsync();
+        }
+
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
             return await Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute).SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
@@ -338,7 +355,7 @@ namespace JIM.PostgresData.Repositories
             }
 
             // it sounds like postgresql cascade delete might auto-delete dependent objects
-            await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjects\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");            
+            await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjects\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
         }
 
         public void DeleteAllPendingExportObjects(int connectedSystemId)
@@ -431,7 +448,7 @@ namespace JIM.PostgresData.Repositories
                 Include(q => q.Partition).
                 Where(q => q.ConnectedSystemId == connectedSystemId).ToListAsync();
         }
-        
+
         public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
         {
             using var db = new JimDbContext();
