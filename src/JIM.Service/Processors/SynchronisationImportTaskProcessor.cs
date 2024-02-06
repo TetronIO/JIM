@@ -1,5 +1,4 @@
-﻿using Activity = JIM.Models.Activities.Activity;
-using JIM.Application;
+﻿using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -18,7 +17,7 @@ namespace JIM.Service.Processors
         private readonly ConnectedSystem _connectedSystem;
         private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
         private readonly MetaverseObject _initiatedBy;
-        private readonly Activity _activity;
+        private readonly Models.Activities.Activity _activity;
         private readonly CancellationTokenSource _cancellationTokenSource;
 
         internal SynchronisationImportTaskProcessor(
@@ -27,7 +26,7 @@ namespace JIM.Service.Processors
             ConnectedSystem connectedSystem,
             ConnectedSystemRunProfile connectedSystemRunProfile,
             MetaverseObject initiatedBy,
-            Activity activity,
+            Models.Activities.Activity activity,
             CancellationTokenSource cancellationTokenSource)
         {
             _jim = jimApplication;
@@ -463,13 +462,15 @@ namespace JIM.Service.Processors
         private async Task ResolveReferencesAsync()
         {
             // get all csos with attributes that have unresolved reference values
-            // see if we can get a cso that has a external id or secondary external id matching the string value
+            // see if we can find a cso that has an external id or secondary external id attribute value matching the string value
             // add the cso id as the reference value
             // remove the unresolved reference value
             // update the cso
             // create a connected system object change for this
 
             var csoIds = await _jim.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(_connectedSystem.Id);
+            var csosWithUpdates = new List<ConnectedSystemObject>();
+
             foreach (var csoId in csoIds)
             {
                 var cso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, csoId);
@@ -478,23 +479,41 @@ namespace JIM.Service.Processors
                     Log.Error($"ResolveReferencesAsync: Couldn't retrieve CSO when we had just received its id. Connected System: {_connectedSystem.Id}, Connected System Object: {csoId}");
                     continue;
                 }
-                
+
+                var externalIdAttribute = cso.Type.Attributes.Single(a => a.IsExternalId);
+                var secondaryExternalIdAttribute = cso.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
+
                 foreach (var referenceAttributeValue in cso.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
                 {
-                    // try and find an object in the Connected System that has an identifier mentioned in the UnresolvedReferenceValue property
-                    // what type of external id is this?
-                    // by default, systems use the anchor attribute for references, but connectors that use a secondary id use the secondary external id for references. 
-                    if (_connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId)
+                    // try and find an object in the Connected System that has an identifier mentioned in the UnresolvedReferenceValue property.
+                    // what type of external id attribute is being used by this Connected System for references?
+                    // most connected systems use the external id attribute when referencing other objects
+                    // but connected systems that use a secondary id use the secondary external id for references (i.e. LDAP and their DNs)
+                    Guid? referencedConnectedSystemObjectId = null;
+                    if (secondaryExternalIdAttribute != null)
+                        referencedConnectedSystemObjectId = await _jim.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(_connectedSystem.Id, secondaryExternalIdAttribute.Id, referenceAttributeValue.UnresolvedReferenceValue);
+                    else
+                        referencedConnectedSystemObjectId = await _jim.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(_connectedSystem.Id, externalIdAttribute.Id, referenceAttributeValue.UnresolvedReferenceValue);
+
+                    if (referencedConnectedSystemObjectId != null)
                     {
-                        var secondaryExternalIdAttribute = 
-                        _jim.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(_connectedSystem.Id, )
+                        // cso found!
+                        referenceAttributeValue.UnresolvedReferenceValue = null;
+                        Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObjectId}");
+                        referenceAttributeValue.ReferenceValueId = referencedConnectedSystemObjectId;
+                        referenceAttributeValue.UnresolvedReferenceValue = null;
+                        csosWithUpdates.Add(cso);
                     }
                     else
                     {
-
+                        // reference not found. referenced object probably out of container scope!
+                        // ideally we'd be surfacing these as sync errors..
+                        Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
                     }
                 }
             }
+
+
         }
     }
 }

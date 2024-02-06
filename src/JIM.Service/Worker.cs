@@ -1,7 +1,6 @@
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
-using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;

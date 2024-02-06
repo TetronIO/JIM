@@ -118,7 +118,7 @@ namespace JIM.Application.Servers
             SanitiseConnectedSystemUserInput(connectedSystem);
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -129,7 +129,7 @@ namespace JIM.Application.Servers
             await Application.Activities.CompleteActivityAsync(activity);
         }
 
-        public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy, Activity? parentActivity = null)
+        public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy, Models.Activities.Activity? parentActivity = null)
         {
             if (connectedSystem == null)
                 throw new ArgumentNullException(nameof(connectedSystem));
@@ -141,7 +141,7 @@ namespace JIM.Application.Servers
             connectedSystem.LastUpdated = DateTime.UtcNow;
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -209,9 +209,7 @@ namespace JIM.Application.Servers
             // especially when we need to support uploaded connectors, not just built-in ones
 
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            {
                 return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
-            }
 
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
         }
@@ -241,7 +239,7 @@ namespace JIM.Application.Servers
             ValidateConnectedSystemParameter(connectedSystem);
 
             // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -327,7 +325,7 @@ namespace JIM.Application.Servers
             // especially when we need to support uploaded connectors, not just built-in ones
 
             // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -667,7 +665,7 @@ namespace JIM.Application.Servers
                 throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystemRunProfile.Name,
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
@@ -688,7 +686,7 @@ namespace JIM.Application.Servers
                 return;
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystemRunProfile.Name,
                 ConnectedSystemRunType = connectedSystemRunProfile.RunType,
@@ -707,7 +705,7 @@ namespace JIM.Application.Servers
                 throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                 TargetOperationType = ActivityTargetOperationType.Update,

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories
 {
-    public class ConnectedSystemRepository : IConnectedSystemRepository
+    public class ConnectedSystemRepository : IConnectedSystemRepository-
     {
         private PostgresDataRepository Repository { get; }
 
@@ -343,6 +343,12 @@ namespace JIM.PostgresData.Repositories
         public async Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
         {
             Repository.Database.ConnectedSystemObjects.Update(connectedSystemObject);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+        {
+            Repository.Database.ConnectedSystemObjects.UpdateRange(connectedSystemObjects);
             await Repository.Database.SaveChangesAsync();
         }
 

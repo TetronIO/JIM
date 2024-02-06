@@ -48,6 +48,7 @@ namespace JIM.Data.Repositories
         public Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
         public Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile);
         public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
+        public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
         public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
 
