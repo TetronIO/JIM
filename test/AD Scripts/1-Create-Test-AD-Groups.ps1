@@ -24,9 +24,9 @@ $user_ous_in_scope = @(
 $user_ous_out_of_scope = @("OU=Interns,OU=Corp,DC=corp,DC=subatomic,DC=com")
 
 # read in the source data
-$adjectives = Import-CSV "Adjectives.en.csv"
-$colours = Import-CSV "Colours.en.csv"
-$group_name_endings = Import-CSV "GroupNameEndings.en.csv"
+$adjectives = Import-CSV "../Data/Adjectives.en.csv"
+$colours = Import-CSV "../Data/Colours.en.csv"
+$group_name_endings = Import-CSV "../Data/GroupNameEndings.en.csv"
 
 # create some text reference data
 $descriptions = @(

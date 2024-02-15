@@ -16,10 +16,10 @@ $default_password = "1Password1"
 $what_if_mode = $false
 
 # data sources and destinations
-$male_first_name_file = "Firstnames-m.csv"     # Format: FirstName
-$female_first_name_file = "Firstnames-f.csv"   # Format: FirstName
-$last_name_file = "Lastnames-fr.csv"           # Format: LastName
-$output_filename = "Users.csv"
+$male_first_name_file = "../Data/Firstnames-m.csv"     # Format: FirstName
+$female_first_name_file = "../Data/Firstnames-f.csv"   # Format: FirstName
+$last_name_file = "../Data/Lastnames-fr.csv"           # Format: LastName
+$output_filename = "InternUsers.csv"
 
 # read in the source data
 $first_names_male = Import-CSV $male_first_name_file
