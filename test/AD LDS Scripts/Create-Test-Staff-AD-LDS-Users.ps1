@@ -141,6 +141,8 @@ do {
             # if the names change, make sure to change it below as well.
             [ADSI]$user_container = "LDAP://localhost/CN=Staff,CN=Users,CN=RD,DC=Borton,DC=Com"
             $user = $user_container.Create("inetOrgPerson","CN=$account_name")
+            $user.put("msDS-UserDontExpirePassword", $true)
+            $user.put("msDS-UserAccountDisabled", $false)
             
             if ($null -ne $company) {
                 $user.put("company", $company)

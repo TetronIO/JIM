@@ -28,7 +28,7 @@ namespace JIM.Connectors.LDAP
                 var filter = "(&(objectClass=classSchema)(objectClassCategory=1)(defaultHidingValue=FALSE))";
                 var dn = $"CN=Schema,CN=Configuration,{_root}";
                 var request = new SearchRequest(dn, filter, SearchScope.Subtree);
-                var response = (SearchResponse)_connection.SendRequest(request);
+                var response = (SearchResponse)_connection.SendRequest(request); // object doesn't exist when querying ADLDS!
 
                 if (response.ResultCode != ResultCode.Success)
                     throw new Exception($"No success getting object types. Result code: {response.ResultCode}");

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories
 {
-    public class ConnectedSystemRepository : IConnectedSystemRepository-
+    public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         private PostgresDataRepository Repository { get; }
 
@@ -281,15 +281,15 @@ namespace JIM.PostgresData.Repositories
             return pagedResultSet;
         }
 
-        /// <summary>
-        /// Returns an array of ids for Connected System Objects that have attributes where the value is an unresolved reference.
-        /// </summary>
-        /// <param name="connectedSystemId">The unique identifier for the Connected System to find objects within.</param>
-        /// <returns>An array of Connected System Object unique identifiers</returns>
-        public async Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId)
-        {
-            return await Repository.Database.ConnectedSystemObjects.Where(cso => cso.ConnectedSystem.Id == connectedSystemId && cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))).Select(cso => cso.Id).ToArrayAsync();
-        }
+        ///// <summary>
+        ///// Returns an array of ids for Connected System Objects that have attributes where the value is an unresolved reference.
+        ///// </summary>
+        ///// <param name="connectedSystemId">The unique identifier for the Connected System to find objects within.</param>
+        ///// <returns>An array of Connected System Object unique identifiers</returns>
+        //public async Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId)
+        //{
+        //    return await Repository.Database.ConnectedSystemObjects.Where(cso => cso.ConnectedSystem.Id == connectedSystemId && cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))).Select(cso => cso.Id).ToArrayAsync();
+        //}
 
         public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
@@ -337,6 +337,12 @@ namespace JIM.PostgresData.Repositories
         public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
         {
             Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+        {
+            Repository.Database.ConnectedSystemObjects.AddRange(connectedSystemObjects);
             await Repository.Database.SaveChangesAsync();
         }
 

@@ -67,6 +67,7 @@ namespace JIM.Connectors.LDAP
         /// </summary>
         public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
+            Log.Verbose($"ValidateSettingValues() called for {Name}");
             var response = new List<ConnectorSettingValueValidationResult>();
 
             // validate that we can connect to the directory service with the supplied setting credentials
@@ -131,6 +132,7 @@ namespace JIM.Connectors.LDAP
         #region IConnectorImportUsingCalls members
         public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
+            Log.Verbose("OpenImportConnection() called");
             var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
             var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
             var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
@@ -144,10 +146,13 @@ namespace JIM.Connectors.LDAP
                 timeoutSeconds == null || !timeoutSeconds.IntValue.HasValue)
                 throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername}, or {_settingPassword}");
 
-            var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue);
+            logger.Debug($"OpenImportConnection() Trying to connect to '{directoryServer.StringValue}' on port '{directoryServerPort.IntValue}' with username '{username.StringValue}'");
+            var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
             var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
             _connection = new LdapConnection(identifier, credential, AuthType.Basic);
             _connection.SessionOptions.ProtocolVersion = 3;
+            //_connection.SessionOptions.SecureSocketLayer = false; // experimental
+            //_connection.SessionOptions.VerifyServerCertificate += delegate { return true; }; // experimental
             _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. consider wrapping this in a time-limited, cancellable task instead
             _connection.Bind();
         }
@@ -207,6 +212,7 @@ namespace JIM.Connectors.LDAP
             }
             catch (Exception ex)
             {
+                Log.Error(ex, $"TestDirectoryConnectivity failed");
                 return new ConnectorSettingValueValidationResult
                 {
                     ErrorMessage = $"Unable to connect. Message: {ex.Message}",

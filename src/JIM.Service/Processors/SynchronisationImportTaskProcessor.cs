@@ -45,6 +45,9 @@ namespace JIM.Service.Processors
             if (_connectedSystem.ObjectTypes == null)
                 throw new InvalidDataException("PerformFullImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
+            // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
+            var connectedSystemObjects = new List<ConnectedSystemObject>();
+            
             if (_connector is IConnectorImportUsingCalls callBasedImportConnector)
             {
                 callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
@@ -81,6 +84,7 @@ namespace JIM.Service.Processors
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
                             activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+                            
                             // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
                             continue;
                         }
@@ -105,26 +109,27 @@ namespace JIM.Service.Processors
                         if (connectedSystemObject == null)
                         {
                             activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
-                            await CreateConnectedSystemObjectFromImportObjectAsync(importObject, csObjectType, activityRunProfileExecutionItem);
+                            connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
                         }
                         else
                         {
                             // existing connected system object - update from import object if necessary
                             activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                            await UpdateConnectedSystemObjectFromImportObjectAsync(importObject, connectedSystemObject, activityRunProfileExecutionItem);
+                            UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, activityRunProfileExecutionItem);
                         }
+
+                        // cso could be null if the create-cso flow failed due to unexpected import attributes, etc.
+                        if (connectedSystemObject != null)
+                            connectedSystemObjects.Add(connectedSystemObject);
                     }
 
                     // todo: process deletes - what wasn't imported? how do we do this when paging is being used?
                     // make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
 
                     if (initialPage)
-                        initialPage = false;
-
-                    // update the activity with the results from this page's processing
-                    await _jim.Activities.UpdateActivityAsync(_activity);
-                }                
+                        initialPage = false;   
+                }
 
                 callBasedImportConnector.CloseImportConnection();
             }
@@ -137,9 +142,16 @@ namespace JIM.Service.Processors
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
             }
 
-            // now that all objects have been imported, we can attempt to resolve unresolved references
+            // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
             // i.e. attempt to convert unresolved reference strings into links to other connected system objects
-            await ResolveReferencesAsync();
+            await ResolveReferencesAsync(connectedSystemObjects);
+
+            // now persist all CSOs and create change objects within the activity tree
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects, _activity);
+
+            // update the activity with the results from all pages.
+            // this will also persist the AcivityRunProfileExecutionItem and ConnectedSystemObjectChanges for each CSO.
+            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
@@ -182,7 +194,7 @@ namespace JIM.Service.Processors
             throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}");
         }
 
-        private async Task CreateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+        private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             var stopwatch = Stopwatch.StartNew();
 
@@ -287,19 +299,21 @@ namespace JIM.Service.Processors
             }
 
             if (csoIsInvalid)
-                return;
+                return null;
 
             // persist the new cso
-            await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject, activityRunProfileExecutionItem);
+            //await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject, activityRunProfileExecutionItem);
 
-            // now associate the persisted cso (now it has a db-generated id) with the activityRunProfileExecutionItem
+            // now associate the persisted cso with the activityRunProfileExecutionItem
             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
             stopwatch.Stop();
-            Log.Debug($"CreateConnectedSystemObjectFromImportObjectAsync: completed for {connectedSystemObject.Type.Name} '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
+            Log.Debug($"CreateConnectedSystemObjectFromImportObject: completed for {connectedSystemObject.Type.Name} '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
+
+            return connectedSystemObject;
         }
 
-        private async Task UpdateConnectedSystemObjectFromImportObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+        private static void UpdateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             // process known attributes (potential updates)
             // need to work with the fact that we have individual objects for multi-valued attribute values
@@ -453,13 +467,14 @@ namespace JIM.Service.Processors
             }
 
             // persist the attribute value changes
-            await _jim.ConnectedSystems.UpdateConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, activityRunProfileExecutionItem);
+            // todo: move to calling method
+            //await _jim.ConnectedSystems.UpdateConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, activityRunProfileExecutionItem);
         }
 
         /// <summary>
         /// Enumerate each connected system object with an unresolved reference string value and attempts to convert it to a resolved reference to another connected system object.
         /// </summary>
-        private async Task ResolveReferencesAsync()
+        private async Task ResolveReferencesAsync(List<ConnectedSystemObject> connectedSystemObjects)
         {
             // get all csos with attributes that have unresolved reference values
             // see if we can find a cso that has an external id or secondary external id attribute value matching the string value
@@ -468,21 +483,23 @@ namespace JIM.Service.Processors
             // update the cso
             // create a connected system object change for this
 
-            var csoIds = await _jim.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(_connectedSystem.Id);
-            var csosWithUpdates = new List<ConnectedSystemObject>();
+            //var csoIds = await _jim.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(_connectedSystem.Id);
+            //var csosWithUpdates = new List<ConnectedSystemObject>();
 
-            foreach (var csoId in csoIds)
+            // enumerate just the CSOs with unresolved references, for efficiency
+            foreach (var cso in connectedSystemObjects.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
             {
-                var cso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, csoId);
-                if (cso == null)
-                {
-                    Log.Error($"ResolveReferencesAsync: Couldn't retrieve CSO when we had just received its id. Connected System: {_connectedSystem.Id}, Connected System Object: {csoId}");
-                    continue;
-                }
+                //var cso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, csoId);
+                //if (cso == null)
+                //{
+                //    Log.Error($"ResolveReferencesAsync: Couldn't retrieve CSO when we had just received its id. Connected System: {_connectedSystem.Id}, Connected System Object: {csoId}");
+                //    continue;
+                //}
 
                 var externalIdAttribute = cso.Type.Attributes.Single(a => a.IsExternalId);
                 var secondaryExternalIdAttribute = cso.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
 
+                // enumerate just the attribute values for this CSO that are for unresolved references
                 foreach (var referenceAttributeValue in cso.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
                 {
                     // try and find an object in the Connected System that has an identifier mentioned in the UnresolvedReferenceValue property.
@@ -497,23 +514,32 @@ namespace JIM.Service.Processors
 
                     if (referencedConnectedSystemObjectId != null)
                     {
-                        // cso found!
+                        // referenced cso found!
                         referenceAttributeValue.UnresolvedReferenceValue = null;
                         Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObjectId}");
                         referenceAttributeValue.ReferenceValueId = referencedConnectedSystemObjectId;
                         referenceAttributeValue.UnresolvedReferenceValue = null;
-                        csosWithUpdates.Add(cso);
+                        //csosWithUpdates.Add(cso);
                     }
                     else
                     {
+                        // todo: make it a per-connected system setting as to whether or not to raise an error, or ignore. sometimes this is desirable.
                         // reference not found. referenced object probably out of container scope!
-                        // ideally we'd be surfacing these as sync errors..
+                        var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id);
+                        if (activityRunProfileExecutionItem != null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                        {
+                            activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                        }
+                        else
+                        {
+                            throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}!");
+                        }
+
                         Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
                     }
                 }
             }
-
-
         }
     }
 }

@@ -11,7 +11,7 @@ using Serilog;
 namespace JIM.Service
 {
     // **************************************************************************************
-    // Junctional Identity Manager - Sync Service
+    // Junctional Identity Manager - Background Worker
     //
     // Needs to:
     // - Loop until asked to close down
