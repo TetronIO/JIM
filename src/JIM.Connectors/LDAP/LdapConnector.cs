@@ -57,7 +57,7 @@ namespace JIM.Connectors.LDAP
                 new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
                 new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
                 new() { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
-                new() { Name = _settingAuthType, Required = true, Description = "What type of authentication is required to authenticate the credential?", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() {"Simple", "NTLM"}},
+                new() { Name = _settingAuthType, Required = true, Description = "What type of authentication is required for this credential?", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() {"Simple", "NTLM"}},
 
                 new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
                 new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
