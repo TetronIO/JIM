@@ -23,12 +23,13 @@ namespace JIM.Connectors.LDAP
             // future improvement: work out how to get the default naming context programatically, so we don't have to ask the
             // user for the root via a setting value.
 
-            return await Task.Run(() => { 
+            return await Task.Run(() => 
+            { 
                 // query: classes, structural, don't return hidden by default classes
                 var filter = "(&(objectClass=classSchema)(objectClassCategory=1)(defaultHidingValue=FALSE))";
                 var dn = $"CN=Schema,CN=Configuration,{_root}";
                 var request = new SearchRequest(dn, filter, SearchScope.Subtree);
-                var response = (SearchResponse)_connection.SendRequest(request); // object doesn't exist when querying ADLDS!
+                var response = (SearchResponse)_connection.SendRequest(request); // object doesn't exist when querying ADLDS!                
 
                 if (response.ResultCode != ResultCode.Success)
                     throw new Exception($"No success getting object types. Result code: {response.ResultCode}");
@@ -39,10 +40,8 @@ namespace JIM.Connectors.LDAP
                 // enumerate each object class entry
                 foreach (SearchResultEntry entry in response.Entries)
                 {
-                    var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name");
-                    if (name == null)
+                    var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? 
                         throw new Exception($"No name on object class entry: {entry.DistinguishedName}");
-
                     var objectType = new ConnectorSchemaObjectType(name);
 
                     // now go and work out which attributes the object type has and add them to the object type
@@ -113,10 +112,9 @@ namespace JIM.Connectors.LDAP
         /// </summary>
         private void GetObjectClassAttributesRecursively(SearchResultEntry objectClassEntry, ConnectorSchemaObjectType objectType)
         {
-            var objectClassName = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname");
-            if (objectClassName == null)
+            var objectClassName = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname") ?? 
                 throw new Exception($"No ldapdisplayname value on {objectClassEntry.DistinguishedName}");
-
+            
             if (objectClassEntry.Attributes.Contains("maycontain"))
                 foreach (string attributeName in objectClassEntry.Attributes["maycontain"].GetValues(typeof(string)))
                     if (!objectType.Attributes.Any(q => q.Name == attributeName))

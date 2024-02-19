@@ -97,7 +97,7 @@
                                     <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name" Variant="Variant.Outlined" Class="mb-5">
                                         @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
                                         {
-                                            <option value="@dropDownValue">@dropDownValue</option>
+                                            <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
                                         }
                                     </MudSelect>
                                 }

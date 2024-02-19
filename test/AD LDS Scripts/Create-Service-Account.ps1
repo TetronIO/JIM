@@ -1,14 +1,18 @@
-﻿$root_dn = 'CN=RD,DC=Borton,DC=Com'
-[ADSI]$root = "LDAP://localhost/$root_dn"
+﻿Set-StrictMode -Version 2
+$ErrorActionPreference = "Stop"
+Clear-Host
+
+$application_partition_dn = 'CN=RD,DC=Borton,DC=Com'
+[ADSI]$root = "LDAP://localhost/$application_partition_dn"
 
 # looking for the following container structure:
-# root/Users/ServiceAccounts
-# root/Users/Staff
-# root/Groups/DistributionGroups
-# root/Groups/SecurityGroups
+# /Users/ServiceAccounts
+# /Users/Staff
+# /Groups/DistributionGroups
+# /Groups/SecurityGroups
 
 # users
-[ADSI]$users_container = "LDAP://localhost/CN=Users,$root_dn"
+[ADSI]$users_container = "LDAP://localhost/CN=Users,$application_partition_dn"
 if ($null -eq $users_container.Guid) 
 {
     $users_container = $root.Create('container', 'CN=Users')
@@ -26,11 +30,11 @@ if ($null -eq $users_container.Guid)
 else 
 {
     Write-Host "Users container structure already exists"
-    [ADSI]$service_accounts_container = "LDAP://localhost/CN=ServiceAccounts,CN=Users,$root_dn"
+    [ADSI]$service_accounts_container = "LDAP://localhost/CN=ServiceAccounts,CN=Users,$application_partition_dn"
 }
 
 # groups
-[ADSI]$groups_container = "LDAP://localhost/CN=Groups,$root_dn"
+[ADSI]$groups_container = "LDAP://localhost/CN=Groups,$application_partition_dn"
 if ($null -eq $groups_container.Guid)
 {
     $groups_container = $root.Create('container', 'CN=Groups')
@@ -51,7 +55,7 @@ else
 }
 
 $service_account_username = "svc-jim-adlds"
-[ADSI]$service_account = "LDAP://localhost/CN=$service_account_username,CN=ServiceAccounts,CN=Users,$root_dn"
+[ADSI]$service_account = "LDAP://localhost/CN=$service_account_username,CN=ServiceAccounts,CN=Users,$application_partition_dn"
 if ($null -eq $service_account.Guid) 
 {
     # create the service account JIM will use to interact with the directory
@@ -66,15 +70,22 @@ else
     Write-Host "Service account ($service_account_username) already exists"
 }
 
-# add the service account to the Administrators role
-[ADSI]$admin_role = "LDAP://localhost/CN=Administrators,CN=Roles,$root_dn"
-if ($admin_role.member.Contains($service_account.distinguishedName))
+# add the service account to the Administrators role on the application partition
+[ADSI]$admin_role = "LDAP://localhost/CN=Administrators,CN=Roles,$application_partition_dn"
+$in_role = $false
+foreach ($member_dn in $admin_role.member) {
+    if ($member_dn -eq $service_account.distinguishedName) {
+        $in_role = $true
+        break
+    }
+}
+if ($in_role)
 {
-    Write-Host "Service account is already a member of the Administrators role"
+    Write-Host "Service account is already a member of the application partition Administrators role"
 }
 else 
 {
     $admin_role.Add($service_account.ADSPath)
     $admin_role.setInfo()
-    Write-Host "Added '$($service_account.distinguishedName)' to admin role"
+    Write-Host "Added '$($service_account.distinguishedName)' to the application partition Administrators role"
 }
