@@ -9,27 +9,28 @@ namespace JIM.Connectors.LDAP
     {
         private readonly LdapConnection _connection;
         private readonly ConnectorSchema _schema;
-        private readonly string _root;
+        private string _schemaNamingContext = null!;
 
-        internal LdapConnectorSchema(LdapConnection ldapConnection, string rootDistinguishedName) 
+        internal LdapConnectorSchema(LdapConnection ldapConnection)
         {
             _connection = ldapConnection;
             _schema = new ConnectorSchema();
-            _root = rootDistinguishedName;
         }
 
         internal async Task<ConnectorSchema> GetSchemaAsync()
         {
-            // future improvement: see about offering discovered naming contexts (from the rootDSE) to the user,
-            // to enable them to just select from a list, rather than having to know what the root DN is.
-
             return await Task.Run(() => 
-            { 
+            {
+                // get the DN for the schema partition
+                var schemaNamingContext = GetSchemaNamingContext();
+                if (string.IsNullOrEmpty(schemaNamingContext))
+                    throw new Exception($"Couldn't get schema naming context from rootDSE.");
+                _schemaNamingContext = schemaNamingContext;
+
                 // query: classes, structural, don't return hidden by default classes
                 var filter = "(&(objectClass=classSchema)(objectClassCategory=1)(defaultHidingValue=FALSE))";
-                var dn = $"CN=Schema,CN=Configuration,{_root}";
-                var request = new SearchRequest(dn, filter, SearchScope.Subtree);
-                var response = (SearchResponse)_connection.SendRequest(request); // object doesn't exist when querying ADLDS!                
+                var request = new SearchRequest(_schemaNamingContext, filter, SearchScope.Subtree);
+                var response = (SearchResponse)_connection.SendRequest(request);
 
                 if (response.ResultCode != ResultCode.Success)
                     throw new Exception($"No success getting object types. Result code: {response.ResultCode}");
@@ -40,8 +41,7 @@ namespace JIM.Connectors.LDAP
                 // enumerate each object class entry
                 foreach (SearchResultEntry entry in response.Entries)
                 {
-                    var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? 
-                        throw new Exception($"No name on object class entry: {entry.DistinguishedName}");
+                    var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? throw new Exception($"No name on object class entry: {entry.DistinguishedName}");
                     var objectType = new ConnectorSchemaObjectType(name);
 
                     // now go and work out which attributes the object type has and add them to the object type
@@ -80,7 +80,7 @@ namespace JIM.Connectors.LDAP
 
             while (continueGettingClasses)
             {
-                var objectClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={objectClassName})");
+                var objectClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={objectClassName})");
                 if (objectClassEntry == null)
                 {
                     // some object classes do not have a schema entry, i.e. some system objects.
@@ -143,7 +143,7 @@ namespace JIM.Connectors.LDAP
             {
                 foreach (var auxiliaryClass in auxiliaryClasses)
                 {
-                    var auxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={auxiliaryClass})") ?? 
+                    var auxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={auxiliaryClass})") ?? 
                         throw new Exception($"Couldn't find auxiliary class entry: {auxiliaryClass}");
 
                     GetObjectClassAttributesRecursively(auxiliaryClassEntry, objectType);
@@ -154,7 +154,7 @@ namespace JIM.Connectors.LDAP
             {
                 foreach (var systemAuxiliaryClass in systemAuxiliaryClasses)
                 {
-                    var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={systemAuxiliaryClass})") ?? 
+                    var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={systemAuxiliaryClass})") ?? 
                         throw new Exception($"Couldn't find auxiliary class entry: {systemAuxiliaryClass}");
 
                     GetObjectClassAttributesRecursively(systemAuxiliaryClassEntry, objectType);
@@ -164,7 +164,7 @@ namespace JIM.Connectors.LDAP
 
         private ConnectorSchemaAttribute GetSchemaAttribute(string attributeName, string objectClass, bool required)
         {
-            var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _root, $"(ldapdisplayname={attributeName})") ?? 
+            var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={attributeName})") ?? 
                 throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
 
             var description = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "description");
@@ -234,6 +234,29 @@ namespace JIM.Connectors.LDAP
                 attribute.Description = admindescription;            
 
             return attribute;
+        }
+
+        private string? GetSchemaNamingContext()
+        {
+            // get the the schema naming context from an attribute on the rootDSE
+            var request = new SearchRequest() { Scope = SearchScope.Base };
+            request.Attributes.Add("schemaNamingContext");
+            var response = (SearchResponse)_connection.SendRequest(request);
+
+            if (response.ResultCode != ResultCode.Success)
+            {
+                Console.WriteLine($"GetSchemaNamingContext: No success. Result code: {response.ResultCode}");
+                return null;
+            }
+
+            if (response.Entries.Count == 0)
+            {
+                Console.WriteLine("GetSchemaNamingContext: Didn't get any results!");
+                return null;
+            }
+
+            var entry = response.Entries[0];
+            return LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "schemaNamingContext");
         }
     }
 }

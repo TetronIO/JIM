@@ -102,11 +102,7 @@ namespace JIM.Connectors.LDAP
             if (_connection == null)
                 throw new Exception("No connection available to get schema with");
 
-            var rootDnSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRootDn);
-            if (rootDnSettingValue == null || string.IsNullOrEmpty(rootDnSettingValue.StringValue))
-                throw new InvalidSettingValuesException($"No setting value for {_settingRootDn}!");
-
-            var ldapConnectorSchema = new LdapConnectorSchema(_connection, rootDnSettingValue.StringValue);
+            var ldapConnectorSchema = new LdapConnectorSchema(_connection);
             var schema = await ldapConnectorSchema.GetSchemaAsync();
             CloseImportConnection();
             return schema;
@@ -120,11 +116,7 @@ namespace JIM.Connectors.LDAP
             if (_connection == null)
                 throw new Exception("No connection available to get partitions with");
 
-            var rootDnSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRootDn);
-            if (rootDnSettingValue == null || string.IsNullOrEmpty(rootDnSettingValue.StringValue))
-                throw new InvalidSettingValuesException($"No setting value for {_settingRootDn}!");
-
-            var ldapConnectorSchema = new LdapConnectorPartitions(_connection, rootDnSettingValue.StringValue);
+            var ldapConnectorSchema = new LdapConnectorPartitions(_connection);
             var partitions = await ldapConnectorSchema.GetPartitionsAsync();
             CloseImportConnection();
             return partitions;
