@@ -34,7 +34,6 @@ namespace JIM.Connectors.LDAP
         private readonly string _settingDirectoryServerPort = "Port";
         //private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
         private readonly string _settingConnectionTimeout = "Connection Timeout";
-        private readonly string _settingRootDn = "Root DN";
         private readonly string _settingUsername = "Username";
         private readonly string _settingPassword = "Password";
         private readonly string _settingAuthType = "Authentication Type";
@@ -50,7 +49,6 @@ namespace JIM.Connectors.LDAP
                 new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultIntValue = 389, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
                 //new() { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
                 new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
-                new() { Name = _settingRootDn, Required = true, Description = "The forest/domain/partition root in DN format, i.e. DC=corp,DC=subatomic,DC=com", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
 
                 new() { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
