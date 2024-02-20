@@ -439,7 +439,7 @@
                     @if (connectedSystem.ConnectorDefinition.SupportsPartitions && connectedSystem.Partitions != null)
                     {
                         <MudSelect T="ConnectedSystemPartition" @bind-Value="newRunProfile.Partition" Label="Partition" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="@connectedSystem.ConnectorDefinition.SupportsPartitions" RequiredError="A run profile partition is required">
-                            @foreach (ConnectedSystemPartition partition in connectedSystem.Partitions)
+                            @foreach (ConnectedSystemPartition partition in connectedSystem.Partitions.Where(p => p.Selected))
                             {
                                 <MudSelectItem Value="@partition" />
                             }
