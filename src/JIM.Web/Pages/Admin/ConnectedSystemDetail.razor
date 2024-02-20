@@ -94,7 +94,14 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                 {
-                                    <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name" Variant="Variant.Outlined" Class="mb-5">
+                                    <MudSelect 
+                                            @bind-Value="settingValue.StringValue" 
+                                            HelperText="@settingValue.Setting.Description" 
+                                            Label="@settingValue.Setting.Name" 
+                                            Variant="Variant.Outlined" 
+                                            Class="mb-5" 
+                                            Required="@settingValue.Setting.Required"
+                                            RequiredError="@($"A {settingValue.Setting.Name} is required")">
                                         @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
                                         {
                                             <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
