@@ -57,7 +57,7 @@ namespace JIM.Connectors.LDAP
                 new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
                 new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
                 new() { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
-                new() { Name = _settingAuthType, Required = true, Description = "What type of authentication is required for this credential?", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() {"Simple", "NTLM"}},
+                new() { Name = _settingAuthType, Required = true, Description = "What type of authentication is required for this credential?", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.SETTING_AUTH_TYPE_SIMPLE, LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM }},
 
                 new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
                 new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
@@ -139,22 +139,33 @@ namespace JIM.Connectors.LDAP
             var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
             var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
             var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
-            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);            
+            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
+            var authTypeSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingAuthType);
 
             if (username == null || string.IsNullOrEmpty(username.StringValue) ||
                 password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
+                authTypeSettingValue == null || string.IsNullOrEmpty(authTypeSettingValue.StringValue) ||
                 directoryServer == null || string.IsNullOrEmpty(directoryServer.StringValue) ||
                 directoryServerPort == null || !directoryServerPort.IntValue.HasValue ||
                 timeoutSeconds == null || !timeoutSeconds.IntValue.HasValue)
-                throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername}, or {_settingPassword}");
+                throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername},{_settingPassword}, or {_settingAuthType}.");
 
-            logger.Debug($"OpenImportConnection() Trying to connect to '{directoryServer.StringValue}' on port '{directoryServerPort.IntValue}' with username '{username.StringValue}'");
+            logger.Debug($"OpenImportConnection() Trying to connect to '{directoryServer.StringValue}' on port '{directoryServerPort.IntValue}' with username '{username.StringValue}' via auth type {authTypeSettingValue.StringValue}.");
             var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
             var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
-            _connection = new LdapConnection(identifier, credential, AuthType.Basic);
+
+            // allow the user to specify what type of authentication to perform against the supplied credential.
+            string authTypeSettingValueString = authTypeSettingValue.StringValue;
+            var authTypeEnumValue = AuthType.Anonymous;
+            if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_SIMPLE)
+                authTypeEnumValue = AuthType.Basic;
+            else if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM)
+                authTypeEnumValue = AuthType.Ntlm;
+
+            _connection = new LdapConnection(identifier, credential, authTypeEnumValue);
             _connection.SessionOptions.ProtocolVersion = 3;
-            //_connection.SessionOptions.SecureSocketLayer = false; // experimental
-            //_connection.SessionOptions.VerifyServerCertificate += delegate { return true; }; // experimental
+            //_connection.SessionOptions.SecureSocketLayer = false; // experimental. might use later when support for encrypted connections has been tested.
+            //_connection.SessionOptions.VerifyServerCertificate += delegate { return true; }; // experimental, as above.
             _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. consider wrapping this in a time-limited, cancellable task instead
             _connection.Bind();
         }

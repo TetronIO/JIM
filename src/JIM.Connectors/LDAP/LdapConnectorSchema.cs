@@ -20,8 +20,8 @@ namespace JIM.Connectors.LDAP
 
         internal async Task<ConnectorSchema> GetSchemaAsync()
         {
-            // future improvement: work out how to get the default naming context programatically, so we don't have to ask the
-            // user for the root via a setting value.
+            // future improvement: see about offering discovered naming contexts (from the rootDSE) to the user,
+            // to enable them to just select from a list, rather than having to know what the root DN is.
 
             return await Task.Run(() => 
             { 
