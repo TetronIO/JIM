@@ -144,8 +144,8 @@
             new BreadcrumbItem(CsoId.ToString(), href: null, disabled: true)
         };
 
-        ExternalIdAttributeValue = ConnectedSystemObject.GetExternalIdAttributeValue();
-        SecondaryExternalIdAttributeValue = ConnectedSystemObject.GetSecondaryExternalIdAttributeValue();
+        ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
+        SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
     }
 
     private TableGroupDefinition<ConnectedSystemObjectAttributeValue> _groupDefinition = new()

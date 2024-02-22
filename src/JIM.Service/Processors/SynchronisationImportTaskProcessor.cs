@@ -46,7 +46,7 @@ namespace JIM.Service.Processors
                 throw new InvalidDataException("PerformFullImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
             // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
-            var connectedSystemObjects = new List<ConnectedSystemObject>();
+            var connectedSystemObjectsBeingProcessed = new List<ConnectedSystemObject>();
             
             if (_connector is IConnectorImportUsingCalls callBasedImportConnector)
             {
@@ -101,7 +101,7 @@ namespace JIM.Service.Processors
                             continue;
                         }
 
-                        // try and find a matching connected system object
+                        // see if we already have a matching connected system object for this imported object within JIM
                         var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
 
                         // is new - new cso required
@@ -119,9 +119,9 @@ namespace JIM.Service.Processors
                             UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, activityRunProfileExecutionItem);
                         }
 
-                        // cso could be null if the create-cso flow failed due to unexpected import attributes, etc.
+                        // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
                         if (connectedSystemObject != null)
-                            connectedSystemObjects.Add(connectedSystemObject);
+                            connectedSystemObjectsBeingProcessed.Add(connectedSystemObject);
                     }
 
                     // todo: process deletes - what wasn't imported? how do we do this when paging is being used?
@@ -143,11 +143,11 @@ namespace JIM.Service.Processors
             }
 
             // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
-            // i.e. attempt to convert unresolved reference strings into links to other connected system objects
-            await ResolveReferencesAsync(connectedSystemObjects);
+            // i.e. attempt to convert unresolved reference strings into hard links to other connected system objects
+            await ResolveReferencesAsync(connectedSystemObjectsBeingProcessed);
 
             // now persist all CSOs and create change objects within the activity tree
-            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects, _activity);
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsBeingProcessed, _activity);
 
             // update the activity with the results from all pages.
             // this will also persist the AcivityRunProfileExecutionItem and ConnectedSystemObjectChanges for each CSO.
@@ -173,21 +173,21 @@ namespace JIM.Service.Processors
                 if (importObjectAttribute.StringValues.Count == 0)
                     throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value.");
 
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]);
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]);
             }
             else if (externalIdAttribute.Type == AttributeDataType.Number)
             {
                 if (importObjectAttribute.IntValues.Count == 0)
                     throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value.");
 
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]);
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]);
             }
             else if (externalIdAttribute.Type == AttributeDataType.Guid)
             {
                 if (importObjectAttribute.GuidValues.Count == 0)
                     throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value.");
 
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]);
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]);
             }
 
             // should never happen, but it's worth covering all possible scenarios
@@ -198,7 +198,7 @@ namespace JIM.Service.Processors
         {
             var stopwatch = Stopwatch.StartNew();
 
-            // new object - create connected system object
+            // new object - create connected system object using data from an import object
             var connectedSystemObject = new ConnectedSystemObject
             {
                 ConnectedSystem = _connectedSystem,
@@ -206,6 +206,7 @@ namespace JIM.Service.Processors
                 Type = connectedSystemObjectType
             };
 
+            // not every system uses a secondary external id attribute, but some do, i.e. LDAP
             var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId);
             if (secondaryExternalIdAttribute != null)
                 connectedSystemObject.SecondaryExternalIdAttributeId = secondaryExternalIdAttribute.Id;
@@ -308,7 +309,7 @@ namespace JIM.Service.Processors
             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
             stopwatch.Stop();
-            Log.Debug($"CreateConnectedSystemObjectFromImportObject: completed for {connectedSystemObject.Type.Name} '{connectedSystemObject.Id}' in {stopwatch.Elapsed}");
+            Log.Debug($"CreateConnectedSystemObjectFromImportObject: completed for {connectedSystemObject.Type.Name} ExtId: '{connectedSystemObject.ExternalIdAttributeValue}', SecExtId: '{connectedSystemObject.SecondaryExternalIdAttributeValue}' in {stopwatch.Elapsed}");
 
             return connectedSystemObject;
         }
@@ -334,7 +335,6 @@ namespace JIM.Service.Processors
                     switch (csoAttribute.Type)
                     {
                         case AttributeDataType.Text:
-
                             // find values on the cso of type string that aren't on the imported object and remove them first
                             var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingStringAttributeValues.Any(msav => msav.Id == av.Id)));
@@ -343,10 +343,9 @@ namespace JIM.Service.Processors
                             var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv)));
                             foreach (var newStringValue in newStringValues)
                                 connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
-
                             break;
-                        case AttributeDataType.Number:
 
+                        case AttributeDataType.Number:
                             // find values on the cso of type int that aren't on the imported object and remove them first
                             var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && !importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingIntAttributeValues.Any(msav => msav.Id == av.Id)));
@@ -355,10 +354,9 @@ namespace JIM.Service.Processors
                             var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv)));
                             foreach (var newIntValue in newIntValues)
                                 connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, IntValue = newIntValue });
-
                             break;
-                        case AttributeDataType.DateTime:
 
+                        case AttributeDataType.DateTime:
                             // find values on the cso of type DateTime that aren't on the imported object and remove them first
                             var missingDateTimeAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && !importedObjectAttribute.DateTimeValues.Any(i => i.Equals(av.DateTimeValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingDateTimeAttributeValues.Any(msav => msav.Id == av.Id)));
@@ -367,10 +365,9 @@ namespace JIM.Service.Processors
                             var newDateTimeValues = importedObjectAttribute.DateTimeValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && av.DateTimeValue.Equals(sv)));
                             foreach (var newDateTimeValue in newDateTimeValues)
                                 connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
-
                             break;
-                        case AttributeDataType.Binary:
 
+                        case AttributeDataType.Binary:
                             // find values on the cso of type byte array that aren't on the imported object and remove them first
                             var missingByteArrayAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && !importedObjectAttribute.ByteValues.Any(i => Utilities.Utilities.AreByteArraysTheSame(i, av.ByteValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingByteArrayAttributeValues.Any(msav => msav.Id == av.Id)));
@@ -379,7 +376,6 @@ namespace JIM.Service.Processors
                             var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue)));
                             foreach (var newByteArrayValue in newByteArrayValues)
                                 connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, ByteValue = newByteArrayValue });
-
                             break;
 
                         case AttributeDataType.Reference:
@@ -389,7 +385,6 @@ namespace JIM.Service.Processors
                             break;
 
                         case AttributeDataType.Guid:
-
                             // find values on the cso of type Guid that aren't on the imported object and remove them first
                             var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue)));
                             connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingGuidAttributeValues.Any(msav => msav.Id == av.Id)));
@@ -398,22 +393,19 @@ namespace JIM.Service.Processors
                             var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv)));
                             foreach (var newGuidValue in newGuidValues)
                                 connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, GuidValue = newGuidValue });
-
                             break;
-                        case AttributeDataType.Boolean:
 
+                        case AttributeDataType.Boolean:
                             // there will be only a single value for a bool. is it the same or different?
                             // if different, remove the old value, add the new one
                             // observation: removing and adding sva values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                             // todo: consider having the ability to update values instead of replacing.
-
                             var csAttributeValue = connectedSystemObject.AttributeValues.Single(av => av.Attribute.Name == csoAttributeName);
                             if (csAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
                             {
                                 connectedSystemObject.PendingAttributeValueRemovals.Add(csAttributeValue);
                                 connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
                             }
-
                             break;
                     }
                 }
@@ -474,7 +466,7 @@ namespace JIM.Service.Processors
         /// <summary>
         /// Enumerate each connected system object with an unresolved reference string value and attempts to convert it to a resolved reference to another connected system object.
         /// </summary>
-        private async Task ResolveReferencesAsync(List<ConnectedSystemObject> connectedSystemObjects)
+        private async Task ResolveReferencesAsync(List<ConnectedSystemObject> connectedSystemObjectsToProcess)
         {
             // get all csos with attributes that have unresolved reference values
             // see if we can find a cso that has an external id or secondary external id attribute value matching the string value
@@ -487,7 +479,7 @@ namespace JIM.Service.Processors
             //var csosWithUpdates = new List<ConnectedSystemObject>();
 
             // enumerate just the CSOs with unresolved references, for efficiency
-            foreach (var cso in connectedSystemObjects.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
+            foreach (var cso in connectedSystemObjectsToProcess.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
             {
                 //var cso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, csoId);
                 //if (cso == null)
@@ -498,35 +490,55 @@ namespace JIM.Service.Processors
 
                 var externalIdAttribute = cso.Type.Attributes.Single(a => a.IsExternalId);
                 var secondaryExternalIdAttribute = cso.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
+                var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
 
                 // enumerate just the attribute values for this CSO that are for unresolved references
                 foreach (var referenceAttributeValue in cso.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
                 {
-                    // try and find an object in the Connected System that has an identifier mentioned in the UnresolvedReferenceValue property.
-                    // what type of external id attribute is being used by this Connected System for references?
-                    // most connected systems use the external id attribute when referencing other objects
-                    // but connected systems that use a secondary id use the secondary external id for references (i.e. LDAP and their DNs)
-                    Guid? referencedConnectedSystemObjectId = null;
-                    if (secondaryExternalIdAttribute != null)
-                        referencedConnectedSystemObjectId = await _jim.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(_connectedSystem.Id, secondaryExternalIdAttribute.Id, referenceAttributeValue.UnresolvedReferenceValue);
-                    else
-                        referencedConnectedSystemObjectId = await _jim.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(_connectedSystem.Id, externalIdAttribute.Id, referenceAttributeValue.UnresolvedReferenceValue);
+                    // try and find a cso in the database, or in the processing list we've been passed in, that has an identifier mentioned in the UnresolvedReferenceValue property.
+                    // to do this:
+                    // - work out what type of target attribute the unresolved reference is pointing to
+                    //   most connected systems use the external id attribute when referencing other objects
+                    //   but connected systems that use a secondary id use the secondary external id for references (i.e. LDAP and their DNs).
+                    // - search the processing list for a cso match
+                    // - failing that, search the database for a cso match
+                    // - assign the cso in the reference property, and remove the unresolved reference string property
 
-                    if (referencedConnectedSystemObjectId != null)
+                    // vs linting issue. it doesn't know how to interpret the loop query and thinks UnresolvedReferenceValue may be null.
+                    if (string.IsNullOrEmpty(referenceAttributeValue.UnresolvedReferenceValue))
+                        continue;
+
+                    // try and find the refrenced object by the external id amongst the processing list of CSOs first
+                    ConnectedSystemObject? referencedConnectedSystemObject = null;
+
+                    // couldn't get this to match anything. no idea why
+                    //referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso =>
+                    //    cso.AttributeValues.Any(av =>
+                    //        av.Attribute.Id == externalIdAttributeToUse.Id &&
+                    //        av.StringValue != null &&
+                    //        av.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)));
+
+                    // this does work, but might not be optimal:
+                    // ideally fix the above query so it works and don't use this, but for now, works is works.
+                    referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
+
+                    // no match, try and find a matching CSO in the database
+                    referencedConnectedSystemObject ??= await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttributeToUse.Id, referenceAttributeValue.UnresolvedReferenceValue);
+
+                    if (referencedConnectedSystemObject != null)
                     {
                         // referenced cso found!
-                        referenceAttributeValue.UnresolvedReferenceValue = null;
-                        Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObjectId}");
-                        referenceAttributeValue.ReferenceValueId = referencedConnectedSystemObjectId;
+                        Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
+                        referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
                         referenceAttributeValue.UnresolvedReferenceValue = null;
                         //csosWithUpdates.Add(cso);
                     }
                     else
                     {
-                        // todo: make it a per-connected system setting as to whether or not to raise an error, or ignore. sometimes this is desirable.
                         // reference not found. referenced object probably out of container scope!
-                        var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id);
-                        if (activityRunProfileExecutionItem != null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                        // todo: make it a per-connected system setting as to whether or not to raise an error, or ignore. sometimes this is desirable.
+                        var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == cso);
+                        if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
                         {
                             activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
@@ -538,6 +550,8 @@ namespace JIM.Service.Processors
 
                         Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
                     }
+
+                    var x = 1;
                 }
             }
         }

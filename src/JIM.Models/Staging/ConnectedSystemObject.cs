@@ -73,6 +73,30 @@ namespace JIM.Models.Staging
         /// </summary>
         [NotMapped]
         public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
+
+        [NotMapped]
+        public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue 
+        {  
+            get
+            {
+                if (AttributeValues == null || AttributeValues.Count == 0)
+                    return null;
+
+                return AttributeValues.SingleOrDefault(q => q.Attribute.Id == ExternalIdAttributeId);
+            } 
+        }
+
+        [NotMapped]
+        public ConnectedSystemObjectAttributeValue? SecondaryExternalIdAttributeValue
+        {
+            get
+            {
+                if (AttributeValues == null || AttributeValues.Count == 0)
+                    return null;
+
+                return AttributeValues.SingleOrDefault(q => q.Attribute.Id == SecondaryExternalIdAttributeId);
+            }
+        }
         #endregion
 
         #region constructors
@@ -86,28 +110,6 @@ namespace JIM.Models.Staging
         #endregion
 
         #region public methods
-        public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
-        {
-            if (AttributeValues == null || AttributeValues.Count == 0)
-                return null;
-
-            // todo: work out why we are duplicating the DN attribute!
-
-            return AttributeValues.SingleOrDefault(q => q.AttributeId == ExternalIdAttributeId);
-        }
-
-        /// <summary>
-        /// If the Connector for this Connected System supports a Secondary External Id, then the attribute value can be retrieved here.
-        /// Not all Connectors support this. It depends on the Connected System architecture.
-        /// </summary>
-        public ConnectedSystemObjectAttributeValue? GetSecondaryExternalIdAttributeValue()
-        {
-            if (AttributeValues == null || AttributeValues.Count == 0)
-                return null;
-
-            return AttributeValues.SingleOrDefault(q => q.AttributeId == SecondaryExternalIdAttributeId);
-        }
-
         public void UpdateSingleValuedAttribute<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T newAttributeValue)
         {
             if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)

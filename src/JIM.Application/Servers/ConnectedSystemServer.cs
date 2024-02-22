@@ -410,19 +410,19 @@ namespace JIM.Application.Servers
                 maxResults);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
         public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)

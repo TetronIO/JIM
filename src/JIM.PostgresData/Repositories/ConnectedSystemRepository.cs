@@ -303,21 +303,21 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute).SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == attributeValue.ToLower()));
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
         {
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
         {
             return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
