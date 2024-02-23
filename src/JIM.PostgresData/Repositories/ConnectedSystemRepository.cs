@@ -300,7 +300,17 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
-            return await Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute).SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+            return await Repository.Database.ConnectedSystemObjects
+                .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+                .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+                .ThenInclude(cso => cso.Type)
+                .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+                .ThenInclude(rv => rv.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+                .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)

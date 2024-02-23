@@ -74,9 +74,20 @@
                     {
                         <Text>Unresolved reference: <span Style="@($"color:{Colors.Grey.Darken2};")">@context.ToString()</span></Text>
                     }
+                    else if (context.ReferenceValue != null)
+                    {
+                        <MudChip Color="Color.Default" Size="Size.Small">@context.ReferenceValue.Type.Name</MudChip>
+                        <text> </text>
+                        <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">@context.ReferenceValue.DisplayNameOrId</MudLink> 
+                        
+                        if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
+                        {
+                            <span class="mud-text-secondary"> (@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</span>
+                        }
+                    }
                     else
                     {
-                        @context.ToString()
+                        @context.ToString()                        
                     }
                 </MudTd>
             </RowTemplate>

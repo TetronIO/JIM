@@ -14,7 +14,6 @@ namespace JIM.Utilities
             var withSpaces = string.Join(" ", words);
             return withSpaces;
         }
-
         
         public static bool AreByteArraysTheSame(ReadOnlySpan<byte> array1, ReadOnlySpan<byte> array2)
         {
@@ -24,6 +23,9 @@ namespace JIM.Utilities
 
         public static string GetMetaverseObjectHref(MetaverseObject metaverseObject)
         {
+            if (metaverseObject == null)
+                return string.Empty;
+
             return $"/t/{metaverseObject.Type.Name.ToLower()}/v/{metaverseObject.Id}";
         }
         public static string? GetMetaverseObjectHrefText(MetaverseObject metaverseObject)
