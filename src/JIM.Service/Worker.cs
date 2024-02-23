@@ -1,7 +1,6 @@
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.LDAP;
-using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -12,7 +11,7 @@ using Serilog;
 namespace JIM.Service
 {
     // **************************************************************************************
-    // Junctional Identity Manager - Sync Service
+    // Junctional Identity Manager - Background Worker
     //
     // Needs to:
     // - Loop until asked to close down

@@ -34,31 +34,31 @@ namespace JIM.Connectors.LDAP
         private readonly string _settingDirectoryServerPort = "Port";
         //private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
         private readonly string _settingConnectionTimeout = "Connection Timeout";
-        private readonly string _settingRootDn = "Root DN";
         private readonly string _settingUsername = "Username";
         private readonly string _settingPassword = "Password";
+        private readonly string _settingAuthType = "Authentication Type";
         private readonly string _settingCreateContainersAsNeeded = "Create containers as needed?";
 
         public List<ConnectorSetting> GetSettings()
         {
             return new List<ConnectorSetting>
             {
-                new ConnectorSetting { Name = "Directory Server", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = "Directory Server Info", Description = "Enter Active Directory domain controller, or LDAP server details below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
-                new ConnectorSetting { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new ConnectorSetting { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultIntValue = 389, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
-                //new ConnectorSetting { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
-                new ConnectorSetting { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
-                new ConnectorSetting { Name = _settingRootDn, Required = true, Description = "The forest/domain root in DN format, i.e. DC=corp,DC=subatomic,DC=com", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new() { Name = "Directory Server", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
+                new() { Name = "Directory Server Info", Description = "Enter Active Directory domain controller, or LDAP server details below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
+                new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultIntValue = 389, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
+                //new() { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+                new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
-                new ConnectorSetting { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
+                new() { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
-                new ConnectorSetting { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
-                new ConnectorSetting { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
+                new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
+                new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
+                new() { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
+                new() { Name = _settingAuthType, Required = true, Description = "What type of authentication is required for this credential?", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.SETTING_AUTH_TYPE_SIMPLE, LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM }},
 
-                new ConnectorSetting { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
-                new ConnectorSetting { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
+                new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
+                new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
             };
         }
 
@@ -67,6 +67,7 @@ namespace JIM.Connectors.LDAP
         /// </summary>
         public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
+            Log.Verbose($"ValidateSettingValues() called for {Name}");
             var response = new List<ConnectorSettingValueValidationResult>();
 
             // validate that we can connect to the directory service with the supplied setting credentials
@@ -99,11 +100,7 @@ namespace JIM.Connectors.LDAP
             if (_connection == null)
                 throw new Exception("No connection available to get schema with");
 
-            var rootDnSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRootDn);
-            if (rootDnSettingValue == null || string.IsNullOrEmpty(rootDnSettingValue.StringValue))
-                throw new InvalidSettingValuesException($"No setting value for {_settingRootDn}!");
-
-            var ldapConnectorSchema = new LdapConnectorSchema(_connection, rootDnSettingValue.StringValue);
+            var ldapConnectorSchema = new LdapConnectorSchema(_connection);
             var schema = await ldapConnectorSchema.GetSchemaAsync();
             CloseImportConnection();
             return schema;
@@ -117,11 +114,7 @@ namespace JIM.Connectors.LDAP
             if (_connection == null)
                 throw new Exception("No connection available to get partitions with");
 
-            var rootDnSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRootDn);
-            if (rootDnSettingValue == null || string.IsNullOrEmpty(rootDnSettingValue.StringValue))
-                throw new InvalidSettingValuesException($"No setting value for {_settingRootDn}!");
-
-            var ldapConnectorSchema = new LdapConnectorPartitions(_connection, rootDnSettingValue.StringValue);
+            var ldapConnectorSchema = new LdapConnectorPartitions(_connection);
             var partitions = await ldapConnectorSchema.GetPartitionsAsync();
             CloseImportConnection();
             return partitions;
@@ -131,23 +124,38 @@ namespace JIM.Connectors.LDAP
         #region IConnectorImportUsingCalls members
         public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
+            Log.Verbose("OpenImportConnection() called");
             var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
             var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
             var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
             var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
-            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);            
+            var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
+            var authTypeSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingAuthType);
 
             if (username == null || string.IsNullOrEmpty(username.StringValue) ||
                 password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
+                authTypeSettingValue == null || string.IsNullOrEmpty(authTypeSettingValue.StringValue) ||
                 directoryServer == null || string.IsNullOrEmpty(directoryServer.StringValue) ||
                 directoryServerPort == null || !directoryServerPort.IntValue.HasValue ||
                 timeoutSeconds == null || !timeoutSeconds.IntValue.HasValue)
-                throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername}, or {_settingPassword}");
+                throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername},{_settingPassword}, or {_settingAuthType}.");
 
-            var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue);
+            logger.Debug($"OpenImportConnection() Trying to connect to '{directoryServer.StringValue}' on port '{directoryServerPort.IntValue}' with username '{username.StringValue}' via auth type {authTypeSettingValue.StringValue}.");
+            var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
             var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
-            _connection = new LdapConnection(identifier, credential, AuthType.Basic);
+
+            // allow the user to specify what type of authentication to perform against the supplied credential.
+            string authTypeSettingValueString = authTypeSettingValue.StringValue;
+            var authTypeEnumValue = AuthType.Anonymous;
+            if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_SIMPLE)
+                authTypeEnumValue = AuthType.Basic;
+            else if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM)
+                authTypeEnumValue = AuthType.Ntlm;
+
+            _connection = new LdapConnection(identifier, credential, authTypeEnumValue);
             _connection.SessionOptions.ProtocolVersion = 3;
+            //_connection.SessionOptions.SecureSocketLayer = false; // experimental. might use later when support for encrypted connections has been tested.
+            //_connection.SessionOptions.VerifyServerCertificate += delegate { return true; }; // experimental, as above.
             _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. consider wrapping this in a time-limited, cancellable task instead
             _connection.Bind();
         }
@@ -207,6 +215,7 @@ namespace JIM.Connectors.LDAP
             }
             catch (Exception ex)
             {
+                Log.Error(ex, $"TestDirectoryConnectivity failed");
                 return new ConnectorSettingValueValidationResult
                 {
                     ErrorMessage = $"Unable to connect. Message: {ex.Message}",

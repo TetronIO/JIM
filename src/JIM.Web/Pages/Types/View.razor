@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
 @using JIM.Models.Core
+@using Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
@@ -46,7 +47,7 @@
                         }
                         else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
                         {
-                            <MudLink Href="@Helpers.GetMetaverseObjectUrl(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</MudLink>
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</MudLink>
                         }
                     </MudField>
                 </MudItem>

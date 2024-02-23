@@ -73,6 +73,52 @@ namespace JIM.Models.Staging
         /// </summary>
         [NotMapped]
         public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
+
+        [NotMapped]
+        public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue 
+        {  
+            get
+            {
+                if (AttributeValues == null || AttributeValues.Count == 0)
+                    return null;
+
+                return AttributeValues.SingleOrDefault(q => q.Attribute.Id == ExternalIdAttributeId);
+            } 
+        }
+
+        [NotMapped]
+        public ConnectedSystemObjectAttributeValue? SecondaryExternalIdAttributeValue
+        {
+            get
+            {
+                if (AttributeValues == null || AttributeValues.Count == 0)
+                    return null;
+
+                return AttributeValues.SingleOrDefault(q => q.Attribute.Id == SecondaryExternalIdAttributeId);
+            }
+        }
+
+        [NotMapped]
+        public string? DisplayNameOrId
+        {
+            get
+            {
+                if (AttributeValues == null || AttributeValues.Count == 0)
+                    return null;
+
+                // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that are less standards baseds
+                // we may have to look at supporting a configurable attribute on the Connected System to use as the label.
+                var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
+                if (av != null && !string.IsNullOrEmpty(av.StringValue))
+                    return av.StringValue;
+
+                // no displayName attribute on this object, return the external id instead
+                if (ExternalIdAttributeValue != null)
+                    return ExternalIdAttributeValue.ToString();
+
+                return null;
+            }
+        }
         #endregion
 
         #region constructors
@@ -86,28 +132,6 @@ namespace JIM.Models.Staging
         #endregion
 
         #region public methods
-        public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
-        {
-            if (AttributeValues == null || AttributeValues.Count == 0)
-                return null;
-
-            // todo: work out why we are duplicating the DN attribute!
-
-            return AttributeValues.SingleOrDefault(q => q.AttributeId == ExternalIdAttributeId);
-        }
-
-        /// <summary>
-        /// If the Connector for this Connected System supports a Secondary External Id, then the attribute value can be retrieved here.
-        /// Not all Connectors support this. It depends on the Connected System architecture.
-        /// </summary>
-        public ConnectedSystemObjectAttributeValue? GetSecondaryExternalIdAttributeValue()
-        {
-            if (AttributeValues == null || AttributeValues.Count == 0)
-                return null;
-
-            return AttributeValues.SingleOrDefault(q => q.AttributeId == SecondaryExternalIdAttributeId);
-        }
-
         public void UpdateSingleValuedAttribute<T>(ConnectedSystemObjectTypeAttribute connectedSystemAttribute, T newAttributeValue)
         {
             if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
@@ -211,6 +235,15 @@ namespace JIM.Models.Staging
         {
             foreach (var attributeValue in AttributeValues.Where(av => av.Attribute.Id == connectedSystemAttribute.Id))
                 RemoveMultiValuedAttributeValue(attributeValue);
+        }
+
+        public ConnectedSystemObjectAttributeValue? GetAttributeValue(string attributeName)
+        {
+            var attributeValue = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase));
+            if (attributeValue != null)
+                return attributeValue;
+
+            return null;
         }
         #endregion
     }

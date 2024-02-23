@@ -1,9 +1,11 @@
 ﻿using JIM.Models.Security;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JIM.Models.Core
 {
     public class MetaverseObject
     {
+        #region accessors
         public Guid Id { get; set; }
 
         public DateTime Created { get; set; }
@@ -20,6 +22,7 @@ namespace JIM.Models.Core
 
         public List<MetaverseObjectChange> Changes { get; set; }
 
+        [NotMapped]
         public string? DisplayName 
         { 
             get
@@ -35,7 +38,9 @@ namespace JIM.Models.Core
                 return null;
             } 
         }
+        #endregion
 
+        #region constructors
         public MetaverseObject()
         {
             Created = DateTime.UtcNow;
@@ -43,7 +48,9 @@ namespace JIM.Models.Core
             AttributeValues = new List<MetaverseObjectAttributeValue>();
             Changes = new List<MetaverseObjectChange>();
         }
+        #endregion
 
+        #region public methods
         public MetaverseObjectAttributeValue? GetAttributeValue(string name)
         {
             return AttributeValues.SingleOrDefault(q => q.Attribute.Name == name);
@@ -53,5 +60,6 @@ namespace JIM.Models.Core
         {
             return AttributeValues.Any(q => q.Attribute.Name == name);
         }
+        #endregion
     }
 }

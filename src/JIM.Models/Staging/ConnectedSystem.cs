@@ -61,5 +61,10 @@ namespace JIM.Models.Staging
             SettingValues = new List<ConnectedSystemSettingValue>();
             Created = DateTime.UtcNow;
         }
+
+        public override string ToString()
+        {
+            return $"{Name} ({Id})";
+        }
     }
 }

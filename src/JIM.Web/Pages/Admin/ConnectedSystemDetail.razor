@@ -94,10 +94,17 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                 {
-                                    <MudSelect @bind-Value="settingValue.StringValue" HelperText="@settingValue.Setting.Description" Label="@settingValue.Setting.Name" Variant="Variant.Outlined" Class="mb-5">
+                                    <MudSelect 
+                                            @bind-Value="settingValue.StringValue" 
+                                            HelperText="@settingValue.Setting.Description" 
+                                            Label="@settingValue.Setting.Name" 
+                                            Variant="Variant.Outlined" 
+                                            Class="mb-5" 
+                                            Required="@settingValue.Setting.Required"
+                                            RequiredError="@($"A {settingValue.Setting.Name} is required")">
                                         @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
                                         {
-                                            <option value="@dropDownValue">@dropDownValue</option>
+                                            <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
                                         }
                                     </MudSelect>
                                 }
@@ -432,7 +439,7 @@
                     @if (connectedSystem.ConnectorDefinition.SupportsPartitions && connectedSystem.Partitions != null)
                     {
                         <MudSelect T="ConnectedSystemPartition" @bind-Value="newRunProfile.Partition" Label="Partition" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="@connectedSystem.ConnectorDefinition.SupportsPartitions" RequiredError="A run profile partition is required">
-                            @foreach (ConnectedSystemPartition partition in connectedSystem.Partitions)
+                            @foreach (ConnectedSystemPartition partition in connectedSystem.Partitions.Where(p => p.Selected))
                             {
                                 <MudSelectItem Value="@partition" />
                             }

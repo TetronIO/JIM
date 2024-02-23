@@ -27,14 +27,6 @@ namespace JIM.Web
             return urlParam.Replace("-", " ");
         }
 
-        public static string GetMetaverseObjectUrl(MetaverseObject metaverseObject)
-        {
-            if (metaverseObject == null)
-                return string.Empty;
-
-            return $"/t/{ConvertToUrlParam(metaverseObject.Type.Name)}/v/{metaverseObject.Id}";
-        }
-
         /// <summary>
         /// Returns the MetaverseObject for the currently signed-in JIM.Web user.
         /// </summary>

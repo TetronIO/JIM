@@ -117,7 +117,7 @@ namespace JIM.Application.Servers
             SanitiseConnectedSystemUserInput(connectedSystem);
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -133,6 +133,8 @@ namespace JIM.Application.Servers
             if (connectedSystem == null)
                 throw new ArgumentNullException(nameof(connectedSystem));
 
+            Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
+
             // are the settings valid?
             var validationResults = ValidateConnectedSystemSettings(connectedSystem);
             connectedSystem.SettingValuesValid = !validationResults.Any(q => q.IsValid == false);
@@ -140,7 +142,7 @@ namespace JIM.Application.Servers
             connectedSystem.LastUpdated = DateTime.UtcNow;
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -208,9 +210,7 @@ namespace JIM.Application.Servers
             // especially when we need to support uploaded connectors, not just built-in ones
 
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            {
                 return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
-            }
 
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
         }
@@ -240,7 +240,7 @@ namespace JIM.Application.Servers
             ValidateConnectedSystemParameter(connectedSystem);
 
             // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -326,7 +326,7 @@ namespace JIM.Application.Servers
             // especially when we need to support uploaded connectors, not just built-in ones
 
             // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -410,19 +410,24 @@ namespace JIM.Application.Servers
                 maxResults);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
         }
 
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByExternalIdAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
         {
-            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByExternalIdAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+        }
+
+        public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
+        {
+            return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(connectedSystemId , connectedSystemAttributeId, attributeValue);
         }
 
         public async Task<int> GetConnectedSystemObjectCountAsync()
@@ -435,11 +440,47 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
         }
 
+        //public async Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId)
+        //{
+        //    var stopwatch = Stopwatch.StartNew();
+        //    var ids = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(connectedSystemId);
+        //    stopwatch.Stop();
+        //    Log.Debug($"GetConnectedSystemObjectsWithUnresolvedReferencesAsync: completed for CS id {connectedSystemId} in {stopwatch.Elapsed}");
+        //    return ids;
+        //}
+
         public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
+            // persist the cso first, so there's something to reference when persisting attribute values later
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
 
-            // now populate the activity run profile execution item change object with the cso attribute values
+            // add a change object to the run profile execution item, so the change is logged.
+            // it will be persisted higher up the calling stack as part of the activity.
+            AddConnectedSystemObjectChange(connectedSystemObject, activityRunProfileExecutionItem);
+        }
+
+        /// <summary>
+        /// Bulk persists ConnectdSystemObjects and creates a corresponding change object for it as part of the activity.
+        /// </summary>
+        public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
+        {
+            // bulk persist csos
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
+
+            // add a change object to the relevant activity run profile execution item for each cso.
+            // they will be persisted further up the call stack, when the activity gets persisted.
+            foreach (var cso in connectedSystemObjects)
+            {
+                var activityRunProfileExecutionItem = activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+                    throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! Should have been created further up the stack.");
+
+                AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem);
+            }
+        }
+
+        private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+        {
+            // now populate the connectd system object change object with the cso attribute values
             // create a change object we can add attribute changes to
             var change = new ConnectedSystemObjectChange
             {
@@ -453,8 +494,6 @@ namespace JIM.Application.Servers
 
             foreach (var attributeValue in connectedSystemObject.AttributeValues)
                 AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
-
-            // don't persist the activity run profile exection, let that be done further up the stack in bulk for efficiency.
         }
 
         public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
@@ -558,7 +597,7 @@ namespace JIM.Application.Servers
             var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemObjectAttributeValue.Attribute.Id);
             if (attributeChange == null)
             {
-                // create the attribute change object
+                // create the attribute change object that provides an audit trail of changes to a cso's attributes
                 attributeChange = new ConnectedSystemObjectChangeAttribute
                 {
                     Attribute = connectedSystemObjectAttributeValue.Attribute,
@@ -652,7 +691,7 @@ namespace JIM.Application.Servers
                 throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystemRunProfile.Name,
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
@@ -673,7 +712,7 @@ namespace JIM.Application.Servers
                 return;
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetName = connectedSystemRunProfile.Name,
                 ConnectedSystemRunType = connectedSystemRunProfile.RunType,
@@ -692,7 +731,7 @@ namespace JIM.Application.Servers
                 throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Activity
+            var activity = new Models.Activities.Activity
             {
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                 TargetOperationType = ActivityTargetOperationType.Update,

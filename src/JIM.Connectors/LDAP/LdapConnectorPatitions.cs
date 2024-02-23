@@ -7,19 +7,24 @@ namespace JIM.Connectors.LDAP
     internal class LdapConnectorPartitions
     {
         private readonly LdapConnection _connection;
-        private readonly string _root;
+        private string _partitionsDn = null!;
 
-        internal LdapConnectorPartitions(LdapConnection ldapConnection, string rootDistinguishedName) 
+        internal LdapConnectorPartitions(LdapConnection ldapConnection) 
         {
             _connection = ldapConnection;
-            _root = rootDistinguishedName;
         }
 
         internal async Task<List<ConnectorPartition>> GetPartitionsAsync()
         {
-            return await Task.Run(() => {
-                var dn = $"CN=Partitions,CN=Configuration,{_root}";
-                var request = new SearchRequest(dn, "(objectClass=crossRef)", SearchScope.OneLevel);
+            return await Task.Run(() => 
+            {
+                // get the partitions DN by deriving it from the configuration naming context
+                var configurationNamingContext = GetConfigurationNamingContext();
+                if (string.IsNullOrEmpty(configurationNamingContext))
+                    throw new Exception($"Couldn't get configuration naming context from rootDSE.");
+                _partitionsDn = $"CN=Partitions,{configurationNamingContext}";
+
+                var request = new SearchRequest(_partitionsDn, "(objectClass=crossRef)", SearchScope.OneLevel);
                 var response = (SearchResponse)_connection.SendRequest(request);
                 var partitions = new List<ConnectorPartition>();
 
@@ -63,7 +68,7 @@ namespace JIM.Connectors.LDAP
             var totalEntries = entries.Count;
 
             // move top-level containers to the new list
-            var topLevelContainers = entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(_root, StringComparison.CurrentCultureIgnoreCase)).ToList();
+            var topLevelContainers = entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(partition.Name, StringComparison.CurrentCultureIgnoreCase)).ToList();
             entries.RemoveAll(q => topLevelContainers.Contains(q));
             foreach (var topLevelContainer in topLevelContainers)
                 containers.Add(new ConnectorContainer(topLevelContainer.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(topLevelContainer, "name")));
@@ -89,6 +94,29 @@ namespace JIM.Connectors.LDAP
                 ProcessContainerNodeForHierarchyRecursively(entries, newChildContainer, ref entriesProcessedCounter);
                 containerToLookForChildrenFor.ChildContainers = containerToLookForChildrenFor.ChildContainers.OrderBy(q => q.Name).ToList();
             }
+        }
+
+        private string? GetConfigurationNamingContext()
+        {
+            // get the the configuration naming context from an attribute on the rootDSE
+            var request = new SearchRequest() { Scope = SearchScope.Base };
+            request.Attributes.Add("configurationNamingContext");
+            var response = (SearchResponse)_connection.SendRequest(request);
+
+            if (response.ResultCode != ResultCode.Success)
+            {
+                Console.WriteLine($"GetConfigurationNamingContext: No success. Result code: {response.ResultCode}");
+                return null;
+            }
+
+            if (response.Entries.Count == 0)
+            {
+                Console.WriteLine("GetConfigurationNamingContext: Didn't get any results!");
+                return null;
+            }
+
+            var entry = response.Entries[0];
+            return LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "configurationNamingContext");
         }
     }
 }

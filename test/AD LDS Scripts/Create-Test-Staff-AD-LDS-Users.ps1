@@ -1,25 +1,21 @@
 Set-StrictMode -Version 2
 $ErrorActionPreference = "Stop"
-Import-Module ActiveDirectory -ErrorAction Stop
 Clear-Host
 
 ##[ VARIABLES ]################################################################
 
 # per-run specifics! set these!
-$users_to_create = 40
-$organisation_name = "SUBATOMIC"
-$upn_prefix = "con"
-$domain = "corp.subatomic.com"
-$domain_netbios = "CORP"
-$ou = "OU=Contractors,OU=Corp,DC=corp,DC=subatomic,DC=com"
-$default_password = "1Password1"
+$users_to_create = 100
+$upn_prefix = "s"
+$ou = "CN=Staff,CN=Users,CN=RD,DC=Borton,DC=Com"
+$domain = "rd.borton.com"
 $what_if_mode = $false
 
 # data sources and destinations
 $male_first_name_file = "../Data/Firstnames-m.csv"     # Format: FirstName
 $female_first_name_file = "../Data/Firstnames-f.csv"   # Format: FirstName
-$last_name_file = "../Data/Lastnames-fr.csv"           # Format: LastName
-$output_filename = "ContractorUsers.csv"
+$last_name_file = "../Data/Lastnames.csv"           # Format: LastName
+$output_filename = "StaffUsers.csv"
 
 # read in the source data
 $first_names_male = Import-CSV $male_first_name_file
@@ -42,7 +38,7 @@ $departments = (
     @{"Name" = "Purchasing"; Positions = ("Manager", "Coordinator", "Clerk", "Purchaser")}
 )
 
-$companies = ("SwiftTech Solutions", "BlueBloom Innovations", "StellarCraft")
+$companies = ("Borton R&D", "Celestial Science", "Phase Remediations")
 
 $country_gb = @{"Code" = "GB"; 
     Locations = (
@@ -59,40 +55,8 @@ $country_gb = @{"Code" = "GB";
         })
 }
 
-$country_fr = @{"Code" = "FR"; 
-    Locations = (
-        @{"Name" = "Paris"; "State" = "Île-de-France"; Offices = (
-                @{"Name" = "Le Marais Tower"; "Street" = "210 Rue Saint-Maur"; "PostalCode" = "75010"},
-                @{"Name" = "La Défense"; "Street" = "144 Rue Lecourbe"; "PostalCode" = "75015"},
-                @{"Name" = "La Belle Étoile Plaza"; "Street" = "9 Rue Louis Willaume, Bois-Colombes"; "PostalCode" = "92270"}
-            );
-        },
-        @{"Name" = "Nice"; "State" = "Provence-Alpes-Côte d'Azur"; Offices = (
-                @{"Name" = "Le Riviera Tower"; "Street" = "47 Boulevard Victor Hugo"; "PostalCode" = "06000"},
-                @{"Name" = "La Promenade Plaza"; "Street" = "21 Rue Auguste Gal"; "PostalCode" = "06300"}
-            )
-        })
-}
-
-$country_it = @{"Code" = "IT"; 
-    Locations = (
-        @{"Name" = "Rome"; "State" = "Lazio"; Offices = (
-                @{"Name" = "Il Colosseo Tower"; "Street" = "Salita del Grillo, 17"; "PostalCode" = "00184"},
-                @{"Name" = "La Piazza Navona Plaza"; "Street" = "Via Nazionale, 243"; "PostalCode" = "00184"},
-                @{"Name" = "Il Vaticano Business Center"; "Street" = "Via Sicilia, 154"; "PostalCode" = "00187"}
-            );
-        },
-        @{"Name" = "Bologna"; "State" = "Emilia-Romagna"; Offices = (
-                @{"Name" = "La Torre di San Petronio"; "Street" = "Via Paradiso, 7"; "PostalCode" = "40122"},
-                @{"Name" = "Il Centro Galleria"; "Street" = "Via Morandi, 6/B"; "PostalCode" = "40124"}
-            )
-        })
-}
-
 $countries = New-Object System.Collections.ArrayList
 $countries.Add($country_gb) | Out-Null
-#$countries.Add($country_fr) | Out-Null
-#$countries.Add($country_it) | Out-Null
           
 ##[ CREATE THE USER DATA ]#####################################################
 
@@ -111,8 +75,6 @@ do {
     $account_name = "$upn_prefix-" + $first_name.Substring(0, 1).ToLower() + $last_name.Substring(0, 1).ToLower() + "-" + ($users_created + 1)
     
     # other properties
-    $enabled = $true
-    $password_never_expires = $true
     $mail_nickname = "$first_name.$last_name".ToLower()
     $email = "$mail_nickname@$domain"
     $home_phone = "0203 " + (Get-Random -Minimum 221 -Maximum 986) + " " + (Get-Random -Minimum 1000 -Maximum 9999)
@@ -130,7 +92,6 @@ do {
     $employee_id = Get-Random -Minimum 10000000 -Maximum 99999999    
     $company_index = Get-Random -Minimum 0 -Maximum $companies.Count
     $company = $companies[$company_index]
-    #$country_index = Get-Random -Minimum 0 -Maximum $countries.Count
     $country_index = 0
     $country = $countries[$country_index]
     $location_index = Get-Random -Minimum 0 -Maximum $country.Locations.Count
@@ -142,22 +103,6 @@ do {
     $initials_chance = Get-Random -Minimum 0 -Maximum 10
     if ($initials_chance -gt 4) {
         $initials = $null
-    }
-
-    $hide_from_address_lists = $null
-    $hfal_chance = Get-Random -Minimum 0 -Maximum 10
-    if ($hfal_chance -le 3) {
-        $hide_from_address_lists = $false
-        $hfal2_chance = Get-Random -Minimum 0 -Maximum 10
-        if ($hfal2_chance -le 4) {
-            $hide_from_address_lists = $true
-        }
-    }
-
-    $sip_address = "sip:$email"
-    $sip_address_chance = Get-Random -Minimum 0 -Maximum 10
-    if ($sip_address_chance -gt 4) {
-        $sip_address = $null
     }
 
     $other_home_phone = "0209 " + (Get-Random -Minimum 221 -Maximum 986) + " " + (Get-Random -Minimum 1000 -Maximum 9999)
@@ -178,100 +123,118 @@ do {
         $pager = $null
     }
 
-    $target_address = "SMTP:$email"
-    $target_address_chance = Get-Random -Minimum 0 -Maximum 10
-    if ($target_address_chance -le 2) {
-        $target_address = $null
-    }
-
-    $text_encoded_or_address = "C=$($country.Code);A= ;P=$domain_netbios;O=$organisation_name;S=$last_name;G=$first_name;"
-    $legacy_exchange_dn = "/o=$organisation_name/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=$display_name"
-    $legacy_attribs_chance = Get-Random -Minimum 0 -Maximum 10
-    if ($legacy_attribs_chance -le 3) {
-        $text_encoded_or_address = $null
-        $legacy_exchange_dn = $null
-    }
-
-    $other_attributes = @{"mailNickname" = $mail_nickname;}
-    if ($null -ne $other_home_phone -and $what_if_mode -eq $false) {
-        $other_attributes.Add("otherHomePhone", $other_home_phone)
-    }
-    if ($null -ne $other_telephone -and $what_if_mode -eq $false) {
-        $other_attributes.Add("otherTelephone", $other_telephone)
-    }
-    if ($null -ne $pager -and $what_if_mode -eq $false) {
-        $other_attributes.Add("pager", $pager)
-    }
-
-    # EXCHANGE SCHEMA EXTENSIONS REQUIRED!
-    if ($null -ne $hide_from_address_lists -and $what_if_mode -eq $false) {
-        $other_attributes.Add("msExchHideFromAddressLists", $hide_from_address_lists)
-    }
-    if ($null -ne $target_address -and $what_if_mode -eq $false) {
-        $other_attributes.Add("targetAddress", $target_address)
-    }
-    if ($null -ne $text_encoded_or_address -and $what_if_mode -eq $false) {
-        $other_attributes.Add("textEncodedOrAddress", $text_encoded_or_address)
-    }
-    if ($null -ne $legacy_exchange_dn -and $what_if_mode -eq $false) {
-        $other_attributes.Add("legacyExchangeDN", $legacy_exchange_dn)
-    }
-
-    # SKYPE FOR BUSINESS SCHEMA EXTENSIONS REQUIRED!
-    #if ($null -ne $sip_address -and $what_if_mode -eq $false) {
-    #    $other_attributes.Add("msRTCSIP-PrimaryUserAddress", $sip_address)
-    #}
-
     # have we created a unique user?
     if ($null -ne ($csv | Where-Object { $_.DisplayName -eq $display_name })) {
         Write-Output "Duplicate user '$display_name' created. Skipping."
         continue;
     }
 
-    # create the user in AD
-    $exists = $false
-    try { $exists = Get-ADUser -LDAPFilter "(sAMAccountName=$account_name)" } 
-    catch { } 
-
+    # create the user in AD LDS
+    [ADSI]$user = "LDAP://localhost/CN=$account_name,$ou"
+    $exists = $null -ne $user.Guid
     if (!$exists) {
         if ($what_if_mode) {
             Write-Output "Whatif: Would have created $account_name user"
         } else {
             # Set all variables according to the table names in the Excel  
             # sheet / import CSV. The names can differ in every project, but  
-            # if the names change, make sure to change it below as well. 
-            $account_password = ConvertTo-SecureString -AsPlainText $default_password -force 
+            # if the names change, make sure to change it below as well.
+            [ADSI]$user_container = "LDAP://localhost/CN=Staff,CN=Users,CN=RD,DC=Borton,DC=Com"
+            $user = $user_container.Create("inetOrgPerson","CN=$account_name")
+            $user.put("msDS-UserDontExpirePassword", $true)
+            $user.put("msDS-UserAccountDisabled", $false)
+            
+            if ($null -ne $company) {
+                $user.put("company", $company)
+            }
+            if ($null -ne $country.Code) {
+                $user.put("c", $country.Code)
+            }
+            if ($null -ne $department) {
+                $user.put("department", $department)
+            }
+            if ($null -ne $display_name) {
+                $user.put("displayName", $display_name)
+            }
+            if ($null -ne $employee_id) {
+                $user.put("employeeID", $employee_id)
+            }
+            #$user.put("facsimileTelephoneNumber", $fax)
+            if ($null -ne $first_name) {
+                $user.put("givenName", $first_name)
+            }
+            if ($null -ne $last_name) {
+                $user.put("sn", $last_name)
+            }
+            if ($null -ne $home_phone) {
+                $user.put("homePhone", $home_phone)
+            }
+            #if ($null -ne $initials) {
+            #    $user.put("initials", $initials)
+            #}
+            if ($null -ne $mobile_phone) {
+                $user.put("mobile", $mobile_phone)
+            }
+            if ($null -ne $office.Street) {
+                $user.put("streetAddress", $office.Street)
+            }
+            if ($null -ne $location.State) {
+                $user.put("st", $location.State)
+            }
+            if ($null -ne $office.PostalCode) {
+                $user.put("postalCode", $office.PostalCode)
+            }
+            if ($null -ne $office_phone) {
+                $user.put("telephoneNumber", $office_phone)
+            }
+            if ($null -ne $jobTitle) {
+                $user.put("title", $jobTitle)
+            }
+            if ($null -ne $email) {
+                $user.put("userPrincipalName", $email)
+                $user.put("mail", $email)
+            }
+            if ($null -ne $pager) {
+                $user.put("pager", $pager)
+            }
+            if ($null -ne $other_home_phone) {
+                $user.put("otherHomePhone", $other_home_phone)
+            }
+            if ($null -ne $other_telephone) {
+                $user.put("otherTelephone", $other_telephone)
+            }
+            $user.setinfo()
 
-            New-ADUser `
-            -Name $account_name `
-            -SamAccountName $account_name `
-            -Company $company `
-            -Country $country.Code `
-            -Department $department `
-            -DisplayName $display_name `
-            -EmployeeID $employee_id `
-            -Fax $fax `
-            -GivenName $first_name `
-            -Surname $last_name `
-            -HomePhone $home_phone `
-            -Initials $initials `
-            -City $location.Name `
-            -MobilePhone $mobile_phone `
-            -Office $office.Name `
-            -StreetAddress $office.Street `
-            -State $location.State `
-            -PostalCode $office.PostalCode `
-            -OfficePhone $office_phone `
-            -Title $jobTitle `
-            -AccountPassword $account_password `
-            -Enabled $enabled `
-            -PasswordNeverExpires $password_never_expires `
-            -UserPrincipalName $email `
-            -EmailAddress $email `
-            -Path $ou `
-            -OtherAttributes $other_attributes        
+            #New-ADUser `
+            #-Name $account_name `
+            #####-SamAccountName $account_name `
+            #-Company $company `
+            #-Country $country.Code `
+            #-Department $department `
+            #-DisplayName $display_name `
+            #-EmployeeID $employee_id `
+            #-Fax $fax `
+            #-GivenName $first_name `
+            #-Surname $last_name `
+            #-HomePhone $home_phone `
+            #-Initials $initials `
+            #####-City $location.Name `
+            #-MobilePhone $mobile_phone `
+            #####-Office $office.Name `
+            #-StreetAddress $office.Street `
+            #-State $location.State `
+            #-PostalCode $office.PostalCode `
+            #-OfficePhone $office_phone `
+            #-Title $jobTitle `
+            ####-AccountPassword $account_password `
+            #####-Enabled $enabled `
+            #####-PasswordNeverExpires $password_never_expires `
+            #-UserPrincipalName $email `
+            #-EmailAddress $email `
+            #####-Path $ou `
+            #####-OtherAttributes $other_attributes
 
-            Write-Output "Created $account_name user"
+            Write-Output "Created user: $account_name"
         }
     } 
 
@@ -287,31 +250,23 @@ do {
     $row | Add-Member -MemberType NoteProperty -Name "HomePhone" -Value $home_phone
     $row | Add-Member -MemberType NoteProperty -Name "Initials" -Value $initials
     $row | Add-Member -MemberType NoteProperty -Name "City" -Value $location.Name
-    $row | Add-Member -MemberType NoteProperty -Name "Domain" -Value $domain_netbios
+    $row | Add-Member -MemberType NoteProperty -Name "Domain" -Value $domain
     $row | Add-Member -MemberType NoteProperty -Name "MobilePhone" -Value $mobile_phone
     $row | Add-Member -MemberType NoteProperty -Name "Office" -Value $office.Name
     $row | Add-Member -MemberType NoteProperty -Name "StreetAddress" -Value $office.Street
     $row | Add-Member -MemberType NoteProperty -Name "PostalCode" -Value $office.PostalCode
     $row | Add-Member -MemberType NoteProperty -Name "OfficePhone" -Value $office_phone
     $row | Add-Member -MemberType NoteProperty -Name "Title" -Value $jobTitle
-    $row | Add-Member -MemberType NoteProperty -Name "Enabled" -Value $enabled
-    $row | Add-Member -MemberType NoteProperty -Name "PasswordNeverExpires" -Value $password_never_expires
     $row | Add-Member -MemberType NoteProperty -Name "UserPrincipalName" -Value $email
-    $row | Add-Member -MemberType NoteProperty -Name "mailNickname" -Value $mail_nickname
     $row | Add-Member -MemberType NoteProperty -Name "st" -Value $location.State
     $row | Add-Member -MemberType NoteProperty -Name "otherHomePhone" -Value $other_home_phone
     $row | Add-Member -MemberType NoteProperty -Name "otherTelephone" -Value $other_telephone
     $row | Add-Member -MemberType NoteProperty -Name "pager" -Value $pager
-    $row | Add-Member -MemberType NoteProperty -Name "msExchHideFromAddressLists" -Value $hide_from_address_lists
-    $row | Add-Member -MemberType NoteProperty -Name "targetAddress" -Value $target_address
-    $row | Add-Member -MemberType NoteProperty -Name "textEncodedOrAddress" -Value $text_encoded_or_address
-    $row | Add-Member -MemberType NoteProperty -Name "legacyExchangeDN" -Value $legacy_exchange_dn
-    #$row | Add-Member -MemberType NoteProperty -Name "msRTCSIP-PrimaryUserAddress" -Value $sip_address
-
+    
     $csv += $row
     $users_created++
 }
 until ($users_created -eq $users_to_create)
 
 $csv | Export-Csv $output_filename -NoTypeInformation
-Write-Output "All done. Created $users_to_create users in $domain"
+Write-Output "All done. Created $users_to_create users in: $ou"

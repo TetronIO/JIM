@@ -92,10 +92,9 @@ namespace JIM.Connectors.LDAP
             return int.Parse(stringValue);
         }
 
-        internal static SearchResultEntry? GetSchemaEntry(LdapConnection connection, string root, string query)
+        internal static SearchResultEntry? GetSchemaEntry(LdapConnection connection, string schemaRootDn, string query)
         {
-            var dn = $"CN=Schema,CN=Configuration,{root}";
-            var request = new SearchRequest(dn, query, SearchScope.OneLevel);
+            var request = new SearchRequest(schemaRootDn, query, SearchScope.OneLevel);
             var response = (SearchResponse)connection.SendRequest(request);
             return response != null && response.Entries.Count == 1 ? response.Entries[0] : null;
         }

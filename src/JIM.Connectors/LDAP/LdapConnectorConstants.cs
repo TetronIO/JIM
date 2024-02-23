@@ -1,7 +1,11 @@
 ﻿namespace JIM.Connectors.LDAP
 {
-    internal static class LdapConnectorSupportedCapabilities
+    internal static class LdapConnectorConstants
     {
+        internal static string SETTING_AUTH_TYPE_SIMPLE => "Simple";
+
+        internal static string SETTING_AUTH_TYPE_NTLM => "NTLM";
+
         /// <summary>
         /// Indicates the directory is AD-DS.
         /// </summary>
