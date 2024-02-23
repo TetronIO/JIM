@@ -29,7 +29,7 @@ Various topologies supported, depending on your needs:
 ## Connectors
 JIM is currently targetting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will also be able to develop their own custom Connectors for use with JIM to support bespoke scenarios.
 - LDAP (incl. Active Directory & AD-LDS)
-- SQL Server Database
+- Microsoft SQL Server Database
 - PostgreSQL Database
 - MySQL Database
 - Oracle Database
