@@ -302,9 +302,6 @@ namespace JIM.Service.Processors
             if (csoIsInvalid)
                 return null;
 
-            // persist the new cso
-            //await _jim.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject, activityRunProfileExecutionItem);
-
             // now associate the persisted cso with the activityRunProfileExecutionItem
             activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
@@ -475,19 +472,9 @@ namespace JIM.Service.Processors
             // update the cso
             // create a connected system object change for this
 
-            //var csoIds = await _jim.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(_connectedSystem.Id);
-            //var csosWithUpdates = new List<ConnectedSystemObject>();
-
             // enumerate just the CSOs with unresolved references, for efficiency
             foreach (var cso in connectedSystemObjectsToProcess.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
             {
-                //var cso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, csoId);
-                //if (cso == null)
-                //{
-                //    Log.Error($"ResolveReferencesAsync: Couldn't retrieve CSO when we had just received its id. Connected System: {_connectedSystem.Id}, Connected System Object: {csoId}");
-                //    continue;
-                //}
-
                 var externalIdAttribute = cso.Type.Attributes.Single(a => a.IsExternalId);
                 var secondaryExternalIdAttribute = cso.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
                 var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
@@ -550,8 +537,6 @@ namespace JIM.Service.Processors
 
                         Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
                     }
-
-                    var x = 1;
                 }
             }
         }
