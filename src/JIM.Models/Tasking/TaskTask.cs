@@ -8,7 +8,7 @@
         public Guid TaskId { get; set; }
 
         /// <summary>
-        /// The Task where the ServiceTask is being executed within.
+        /// The Task where the WorkerTask is being executed within.
         /// </summary>
         public Task Task { get; set; }
 

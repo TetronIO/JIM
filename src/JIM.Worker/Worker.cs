@@ -43,7 +43,7 @@ namespace JIM.Worker
     public class Worker : BackgroundService
     {
         /// <summary>
-        /// The service tasks currently being executed.
+        /// The worker tasks currently being executed.
         /// </summary>
         private List<TaskTask> CurrentTasks { get; set; } = new List<TaskTask>();
         private readonly object _currentTasksLock = new();
@@ -72,42 +72,42 @@ namespace JIM.Worker
                 // if processing no tasks:
                 //      get the next batch of parallel tasks and execute them all at once or the next sequential task and execute that
                 // if processing tasks:
-                //      get the service tasks for those being processed
+                //      get the worker tasks for those being processed
                 //      foreach: if the status is cancellation requested, then cancel the task
 
                 if (CurrentTasks.Count > 0)
                 {
                     // check the database to see if we need to cancel any tasks we're currently processing...
-                    var serviceTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
-                    var serviceTasksToCancel = await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync(serviceTaskIds);
-                    foreach (var serviceTaskToCancel in serviceTasksToCancel)
+                    var workerTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
+                    var workerTasksToCancel = await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync(workerTaskIds);
+                    foreach (var workerTaskToCancel in workerTasksToCancel)
                     {
-                        var taskTask = CurrentTasks.SingleOrDefault(t => t.TaskId == serviceTaskToCancel.Id);
+                        var taskTask = CurrentTasks.SingleOrDefault(t => t.TaskId == workerTaskToCancel.Id);
                         if (taskTask != null)
                         {
-                            Log.Information($"ExecuteAsync: Cancelling task {serviceTaskToCancel.Id}...");
+                            Log.Information($"ExecuteAsync: Cancelling task {workerTaskToCancel.Id}...");
                             taskTask.CancellationTokenSource.Cancel();
-                            await mainLoopJim.Tasking.CancelWorkerTaskAsync(serviceTaskToCancel);
+                            await mainLoopJim.Tasking.CancelWorkerTaskAsync(workerTaskToCancel);
                             CurrentTasks.Remove(taskTask);
                         }
                         else
                         {
-                            Log.Debug($"ExecuteAsync: No need to cancel task id {serviceTaskToCancel.Id} as it seems to have finished processing.");
+                            Log.Debug($"ExecuteAsync: No need to cancel task id {workerTaskToCancel.Id} as it seems to have finished processing.");
                         }
                     }
                 }
                 else
                 {
                     // look for new tasks to process...
-                    var newServiceTasksToProcess = await mainLoopJim.Tasking.GetNextWorkerTasksToProcessAsync();
-                    if (newServiceTasksToProcess.Count == 0)
+                    var newWorkerTasksToProcess = await mainLoopJim.Tasking.GetNextWorkerTasksToProcessAsync();
+                    if (newWorkerTasksToProcess.Count == 0)
                     {
                         Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
                         await Task.Delay(2000, stoppingToken);
                     }
                     else
                     {
-                        foreach (var mainLoopNewServiceTask in newServiceTasksToProcess)
+                        foreach (var mainLoopNewWorkerTask in newWorkerTasksToProcess)
                         {
                             var cancellationTokenSource = new CancellationTokenSource();
                             var task = Task.Run(async () =>
@@ -116,14 +116,14 @@ namespace JIM.Worker
                                 // we can't use the main-loop instance, due to EF having connection sharing issues.
                                 var taskJim = new JimApplication(new PostgresDataRepository());
 
-                                // we want to re-retrieve the service task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
-                                var newServiceTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewServiceTask.Id) ?? 
-                                    throw new InvalidDataException($"ServiceTask '{mainLoopNewServiceTask.Id}' could not be retrieved.");
+                                // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
+                                var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ?? 
+                                    throw new InvalidDataException($"WorkerTask '{mainLoopNewWorkerTask.Id}' could not be retrieved.");
 
-                                newServiceTask.Activity.Executed = DateTime.UtcNow;
-                                await taskJim.Activities.UpdateActivityAsync(newServiceTask.Activity);
+                                newWorkerTask.Activity.Executed = DateTime.UtcNow;
+                                await taskJim.Activities.UpdateActivityAsync(newWorkerTask.Activity);
 
-                                if (newServiceTask is DataGenerationTemplateWorkerTask dataGenTemplateServiceTask)
+                                if (newWorkerTask is DataGenerationTemplateWorkerTask dataGenTemplateServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
                                     var dataGenerationTemplate = await taskJim.DataGeneration.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
@@ -136,29 +136,29 @@ namespace JIM.Worker
                                         try
                                         {
                                             await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
-                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }
                                         catch (Exception ex)
                                         {
-                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing data generation template: " + dataGenTemplateServiceTask.TemplateId);
                                         }
                                         finally
                                         {
-                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {newServiceTask.Activity.ExecutionTime}.");
+                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {newWorkerTask.Activity.ExecutionTime}.");
                                         }
                                     }
                                 }
-                                else if (newServiceTask is SynchronisationWorkerTask syncServiceTask)
+                                else if (newWorkerTask is SynchronisationWorkerTask syncWorkerTask)
                                 {
-                                    Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
-                                    if (newServiceTask.InitiatedBy == null)
+                                    Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: " + syncWorkerTask.ConnectedSystemRunProfileId);
+                                    if (newWorkerTask.InitiatedBy == null)
                                     {
-                                        Log.Error("ExecuteAsync: syncServiceTask.InitiatedBy was null. Cannot execute sync task");
+                                        Log.Error("ExecuteAsync: syncWorkerTask.InitiatedBy was null. Cannot execute sync task");
                                     }
                                     else
                                     {
-                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncServiceTask.ConnectedSystemId);
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
                                         if (connectedSystem != null)
                                         {
                                             // work out what connector we need to use
@@ -167,10 +167,10 @@ namespace JIM.Worker
                                             if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
                                                 connector = new LdapConnector();
                                             else
-                                                throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for service processing.");
+                                                throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for worker processing.");
 
                                             // work out what type of run profile we're being asked to run
-                                            var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncServiceTask.ConnectedSystemRunProfileId);
+                                            var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncWorkerTask.ConnectedSystemRunProfileId);
                                             if (runProfile != null)
                                             {
                                                 try
@@ -178,7 +178,7 @@ namespace JIM.Worker
                                                     // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                     if (runProfile.RunType == ConnectedSystemRunType.FullImport)
                                                     {
-                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newServiceTask.InitiatedBy, newServiceTask.Activity, cancellationTokenSource);
+                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
                                                         await synchronisationImportTaskProcessor.PerformFullImportAsync();
                                                     }
                                                     else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
@@ -203,43 +203,43 @@ namespace JIM.Worker
                                                     }
                                                                                                       
                                                     // task completed. determine final status, depending on how the run profile execution went
-                                                    if (newServiceTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue))
-                                                        await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
-                                                    else if (newServiceTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue))
-                                                        await taskJim.Activities.CompleteActivityWithWarningAsync(newServiceTask.Activity);
+                                                    if (newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue))
+                                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
+                                                    else if (newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue))
+                                                        await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
                                                     else
-                                                        await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
+                                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                                 }
                                                 catch (Exception ex)
                                                 {
                                                     // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view
                                                     // issues with connectors through JIM, rather than an admin having to dig through server logs.
-                                                    await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
+                                                    await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
                                                     Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
                                                 }
                                                 finally
                                                 {
                                                     // record how long the sync run took, whether it was successful, or not.
-                                                    Log.Information($"ExecuteAsync: Completed processing of {newServiceTask.Activity.TargetName} sync run in {newServiceTask.Activity.ExecutionTime}.");
+                                                    Log.Information($"ExecuteAsync: Completed processing of {newWorkerTask.Activity.TargetName} sync run in {newWorkerTask.Activity.ExecutionTime}.");
                                                 }
                                             }
                                             else
                                             {
-                                                Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncServiceTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncServiceTask.ConnectedSystemId}.");
+                                                Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncWorkerTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncWorkerTask.ConnectedSystemId}.");
                                             }
                                         }
                                         else
                                         {
-                                            Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncServiceTask.ConnectedSystemId} but no such connected system found.");
+                                            Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncWorkerTask.ConnectedSystemId} but no such connected system found.");
                                         }
                                     }
                                 }
-                                else if (newServiceTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
+                                else if (newWorkerTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
                                 {
                                     Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
                                     if (clearConnectedSystemObjectsTask.InitiatedBy == null)
                                     {
-                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value. Cannot continue processing service task.");
+                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value. Cannot continue processing worker task.");
                                     }
                                     else
                                     {
@@ -257,31 +257,31 @@ namespace JIM.Worker
                                             await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
 
                                             // task completed successfully, complete the activity
-                                            await taskJim.Activities.CompleteActivityAsync(newServiceTask.Activity);
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }
                                         catch (Exception ex)
                                         {
-                                            await taskJim.Activities.FailActivityWithErrorAsync(newServiceTask.Activity, ex);
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
                                         }
                                         finally
                                         {
                                             // record how long the sync run took, whether it was successful, or not.
-                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {newServiceTask.Activity.ExecutionTime}.");
+                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {newWorkerTask.Activity.ExecutionTime}.");
                                         }
                                     }
                                 }
                         
                                 // very important: we must mark the task as complete once we're done
-                                await taskJim.Tasking.CompleteWorkerTaskAsync(newServiceTask);
+                                await taskJim.Tasking.CompleteWorkerTaskAsync(newWorkerTask);
 
                                 // remove from the current tasks list after locking it for thread safety
                                 lock (_currentTasksLock)
-                                    CurrentTasks.RemoveAll(q => q.TaskId == newServiceTask.Id);
+                                    CurrentTasks.RemoveAll(q => q.TaskId == newWorkerTask.Id);
 
                             }, cancellationTokenSource.Token);
 
-                            CurrentTasks.Add(new TaskTask(mainLoopNewServiceTask.Id, task, cancellationTokenSource));
+                            CurrentTasks.Add(new TaskTask(mainLoopNewWorkerTask.Id, task, cancellationTokenSource));
                         }
                     }
                 }
