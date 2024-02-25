@@ -12,6 +12,7 @@ namespace JIM.Models.Logic
     public class SyncRuleMappingSourceParamValue
     {
         public int Id { get; set; }
+        
         public FunctionParameter FunctionParameter { get; set; } = null!;
 
         public MetaverseAttribute? MetaverseAttribute { get; set; }

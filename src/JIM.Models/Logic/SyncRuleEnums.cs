@@ -5,4 +5,10 @@
         Import = 0,
         Export = 1
     }
+
+    public enum SyncRuleStatus
+    {
+        Disabled = 0,
+        Enabled = 1
+    }
 }
