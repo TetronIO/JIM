@@ -10,7 +10,7 @@ RUN apt-get update \
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
-COPY ["JIM.Service/JIM.Worker.csproj", "JIM.Worker/"]
+COPY ["JIM.Worker/JIM.Worker.csproj", "JIM.Worker/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
 RUN dotnet restore "JIM.Service/JIM.Worker.csproj"
 COPY . .
