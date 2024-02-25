@@ -61,8 +61,8 @@ namespace JIM.Worker
 
             // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
             // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
-            foreach (var taskToCancel in await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync())
-                await mainLoopJim.Tasking.CancelServiceTaskAsync(taskToCancel);
+            foreach (var taskToCancel in await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync())
+                await mainLoopJim.Tasking.CancelWorkerTaskAsync(taskToCancel);
 
             // DEV: Unsupported scenario:
             // todo: job is being processed in database but is not in the current tasks, i.e. it's no longer being processed. clear it out
@@ -79,7 +79,7 @@ namespace JIM.Worker
                 {
                     // check the database to see if we need to cancel any tasks we're currently processing...
                     var serviceTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
-                    var serviceTasksToCancel = await mainLoopJim.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
+                    var serviceTasksToCancel = await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync(serviceTaskIds);
                     foreach (var serviceTaskToCancel in serviceTasksToCancel)
                     {
                         var taskTask = CurrentTasks.SingleOrDefault(t => t.TaskId == serviceTaskToCancel.Id);
@@ -87,7 +87,7 @@ namespace JIM.Worker
                         {
                             Log.Information($"ExecuteAsync: Cancelling task {serviceTaskToCancel.Id}...");
                             taskTask.CancellationTokenSource.Cancel();
-                            await mainLoopJim.Tasking.CancelServiceTaskAsync(serviceTaskToCancel);
+                            await mainLoopJim.Tasking.CancelWorkerTaskAsync(serviceTaskToCancel);
                             CurrentTasks.Remove(taskTask);
                         }
                         else
@@ -99,7 +99,7 @@ namespace JIM.Worker
                 else
                 {
                     // look for new tasks to process...
-                    var newServiceTasksToProcess = await mainLoopJim.Tasking.GetNextServiceTasksToProcessAsync();
+                    var newServiceTasksToProcess = await mainLoopJim.Tasking.GetNextWorkerTasksToProcessAsync();
                     if (newServiceTasksToProcess.Count == 0)
                     {
                         Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
@@ -117,13 +117,13 @@ namespace JIM.Worker
                                 var taskJim = new JimApplication(new PostgresDataRepository());
 
                                 // we want to re-retrieve the service task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
-                                var newServiceTask = await taskJim.Tasking.GetServiceTaskAsync(mainLoopNewServiceTask.Id) ?? 
+                                var newServiceTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewServiceTask.Id) ?? 
                                     throw new InvalidDataException($"ServiceTask '{mainLoopNewServiceTask.Id}' could not be retrieved.");
 
                                 newServiceTask.Activity.Executed = DateTime.UtcNow;
                                 await taskJim.Activities.UpdateActivityAsync(newServiceTask.Activity);
 
-                                if (newServiceTask is DataGenerationTemplateServiceTask dataGenTemplateServiceTask)
+                                if (newServiceTask is DataGenerationTemplateWorkerTask dataGenTemplateServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
                                     var dataGenerationTemplate = await taskJim.DataGeneration.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
@@ -149,7 +149,7 @@ namespace JIM.Worker
                                         }
                                     }
                                 }
-                                else if (newServiceTask is SynchronisationServiceTask syncServiceTask)
+                                else if (newServiceTask is SynchronisationWorkerTask syncServiceTask)
                                 {
                                     Log.Information("ExecuteAsync: SynchronisationServiceTask received for run profile id: " + syncServiceTask.ConnectedSystemRunProfileId);
                                     if (newServiceTask.InitiatedBy == null)
@@ -234,7 +234,7 @@ namespace JIM.Worker
                                         }
                                     }
                                 }
-                                else if (newServiceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
+                                else if (newServiceTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
                                 {
                                     Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
                                     if (clearConnectedSystemObjectsTask.InitiatedBy == null)
@@ -273,7 +273,7 @@ namespace JIM.Worker
                                 }
                         
                                 // very important: we must mark the task as complete once we're done
-                                await taskJim.Tasking.CompleteServiceTaskAsync(newServiceTask);
+                                await taskJim.Tasking.CompleteWorkerTaskAsync(newServiceTask);
 
                                 // remove from the current tasks list after locking it for thread safety
                                 lock (_currentTasksLock)

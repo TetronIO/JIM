@@ -2,7 +2,7 @@
 
 namespace JIM.Models.Tasking.DTOs
 {
-    public class ServiceTaskHeader
+    public class WorkerTaskHeader
     {
         public Guid Id { get; set; }
 
@@ -12,7 +12,7 @@ namespace JIM.Models.Tasking.DTOs
 
         public DateTime Timestamp { get; set; }
 
-        public ServiceTaskStatus Status { get; set; }
+        public WorkerTaskStatus Status { get; set; }
 
         public MetaverseObject? InitiatedBy { get; set; }
     }

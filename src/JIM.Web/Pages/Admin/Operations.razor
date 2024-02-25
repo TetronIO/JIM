@@ -49,7 +49,7 @@
     }
 </MudPaper>
 
-<MudTable T="ServiceTaskHeader" Items="@serviceTaskHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+<MudTable T="WorkerTaskHeader" Items="@workerTaskHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
     <HeaderContent>
         <MudTh>Actions</MudTh>
         <MudTh>Type</MudTh>
@@ -87,7 +87,7 @@
     private List<ConnectedSystemRunProfile>? connectedSystemRunProfiles;
     private ConnectedSystemHeader? selectedConnectedSystemHeader;
     private ConnectedSystemRunProfile? selectedConnectedSystemRunProfile;
-    private List<ServiceTaskHeader> serviceTaskHeaders = new List<ServiceTaskHeader>();
+    private List<WorkerTaskHeader> workerTaskHeaders = new List<WorkerTaskHeader>();
     private CancellationTokenSource pollingCancellationTokenSource = new CancellationTokenSource();
 
     private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
@@ -100,47 +100,47 @@
     {
         connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
-        // get initial data for service task table rendering
-        serviceTaskHeaders = await Jim.Tasking.GetServiceTaskHeadersAsync();
+        // get initial data for worker task table rendering
+        workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
 
-        // setup polling for service task header updates
+        // setup polling for worker task header updates
         var token = pollingCancellationTokenSource.Token;
         var task = Task.Factory.StartNew(async () =>
         {
             while (true)
             {
                 var stateHasChanged = false;
-                Console.WriteLine("JIM.Web: Operations.razor: Polling for service task headers...");
-                var newServiceTaskHeaders = await Jim.Tasking.GetServiceTaskHeadersAsync();
+                Console.WriteLine("JIM.Web: Operations.razor: Polling for worker task headers...");
+                var newWorkerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
 
                 // look for additions or updates...
-                foreach (var newServiceTaskHeader in newServiceTaskHeaders)
+                foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
                 {
-                    var serviceTaskHeader = serviceTaskHeaders.SingleOrDefault(q => q.Id == newServiceTaskHeader.Id);
-                    if (serviceTaskHeader == null)
+                    var workerTaskHeader = workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
+                    if (workerTaskHeader == null)
                     {
-                        // newServiceTask is new, add it
-                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Adding service task header: " + newServiceTaskHeader.Id);
-                        serviceTaskHeaders.Add(newServiceTaskHeader);
+                        // newWorkerTask is new, add it
+                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Adding worker task header: " + newWorkerTaskHeader.Id);
+                        workerTaskHeaders.Add(newWorkerTaskHeader);
                         stateHasChanged = true;
                     }
-                    else if (serviceTaskHeader.Status != newServiceTaskHeader.Status)
+                    else if (workerTaskHeader.Status != newWorkerTaskHeader.Status)
                     {
-                        // existing service task, so it's either unchanged, or an update
-                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Updating service task header: " + newServiceTaskHeader.Id);
-                        var position = serviceTaskHeaders.IndexOf(serviceTaskHeader);
-                        serviceTaskHeaders.Remove(serviceTaskHeader);
-                        serviceTaskHeaders.Insert(position, newServiceTaskHeader);
+                        // existing worker task, so it's either unchanged, or an update
+                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Updating worker task header: " + newWorkerTaskHeader.Id);
+                        var position = workerTaskHeaders.IndexOf(workerTaskHeader);
+                        workerTaskHeaders.Remove(workerTaskHeader);
+                        workerTaskHeaders.Insert(position, newWorkerTaskHeader);
                         stateHasChanged = true;
                     }
                 }
 
-                // look for removals, i.e. serviceTasks items not in newServiceTasks
-                var serviceTaskHeadersToRemove = serviceTaskHeaders.Where(sth => newServiceTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
-                foreach (var serviceTaskHeaderToRemove in serviceTaskHeadersToRemove)
+                // look for removals, i.e. workerTasks items not in newWorkerTasks
+                var workerTaskHeadersToRemove = workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
+                foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
                 {
-                    Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Removing service task header: " + serviceTaskHeaderToRemove.Id);
-                    serviceTaskHeaders.Remove(serviceTaskHeaderToRemove);
+                    Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Removing worker task header: " + workerTaskHeaderToRemove.Id);
+                    workerTaskHeaders.Remove(workerTaskHeaderToRemove);
                     stateHasChanged = true;
                 }
 
@@ -173,27 +173,27 @@
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        var task = new SynchronisationServiceTask(selectedConnectedSystemHeader.Id, selectedConnectedSystemRunProfile.Id, user);
-        await Jim.Tasking.CreateServiceTaskAsync(task);
+        var task = new SynchronisationWorkerTask(selectedConnectedSystemHeader.Id, selectedConnectedSystemRunProfile.Id, user);
+        await Jim.Tasking.CreateWorkerTaskAsync(task);
         Snackbar.Add("Synchronisation task added.", Severity.Success);
     }
 
-    private string GetServiceTaskType(ServiceTask serviceTask)
+    private string GetWorkerTaskType(WorkerTask workerTask)
     {
-        if (serviceTask is DataGenerationTemplateServiceTask)
+        if (workerTask is DataGenerationTemplateWorkerTask)
             return "Data Generation Template Task";
-        else if (serviceTask is SynchronisationServiceTask)
+        else if (workerTask is SynchronisationWorkerTask)
             return "Synchronisation Task";
         else
             return "Unknown Task";
     }
 
-    private async Task HandleCancelTaskAsync(ServiceTaskHeader serviceTaskHeader)
+    private async Task HandleCancelTaskAsync(WorkerTaskHeader workerTaskHeader)
     {
-        if (serviceTaskHeader == null)
+        if (workerTaskHeader == null)
             return;
 
-        await Jim.Tasking.CancelServiceTaskAsync(serviceTaskHeader.Id);
-        Snackbar.Add("Service task cancellation requested.", Severity.Success);
+        await Jim.Tasking.CancelWorkerTaskAsync(workerTaskHeader.Id);
+        Snackbar.Add("Worker task cancellation requested.", Severity.Success);
     }
 }

@@ -2,18 +2,18 @@
 
 namespace JIM.Models.Tasking
 {
-	public class DataGenerationTemplateServiceTask : ServiceTask
+	public class DataGenerationTemplateWorkerTask : WorkerTask
 	{
 		/// <summary>
         /// Then id of the DataGenerationTemplate to execute via this task.
         /// </summary>
 		public int TemplateId { get; set; }
 
-		public DataGenerationTemplateServiceTask()
+		public DataGenerationTemplateWorkerTask()
         {
         }
 
-		public DataGenerationTemplateServiceTask(int templateId, MetaverseObject user)
+		public DataGenerationTemplateWorkerTask(int templateId, MetaverseObject user)
         {
             TemplateId = templateId;
             InitiatedBy = user;

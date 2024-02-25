@@ -14,49 +14,49 @@ namespace JIM.Application.Servers
             Application = application;
         }
 
-        public async Task<ServiceTask?> GetServiceTaskAsync(Guid id)
+        public async Task<WorkerTask?> GetWorkerTaskAsync(Guid id)
         {
-            return await Application.Repository.Tasking.GetServiceTaskAsync(id);
+            return await Application.Repository.Tasking.GetWorkerTaskAsync(id);
         }
 
-        public async Task<List<ServiceTask>> GetServiceTasksAsync()
+        public async Task<List<WorkerTask>> GetWorkerTasksAsync()
         {
-            return await Application.Repository.Tasking.GetServiceTasksAsync();
+            return await Application.Repository.Tasking.GetWorkerTasksAsync();
         }
 
         /// <summary>
         /// Retrieves a list of the current tasks, with any inherited task information formatted into the name, 
-        /// i.e. connected system name and connected system run profile name for a SynchronisationServiceTask.
+        /// i.e. connected system name and connected system run profile name for a SynchronisationWorkerTask.
         /// </summary>
-        public async Task<List<ServiceTaskHeader>> GetServiceTaskHeadersAsync()
+        public async Task<List<WorkerTaskHeader>> GetWorkerTaskHeadersAsync()
         {
-            return await Application.Repository.Tasking.GetServiceTaskHeadersAsync();
+            return await Application.Repository.Tasking.GetWorkerTaskHeadersAsync();
         }
 
-        public async Task CreateServiceTaskAsync(ServiceTask serviceTask)
+        public async Task CreateWorkerTaskAsync(WorkerTask workerTask)
         {
-            if (serviceTask is SynchronisationServiceTask synchronisationServiceTask)
+            if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
             {
                 // every CRUD operation requires tracking with an activity...
-                var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationServiceTask.ConnectedSystemId);
-                var runProfile = runProfiles.Single(rp => rp.Id == synchronisationServiceTask.ConnectedSystemRunProfileId);
+                var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
+                var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
                 var activity = new Activity
                 {
                     TargetName = runProfile.Name,
                     TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                     TargetOperationType = ActivityTargetOperationType.Execute,
-                    ConnectedSystemId = synchronisationServiceTask.ConnectedSystemId,
+                    ConnectedSystemId = synchronisationWorkerTask.ConnectedSystemId,
                     ConnectedSystemRunProfileId = runProfile.Id
                 };
-                await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
 
-                // associate the activity with the service task so the service task processor can complete the activity when done.
-                serviceTask.Activity = activity;
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
             }
-            else if (serviceTask is DataGenerationTemplateServiceTask dataGenerationServiceTask)
+            else if (workerTask is DataGenerationTemplateWorkerTask dataGenerationWorkerTask)
             {
-                var template = await Application.DataGeneration.GetTemplateAsync(dataGenerationServiceTask.TemplateId) ?? 
-                    throw new InvalidDataException("CreateServiceTaskAsync: template not found for id " + dataGenerationServiceTask.TemplateId);
+                var template = await Application.DataGeneration.GetTemplateAsync(dataGenerationWorkerTask.TemplateId) ?? 
+                    throw new InvalidDataException("CreateWorkerTaskAsync: template not found for id " + dataGenerationWorkerTask.TemplateId);
 
                 // every data generation operation requires tracking with an activity...
                 var activity = new Activity
@@ -66,12 +66,12 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Execute,
                     DataGenerationTemplateId = template.Id                    
                 };
-                await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
 
-                // associate the activity with the service task so the service task processor can complete the activity when done.
-                serviceTask.Activity = activity;
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
             }
-            else if (serviceTask is ClearConnectedSystemObjectsTask clearConnectedSystemObjectsTask)
+            else if (workerTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
             {
                 // every crud operation requires tracking with an activity...
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
@@ -82,97 +82,84 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Clear,
                     ConnectedSystemId = clearConnectedSystemObjectsTask.ConnectedSystemId,
                 };
-                await Application.Activities.CreateActivityAsync(activity, serviceTask.InitiatedBy);
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
 
-                // associate the activity with the service task so the service task processor can complete the activity when done.
-                serviceTask.Activity = activity;
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
             }
 
-            await Application.Repository.Tasking.CreateServiceTaskAsync(serviceTask);
+            await Application.Repository.Tasking.CreateWorkerTaskAsync(workerTask);
         }
 
-        public async Task<ServiceTask?> GetNextServiceTaskAsync()
+        public async Task<WorkerTask?> GetNextWorkerTaskAsync()
         {
-            var task = await Application.Repository.Tasking.GetNextServiceTaskAsync();
+            var task = await Application.Repository.Tasking.GetNextWorkerTaskAsync();
             if (task == null)
                 return null;
 
             // we need to mark the task as being processed, so it's not picked up again by any other queue clients
-            task.Status = ServiceTaskStatus.Processing;
-            await Application.Repository.Tasking.UpdateServiceTaskAsync(task);
+            task.Status = WorkerTaskStatus.Processing;
+            await Application.Repository.Tasking.UpdateWorkerTaskAsync(task);
             return task;
         }
 
-        public async Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync()
+        public async Task<List<WorkerTask>> GetNextWorkerTasksToProcessAsync()
         {
-            return await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
-            
-            //var tasks = await Application.Repository.Tasking.GetNextServiceTasksToProcessAsync();
-            //if (tasks.Count == 0)
-            //    return tasks;
-
-            // we need to mark the tasks as being processed, so they're not picked up again by any other queue clients
-            //foreach (var task in tasks)
-            //{
-            //    task.Status = ServiceTaskStatus.Processing;
-            //    await Application.Repository.Tasking.UpdateServiceTaskAsync(task);
-            //}            
-
-            //return tasks;
+            return await Application.Repository.Tasking.GetNextWorkerTasksToProcessAsync();
         }
 
-        public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync()
+        public async Task<List<WorkerTask>> GetWorkerTasksThatNeedCancellingAsync()
         {
-            return await Application.Repository.Tasking.GetServiceTasksThatNeedCancellingAsync();
+            return await Application.Repository.Tasking.GetWorkerTasksThatNeedCancellingAsync();
         }
 
-        public async Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds)
+        public async Task<List<WorkerTask>> GetWorkerTasksThatNeedCancellingAsync(Guid[] workerTaskIds)
         {
-            return await Application.Repository.Tasking.GetServiceTasksThatNeedCancellingAsync(serviceTaskIds);
+            return await Application.Repository.Tasking.GetWorkerTasksThatNeedCancellingAsync(workerTaskIds);
         }
 
-        public async Task UpdateServiceTaskAsync(ServiceTask serviceTask)
+        public async Task UpdateWorkerTaskAsync(WorkerTask workerTask)
         {
-            await Application.Repository.Tasking.UpdateServiceTaskAsync(serviceTask);
+            await Application.Repository.Tasking.UpdateWorkerTaskAsync(workerTask);
         }
 
-        public async Task CancelServiceTaskAsync(Guid serviceTaskId)
+        public async Task CancelWorkerTaskAsync(Guid workerTaskId)
         {
-            var serviceTask = await GetServiceTaskAsync(serviceTaskId);
-            if (serviceTask == null)
+            var workerTask = await GetWorkerTaskAsync(workerTaskId);
+            if (workerTask == null)
             {
-                Log.Warning($"CancelServiceTaskAsync: no activity for id {serviceTaskId} exists. Aborting.");
+                Log.Warning($"CancelWorkerTaskAsync: no activity for id {workerTaskId} exists. Aborting.");
                 return;
             }
 
-            if (serviceTask.Activity != null)
-                await Application.Activities.CancelActivityAsync(serviceTask.Activity);
+            if (workerTask.Activity != null)
+                await Application.Activities.CancelActivityAsync(workerTask.Activity);
 
-            await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
+            await Application.Repository.Tasking.DeleteWorkerTaskAsync(workerTask);
         }
 
-        public async Task CancelServiceTaskAsync(ServiceTask serviceTask)
+        public async Task CancelWorkerTaskAsync(WorkerTask workerTask)
         {
-            await CancelServiceTaskAsync(serviceTask.Id);
+            await CancelWorkerTaskAsync(workerTask.Id);
         }
 
-        public async Task CompleteServiceTaskAsync(ServiceTask serviceTask)
+        public async Task CompleteWorkerTaskAsync(WorkerTask workerTask)
         {
-            if (serviceTask.Activity != null && serviceTask.Activity.Status == ActivityStatus.InProgress)
-                await Application.Activities.CompleteActivityAsync(serviceTask.Activity);
+            if (workerTask.Activity != null && workerTask.Activity.Status == ActivityStatus.InProgress)
+                await Application.Activities.CompleteActivityAsync(workerTask.Activity);
 
-            await Application.Repository.Tasking.DeleteServiceTaskAsync(serviceTask);
+            await Application.Repository.Tasking.DeleteWorkerTaskAsync(workerTask);
         }
 
         #region Data Generation Tasks
-        public async Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationTemplateServiceTaskAsync(int templateId)
+        public async Task<DataGenerationTemplateWorkerTask?> GetFirstDataGenerationTemplateWorkerTaskAsync(int templateId)
         {
-            return await Application.Repository.Tasking.GetFirstDataGenerationServiceTaskAsync(templateId);
+            return await Application.Repository.Tasking.GetFirstDataGenerationWorkerTaskAsync(templateId);
         }
 
-        public async Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId)
+        public async Task<WorkerTaskStatus?> GetFirstDataGenerationTemplateWorkerTaskStatus(int templateId)
         {
-            return await Application.Repository.Tasking.GetFirstDataGenerationTemplateServiceTaskStatus(templateId);
+            return await Application.Repository.Tasking.GetFirstDataGenerationTemplateWorkerTaskStatus(templateId);
         }
         #endregion
     }

@@ -15,7 +15,7 @@ namespace JIM.PostgresData
     {
         internal DbSet<Activity> Activities { get; set; } = null!;
         internal DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
-        internal DbSet<ClearConnectedSystemObjectsTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
+        internal DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
         internal DbSet<ConnectedSystem> ConnectedSystems { get; set; } = null!;
         internal DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; } = null!;
         internal DbSet<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = null!;
@@ -32,7 +32,7 @@ namespace JIM.PostgresData
         internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; } = null!;
         internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; } = null!;
         internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;
-        internal DbSet<DataGenerationTemplateServiceTask> DataGenerationTemplateServiceTasks { get; set; } = null!;
+        internal DbSet<DataGenerationTemplateWorkerTask> DataGenerationTemplateWorkerTasks { get; set; } = null!;
         internal DbSet<ExampleDataSet> ExampleDataSets { get; set; } = null!;
         internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
         internal DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; } = null!;
@@ -50,8 +50,8 @@ namespace JIM.PostgresData
         internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; } = null!;
         internal DbSet<Role> Roles { get; set; } = null!;
         internal DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
-        internal DbSet<ServiceTask> ServiceTasks { get; set; } = null!;
-        internal DbSet<SynchronisationServiceTask> SynchronisationServiceTasks { get; set; } = null!;
+        internal DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
+        internal DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
         internal DbSet<SyncRule> SyncRules { get; set; } = null!;
 
         private readonly string _connectionString;
