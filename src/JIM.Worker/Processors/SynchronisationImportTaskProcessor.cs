@@ -8,7 +8,7 @@ using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
 
-namespace JIM.Service.Processors
+namespace JIM.Worker.Processors
 {
     internal class SynchronisationImportTaskProcessor
     {

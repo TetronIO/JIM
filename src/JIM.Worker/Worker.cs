@@ -5,10 +5,10 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.PostgresData;
-using JIM.Service.Processors;
+using JIM.Worker.Processors;
 using Serilog;
 
-namespace JIM.Service
+namespace JIM.Worker
 {
     // **************************************************************************************
     // Junctional Identity Manager - Background Worker
@@ -51,9 +51,9 @@ namespace JIM.Service
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             InitialiseLogging();
-            Log.Information("Starting JIM.Service...");
+            Log.Information("Starting JIM.Worker...");
 
-            // as JIM.Service is the first JimApplication client to start, it's responsible for ensuring the database is intialised.
+            // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is intialised.
             // other JimAppication clients will need to check if the app is ready before completing their initialisation.
             // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
             var mainLoopJim = new JimApplication(new PostgresDataRepository());
@@ -332,7 +332,7 @@ namespace JIM.Service
             }
 
             loggerConfiguration.Enrich.FromLogContext();
-            loggerConfiguration.WriteTo.File(Path.Combine(loggingPath, "jim.service..log"), rollingInterval: RollingInterval.Day);
+            loggerConfiguration.WriteTo.File(Path.Combine(loggingPath, "jim.worker..log"), rollingInterval: RollingInterval.Day);
             loggerConfiguration.WriteTo.Console();
             Log.Logger = loggerConfiguration.CreateLogger();
         }

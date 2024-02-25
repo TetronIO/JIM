@@ -1,4 +1,4 @@
-using JIM.Service;
+using JIM.Worker;
 
 IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((hostContext, services) =>
