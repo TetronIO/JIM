@@ -27,6 +27,7 @@
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemObjectTypeName)">Connected System Object Type</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem)">Provision?</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse)">Project?</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
@@ -45,6 +46,7 @@
         <MudTd DataLabel="Connected System Object Type">@context.ConnectedSystemObjectTypeName</MudTd>
         <MudTd DataLabel="Provision?">@(context.ProvisionToConnectedSystem.HasValue && context.ProvisionToConnectedSystem.Value ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="Project?">@(context.ProjectToMetaverse.HasValue && context.ProjectToMetaverse.Value ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Status">@context.Status</MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no synchronisation rules

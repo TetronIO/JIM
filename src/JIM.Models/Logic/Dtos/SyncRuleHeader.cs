@@ -19,5 +19,7 @@
         public bool? ProvisionToConnectedSystem { get; set; }
 
         public bool? ProjectToMetaverse { get; set; }
+        
+        public SyncRuleStatus Status { get; set; }
     }
 }
