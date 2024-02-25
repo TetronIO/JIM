@@ -10,17 +10,17 @@ RUN apt-get update \
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
-COPY ["JIM.Service/JIM.Service.csproj", "JIM.Service/"]
+COPY ["JIM.Service/JIM.Worker.csproj", "JIM.Worker/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
-RUN dotnet restore "JIM.Service/JIM.Service.csproj"
+RUN dotnet restore "JIM.Service/JIM.Worker.csproj"
 COPY . .
-WORKDIR "/src/JIM.Service"
-RUN dotnet build "JIM.Service.csproj" -c Release -o /app/build
+WORKDIR "/src/JIM.Worker"
+RUN dotnet build "JIM.Worker.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "JIM.Service.csproj" -c Release -o /app/publish
+RUN dotnet publish "JIM.Worker.csproj" -c Release -o /app/publish
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "JIM.Service.dll"]
+ENTRYPOINT ["dotnet", "JIM.Worker.dll"]

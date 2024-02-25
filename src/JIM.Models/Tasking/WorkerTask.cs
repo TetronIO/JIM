@@ -3,7 +3,7 @@ using JIM.Models.Core;
 
 namespace JIM.Models.Tasking
 {
-	public abstract class ServiceTask
+	public abstract class WorkerTask
 	{
 		public Guid Id { get; set; }
 
@@ -13,9 +13,9 @@ namespace JIM.Models.Tasking
 		/// </summary>
 		public DateTime Timestamp { get; set; }
 
-		public ServiceTaskStatus Status { get; set; }
+		public WorkerTaskStatus Status { get; set; }
 
-		public ServiceTaskExecutionMode ExecutionMode { get; set; }
+		public WorkerTaskExecutionMode ExecutionMode { get; set; }
 
 		/// <summary>
 		/// If this task was initiated by a user, reference them here.
@@ -28,16 +28,16 @@ namespace JIM.Models.Tasking
 		public string? InitiatedByName { get; set; }
 
 		/// <summary>
-		/// If this service task has already resulted in an activity being created, then it can be found here, and when the service task
+		/// If this worker task has already resulted in an activity being created, then it can be found here, and when the worker task
 		/// is initiated then the execution time must be set, and when complete, the activity must also be completed.
 		/// </summary>
 		public Activity Activity { get; set; } = null!;
 
-        public ServiceTask()
+        public WorkerTask()
         {
 			Timestamp = DateTime.UtcNow;
-			Status = ServiceTaskStatus.Queued;
-			ExecutionMode = ServiceTaskExecutionMode.Sequential;
+			Status = WorkerTaskStatus.Queued;
+			ExecutionMode = WorkerTaskExecutionMode.Sequential;
         }
 	}
 }

@@ -11,7 +11,7 @@
         "jim.api": "StartDebugging",
         "jim.database": "StartWithoutDebugging",
         "jim.scheduler": "StartDebugging",
-        "jim.service": "StartDebugging",
+        "jim.worker": "StartDebugging",
         "jim.web": "StartDebugging"
       }
     }

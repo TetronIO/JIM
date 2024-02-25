@@ -28,7 +28,7 @@ services:
       dockerfile: src/JIM.Web/Dockerfile
     depends_on:
       - jim.database
-      - jim.service
+      - jim.worker
       - jim.api
     networks:
       - jim-network
@@ -59,13 +59,13 @@ services:
       dockerfile: src/JIM.Api/Dockerfile
     depends_on:
       - jim.database
-      - jim.service
+      - jim.worker
     networks:
       - jim-network
 
-  jim.service:
-    container_name: jim.service
-    image: ${DOCKER_REGISTRY-}jim.service
+  jim.worker:
+    container_name: jim.worker
+    image: ${DOCKER_REGISTRY-}jim.worker
     restart: always
     environment:
      - LOGGING_LEVEL=Verbose
@@ -79,7 +79,7 @@ services:
       - jim-logs-volume:/var/log/jim
     build:
       context: .
-      dockerfile: src/JIM.Service/Dockerfile
+      dockerfile: src/JIM.Worker/Dockerfile
     depends_on:
       - jim.database
     networks:
@@ -104,7 +104,7 @@ services:
       dockerfile: src/JIM.Scheduler/Dockerfile
     depends_on:
       - jim.database
-      - jim.service
+      - jim.worker
     networks:
       - jim-network
   

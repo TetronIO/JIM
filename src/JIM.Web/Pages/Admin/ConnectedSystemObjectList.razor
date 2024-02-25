@@ -148,8 +148,8 @@
         {
             // attribute the execution to the user
             var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-            var task = new ClearConnectedSystemObjectsTask(Id, user);
-            await Jim.Tasking.CreateServiceTaskAsync(task);
+            var task = new ClearConnectedSystemObjectsWorkerTask(Id, user);
+            await Jim.Tasking.CreateWorkerTaskAsync(task);
             Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
         }
     }

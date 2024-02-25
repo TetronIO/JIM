@@ -2,19 +2,19 @@
 
 namespace JIM.Models.Tasking
 {
-	public class ClearConnectedSystemObjectsTask : ServiceTask
+	public class ClearConnectedSystemObjectsWorkerTask : WorkerTask
 	{
         /// <summary>
         /// The id for the connected system the run profile relates to.
         /// </summary>
         public int ConnectedSystemId { get; set; }
 
-        public ClearConnectedSystemObjectsTask()
+        public ClearConnectedSystemObjectsWorkerTask()
         {
             // for use by EntityFramework to construct db-sourced objects.
         }
 
-		public ClearConnectedSystemObjectsTask(int connectedSystemId)
+		public ClearConnectedSystemObjectsWorkerTask(int connectedSystemId)
         {
             ConnectedSystemId = connectedSystemId;
         }
@@ -22,7 +22,7 @@ namespace JIM.Models.Tasking
         /// <summary>
         /// When a clear connected system objects task is triggered by a user, this overload should be used to attribute the action to the user.
         /// </summary>
-        public ClearConnectedSystemObjectsTask(int connectedSystemId, MetaverseObject initiatingBy)
+        public ClearConnectedSystemObjectsWorkerTask(int connectedSystemId, MetaverseObject initiatingBy)
         {
             ConnectedSystemId = connectedSystemId;
             InitiatedBy = initiatingBy;

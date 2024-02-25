@@ -5,34 +5,34 @@ namespace JIM.Data.Repositories
 {
     public interface ITaskingRepository
     {
-        public Task CreateServiceTaskAsync(ServiceTask serviceTask);
+        public Task CreateWorkerTaskAsync(WorkerTask serviceTask);
 
-        public Task<ServiceTask?> GetServiceTaskAsync(Guid id);
+        public Task<WorkerTask?> GetWorkerTaskAsync(Guid id);
 
-        public Task<List<ServiceTask>> GetServiceTasksAsync();
+        public Task<List<WorkerTask>> GetWorkerTasksAsync();
 
-        public Task<List<ServiceTaskHeader>> GetServiceTaskHeadersAsync();
+        public Task<List<WorkerTaskHeader>> GetWorkerTaskHeadersAsync();
 
-        public Task<ServiceTask?> GetNextServiceTaskAsync();
+        public Task<WorkerTask?> GetNextWorkerTaskAsync();
 
-        public Task<DataGenerationTemplateServiceTask?> GetFirstDataGenerationServiceTaskAsync(int dataGenerationTemplateId);
-
-        /// <summary>
-        /// Get all service tasks that need cancelling.
-        /// </summary>
-        public Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync();
+        public Task<DataGenerationTemplateWorkerTask?> GetFirstDataGenerationWorkerTaskAsync(int dataGenerationTemplateId);
 
         /// <summary>
-        /// Get selective service tasks that need cancelling.
+        /// Get all worker tasks that need cancelling.
         /// </summary>
-        public Task<List<ServiceTask>> GetServiceTasksThatNeedCancellingAsync(Guid[] serviceTaskIds);
+        public Task<List<WorkerTask>> GetWorkerTasksThatNeedCancellingAsync();
 
-        public Task<List<ServiceTask>> GetNextServiceTasksToProcessAsync();
+        /// <summary>
+        /// Get selective worker tasks that need cancelling.
+        /// </summary>
+        public Task<List<WorkerTask>> GetWorkerTasksThatNeedCancellingAsync(Guid[] serviceTaskIds);
 
-        public Task<ServiceTaskStatus?> GetFirstDataGenerationTemplateServiceTaskStatus(int templateId);
+        public Task<List<WorkerTask>> GetNextWorkerTasksToProcessAsync();
 
-        public Task UpdateServiceTaskAsync(ServiceTask serviceTask);
+        public Task<WorkerTaskStatus?> GetFirstDataGenerationTemplateWorkerTaskStatus(int templateId);
 
-        public Task DeleteServiceTaskAsync(ServiceTask serviceTask);
+        public Task UpdateWorkerTaskAsync(WorkerTask serviceTask);
+
+        public Task DeleteWorkerTaskAsync(WorkerTask serviceTask);
     }
 }

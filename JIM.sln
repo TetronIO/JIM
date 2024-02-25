@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Models", "src\JIM.Model
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Functions", "src\JIM.Functions\JIM.Functions.csproj", "{5EF0C302-3606-4ABC-83B2-C2A72E4B3261}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Service", "src\JIM.Service\JIM.Service.csproj", "{F5068ED9-AA55-4FF7-BC2A-F9497C806C97}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Worker", "src\JIM.Worker\JIM.Worker.csproj", "{F5068ED9-AA55-4FF7-BC2A-F9497C806C97}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Scheduler", "src\JIM.Scheduler\JIM.Scheduler.csproj", "{2B8193D6-077C-48C8-AAE2-5503B8971AF9}"
 EndProject

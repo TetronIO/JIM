@@ -167,11 +167,11 @@
                Disabled="@(status != null)"
                OnClick="ExecuteTemplateAsync"
                DisableElevation="true">
-        @if (status != null && status == ServiceTaskStatus.Processing)
+        @if (status != null && status == WorkerTaskStatus.Processing)
         {
             <text>Processing...</text>
         }
-        else if (status != null && status == ServiceTaskStatus.Queued)
+        else if (status != null && status == WorkerTaskStatus.Queued)
         {
             <text>Queued...</text>
         }
@@ -188,8 +188,8 @@
     [CascadingParameter]
     private Task<AuthenticationState>? authenticationStateTask { get; set; }
     private DataGenerationTemplate? template;
-    private DataGenerationTemplateServiceTask? task;
-    private ServiceTaskStatus? status;
+    private DataGenerationTemplateWorkerTask? task;
+    private WorkerTaskStatus? status;
     private List<BreadcrumbItem> breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
@@ -217,7 +217,7 @@
             Debug.WriteLine("Timer loop executing...");
             if (template != null)
             {
-                status = await Jim.Tasking.GetFirstDataGenerationTemplateServiceTaskStatus(template.Id);
+                status = await Jim.Tasking.GetFirstDataGenerationTemplateWorkerTaskStatus(template.Id);
                 if (status != null)
                     Debug.WriteLine("TimerLoop: status is " + status);
                 else
@@ -242,7 +242,7 @@
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        task = new DataGenerationTemplateServiceTask(template.Id, user);
-        await Jim.Tasking.CreateServiceTaskAsync(task);
+        task = new DataGenerationTemplateWorkerTask(template.Id, user);
+        await Jim.Tasking.CreateWorkerTaskAsync(task);
     }
 }

@@ -2,7 +2,7 @@
 
 namespace JIM.Models.Tasking
 {
-	public class SynchronisationServiceTask : ServiceTask
+	public class SynchronisationWorkerTask : WorkerTask
 	{
         /// <summary>
         /// The id for the connected system the run profile relates to.
@@ -14,12 +14,12 @@ namespace JIM.Models.Tasking
         /// </summary>
         public int ConnectedSystemRunProfileId { get; set; }
 
-        public SynchronisationServiceTask()
+        public SynchronisationWorkerTask()
         {
             // for use by EntityFramework to construct db-sourced objects.
         }
 
-		public SynchronisationServiceTask(int connectedSystemId, int connectedSystemRunProfileId)
+		public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId)
         {
             ConnectedSystemId = connectedSystemId;
             ConnectedSystemRunProfileId = connectedSystemRunProfileId;
@@ -28,7 +28,7 @@ namespace JIM.Models.Tasking
         /// <summary>
         /// When a synchronisation service task is triggered by a user, this overload should be used to attribute the action to the user.
         /// </summary>
-        public SynchronisationServiceTask(int connectedSystemId, int connectedSystemRunProfileId, MetaverseObject initiatingBy)
+        public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId, MetaverseObject initiatingBy)
         {
             ConnectedSystemId = connectedSystemId;
             ConnectedSystemRunProfileId = connectedSystemRunProfileId;

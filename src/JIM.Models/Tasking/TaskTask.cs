@@ -3,7 +3,7 @@
     public class TaskTask
     {
         /// <summary>
-        /// The identifier for the ServiceTask being processed.
+        /// The identifier for the WorkerTask being processed.
         /// </summary>
         public Guid TaskId { get; set; }
 
