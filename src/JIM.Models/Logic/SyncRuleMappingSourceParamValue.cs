@@ -5,6 +5,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Logic
 {
     /// <summary>
+    /// A SyncRuleMappingSourceParamValue supports the calling of a function as part of a sync rule mapping.
     /// A SyncRuleMappingSourceParamValue can get it's value from an attribute, or a constant value from type-specific properties.
     /// If it is an attribute, then depending on the direction of the sync rule (import/export), then it'll be either the 
     /// ConnectedSystemAttribute or MetaverseAttribute that needs to be populated.
