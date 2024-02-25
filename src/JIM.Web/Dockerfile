@@ -6,8 +6,8 @@ EXPOSE 80
 EXPOSE 443
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        libldap-2.4-2 \
+    && apt-get install -y --no-install-recommends libldap-2.4-2 \
+    && apt-get install -y --no-install-recommends libldap-common \
     && rm -rf /var/lib/apt/lists/*
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
