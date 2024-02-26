@@ -140,18 +140,17 @@
                     </MudAlert>
                 }
 
-                @if (settingsBeingSaved)
-                {
-                    <MudButton Variant="Variant.Filled" Color="Color.Default" Disabled="true" Class="mt-5" DisableElevation="true">
+                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || settingsBeingSaved)" Class="mt-5" DisableElevation="true" OnClick="HandleValidSettingsSubmitAsync">
+                    @if (settingsBeingSaved)
+                    {
                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
                         <MudText Class="ms-2">Processing</MudText>
-                    </MudButton>
-                }
-                else
-                {
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync" DisableElevation="true">Save Settings</MudButton>
-                }
-
+                    }
+                    else
+                    {
+                        <MudText>Save Settings</MudText>
+                    }
+                </MudButton>
             </MudForm>
         </MudTabPanel>
 
