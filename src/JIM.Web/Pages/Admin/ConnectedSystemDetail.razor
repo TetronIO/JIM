@@ -127,7 +127,7 @@
                     }
                 }
 
-                @if (SettingsFormCustomErrors.Any())
+                @if (SettingsFormCustomErrors.Count > 0)
                 {
                     <MudAlert Severity="Severity.Error" Class="mt-5">
                         <MudText>There are issues with the settings:</MudText>
@@ -140,17 +140,18 @@
                     </MudAlert>
                 }
 
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || settingsBeingSaved)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync" DisableElevation="true">
-                    @if (settingsBeingSaved)
-                    {
+                @if (settingsBeingSaved)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Default" Disabled="true" Class="mt-5" DisableElevation="true">
                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
                         <MudText Class="ms-2">Processing</MudText>
-                    }
-                    else
-                    {
-                        <MudText>Save Settings</MudText>
-                    }
-                </MudButton>
+                    </MudButton>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid)" Class="mt-5" OnClick="HandleValidSettingsSubmitAsync" DisableElevation="true">Save Settings</MudButton>
+                }
+
             </MudForm>
         </MudTabPanel>
 
@@ -578,9 +579,12 @@
         }
 
         settingsBeingSaved = true;
+        SettingsFormCustomErrors.Clear();
+
+        StateHasChanged();
+        await Task.Delay(1);
 
         // validate the form
-        SettingsFormCustomErrors.Clear();
         var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
         for (var i = 0; i < results.Count; i++)
         {
@@ -605,6 +609,9 @@
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);
         settingsBeingSaved = false;
+
+        StateHasChanged();
+        await Task.Delay(1);
     }
 
     private async Task HandleImportSchemaAsync()
