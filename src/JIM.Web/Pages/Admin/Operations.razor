@@ -4,6 +4,7 @@
 @using JIM.Models.Staging.DTOs;
 @using JIM.Models.Tasking;
 @using JIM.Models.Tasking.DTOs;
+@using JIM.PostgresData
 @using JIM.Utilities;
 @attribute [Authorize(Roles = "Administrators")]
 @inject JimApplication Jim
@@ -109,9 +110,12 @@
         {
             while (true)
             {
+                // get a new JIM instance so we disable EF caching and are able to see changes made to the data by other JIM instances, i.e. JIM.Worker
+                var iterationJim = new JimApplication(new PostgresDataRepository());
+
                 var stateHasChanged = false;
                 Console.WriteLine("JIM.Web: Operations.razor: Polling for worker task headers...");
-                var newWorkerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
+                var newWorkerTaskHeaders = await iterationJim.Tasking.GetWorkerTaskHeadersAsync();
 
                 // look for additions or updates...
                 foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
@@ -144,6 +148,7 @@
                     stateHasChanged = true;
                 }
 
+                // we have to manually cause the UI to update as Blazor has no way of knowing about the data changing on this thread.
                 if (stateHasChanged)
                     await InvokeAsync(StateHasChanged);
 
