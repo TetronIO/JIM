@@ -622,8 +622,13 @@
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
 
         schemaBeingRetrieved = true;
+        StateHasChanged();
+        await Task.Delay(1);
+
         await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, user);
         schemaBeingRetrieved = false;
+        StateHasChanged();
+        await Task.Delay(1);
     }
 
     private void HandleSelectedObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType, bool isObjectTypeChecked)
@@ -671,8 +676,13 @@
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
 
         hierarchyBeingRetrieved = true;
+        StateHasChanged();
+        await Task.Delay(1);
+
         await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, user);
         hierarchyBeingRetrieved = false;
+        StateHasChanged();
+        await Task.Delay(1);
     }
 
     private async Task HandleHierarchySelectionSubmitAsync()
