@@ -12,15 +12,34 @@ namespace JIM.Models.Logic
     public class SyncRuleMappingSource
     {
         public int Id { get; set; }
-        
+
+        /// <summary>
+        /// If multiple sources are defined for an attribute mapping, then the order in which they appear matters.
+        /// The one with the lowest order will take priority, i.e. in a list of sources, the first to provide a non-null value will be used.
+        /// </summary>
         public int Order { get; set; }
         
+        /// <summary>
+        /// For Export sync rules only: If populated, denotes that a Metaverse Attribute should be used to set the target attribute value.
+        /// </summary>
         public MetaverseAttribute? MetaverseAttribute { get; set; }
         
+        /// <summary>
+        /// For Import sync rules only: If populated, denotes that a Connected System Attribute should be used to set the target attribute value.
+        /// </summary>
         public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
         
+        /// <summary>
+        /// If populated, denotes that a Function (either built-in or extensible) should be used to determine the target attribute value.
+        /// </summary>
         public Function? Function { get; set; }
+
+        // todo: add in support for Expressions as an alternative to Functions and Attributes.
         
+        /// <summary>
+        /// If a Function or Expression is to be the source of the target attribute value, then parameters for those need to be defined.
+        /// They in term can be sourced from attributes, or constant values.
+        /// </summary>
         public List<SyncRuleMappingSourceParamValue> ParameterValues { get; set; }
 
         public SyncRuleMappingSource()
@@ -30,11 +49,11 @@ namespace JIM.Models.Logic
 
         public bool IsValid()
         {
-            // if we have no function, we require either a metaverse or connected system attribute value
+            // if we have no Function, we require either a metaverse or connected system attribute value to use as the source
             if (Function == null)
                 return MetaverseAttribute != null || ConnectedSystemAttribute != null;
 
-            // if we do have a function, we don't want either attribute values
+            // if we do have a Function, we don't want either attribute values
             return MetaverseAttribute == null && ConnectedSystemAttribute == null;
         }
     }

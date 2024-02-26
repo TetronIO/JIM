@@ -5,20 +5,25 @@ namespace JIM.Models.Logic
 {
     /// <summary>
     /// Defines how data should flow from JIM to a connected system (or visa versa) for a specific attribute.
-    /// Not, if transforms are being applied, then multiple attributes could be the source, but only a single attribute can be a target. i.e. n:1
+    /// Note: There can be only one mapping per target attribute. If multiple sources need to be used to determine the target value
+    /// then the user is to define multiple sources under a mapping. This keeps the UI clean: there's only one mapping per target attribute.
+    /// How those target attribute values are determined is up to the mapping.
     /// </summary>
     public class SyncRuleMapping
     {
         public int Id { get; set; }
 
+        /// <summary>
+        /// A link to the parent SynchronisationRule for this SyncRuleMapping.
+        /// </summary>
         public SyncRule SynchronisationRule { get; set; } = null!;
 
         /// <summary>
-        /// When this is not the only sync rule mapping for the attribute, a priority helps us make decisions on system authority.
-        /// A lower value denotes a higher priority. 0 is the highest priority.
+        /// The list of sources to use when determining the target value.
+        /// A single source is most common, i.e. a 1:1 mapping, but it's possible to use multiple sources to determine the target value,
+        /// i.e. you might want to take the first non-null value from a list of sources, or you might want to use a function or expression to
+        /// make more complex decisions on what the target value should be.
         /// </summary>
-        public int Priority { get; set; }
-
         public List<SyncRuleMappingSource> Sources { get; set; }
 
         public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
