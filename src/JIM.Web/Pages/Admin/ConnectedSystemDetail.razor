@@ -169,14 +169,37 @@
                         permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     </MudText>
                 }
-                <MudButton Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)" Variant="Variant.Filled" Size="Size.Small" OnClick="HandleImportSchemaAsync" Class="mt-5" DisableElevation="true">
+                <MudButton 
+                    Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
+                    Disabled="@(schemaBeingRetrieved)"
+                    Variant="Variant.Filled" 
+                    Size="Size.Small" 
+                    OnClick="HandleImportSchemaAsync" 
+                    Class="mt-5" 
+                    DisableElevation="true">
                     @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
                     {
-                        <text>Retrieve Schema</text>
+                        if (schemaBeingRetrieved)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudText Class="ms-2">Retrieving Schema</MudText>
+                        }
+                        else
+                        {
+                            <text>Retrieve Schema</text>
+                        }
                     }
                     else
                     {
-                        <text>Refresh Schema</text>
+                        if (schemaBeingRetrieved)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudText Class="ms-2">Refreshing Schema</MudText>
+                        }
+                        else
+                        {
+                            <text>Refresh Schema</text>
+                        }
                     }
                 </MudButton>
             </MudAlert>
@@ -335,23 +358,32 @@
                             Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
                         </MudText>
                     }
-                    <MudButton Disabled="@hierarchyBeingRetrieved"
-                       Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
-                       Size="Size.Small"
-                       OnClick="HandleImportHierarchyAsync"
-                       Variant="Variant.Filled"
-                       Class="mt-5"
-                       DisableElevation="true">
-                        @if (hierarchyBeingRetrieved)
+                    <MudButton 
+                        Disabled="@hierarchyBeingRetrieved"
+                        Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
+                        Size="Size.Small"
+                        OnClick="HandleImportHierarchyAsync"
+                        Variant="Variant.Filled"
+                        Class="mt-5"
+                        DisableElevation="true">
+                        @if (connectedSystem.Partitions?.Count == 0)
                         {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                            <MudText Class="ms-2">Processing</MudText>
+                            if (hierarchyBeingRetrieved)
+                            {
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                <MudText Class="ms-2">Retrieving Hierarchy</MudText>
+                            }
+                            else
+                            {
+                                <text>Retrieve Hierarchy</text>
+                            }
                         }
                         else
                         {
-                            if (connectedSystem.Partitions?.Count == 0)
+                            if (hierarchyBeingRetrieved)
                             {
-                                <text>Retrieve Hierarchy</text>
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                <MudText Class="ms-2">Refreshing Hierarchy</MudText>
                             }
                             else
                             {
@@ -496,7 +528,7 @@
     private List<ConnectedSystemSettingCategory>? settingCategories;
     private string? partitionsAndHierarchiesText;
     private string? partitionAndHierarchyText;
-    private bool schemaBeingRetrieved;
+    private bool schemaBeingRetrieved = false;
     private ConnectedSystemObjectType? selectedObjectType;
     private bool hierarchyBeingRetrieved;
     private string schemaSearchString = "";
