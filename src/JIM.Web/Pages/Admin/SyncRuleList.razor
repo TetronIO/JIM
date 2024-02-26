@@ -14,6 +14,14 @@
     Synchronisation Rules are used to define the flow of information between JIM and connected systems.
 </MudText>
 
+<MudPaper Elevation="0" Class="mt-2" Outlined="true">
+    <MudToolBar>
+        <MudButton Href="/admin/connected-systems/sync-rules" Color="Color.Primary" DisableElevation="true" Disabled="true">Sync Rules</MudButton>
+        <MudSpacer />
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/sync-rules/create" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Create Sync Rule</MudButton>
+    </MudToolBar>
+</MudPaper>
+
 <MudTable Items="@syncRuleHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<SyncRuleHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <MudSpacer />
