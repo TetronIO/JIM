@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20240227125955_SyncRuleMapping4Matching")]
+    partial class SyncRuleMapping4Matching
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -818,12 +820,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("AttributeFlowSynchronisationRuleId")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedById")
-                        .HasColumnType("uuid");
-
                     b.Property<int?>("ObjectMatchingSynchronisationRuleId")
                         .HasColumnType("integer");
 
@@ -839,8 +835,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AttributeFlowSynchronisationRuleId");
-
-                    b.HasIndex("CreatedById");
 
                     b.HasIndex("ObjectMatchingSynchronisationRuleId");
 
@@ -2165,10 +2159,6 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("AttributeFlowRules")
                         .HasForeignKey("AttributeFlowSynchronisationRuleId");
 
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "CreatedBy")
-                        .WithMany()
-                        .HasForeignKey("CreatedById");
-
                     b.HasOne("JIM.Models.Logic.SyncRule", "ObjectMatchingSynchronisationRule")
                         .WithMany("ObjectMatchingRules")
                         .HasForeignKey("ObjectMatchingSynchronisationRuleId");
@@ -2182,8 +2172,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("TargetMetaverseAttributeId");
 
                     b.Navigation("AttributeFlowSynchronisationRule");
-
-                    b.Navigation("CreatedBy");
 
                     b.Navigation("ObjectMatchingSynchronisationRule");
 

@@ -11,4 +11,11 @@
         Disabled = 0,
         Enabled = 1
     }
+
+    public enum SyncRuleMappingType
+    {
+        NotSet = 0,
+        AttributeFlow = 1,
+        ObjectMatching = 2
+    }
 }

@@ -8,6 +8,7 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Update;
 
 namespace JIM.PostgresData
 {
@@ -118,6 +119,14 @@ namespace JIM.PostgresData
 
             modelBuilder.Entity<MetaverseObjectType>()
                 .HasMany(mot => mot.Attributes);
+
+            modelBuilder.Entity<SyncRule>()
+                .HasMany(sr => sr.AttributeFlowRules)
+                .WithOne(afr => afr.AttributeFlowSynchronisationRule);
+
+            modelBuilder.Entity<SyncRule>()
+                .HasMany(sr => sr.ObjectMatchingRules)
+                .WithOne(omr => omr.ObjectMatchingSynchronisationRule);
 
             // reduce the chance of concurrency issues by using a system attribute to identify row versions
             // for our most heavily updated objects.

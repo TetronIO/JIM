@@ -13,10 +13,24 @@ namespace JIM.Models.Logic
     {
         public int Id { get; set; }
 
+        public DateTime Created { get; set; }
+
+        public MetaverseObject? CreatedBy { get; set; }
+
         /// <summary>
-        /// A link to the parent SynchronisationRule for this SyncRuleMapping.
+        /// A link to the parent SynchronisationRule for when this is an AttributeFlow type SyncRuleMapping.
         /// </summary>
-        public SyncRule SynchronisationRule { get; set; } = null!;
+        public SyncRule? AttributeFlowSynchronisationRule { get; set; }
+
+        /// <summary>
+        /// A link to the parent SynchronisationRule for when this is an ObjectMatching type SyncRuleMapping.
+        /// </summary>
+        public SyncRule? ObjectMatchingSynchronisationRule { get; set; }
+
+        /// <summary>
+        /// Denotes what the purpose of this mapping is for, i.e. attribute flow, or object matching (joining/correlating).
+        /// </summary>
+        public SyncRuleMappingType Type { get; set; }
 
         /// <summary>
         /// The list of sources to use when determining the target value.
@@ -32,7 +46,9 @@ namespace JIM.Models.Logic
 
         public SyncRuleMapping()
         {
+            Type = SyncRuleMappingType.NotSet;
             Sources = new List<SyncRuleMappingSource>();
+            Created = DateTime.UtcNow;
         }
     }
 }
