@@ -281,12 +281,12 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = userObjectType
                 };
 
-                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
-                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = jobTitleAttribute, Position = 1 });
-                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = departmentAttribute, Position = 2 });
-                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = companyAttribute, Position = 3 });
-                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 4 });
-                usersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 5 });
+                usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = jobTitleAttribute, Position = 1 });
+                usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = departmentAttribute, Position = 2 });
+                usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = companyAttribute, Position = 3 });
+                usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 4 });
+                usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 5 });
                 
                 predefinedSearchesToCreate.Add(usersPredefinedSearch);
                 Log.Information("SeedAsync: Preparing User default PredefinedSearch");
@@ -303,18 +303,18 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = userObjectType
                 };
 
-                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
-                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = jobTitleAttribute, Position = 1 });
-                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = departmentAttribute, Position = 2 });
-                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = companyAttribute, Position = 3 });
-                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 4 });
-                peopleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 5 });
+                peopleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                peopleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = jobTitleAttribute, Position = 1 });
+                peopleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = departmentAttribute, Position = 2 });
+                peopleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = companyAttribute, Position = 3 });
+                peopleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 4 });
+                peopleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 5 });
 
                 peopleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
                     Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
-                        new PredefinedSearchCriteria {
+                        new() {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
                             StringValue = "Person"
@@ -337,16 +337,16 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = userObjectType
                 };
 
-                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
-                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = accountNameAttribute, Position = 1 });
-                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 2 });
-                servicePrincipleUsersPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 3 });
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = accountNameAttribute, Position = 1 });
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 2 });
+                servicePrincipleUsersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 3 });
 
                 servicePrincipleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
                     Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
-                        new PredefinedSearchCriteria {
+                        new() {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
                             StringValue = "Service"
@@ -370,11 +370,11 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = groupObjectType
                 };
 
-                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
-                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupTypeAttribute, Position = 1 });
-                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupScopeAttribute, Position = 2 });
-                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 3 });
-                groupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 4 });
+                groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupTypeAttribute, Position = 1 });
+                groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupScopeAttribute, Position = 2 });
+                groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 3 });
+                groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 4 });
                 
                 predefinedSearchesToCreate.Add(groupsPredefinedSearch);
                 Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
@@ -391,15 +391,15 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = groupObjectType
                 };
 
-                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
-                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupTypeAttribute, Position = 1 });
-                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupScopeAttribute, Position = 2 });
-                securityGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 3 });
+                securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupTypeAttribute, Position = 1 });
+                securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupScopeAttribute, Position = 2 });
+                securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 3 });
 
                 securityGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup {
                     Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
-                        new PredefinedSearchCriteria {
+                        new() {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = groupTypeAttribute,
                             StringValue = "Security" 
@@ -422,17 +422,17 @@ namespace JIM.Application.Servers
                     MetaverseObjectType = groupObjectType
                 };
 
-                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = displayNameAttribute, Position = 0 });
-                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupTypeAttribute, Position = 1 });
-                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = groupScopeAttribute, Position = 2 });
-                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = emailAttribute, Position = 3 });
-                distributionGroupsPredefinedSearch.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = statusAttribute, Position = 4 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = displayNameAttribute, Position = 0 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupTypeAttribute, Position = 1 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupScopeAttribute, Position = 2 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 3 });
+                distributionGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 4 });
 
                 distributionGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
                     Type = PredefinedSearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
-                        new PredefinedSearchCriteria {
+                        new() {
                             ComparisonType = PredefinedSearchComparisonType.Equals,
                             MetaverseAttribute = groupTypeAttribute,
                             StringValue = "Distribution"
@@ -527,8 +527,8 @@ namespace JIM.Application.Servers
                 connectorDefinitions.Add(ldapConnectorDefinition);
             #endregion
 
-                // submit all the preparations to the repository for creation
-                await Application.Repository.Seeding.SeedDataAsync(
+            // submit all the preparations to the repository for creation
+            await Application.Repository.Seeding.SeedDataAsync(
                 attributesToCreate, 
                 objectTypesToCreate, 
                 predefinedSearchesToCreate,
@@ -622,14 +622,8 @@ namespace JIM.Application.Servers
         /// </summary>
         private async Task<ConnectorDefinition?> PrepareConnectorDefinitionAsync(IConnector connector)
         {
-            var connectorCapabilities = (IConnectorCapabilities)connector;
-            if (connectorCapabilities == null)
-                throw new ArgumentException("connector does not implement IConnectorCapabilities");
-
-            var connectorSettings = (IConnectorSettings)connector;
-            if (connectorSettings == null)
-                throw new ArgumentException("connector does not implement IConnectorSettings");
-
+            var connectorCapabilities = (IConnectorCapabilities)connector ?? throw new ArgumentException("connector does not implement IConnectorCapabilities");
+            var connectorSettings = (IConnectorSettings)connector ?? throw new ArgumentException("connector does not implement IConnectorSettings");
             var connectorDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name);
             if (connectorDefinition != null)
                 return null;
@@ -834,14 +828,14 @@ namespace JIM.Application.Servers
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Status),
                     WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
                     {
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Active", Weight = 0.8f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Suspended", Weight = 0.02f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Sebatical", Weight = 0.03f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Seconded", Weight = 0.03f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Maternity", Weight = 0.03f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Paternity", Weight = 0.03f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Leaving", Weight = 0.03f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Leaver", Weight = 0.03f }
+                        new() { Value = "Active", Weight = 0.8f },
+                        new() { Value = "Suspended", Weight = 0.02f },
+                        new() { Value = "Sebatical", Weight = 0.03f },
+                        new() { Value = "Seconded", Weight = 0.03f },
+                        new() { Value = "Maternity", Weight = 0.03f },
+                        new() { Value = "Paternity", Weight = 0.03f },
+                        new() { Value = "Leaving", Weight = 0.03f },
+                        new() { Value = "Leaver", Weight = 0.03f }
                     },
                     PopulatedValuesPercentage = 100
                 });
@@ -875,10 +869,10 @@ namespace JIM.Application.Servers
                 {
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.DisplayName),
                     ExampleDataSetInstances = new List<ExampleDataSetInstance> { 
-                        new ExampleDataSetInstance { ExampleDataSet = adjectivesDataSet, Order = 0 }, 
-                        new ExampleDataSetInstance { ExampleDataSet = coloursDataSet, Order = 1 }, 
-                        new ExampleDataSetInstance { ExampleDataSet = wordsDataSet, Order = 2 }, 
-                        new ExampleDataSetInstance { ExampleDataSet = groupEndingsDataSet, Order = 3 } },
+                        new() { ExampleDataSet = adjectivesDataSet, Order = 0 }, 
+                        new() { ExampleDataSet = coloursDataSet, Order = 1 }, 
+                        new() { ExampleDataSet = wordsDataSet, Order = 2 }, 
+                        new() { ExampleDataSet = groupEndingsDataSet, Order = 3 } },
                     PopulatedValuesPercentage = 100,
                     Pattern = "{0} {1} {2} {3}"
                 });
@@ -892,8 +886,8 @@ namespace JIM.Application.Servers
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
                     WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
                     {
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Security", Weight = 0.6f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Distribution", Weight = 0.4f },
+                        new() { Value = "Security", Weight = 0.6f },
+                        new() { Value = "Distribution", Weight = 0.4f },
                     },
                     PopulatedValuesPercentage = 100
                 });
@@ -982,9 +976,9 @@ namespace JIM.Application.Servers
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Status),
                     WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
                     {
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Active", Weight = 0.9f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Retiring", Weight = 0.05f },
-                        new DataGenerationTemplateAttributeWeightedValue { Value = "Retired", Weight = 0.05f },
+                        new() { Value = "Active", Weight = 0.9f },
+                        new() { Value = "Retiring", Weight = 0.05f },
+                        new() { Value = "Retired", Weight = 0.05f },
                     },
                     PopulatedValuesPercentage = 100
                 });

@@ -11,6 +11,11 @@ namespace JIM.Models.Search
     {
         public int Id { get; set; }
 
+        public DateTime Created { get; set; }
+
+        /// <summary>
+        /// The type of Metaverse object this search will result results for.
+        /// </summary>
         public MetaverseObjectType MetaverseObjectType { get; set; } = null!;
 
         /// <summary>
@@ -19,6 +24,10 @@ namespace JIM.Models.Search
         /// </summary>
         public bool IsDefaultForMetaverseObjectType { get; set; }
 
+        /// <summary>
+        /// The user-supplied name of the predefined search. This will be displayed to users when selecting from predefined searches.
+        /// i.e. "All Permanent Staff"
+        /// </summary>
         public string Name { get; set; } = null!;
 
         /// <summary>
@@ -26,12 +35,19 @@ namespace JIM.Models.Search
         /// </summary>
         public string Uri { get; set; } = null!;
 
+        /// <summary>
+        /// Is this a PredefinedSearch that comes built-in to JIM, or is it user-created?
+        /// </summary>
         public bool BuiltIn { get; set; }
 
+        /// <summary>
+        /// The attribute(s) to return in the result of the search. They can be different for each predefined search.
+        /// </summary>
         public List<PredefinedSearchAttribute> Attributes { get; set; }
 
-        public DateTime Created { get; set; }
-
+        /// <summary>
+        /// The criteria used to filter the results, i.e. the search query.
+        /// </summary>
         public List<PredefinedSearchCriteriaGroup> CriteriaGroups { get; set; }
 
         public PredefinedSearch()
