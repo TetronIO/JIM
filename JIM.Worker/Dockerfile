@@ -11,6 +11,11 @@ FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
 COPY ["JIM.Worker/JIM.Worker.csproj", "JIM.Worker/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
+COPY ["JIM.Application/JIM.Application.csproj", "JIM.Application/"]
+COPY ["JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+COPY ["JIM.Data/JIM.Data.csproj", "JIM.Data/"]
 RUN dotnet restore "./JIM.Worker/JIM.Worker.csproj"
 COPY . .
 WORKDIR "/src/JIM.Worker"

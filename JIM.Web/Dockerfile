@@ -12,7 +12,13 @@ RUN apt-get update \
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
-COPY ["src/JIM.Web/JIM.Web.csproj", "src/JIM.Web/"]
+COPY ["JIM.Web/JIM.Web.csproj", "JIM.Web/"]
+COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
+COPY ["JIM.Application/JIM.Application.csproj", "JIM.Application/"]
+COPY ["JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+COPY ["JIM.Data/JIM.Data.csproj", "JIM.Data/"]
 RUN dotnet restore "./JIM.Web/JIM.Web.csproj"
 COPY . .
 WORKDIR "/src/JIM.Web"
