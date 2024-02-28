@@ -10,7 +10,11 @@ WORKDIR /src
 COPY ["JIM.Api/JIM.Api.csproj", "JIM.Api/"]
 COPY ["JIM.Application/JIM.Application.csproj", "JIM.Application/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
-RUN dotnet restore "JIM.Api/JIM.Api.csproj"
+COPY ["JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["JIM.Data/JIM.Data.csproj", "JIM.Data/"]
+COPY ["JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+RUN dotnet restore "./JIM.Api/JIM.Api.csproj"
 COPY . .
 WORKDIR "/src/JIM.Api"
 RUN dotnet build "JIM.Api.csproj" -c Release -o /app/build
