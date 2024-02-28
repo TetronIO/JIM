@@ -10,7 +10,7 @@ WORKDIR /src
 COPY ["JIM.Api/JIM.Api.csproj", "JIM.Api/"]
 COPY ["JIM.Application/JIM.Application.csproj", "JIM.Application/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
-RUN dotnet restore "JIM.Api/JIM.Api.csproj"
+RUN dotnet restore "./JIM.Api/JIM.Api.csproj"
 COPY . .
 WORKDIR "/src/JIM.Api"
 RUN dotnet build "JIM.Api.csproj" -c Release -o /app/build

@@ -13,9 +13,9 @@ RUN apt-get update \
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
 COPY ["src/JIM.Web/JIM.Web.csproj", "src/JIM.Web/"]
-RUN dotnet restore "src/JIM.Web/JIM.Web.csproj"
+RUN dotnet restore "./JIM.Web/JIM.Web.csproj"
 COPY . .
-WORKDIR "/src/src/JIM.Web"
+WORKDIR "/src/JIM.Web"
 RUN dotnet build "JIM.Web.csproj" -c Release -o /app/build
 
 FROM build AS publish

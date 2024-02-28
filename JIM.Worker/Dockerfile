@@ -11,7 +11,7 @@ FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
 COPY ["JIM.Worker/JIM.Worker.csproj", "JIM.Worker/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
-RUN dotnet restore "JIM.Service/JIM.Worker.csproj"
+RUN dotnet restore "./JIM.Worker/JIM.Worker.csproj"
 COPY . .
 WORKDIR "/src/JIM.Worker"
 RUN dotnet build "JIM.Worker.csproj" -c Release -o /app/build

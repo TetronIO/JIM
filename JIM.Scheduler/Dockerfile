@@ -6,7 +6,7 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
 COPY ["JIM.Scheduler/JIM.Scheduler.csproj", "JIM.Scheduler/"]
-RUN dotnet restore "JIM.Scheduler/JIM.Scheduler.csproj"
+RUN dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj"
 COPY . .
 WORKDIR "/src/JIM.Scheduler"
 RUN dotnet build "JIM.Scheduler.csproj" -c Release -o /app/build
