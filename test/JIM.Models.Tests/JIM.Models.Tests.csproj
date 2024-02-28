@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\JIM.Models\JIM.Models.csproj" />
+    <ProjectReference Include="..\..\JIM.Models\JIM.Models.csproj" />
   </ItemGroup>
 
 </Project>

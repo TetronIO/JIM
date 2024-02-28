@@ -25,7 +25,7 @@ services:
       - jim-logs-volume:/var/log/jim
     build:
       context: .
-      dockerfile: src/JIM.Web/Dockerfile
+      dockerfile: JIM.Web/Dockerfile
     depends_on:
       - jim.database
       - jim.worker
@@ -56,7 +56,7 @@ services:
       - jim-logs-volume:/var/log/jim
     build:
       context: .
-      dockerfile: src/JIM.Api/Dockerfile
+      dockerfile: JIM.Api/Dockerfile
     depends_on:
       - jim.database
       - jim.worker
@@ -79,7 +79,7 @@ services:
       - jim-logs-volume:/var/log/jim
     build:
       context: .
-      dockerfile: src/JIM.Worker/Dockerfile
+      dockerfile: JIM.Worker/Dockerfile
     depends_on:
       - jim.database
     networks:
@@ -101,7 +101,7 @@ services:
       - jim-logs-volume:/var/log/jim
     build:
       context: .
-      dockerfile: src/JIM.Scheduler/Dockerfile
+      dockerfile: JIM.Scheduler/Dockerfile
     depends_on:
       - jim.database
       - jim.worker
