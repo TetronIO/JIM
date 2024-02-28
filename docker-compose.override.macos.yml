@@ -1,6 +1,16 @@
 version: '3.4'
 
 services:
+  jim.web:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=https://+:443;http://+:80
+    ports:
+      - "5200:80"
+      - "5201:443"
+    volumes:
+      - ~/.aspnet/https:/root/.aspnet/https:ro
+      - ~/.microsoft/usersecrets:/root/.microsoft/usersecrets:ro
   jim.api:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
