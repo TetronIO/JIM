@@ -1,0 +1,81 @@
+﻿@page "/admin/connected-systems/sync-rules/create"
+@page "/admin/connected-systems/sync-rules/{Id:int}"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Logic
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Sync Rule: @syncRuleNameOrCreate</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Sync Rule:</span> @syncRuleNameOrCreate</MudText>
+<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+@if (syncRule != null)
+{
+    <MudPaper Class="pa-4 mt-5" Outlined="true">
+        <MudForm @bind-IsValid="@isDetailsFormValid" @bind-Errors="@detailsFormErrors">
+            <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="syncRule.Name" Variant="Variant.Outlined" />
+
+            @if (syncRule.Id == null)
+            {
+                <MudSelect T="int" Label="Connected System" Placeholder="Please select a Connected System..." Required="true" @bind-Value="selectedConnectedSystemId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start" Variant="Variant.Outlined">
+                    @foreach (var header in connectedSystemHeaders)
+                    {
+                        <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save</MudButton>
+        </MudForm>
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    private string syncRuleNameOrCreate = "Create";
+    private List<BreadcrumbItem> breadcrumbs = null!;
+    private SyncRule? syncRule;
+    private bool isDetailsFormValid;
+    private string[] detailsFormErrors = { };
+    private List<ConnectedSystemHeader> connectedSystemHeaders = null!;
+    private int selectedConnectedSystemId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Sync Rules", href: "/admin/connected-systems/sync-rules/")
+        };
+
+        if (Id != null)
+        {
+            // edit an existing sync rule
+            syncRule = await Jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
+            if (syncRule == null)
+            {
+                // sync rule not found, redirect to index page
+                NavManager.NavigateTo("../");
+                return;
+            }
+
+            breadcrumbs.Add(new BreadcrumbItem(syncRule.Name, href: null, disabled: true));
+        }
+        else
+        {
+            // create a new sync rule
+            syncRule = new SyncRule();
+
+            breadcrumbs.Add(new BreadcrumbItem("New Sync Rule", href: null, disabled: true));
+            connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        }
+
+
+    }
+}
