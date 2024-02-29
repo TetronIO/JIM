@@ -84,6 +84,11 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemHeaderAsync(id);
         }
 
+        public int GetConnectedSystemCount()
+        {
+            return Application.Repository.ConnectedSystems.GetConnectedSystemCount();
+        }
+        
         public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
         {
             if (connectedSystem == null)

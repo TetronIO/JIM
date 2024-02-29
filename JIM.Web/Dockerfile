@@ -7,7 +7,9 @@ EXPOSE 443
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libldap-2.4-2 \
+    && apt-get install -y --no-install-recommends libldap-common \
     && apt-get install -y --no-install-recommends iputils-ping \
+    && apt-get install -y --no-install-recommends netcat \
     && rm -rf /var/lib/apt/lists/*
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build

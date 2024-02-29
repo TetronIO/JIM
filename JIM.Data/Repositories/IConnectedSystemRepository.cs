@@ -17,6 +17,7 @@ namespace JIM.Data.Repositories
         public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
         public Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId);
         public Task<int> GetConnectedSystemObjectCountAsync();
+        public int GetConnectedSystemCount();
         public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
         public Task<IList<SyncRule>> GetSyncRulesAsync();
         public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();

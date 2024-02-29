@@ -84,6 +84,11 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.ConnectedSystems.OrderBy(x => x.Name).ToListAsync();
         }
 
+        public int GetConnectedSystemCount()
+        {
+            return Repository.Database.ConnectedSystems.Count();
+        }
+        
         public async Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
         {
             return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader

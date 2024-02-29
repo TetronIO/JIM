@@ -18,9 +18,21 @@
     <MudToolBar>
         <MudButton Href="/admin/connected-systems/sync-rules" Color="Color.Primary" DisableElevation="true" Disabled="true">Sync Rules</MudButton>
         <MudSpacer />
-        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/sync-rules/create" Size="Size.Small" Color="Color.Primary" DisableElevation="true">Create Sync Rule</MudButton>
+        <MudButton 
+            StartIcon="@Icons.Material.Filled.Add" 
+            ariant="Variant.Filled" 
+            Href="/admin/connected-systems/sync-rules/create" 
+            Size="Size.Small" 
+            Color="Color.Primary"
+            Disabled=@(!canCreateSyncRules)
+            DisableElevation="true">Create Sync Rule</MudButton>
     </MudToolBar>
 </MudPaper>
+
+@if (!canCreateSyncRules)
+{
+    <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
+}
 
 <MudTable Items="@syncRuleHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<SyncRuleHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
@@ -64,6 +76,7 @@
 @code {
     private IList<SyncRuleHeader>? syncRuleHeaders;
     private string searchString = "";
+    private bool canCreateSyncRules = false;
 
     private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
     {
@@ -73,6 +86,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        canCreateSyncRules = Jim.ConnectedSystems.GetConnectedSystemCount() > 0;
         syncRuleHeaders = await Jim.ConnectedSystems.GetSyncRuleHeadersAsync();
     }
 
