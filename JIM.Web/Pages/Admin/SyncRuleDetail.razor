@@ -9,8 +9,8 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Sync Rule: @syncRuleNameOrCreate</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Sync Rule:</span> @syncRuleNameOrCreate</MudText>
+<PageTitle>Synchronisation Rule: @syncRuleNameOrCreate</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Synchronisation Rule:</span> @syncRuleNameOrCreate</MudText>
 <MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (syncRule != null)
@@ -19,17 +19,45 @@
         <MudForm @bind-IsValid="@isDetailsFormValid" @bind-Errors="@detailsFormErrors">
             <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="syncRule.Name" Variant="Variant.Outlined" />
 
-            @if (syncRule.Id == null)
+            @if (syncRule.Id == 0)
             {
-                <MudSelect T="int" Label="Connected System" Placeholder="Please select a Connected System..." Required="true" @bind-Value="selectedConnectedSystemId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start" Variant="Variant.Outlined">
-                    @foreach (var header in connectedSystemHeaders)
-                    {
-                        <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
-                    }
-                </MudSelect>
+                @if (connectedSystemHeaders != null)
+                {
+                    <MudSelect 
+                        T="string"
+                        Label="Connected System"
+                        Placeholder="Please select a Connected System..."
+                        Required="true"
+                        @bind-Value="selectedConnectedSystemId"
+                        AdornmentIcon="@Icons.Material.Filled.Power"
+                        Adornment="Adornment.Start"
+                        Variant="Variant.Outlined"
+                        Class="mt-5">
+                        @foreach (var header in connectedSystemHeaders)
+                        {
+                            <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
             }
+
+            <MudSelect 
+                T="SyncRuleDirection" 
+                Label="Direction" 
+                Placeholder="Please select an attribute flow direction..." 
+                Required="true" 
+                @bind-Value="syncRule.Direction"
+                AdornmentIcon="@Icons.Material.Filled.CompareArrows"
+                Adornment="Adornment.Start" 
+                Variant="Variant.Outlined"
+                Class="mt-5">
+                @foreach (SyncRuleDirection item in Enum.GetValues(typeof(SyncRuleDirection)))
+                {
+                    <MudSelectItem Value="@item">@item</MudSelectItem>
+                }
+            </MudSelect>
             
-            @*<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save</MudButton>*@
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save Sync Rule</MudButton>
         </MudForm>
     </MudPaper>
 }
@@ -38,20 +66,20 @@
     [Parameter]
     public int? Id { get; set; }
 
-    private string syncRuleNameOrCreate = "Create";
+    private string syncRuleNameOrCreate = "New";
     private List<BreadcrumbItem> breadcrumbs = null!;
     private SyncRule? syncRule;
     private bool isDetailsFormValid;
     private string[] detailsFormErrors = { };
     private List<ConnectedSystemHeader> connectedSystemHeaders = null!;
-    private int selectedConnectedSystemId;
+    private string selectedConnectedSystemId = null!;
 
     protected override async Task OnInitializedAsync()
     {
         breadcrumbs = new List<BreadcrumbItem>
         {
             new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Sync Rules", href: "/admin/connected-systems/sync-rules/")
+            new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync-rules/")
         };
 
         if (Id != null)
@@ -71,11 +99,29 @@
         {
             // create a new sync rule
             syncRule = new SyncRule();
-
-            breadcrumbs.Add(new BreadcrumbItem("New Sync Rule", href: null, disabled: true));
+            breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
             connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
         }
+    }
+
+    private async Task HandleValidDetailsFormSubmit()
+    {
 
 
+        // var connectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId));
+        // if (connectorDefinition == null)
+        //     return;
+
+        // var connectedSystem = new JIM.Models.Staging.ConnectedSystem
+        //     {
+        //         Name = model.Name,
+        //         Description = model.Description,
+        //         ConnectorDefinition = connectorDefinition
+        //     };
+
+        // // attribute the execution to the user
+        // var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        // await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user);
+        // NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}");
     }
 }

@@ -91,7 +91,7 @@ namespace JIM.PostgresData.Repositories
         
         public async Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
         {
-            return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
+            var headers = await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).OrderBy(a => a.Name).Select(cs => new ConnectedSystemHeader
             {
                 Id = cs.Id,
                 Name = cs.Name,
@@ -102,6 +102,7 @@ namespace JIM.PostgresData.Repositories
                 ConnectorName = cs.ConnectorDefinition.Name,
                 ConnectorId = cs.ConnectorDefinition.Id
             }).ToListAsync();
+            return headers;
         }
 
         public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
