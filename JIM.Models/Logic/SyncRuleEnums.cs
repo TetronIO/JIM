@@ -2,14 +2,16 @@
 {
     public enum SyncRuleDirection
     {
-        Import = 0,
-        Export = 1
+        NotSet = 0,
+        Import = 1,
+        Export = 2
     }
 
     public enum SyncRuleStatus
     {
-        Disabled = 0,
-        Enabled = 1
+        NotSet = 0,
+        Disabled = 1,
+        Enabled = 2
     }
 
     public enum SyncRuleMappingType

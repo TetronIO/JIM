@@ -28,7 +28,7 @@
                         Label="Connected System"
                         Placeholder="Please select a Connected System..."
                         Required="true"
-                        @bind-Value="selectedConnectedSystemId"
+                        ValueChanged="HandleConnectedSystemSelectedAsync"
                         AdornmentIcon="@Icons.Material.Filled.Power"
                         Adornment="Adornment.Start"
                         Variant="Variant.Outlined"
@@ -42,18 +42,21 @@
             }
 
             <MudSelect 
-                T="SyncRuleDirection" 
+                T="string" 
                 Label="Direction" 
                 Placeholder="Please select an attribute flow direction..." 
-                Required="true" 
-                @bind-Value="syncRule.Direction"
+                Required="true"
+                ValueChanged="HandleSyncRuleDirectionSelection"
                 AdornmentIcon="@Icons.Material.Filled.CompareArrows"
                 Adornment="Adornment.Start" 
                 Variant="Variant.Outlined"
                 Class="mt-5">
                 @foreach (SyncRuleDirection item in Enum.GetValues(typeof(SyncRuleDirection)))
                 {
-                    <MudSelectItem Value="@item">@item</MudSelectItem>
+                    if (item != SyncRuleDirection.NotSet)
+                    {
+                        <MudSelectItem Value="@item.ToString()">@item</MudSelectItem>
+                    }
                 }
             </MudSelect>
             
@@ -72,7 +75,6 @@
     private bool isDetailsFormValid;
     private string[] detailsFormErrors = { };
     private List<ConnectedSystemHeader> connectedSystemHeaders = null!;
-    private string selectedConnectedSystemId = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -104,10 +106,36 @@
         }
     }
 
+    private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)
+    {
+        // should never happen, but performing for linting reasons
+        if (syncRule == null)
+            return;
+
+        // convert to int and assign to SR
+        int connectedSystemIdInt = int.Parse(connectedSystemId);
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystemIdInt);
+        if (connectedSystem == null)
+            return;
+
+        syncRule.ConnectedSystem = connectedSystem;
+        Console.WriteLine($"HandleConnectedSystemSelectedAsync: Assigned ConnectedSystem: {syncRule.ConnectedSystem}");
+    }
+
+    private void HandleSyncRuleDirectionSelection(string syncRuleDirection)
+    {
+        // convert to enum and assign to sr
+        // should never happen, but performing for linting reasons
+        if (syncRule == null)
+            return;
+
+        var syncRuleDirectionEnum = (SyncRuleDirection)Enum.Parse(typeof(SyncRuleDirection), syncRuleDirection);
+        syncRule.Direction = syncRuleDirectionEnum;
+        Console.WriteLine($"HandleSyncRuleDirectionSelection: Assigned SyncRuleDirection: {syncRule.Direction}");
+    }
+
     private async Task HandleValidDetailsFormSubmit()
     {
-
-
         // var connectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId));
         // if (connectorDefinition == null)
         //     return;
