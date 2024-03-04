@@ -105,12 +105,20 @@
                 }
 
                 <MudSwitch Class="mt-5" @bind-Value="@syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
-                <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">Synchronisation Rules will not be evaluated when disabled, enabling you to either prepare a rule in advance of it needing to be used, or to temporarily stop evaluating the sync rule..</MudAlert>
-
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save Synchronisation Rule</MudButton>
+                <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">Synchronisation Rules will not be evaluated when disabled, enabling you to either prepare a rule in advance of it being needed, or to temporarily stop evaluating a sync rule..</MudAlert>
             }
-            
         </MudForm>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mt-5" Outlined="true">
+        <MudText Typo="Typo.h4">Matching Rules</MudText>
+        <MudText Class="mt-5">
+            One or more matching rules are needed to ensure JIM can relate a Metaverse Object to a Connected System Object. 
+            It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for the life of the object. 
+            You can define multiple rules, and order them. The first to match will be used. Common examples might include: employeeID = employeeID, or ActiveDirectoryObjectGuid = objectGUID.
+            A Connected System Object is marked as Joined when a match is found, and Disconnected when not and there's connection to a Metaverse Object.
+        </MudText>
+    
     </MudPaper>
 }
 
@@ -188,24 +196,5 @@
         // reset provision/project choices
         syncRule.ProvisionToConnectedSystem = false;
         syncRule.ProjectToMetaverse = false;
-    }
-
-    private async Task HandleValidDetailsFormSubmit()
-    {
-        // var connectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId));
-        // if (connectorDefinition == null)
-        //     return;
-
-        // var connectedSystem = new JIM.Models.Staging.ConnectedSystem
-        //     {
-        //         Name = model.Name,
-        //         Description = model.Description,
-        //         ConnectorDefinition = connectorDefinition
-        //     };
-
-        // // attribute the execution to the user
-        // var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        // await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user);
-        // NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}");
     }
 }
