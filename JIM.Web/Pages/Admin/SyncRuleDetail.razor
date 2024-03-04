@@ -39,63 +39,74 @@
                         }
                     </MudSelect>
                 }
-            }
 
-            <MudSelect 
-                T="string" 
-                Label="Direction" 
-                Placeholder="Please select an attribute flow direction..." 
-                Required="true"
-                ValueChanged="HandleSyncRuleDirectionSelection"
-                Variant="Variant.Outlined"
-                Class="mt-5">
-                @foreach (SyncRuleDirection item in Enum.GetValues(typeof(SyncRuleDirection)))
-                {
-                    if (item != SyncRuleDirection.NotSet)
+                <MudSelect T="string"
+                           Label="Direction"
+                           Placeholder="Please select an attribute flow direction..."
+                           Required="true"
+                           ValueChanged="HandleSyncRuleDirectionSelection"
+                           Variant="Variant.Outlined"
+                           Class="mt-5">
+                    @foreach (SyncRuleDirection item in Enum.GetValues(typeof(SyncRuleDirection)))
                     {
-                        <MudSelectItem Value="@item.ToString()">@item</MudSelectItem>
+                        if (item != SyncRuleDirection.NotSet)
+                        {
+                            <MudSelectItem Value="@item.ToString()">@item</MudSelectItem>
+                        }
                     }
+                </MudSelect>
+
+                @if (syncRule.ConnectedSystem != null && syncRule.Direction != SyncRuleDirection.NotSet && metaverseObjectTypes != null && syncRule.ConnectedSystem != null && syncRule.ConnectedSystem.ObjectTypes != null)
+                {
+                    <MudGrid>
+                        <MudItem xs="5">
+                            <MudSelect T="MetaverseObjectType"
+                                       Label="Metaverse Object Type"
+                                       @bind-Value="@syncRule.MetaverseObjectType"
+                                       Required="true"
+                                       Class="mt-5"
+                                       Variant="Variant.Outlined">
+                                @foreach (var mvObjectType in metaverseObjectTypes)
+                                {
+                                    <MudSelectItem Value="@mvObjectType">@mvObjectType.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="2">
+                            <MudPaper Outlined="false" Elevation="0" Class="d-flex flex-column align-center justify-center mud-width-full py-10">
+                                <MudIcon Size="Size.Medium" Icon="@(syncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)"></MudIcon>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="5">
+                            <MudSelect T="ConnectedSystemObjectType"
+                                       Label="Connected System Object Type"
+                                       @bind-Value="@syncRule.ConnectedSystemObjectType"
+                                       Required="true"
+                                       Class="mt-5"
+                                       Variant="Variant.Outlined">
+                                @foreach (var csObjectType in syncRule.ConnectedSystem.ObjectTypes)
+                                {
+                                    <MudSelectItem Value="@csObjectType">@csObjectType.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
                 }
-            </MudSelect>
 
-            @if (syncRule.ConnectedSystem != null && syncRule.Direction != SyncRuleDirection.NotSet && metaverseObjectTypes != null && syncRule.ConnectedSystem != null && syncRule.ConnectedSystem.ObjectTypes != null)
-            {
-                <MudGrid>
-                    <MudItem xs="5">
-                        <MudSelect T="MetaverseObjectType"
-                                    Label="Metaverse Object Type"
-                                    @bind-Value="@syncRule.MetaverseObjectType"
-                                    Required="true"
-                                    Class="mt-5"
-                                    Variant="Variant.Outlined">
-                            @foreach (var mvObjectType in metaverseObjectTypes)
-                            {
-                                <MudSelectItem Value="@mvObjectType">@mvObjectType.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="2">
-                        <MudPaper Outlined="false" Elevation="0" Class="d-flex flex-column align-center justify-center mud-width-full py-10">
-                            <MudIcon Size="Size.Medium" Icon="@(syncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)"></MudIcon>
-                        </MudPaper>
-                    </MudItem>
-                    <MudItem xs="5">
-                        <MudSelect T="ConnectedSystemObjectType"
-                                   Label="Connected System Object Type"
-                                   @bind-Value="@syncRule.ConnectedSystemObjectType"
-                                   Required="true"
-                                   Class="mt-5"
-                                   Variant="Variant.Outlined">
-                            @foreach (var csObjectType in syncRule.ConnectedSystem.ObjectTypes)
-                            {
-                                <MudSelectItem Value="@csObjectType">@csObjectType.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
-                </MudGrid>
+                @if (syncRule.Direction == SyncRuleDirection.Import)
+                {
+                    <MudSwitch @bind-Value="@syncRule.ProjectToMetaverse" Color="Color.Primary" Label="Create imported objects in the Metaverse?" />
+                    <MudAlert Class="mt-5" Severity="Severity.Info" Variant="Variant.Text">By default, objects imported from the Connected System matched in this synchronisation rule will not result in a Metaverse object being created. Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a HR system.</MudAlert>
+                }
+                @if (syncRule.Direction == SyncRuleDirection.Export)
+                {
+                    <MudSwitch @bind-Value="@syncRule.ProvisionToConnectedSystem" Color="Color.Primary" Label="Create objects in the Connected System?" />
+                    <MudAlert Class="mt-5" Severity="Severity.Info" Variant="Variant.Text">By default, Metaverse objects matched in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse object to be created (provisioned) in the Connected System. You would typically enable this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudAlert>
+                }
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save Synchronisation Rule</MudButton>
             }
-
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save Synchronisation Rule</MudButton>
+            
         </MudForm>
     </MudPaper>
 }
@@ -170,6 +181,10 @@
         var syncRuleDirectionEnum = (SyncRuleDirection)Enum.Parse(typeof(SyncRuleDirection), syncRuleDirection);
         syncRule.Direction = syncRuleDirectionEnum;
         Console.WriteLine($"HandleSyncRuleDirectionSelection: Assigned SyncRuleDirection: {syncRule.Direction}");
+
+        // reset provision/project choices
+        syncRule.ProvisionToConnectedSystem = false;
+        syncRule.ProjectToMetaverse = false;
     }
 
     private async Task HandleValidDetailsFormSubmit()
