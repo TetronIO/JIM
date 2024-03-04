@@ -7,13 +7,6 @@
         Export = 2
     }
 
-    public enum SyncRuleStatus
-    {
-        NotSet = 0,
-        Disabled = 1,
-        Enabled = 2
-    }
-
     public enum SyncRuleMappingType
     {
         NotSet = 0,

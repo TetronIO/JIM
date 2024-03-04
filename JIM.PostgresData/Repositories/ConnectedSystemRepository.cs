@@ -508,7 +508,7 @@ namespace JIM.PostgresData.Repositories
                 MetaverseObjectTypeName = sr.MetaverseObjectType.Name,
                 ProjectToMetaverse = sr.ProjectToMetaverse,
                 ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem,
-                Status = sr.Status
+                Enabled = sr.Enabled
             }).ToListAsync();
         }
 

@@ -20,6 +20,6 @@
 
         public bool? ProjectToMetaverse { get; set; }
         
-        public SyncRuleStatus Status { get; set; }
+        public bool Enabled { get; set; }
     }
 }

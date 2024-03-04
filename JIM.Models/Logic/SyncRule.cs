@@ -31,7 +31,7 @@ namespace JIM.Models.Logic
         
         public bool? ProjectToMetaverse { get; set; }
 
-        public SyncRuleStatus Status { get; set; }
+        public bool Enabled { get; set; }
 
         /// <summary>
         /// Contains all the logic that controls what attributes on a metaverse object should flow to what connected system object attribute, or visa-versa.
@@ -52,7 +52,7 @@ namespace JIM.Models.Logic
 
         public SyncRule()
         {
-            Status = SyncRuleStatus.Enabled;
+            Enabled = true;
             Created = DateTime.UtcNow;
             AttributeFlowRules = new List<SyncRuleMapping>();
             ObjectMatchingRules = new List<SyncRuleMapping>();
