@@ -47,8 +47,6 @@
                 Placeholder="Please select an attribute flow direction..." 
                 Required="true"
                 ValueChanged="HandleSyncRuleDirectionSelection"
-                AdornmentIcon="@Icons.Material.Filled.CompareArrows"
-                Adornment="Adornment.Start" 
                 Variant="Variant.Outlined"
                 Class="mt-5">
                 @foreach (SyncRuleDirection item in Enum.GetValues(typeof(SyncRuleDirection)))
@@ -59,7 +57,44 @@
                     }
                 }
             </MudSelect>
-            
+
+            @if (syncRule.ConnectedSystem != null && syncRule.Direction != SyncRuleDirection.NotSet && metaverseObjectTypes != null && syncRule.ConnectedSystem != null && syncRule.ConnectedSystem.ObjectTypes != null)
+            {
+                <MudGrid>
+                    <MudItem xs="5">
+                        <MudSelect T="MetaverseObjectType"
+                                    Label="Metaverse Object Type"
+                                    @bind-Value="@syncRule.MetaverseObjectType"
+                                    Required="true"
+                                    Class="mt-5"
+                                    Variant="Variant.Outlined">
+                            @foreach (var mvObjectType in metaverseObjectTypes)
+                            {
+                                <MudSelectItem Value="@mvObjectType">@mvObjectType.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="2">
+                        <MudPaper Outlined="false" Elevation="0" Class="d-flex flex-column align-center justify-center mud-width-full py-10">
+                            <MudIcon Size="Size.Medium" Icon="@(syncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)"></MudIcon>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudSelect T="ConnectedSystemObjectType"
+                                   Label="Connected System Object Type"
+                                   @bind-Value="@syncRule.ConnectedSystemObjectType"
+                                   Required="true"
+                                   Class="mt-5"
+                                   Variant="Variant.Outlined">
+                            @foreach (var csObjectType in syncRule.ConnectedSystem.ObjectTypes)
+                            {
+                                <MudSelectItem Value="@csObjectType">@csObjectType.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+            }
+
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save Synchronisation Rule</MudButton>
         </MudForm>
     </MudPaper>
@@ -75,6 +110,8 @@
     private bool isDetailsFormValid;
     private string[] detailsFormErrors = { };
     private List<ConnectedSystemHeader> connectedSystemHeaders = null!;
+    private List<MetaverseObjectType> metaverseObjectTypes = null!;
+    private List<ConnectedSystemObjectType> connectedSystemObjectTypes = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -103,6 +140,7 @@
             syncRule = new SyncRule();
             breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
             connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+            metaverseObjectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(false);
         }
     }
 

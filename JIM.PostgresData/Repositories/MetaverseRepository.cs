@@ -23,7 +23,7 @@ namespace JIM.PostgresData.Repositories
 
         #region metaverse object types
 
-        public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
+        public async Task<List<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
         {
             var result = Repository.Database.MetaverseObjectTypes;
             if (includeChildObjects)
@@ -32,7 +32,7 @@ namespace JIM.PostgresData.Repositories
             return await result.OrderBy(x => x.Name).ToListAsync();
         }
 
-        public async Task<IList<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
+        public async Task<List<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
         {
             var metaverseObjectTypeHeaders = await Repository.Database.MetaverseObjectTypes.OrderBy(t => t.Name).Select(t => new MetaverseObjectTypeHeader
             {

@@ -19,12 +19,12 @@ namespace JIM.Application.Servers
         #endregion
 
         #region metaverse object types
-        public async Task<IList<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
+        public async Task<List<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
         }
 
-        public async Task<IList<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
+        public async Task<List<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
         {
             return await Application.Repository.Metaverse.GetMetaverseObjectTypeHeadersAsync();
         }
