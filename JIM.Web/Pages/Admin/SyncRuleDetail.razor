@@ -1,4 +1,4 @@
-﻿@page "/admin/connected-systems/sync-rules/create"
+﻿@page "/admin/connected-systems/sync-rules/new"
 @page "/admin/connected-systems/sync-rules/{Id:int}"
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
@@ -60,7 +60,7 @@
                 }
             </MudSelect>
             
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save Sync Rule</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsFormSubmit" DisableElevation="true">Save Synchronisation Rule</MudButton>
         </MudForm>
     </MudPaper>
 }
