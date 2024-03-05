@@ -110,18 +110,27 @@
         </MudForm>
     </MudPaper>
 
-    <MudPaper Class="pa-4 mt-5" Outlined="true">
-        <MudText Typo="Typo.h4">Matching Rules</MudText>
-        <MudText Class="mt-5">
-            At lest one matching rules is needed to ensure JIM can associate a Connected System Object from this sync rule with a matching Metaverse object.
-            It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for the life of the object. 
-            You can define multiple rules, and order them. The first to match will be used. Common examples might include: employeeID = employeeID, or ActiveDirectoryObjectGuid = objectGUID.
-            A Connected System Object is considered as Joined when a matching Metaverse object is found, and Disconnected when not.
-        </MudText>
+    @if (syncRule.Direction == SyncRuleDirection.Import)
+    {
+        <MudPaper Class="pa-4 mt-5" Outlined="true">
+            <MudText Typo="Typo.h4">Matching Rules</MudText>
+            <MudText Class="mt-5">
+                At lest one matching rules is needed to ensure JIM can associate a Connected System Object from this sync rule with a matching Metaverse object.
+                It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for the life of the object.
+                You can define multiple rules, and order them. The first to match will be used. Common examples might include: employeeID = employeeID, or ActiveDirectoryObjectGuid = objectGUID.
+                A Connected System Object is considered as Joined when a matching Metaverse object is found, and Disconnected when not.
+            </MudText>
 
+            <MudButton StartIcon="@Icons.Material.Filled.Add"
+                       Variant="Variant.Filled"
+                       Href="/admin/connected-systems/sync-rules/new"
+                       Color="Color.Default"
+                       Class="mt-5"
+                       Disabled="@(syncRule.MetaverseObjectType == null || syncRule.ConnectedSystemObjectType == null)"
+                       DisableElevation="true">Create Mapping</MudButton>
 
-    
-    </MudPaper>
+        </MudPaper>
+    }
 }
 
 @code {
