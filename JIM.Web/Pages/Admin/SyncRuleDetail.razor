@@ -113,11 +113,13 @@
     <MudPaper Class="pa-4 mt-5" Outlined="true">
         <MudText Typo="Typo.h4">Matching Rules</MudText>
         <MudText Class="mt-5">
-            One or more matching rules are needed to ensure JIM can relate a Metaverse Object to a Connected System Object. 
+            At lest one matching rules is needed to ensure JIM can associate a Connected System Object from this sync rule with a matching Metaverse object.
             It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for the life of the object. 
             You can define multiple rules, and order them. The first to match will be used. Common examples might include: employeeID = employeeID, or ActiveDirectoryObjectGuid = objectGUID.
-            A Connected System Object is marked as Joined when a match is found, and Disconnected when not and there's connection to a Metaverse Object.
+            A Connected System Object is considered as Joined when a matching Metaverse object is found, and Disconnected when not.
         </MudText>
+
+
     
     </MudPaper>
 }

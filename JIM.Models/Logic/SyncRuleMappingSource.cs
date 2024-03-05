@@ -14,11 +14,12 @@ namespace JIM.Models.Logic
         public int Id { get; set; }
 
         /// <summary>
-        /// If multiple sources are defined for an attribute mapping, then the order in which they appear matters.
-        /// The one with the lowest order will take priority, i.e. in a list of sources, the first to provide a non-null value will be used.
+        /// Applies to: Function chaining scenario.
+        /// If multiple sources are defined against a mapping, then the order in which they appear matters.
+        /// Sources will be evaluated in order, i.e order 0 item will be evaluated first, then 1, etc.
         /// </summary>
         public int Order { get; set; }
-        
+
         /// <summary>
         /// For Export sync rules only: If populated, denotes that a Metaverse Attribute should be used to set the target attribute value.
         /// </summary>

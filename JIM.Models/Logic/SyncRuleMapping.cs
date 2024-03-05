@@ -5,9 +5,20 @@ namespace JIM.Models.Logic
 {
     /// <summary>
     /// Defines how data should flow from JIM to a connected system (or visa versa) for a specific attribute.
-    /// Note: There can be only one mapping per target attribute. If multiple sources need to be used to determine the target value
-    /// then the user is to define multiple sources under a mapping. This keeps the UI clean: there's only one mapping per target attribute.
-    /// How those target attribute values are determined is up to the mapping.
+    /// Mappings can be used for either attribute flow, or object matching scenarios. They have slightly different rules:
+    /// 
+    /// Rules:
+    /// 
+    /// ** Object Matching Scenario **
+    /// 
+    /// There can be multiple mappings against a sync rule for the same target Metaverse attribute.
+    /// i.e. you might have a primary attribute you want to join on defined in one mapping, and then a fall-back attribute in another mapping.
+    /// 
+    /// ** Attribute Flow Scenario **
+    /// 
+    /// There can only be one mapping per target attribute.
+    /// i.e. you might be mapping a single attribute source attribute to a target attribute, or your might use a function or expression as a 
+    /// source and in that be using multiple attributes as sources (parameters).
     /// </summary>
     public class SyncRuleMapping
     {
@@ -16,6 +27,13 @@ namespace JIM.Models.Logic
         public DateTime Created { get; set; }
 
         public MetaverseObject? CreatedBy { get; set; }
+
+        /// <summary>
+        /// Applies to: Object Matching scenario.
+        /// If multiple mappings are defined for a target attribute, then the order in which they appear matters.
+        /// Mappings will be evaluated in order, i.e order 0 item will be evaluated first, then 1, etc.
+        /// </summary>
+        public int Order { get; set; }
 
         /// <summary>
         /// A link to the parent SynchronisationRule for when this is an AttributeFlow type SyncRuleMapping.
@@ -33,10 +51,12 @@ namespace JIM.Models.Logic
         public SyncRuleMappingType Type { get; set; }
 
         /// <summary>
-        /// The list of sources to use when determining the target value.
-        /// A single source is most common, i.e. a 1:1 mapping, but it's possible to use multiple sources to determine the target value,
-        /// i.e. you might want to take the first non-null value from a list of sources, or you might want to use a function or expression to
-        /// make more complex decisions on what the target value should be.
+        /// The sources that provide the value for the target attribute when the mapping is evaluated. 
+        /// Suppported scenarios:
+        /// - Just one: for mapping a single attribute to the target attribute.
+        /// - Just one: for using a single function to generate a value for the target attribute.
+        /// - Just one: for using an expression to generate a value for the target attribute.
+        /// - Multiple: for usign multiple function calls that chain through each other to generate a value for the target attribute.
         /// </summary>
         public List<SyncRuleMappingSource> Sources { get; set; }
 
@@ -46,8 +66,8 @@ namespace JIM.Models.Logic
 
         public SyncRuleMapping()
         {
-            Type = SyncRuleMappingType.NotSet;
             Sources = new List<SyncRuleMappingSource>();
+            Type = SyncRuleMappingType.NotSet;
             Created = DateTime.UtcNow;
         }
     }

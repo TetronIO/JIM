@@ -24,8 +24,14 @@
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
             @Body
 
-            <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5">
-                &copy; @DateTime.UtcNow.Year Tetron Limited
+            <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
+                &copy; @DateTime.UtcNow.Year Tetron
+            </MudText>
+
+            <MudText Align="Align.Center">
+                <MudLink Href="https://github.com/TetronIO/JIM">
+                    <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;" />
+                </MudLink>
             </MudText>
 
         </MudContainer>
@@ -35,54 +41,54 @@
 @code
 {
     private MudTheme _theme = new()
+    {
+        Typography = new Typography()
         {
-            Typography = new Typography()
+            Default = new Default()
             {
-                Default = new Default()
-                {
-                    FontFamily = new[] {
-                        "-apple-system",
-                        "Segoe UI Variable Display",
-                        "Roboto",
-                        "Helvetica Neue",
-                        "Arial"
-                    },
-                    FontWeight = 400,
-                    FontSize = "16px"
-                }
-            },
-            Palette = new PaletteLight()
-            {
-                AppbarBackground = new MudColor("rgb(60,148,255)"),
-                Background = new MudColor("#f6f9fc"),
-                DrawerBackground = new MudColor("#eef2f6"),
-                Primary = new MudColor("rgb(60,148,255)")
-            },
-            PaletteDark = new PaletteDark()
-            {
-                ActionDefault = new MudColor("#acb0b3"), // pagination arrow link text
-                // ActionDisabled = new MudColor("#2c3441"), // disabled button
-                AppbarBackground = new MudColor("#1a273b"),
-                Background = new MudColor("#0e1420"),
-                Divider = new MudColor("#292838ff"),
-                DrawerBackground = new MudColor("#111926"),
-                DrawerIcon = new MudColor("#46545f"),
-                DrawerText = new MudColor("#acb0b3"),
-                LinesDefault = new MudColor("#2a303c"),
-                LinesInputs = new MudColor("#595d68"),
-                Primary = new MudColor("rgb(60,148,255)"),
-                Surface = new MudColor("#121826"),
-                TableHover = new MudColor("#151b2b"),
-                TableLines = new MudColor("#2a303c"),
-                TextDisabled = new MudColor("#535861"),
-                TextPrimary = new MudColor("#acb0b3"),
-                TextSecondary = new MudColor("#515560")
-            },
-            LayoutProperties = new LayoutProperties()
-            {
-                DefaultBorderRadius = "4px"
+                FontFamily = new[] {
+                    "-apple-system",
+                    "Segoe UI Variable Display",
+                    "Roboto",
+                    "Helvetica Neue",
+                    "Arial"
+                },
+                FontWeight = 400,
+                FontSize = "16px"
             }
-        };
+        },
+        Palette = new PaletteLight()
+        {
+            AppbarBackground = new MudColor("rgb(60,148,255)"),
+            Background = new MudColor("#f6f9fc"),
+            DrawerBackground = new MudColor("#eef2f6"),
+            Primary = new MudColor("rgb(60,148,255)")
+        },
+        PaletteDark = new PaletteDark()
+        {
+            ActionDefault = new MudColor("#acb0b3"), // pagination arrow link text
+            // ActionDisabled = new MudColor("#2c3441"), // disabled button
+            AppbarBackground = new MudColor("#1a273b"),
+            Background = new MudColor("#0e1420"),
+            Divider = new MudColor("#292838ff"),
+            DrawerBackground = new MudColor("#111926"),
+            DrawerIcon = new MudColor("#46545f"),
+            DrawerText = new MudColor("#acb0b3"),
+            LinesDefault = new MudColor("#2a303c"),
+            LinesInputs = new MudColor("#595d68"),
+            Primary = new MudColor("rgb(60,148,255)"),
+            Surface = new MudColor("#121826"),
+            TableHover = new MudColor("#151b2b"),
+            TableLines = new MudColor("#2a303c"),
+            TextDisabled = new MudColor("#535861"),
+            TextPrimary = new MudColor("#acb0b3"),
+            TextSecondary = new MudColor("#515560")
+        },
+        LayoutProperties = new LayoutProperties()
+        {
+            DefaultBorderRadius = "4px"
+        }
+    };
 
     private MudThemeProvider? _mudThemeProvider;
     private string _lightModeText = "Light Mode";
