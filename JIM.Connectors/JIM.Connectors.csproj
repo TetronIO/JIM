@@ -7,7 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="CSV\" />
+    <Compile Remove="CSV\**" />
+    <EmbeddedResource Remove="CSV\**" />
+    <None Remove="CSV\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="SCIM2\" />
     <Folder Include="SQL\" />
   </ItemGroup>
