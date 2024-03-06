@@ -1,6 +1,10 @@
-﻿using JIM.Models.Interfaces;
+﻿using CsvHelper;
+using JIM.Models.Core;
+using JIM.Models.Exceptions;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
+using System.Globalization;
 
 namespace JIM.Connectors.File
 {
@@ -26,14 +30,18 @@ namespace JIM.Connectors.File
         #region IConnectorSettings members
         // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
         private readonly string _settingFilePath = "File Path";
+        private readonly string _settingObjectTypeColumn = "Object Type Column";
+        private readonly string _settingObjectType = "Object Type";
+        private readonly string _settingCulture = "Culture";
 
         public List<ConnectorSetting> GetSettings()
         {
             return new List<ConnectorSetting>
             {
-                new() { Name = "File Details", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new() { Name = "File Details 2", Description = "Enter details on the file to read/write to below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
                 new() { Name = _settingFilePath, Required = true, Description = "Supply a UNC full path to the file, i.e. \\\\fs001\\idam\\users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new() { Name = _settingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+                new() { Name = _settingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+                new() { Name = _settingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String }
             };
         }
 
@@ -68,9 +76,51 @@ namespace JIM.Connectors.File
         #endregion
 
         #region IConnectorSchema members
-        public Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+        public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            throw new NotImplementedException();
+            var path = settingValues.SingleOrDefault(q => q.Setting.Name == _settingFilePath);
+            if (path == null || string.IsNullOrEmpty(path.StringValue))
+                throw new InvalidSettingValuesException($"Missing setting values for {_settingFilePath}.");
+
+            var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectTypeColumn);
+            var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectType);
+            if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
+                throw new InvalidSettingValuesException($"Either a {_settingObjectTypeColumn} or {_settingObjectType} need a setting value specifying.");
+
+            // default culture info is invariant culture. hoping this is fine for most languages.
+            CultureInfo cultureInfo = CultureInfo.InvariantCulture;
+
+            // though the user can specify a specific culture if they're having problems with characters not being transferred between systems correctly.
+            var culture = settingValues.SingleOrDefault(q => q.Setting.Name == _settingCulture);
+            if (culture != null && !string.IsNullOrEmpty(culture.StringValue))
+                cultureInfo = new CultureInfo(culture.StringValue);
+
+            using var reader = new StreamReader(path.StringValue);
+            using var csv = new CsvReader(reader, cultureInfo);
+            await csv.ReadAsync();
+            csv.ReadHeader();
+            var columnNames = csv.HeaderRecord;
+
+            // start building the schema by inspecting the file!
+            var schema = new ConnectorSchema();
+
+            // the user can specify either a column to infer the object type of a row (needed when files contain reference attributes)
+            // or they can specify a fixed object type, i.e. for when a file only contains a single object type.
+
+            if (objectType != null && !string.IsNullOrEmpty(objectType.StringValue))
+            {
+                var schemaObjectType = new ConnectorSchemaObjectType(objectType.StringValue);
+                schema.ObjectTypes.Add(schemaObjectType);
+                
+                for (var i = 0; i < columnNames.Length; i++)
+                {
+                    // todo: expand to auto detect data types by inspecting values and detect plurality
+                    schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnNames[i], AttributeDataType.Text, AttributePlurality.SingleValued));
+                }
+            }
+            // todo: support column-based object type usage
+
+            return schema;
         }
         #endregion
 

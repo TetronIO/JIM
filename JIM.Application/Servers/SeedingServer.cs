@@ -1,4 +1,5 @@
-﻿using JIM.Connectors.LDAP;
+﻿using JIM.Connectors.File;
+using JIM.Connectors.LDAP;
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using JIM.Models.Interfaces;
@@ -525,6 +526,11 @@ namespace JIM.Application.Servers
             var ldapConnectorDefinition = await PrepareConnectorDefinitionAsync(ldapConnector);
             if (ldapConnectorDefinition != null)
                 connectorDefinitions.Add(ldapConnectorDefinition);
+
+            var fileConnector = new FileConnector();
+            var fileConnectorDefinition = await PrepareConnectorDefinitionAsync(fileConnector);
+            if (fileConnectorDefinition != null)
+                connectorDefinitions.Add(fileConnectorDefinition);
             #endregion
 
             // submit all the preparations to the repository for creation
