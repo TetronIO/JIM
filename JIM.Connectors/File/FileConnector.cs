@@ -97,8 +97,8 @@ namespace JIM.Connectors.File
             if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
                 throw new InvalidSettingValuesException($"Either a {_settingObjectTypeColumn} or {_settingObjectType} need a setting value specifying.");
 
-            // default culture info is invariant culture. hoping this is fine for most languages.
-            CultureInfo cultureInfo = CultureInfo.InvariantCulture;
+            // default culture info is invariant culture. hoping this is fine for most data.
+            var cultureInfo = CultureInfo.InvariantCulture;
 
             // though the user can specify a specific culture if they're having problems with characters not being transferred between systems correctly.
             var culture = settingValues.SingleOrDefault(q => q.Setting.Name == _settingCulture);
@@ -123,16 +123,32 @@ namespace JIM.Connectors.File
             {
                 var schemaObjectType = new ConnectorSchemaObjectType(objectType.StringValue);
                 schema.ObjectTypes.Add(schemaObjectType);
-                
-                for (var i = 0; i < columnNames.Length; i++)
-                {
-                    // initially set the attributes with just a name. we'll work out their data types next.
-                    schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnNames[i], AttributeDataType.NotSet, AttributePlurality.SingleValued));
-                }
             }
             else
             {
-                // too: inspect the row data for all the possible object types
+                // todo: inspect the row data for all the possible object types
+            }
+
+            // now determine the attributes from the file headers.
+            // at this point we don't know what attributes are for what object type. so all object types get the same attributes.
+            // later, the user can refine the per-object type attribute lists.
+            foreach (var schemaObjectType in schema.ObjectTypes)
+            {
+                for (var i = 0; i < columnNames.Length; i++)
+                {
+                    // has this attribute already been added? if it has, this indicates it's a multi-valued attribute
+                    var existingSchemaAttribute = schemaObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(columnNames[i], StringComparison.OrdinalIgnoreCase));
+                    if (existingSchemaAttribute != null)
+                    {
+                        if (existingSchemaAttribute.AttributePlurality != AttributePlurality.MultiValued)
+                            existingSchemaAttribute.AttributePlurality = AttributePlurality.MultiValued;
+                        
+                        continue;
+                    }
+
+                    // initially set the attributes with just a name. we'll work out their data types next.
+                    schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnNames[i], AttributeDataType.NotSet, AttributePlurality.SingleValued));
+                }
             }
 
             // read some rows and infer the data type of the fields
