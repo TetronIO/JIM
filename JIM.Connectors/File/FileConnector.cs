@@ -45,8 +45,6 @@ namespace JIM.Connectors.File
                 new() { Name = _settingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String }
-                
-
             };
         }
 
@@ -81,6 +79,9 @@ namespace JIM.Connectors.File
         #endregion
 
         #region IConnectorSchema members
+        /// <summary>
+        /// Determine the file schema by inspecting some of the headers and row fields.
+        /// </summary>
         public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
             var path = settingValues.SingleOrDefault(q => q.Setting.Name == _settingFilePath);
@@ -125,9 +126,13 @@ namespace JIM.Connectors.File
                 
                 for (var i = 0; i < columnNames.Length; i++)
                 {
-                    // todo: expand to auto detect data types by inspecting values and detect plurality
+                    // initially set the attributes with just a name. we'll work out their data types next.
                     schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnNames[i], AttributeDataType.NotSet, AttributePlurality.SingleValued));
                 }
+            }
+            else
+            {
+                // too: inspect the row data for all the possible object types
             }
 
             // read some rows and infer the data type of the fields
