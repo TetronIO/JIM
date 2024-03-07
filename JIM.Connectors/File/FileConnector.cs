@@ -1,4 +1,5 @@
 ﻿using CsvHelper;
+using CsvHelper.Configuration;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
@@ -33,6 +34,7 @@ namespace JIM.Connectors.File
         private readonly string _settingObjectTypeColumn = "Object Type Column";
         private readonly string _settingObjectType = "Object Type";
         private readonly string _settingCulture = "Culture";
+        private readonly string _settingDelimiter = "Delimiter";
 
         public List<ConnectorSetting> GetSettings()
         {
@@ -41,7 +43,10 @@ namespace JIM.Connectors.File
                 new() { Name = _settingFilePath, Required = true, Description = "Supply a UNC full path to the file, i.e. \\\\fs001\\idam\\users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+                new() { Name = _settingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String }
+                
+
             };
         }
 
@@ -80,7 +85,11 @@ namespace JIM.Connectors.File
         {
             var path = settingValues.SingleOrDefault(q => q.Setting.Name == _settingFilePath);
             if (path == null || string.IsNullOrEmpty(path.StringValue))
-                throw new InvalidSettingValuesException($"Missing setting values for {_settingFilePath}.");
+                throw new InvalidSettingValuesException($"Missing setting value for {_settingFilePath}.");
+
+            var delimiter = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDelimiter);
+            if (delimiter == null || string.IsNullOrEmpty(delimiter.StringValue))
+                throw new InvalidSettingValuesException($"Missing setting value for {_settingDelimiter}.");
 
             var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectTypeColumn);
             var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectType);
@@ -95,8 +104,10 @@ namespace JIM.Connectors.File
             if (culture != null && !string.IsNullOrEmpty(culture.StringValue))
                 cultureInfo = new CultureInfo(culture.StringValue);
 
+            var config = new CsvConfiguration(CultureInfo.CurrentCulture) { Delimiter = delimiter.StringValue };
             using var reader = new StreamReader(path.StringValue);
-            using var csv = new CsvReader(reader, cultureInfo);
+            using var csv = new CsvReader(reader, config);
+
             await csv.ReadAsync();
             csv.ReadHeader();
             var columnNames = csv.HeaderRecord;
@@ -115,10 +126,48 @@ namespace JIM.Connectors.File
                 for (var i = 0; i < columnNames.Length; i++)
                 {
                     // todo: expand to auto detect data types by inspecting values and detect plurality
-                    schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnNames[i], AttributeDataType.Text, AttributePlurality.SingleValued));
+                    schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnNames[i], AttributeDataType.NotSet, AttributePlurality.SingleValued));
                 }
             }
-            // todo: support column-based object type usage
+
+            // read some rows and infer the data type of the fields
+            var maxRowsToInspect = 50;
+            var rowsInspected = 0;
+            while (await csv.ReadAsync())
+            {
+                if (rowsInspected == maxRowsToInspect)
+                    break;
+
+                var schemaObjectType = schema.ObjectTypes[0];
+                foreach (var schemaAttribute in schemaObjectType.Attributes)
+                {
+                    var field = csv.GetField(schemaAttribute.Name);
+
+                    // some fields may be null/empty, skip those and hopefully we'll find
+                    // a value we can inspect in a later row.
+                    if (field == null || string.IsNullOrEmpty(field))
+                        continue;
+
+                    // attempt to infer the data type
+                    // conflating ints and doubles may turn out to be a bad idea
+                    if (int.TryParse(field, out var fieldInt) || double.TryParse(field, out var fieldDouble))
+                        schemaAttribute.Type = AttributeDataType.Number;
+                    else if (bool.TryParse(field, out var fieldBool))
+                        schemaAttribute.Type = AttributeDataType.Boolean;
+                    else if (Guid.TryParse(field, out var fieldGuid))
+                        schemaAttribute.Type = AttributeDataType.Guid;
+                    else if (DateTime.TryParse(field, out var fieldDate))
+                        schemaAttribute.Type = AttributeDataType.DateTime;
+                    else
+                        schemaAttribute.Type = AttributeDataType.Text;
+
+                    // if all fields have a type definition, stop inspecting
+                    if (schemaObjectType.Attributes.All(a => a.Type != AttributeDataType.NotSet))
+                        break;
+                }
+
+                rowsInspected++;
+            }
 
             return schema;
         }
