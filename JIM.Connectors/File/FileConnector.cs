@@ -59,7 +59,7 @@ namespace JIM.Connectors.File
         /// </summary>
         public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            Log.Verbose($"ValidateSettingValues() called for {Name}");
+            logger.Verbose($"ValidateSettingValues() called for {Name}");
             var response = new List<ConnectorSettingValueValidationResult>();
 
             // general required setting value validation
@@ -117,7 +117,7 @@ namespace JIM.Connectors.File
 
             var config = new CsvConfiguration(CultureInfo.CurrentCulture) { Delimiter = delimiter.StringValue };
             var filePath = _filePathPrefix + path.StringValue;
-            Log.Debug($"GetSchemaAsync: {nameof(filePath)}: '{filePath}'");
+            logger.Debug($"GetSchemaAsync: {nameof(filePath)}: '{filePath}'");
             using var reader = new StreamReader(filePath);
             using var csv = new CsvReader(reader, config);
 

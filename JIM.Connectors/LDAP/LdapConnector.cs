@@ -67,7 +67,7 @@ namespace JIM.Connectors.LDAP
         /// </summary>
         public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            Log.Verbose($"ValidateSettingValues() called for {Name}");
+            logger.Verbose($"ValidateSettingValues() called for {Name}");
             var response = new List<ConnectorSettingValueValidationResult>();
 
             // validate that we can connect to the directory service with the supplied setting credentials
@@ -124,7 +124,7 @@ namespace JIM.Connectors.LDAP
         #region IConnectorImportUsingCalls members
         public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            Log.Verbose("OpenImportConnection() called");
+            logger.Verbose("OpenImportConnection() called");
             var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
             var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
             var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
@@ -217,7 +217,7 @@ namespace JIM.Connectors.LDAP
             }
             catch (Exception ex)
             {
-                Log.Error(ex, $"TestDirectoryConnectivity failed");
+                logger.Error(ex, $"TestDirectoryConnectivity failed");
                 return new ConnectorSettingValueValidationResult
                 {
                     ErrorMessage = $"Unable to connect. Message: {ex.Message}",
