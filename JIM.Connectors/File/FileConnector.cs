@@ -126,7 +126,7 @@ namespace JIM.Connectors.File
             }
             else
             {
-                // todo: inspect the row data for all the possible object types
+                // todo: inspect row data for all the possible object types
             }
 
             // now determine the attributes from the file headers.

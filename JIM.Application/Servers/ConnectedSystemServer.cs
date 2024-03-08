@@ -1,4 +1,5 @@
-﻿using JIM.Connectors.LDAP;
+﻿using JIM.Connectors.File;
+using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -216,6 +217,11 @@ namespace JIM.Application.Servers
 
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
                 return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
+
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
+                return new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
+
+            // todo: support custom connectors.
 
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
         }
