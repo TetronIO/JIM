@@ -296,12 +296,12 @@ namespace JIM.Application.Servers
                     }).ToList()
                 };
 
-                // take the External Id attribute recommendation as the default, and allow the user to potentially change it later if they want/need
-                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedExternalIdAttribute.Name);
+                // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
+                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => objectType.RecommendedExternalIdAttribute != null && a.Name == objectType.RecommendedExternalIdAttribute.Name);
                 if (attribute != null)
                     attribute.IsExternalId = true;
-                else
-                    Log.Error($"Recommended External Id attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes!");
+                //else
+                //   Log.Error($"A recommended External Id attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes.");
 
                 // if the connector supports it (requires it), take the secondary external id from the schema and mark the attribute as such
                 if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && objectType.RecommendedSecondaryExternalIdAttribute != null)
