@@ -11,6 +11,12 @@ namespace JIM.Connectors.File
 {
     public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingFiles
     {
+        /// <summary>
+        /// This is the in-container path, where we expect Docker Volumes to be mounted to, when users need to make
+        /// files available to JIM for import/export via this Connector.
+        /// </summary>
+        private const string _filePathPrefix = $"/var/connector-files/";
+
         #region IConnector members
         public string Name => ConnectorConstants.FileConnectorName;
 
@@ -56,22 +62,26 @@ namespace JIM.Connectors.File
             Log.Verbose($"ValidateSettingValues() called for {Name}");
             var response = new List<ConnectorSettingValueValidationResult>();
 
-            // validate that we can access the file with the supplied path
-            if (!System.IO.File.Exists(_settingFilePath))
-            {
-                var connectivityTestResult = new ConnectorSettingValueValidationResult
-                {
-                    IsValid = false,
-                    ErrorMessage = "File either doesn't exist, or it couldn't be accessed."
-                };
-                response.Add(connectivityTestResult);
-            }
-
             // general required setting value validation
             foreach (var requiredSettingValue in settingValues.Where(q => q.Setting.Required))
             {
                 if (requiredSettingValue.Setting.Type == ConnectedSystemSettingType.String && string.IsNullOrEmpty(requiredSettingValue.StringValue))
                     response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
+            }
+
+            // test that we can access the file
+            var filenameSettingValue = settingValues.Single(q => q.Setting.Name == _settingFilePath);
+            if (!string.IsNullOrEmpty(filenameSettingValue.StringValue))
+            {
+                if (!System.IO.File.Exists(GetFilePath(filenameSettingValue.StringValue)))
+                {
+                    var connectivityTestResult = new ConnectorSettingValueValidationResult
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"File either doesn't exist, or it couldn't be accessed. Has a '{_filePathPrefix}' mount been provided by a volume?"
+                    };
+                    response.Add(connectivityTestResult);
+                }
             }
 
             return response;
@@ -106,7 +116,9 @@ namespace JIM.Connectors.File
                 cultureInfo = new CultureInfo(culture.StringValue);
 
             var config = new CsvConfiguration(CultureInfo.CurrentCulture) { Delimiter = delimiter.StringValue };
-            using var reader = new StreamReader(path.StringValue);
+            var filePath = _filePathPrefix + path.StringValue;
+            Log.Debug($"GetSchemaAsync: {nameof(filePath)}: '{filePath}'");
+            using var reader = new StreamReader(filePath);
             using var csv = new CsvReader(reader, config);
 
             await csv.ReadAsync();
@@ -142,7 +154,7 @@ namespace JIM.Connectors.File
                     {
                         if (existingSchemaAttribute.AttributePlurality != AttributePlurality.MultiValued)
                             existingSchemaAttribute.AttributePlurality = AttributePlurality.MultiValued;
-                        
+
                         continue;
                     }
 
@@ -200,5 +212,10 @@ namespace JIM.Connectors.File
             throw new NotImplementedException();
         }
         #endregion
+
+        private static string GetFilePath(string filename)
+        {
+            return _filePathPrefix + filename;
+        }
     }
 }

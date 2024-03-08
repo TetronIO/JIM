@@ -81,6 +81,7 @@ services:
      - DB_LOG_SENSITIVE_INFO=${DB_LOG_SENSITIVE_INFO}
     volumes:
       - jim-logs-volume:/var/log/jim
+      - "c:/temp/jim-connector-files:/var/connector-files"
     build:
       context: .
       dockerfile: JIM.Worker/Dockerfile

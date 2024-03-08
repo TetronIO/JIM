@@ -267,6 +267,8 @@ namespace JIM.Application.Servers
             ConnectorSchema schema;
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
                 schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+            else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
+                schema = await new FileConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
             else
                 throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
 
