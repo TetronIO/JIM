@@ -206,17 +206,20 @@
 
             @if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0)
             {
-                <MudPaper Outlined="true" Class="pa-4 mt-5">
-                    <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                        Select which object types you would like to manage with JIM.
-                    </MudText>
-                    <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                        @foreach (var objectType in connectedSystem.ObjectTypes)
-                        {
-                            <MudCheckBox T="Boolean" Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" CheckedChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
-                        }
-                    </div>
-                </MudPaper>
+                if (connectedSystem.ObjectTypes.Count > 1 || (connectedSystem.ObjectTypes.Count == 1 && !connectedSystem.ObjectTypes[0].Selected))
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                            Select which object types you would like to manage with JIM.
+                        </MudText>
+                        <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                            @foreach (var objectType in connectedSystem.ObjectTypes)
+                            {
+                                <MudCheckBox T="Boolean" Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" CheckedChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                            }
+                        </div>
+                    </MudPaper>
+                }
 
                 @if (connectedSystem.ObjectTypes.Count(q => q.Selected) > 0)
                 {
@@ -658,6 +661,11 @@
         await Task.Delay(1);
 
         await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, user);
+
+        // if there's just a single object type in the schema, auto-select it
+        if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count == 1)
+            HandleSelectedObjectTypeClick(connectedSystem.ObjectTypes[0], true);
+
         schemaBeingRetrieved = false;
         StateHasChanged();
         await Task.Delay(1);
