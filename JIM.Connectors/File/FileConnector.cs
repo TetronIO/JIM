@@ -26,12 +26,14 @@ namespace JIM.Connectors.File
         #endregion
 
         #region IConnectorCapabilities members
-        public bool SupportsFullImport { get => true; }
-        public bool SupportsDeltaImport { get => false; }
-        public bool SupportsExport { get => false; }
-        public bool SupportsPartitions { get => false; }
-        public bool SupportsPartitionContainers { get => false; }
-        public bool SupportsSecondaryExternalId { get => false; }
+        public bool SupportsFullImport => true;
+        public bool SupportsDeltaImport => false;
+        public bool SupportsExport => false;
+        public bool SupportsPartitions => false;
+        public bool SupportsPartitionContainers => false;
+        public bool SupportsSecondaryExternalId => false;
+        public bool SupportsUserSelectedExternalId => true;
+        public bool SupportsUserSeletedAttributeTypes => true;
         #endregion
 
         #region IConnectorSettings members

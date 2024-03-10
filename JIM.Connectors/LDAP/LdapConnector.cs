@@ -20,12 +20,14 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorCapability members
-        public bool SupportsFullImport { get => true; }
-        public bool SupportsDeltaImport { get => false; }
-        public bool SupportsExport { get => false; }
-        public bool SupportsPartitions { get => true; }
-        public bool SupportsPartitionContainers { get => true; }
-        public bool SupportsSecondaryExternalId { get => true; }
+        public bool SupportsFullImport => true;
+        public bool SupportsDeltaImport => false;
+        public bool SupportsExport => false;
+        public bool SupportsPartitions => true;
+        public bool SupportsPartitionContainers => true;
+        public bool SupportsSecondaryExternalId => true;
+        public bool SupportsUserSelectedExternalId => false;
+        public bool SupportsUserSeletedAttributeTypes => false;
         #endregion
 
         #region IConnectorSettings members

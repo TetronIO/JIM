@@ -39,5 +39,18 @@
         /// even though this is not an immutable identifier, but still has to be used to do things like resolve references. If the connected system needs to use a secondary ID, set this to true.
         /// </summary>
         public bool SupportsSecondaryExternalId { get; }
+
+        /// <summary>
+        /// For some systems it makes sense to allow the user to choose the external id attribute, for others it doesn't.
+        /// Use this to control whether or not the user can change the external id. Note, if you set this to false, you will
+        /// have to use the RecomendedExternalIdAttribute property on a connector so an external id attribute is set.
+        /// </summary>
+        public bool SupportsUserSelectedExternalId { get; }
+
+        /// <summary>
+        /// Controls whether or not the user can change the data type of a connected system attribute. For systems with a defined
+        /// schema, this probably doesn't make sense to allow, but for systems where the schema is inferred, i.e. in CSVs, then it does.
+        /// </summary>
+        public bool SupportsUserSeletedAttributeTypes {  get; }
     }
 }
