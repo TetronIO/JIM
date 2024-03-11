@@ -247,7 +247,7 @@
                             <MudText Typo="Typo.h6">@selectedObjectType.Name</MudText>
 
                             <MudGrid Class="mt-3 mb-3">
-                                <MudItem xs="6" >
+                                <MudItem xs="@(selectedObjectTypeHasClasses ? 6 : 12)" >
                                     <MudTextField T="string"
                                         @bind-Value="schemaSearchString"
                                         Label="Filter by name"
@@ -258,22 +258,27 @@
                                         HelperText="Show only attributes where the name containers a specific value"
                                         autocomplete="schema_search_string" />
                                 </MudItem>
-                                <MudItem xs="6">
-                                    <MudSelect T="string"
-                                        Label="Filter by class"
-                                        MultiSelection="true"
-                                        @bind-SelectedValues="attributeClassFilterSelectedValues"
-                                        Variant="Variant.Outlined"
-                                        HelperText="Show only attributes with a particular class"
-                                        Adornment="Adornment.Start"
-                                        AdornmentIcon="@Icons.Material.Filled.FilterAlt"
-                                        IconSize="Size.Small">
-                                        @foreach (var className in selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
-                                        {
-                                            <MudSelectItem T="string" Value="@className">@className</MudSelectItem>
-                                        }
-                                    </MudSelect>
-                                </MudItem>
+
+                                @if (selectedObjectTypeHasClasses)
+                                {
+                                    <MudItem xs="6">
+                                        <MudSelect T="string"
+                                                   Label="Filter by class"
+                                                   MultiSelection="true"
+                                                   @bind-SelectedValues="attributeClassFilterSelectedValues"
+                                                   Variant="Variant.Outlined"
+                                                   HelperText="Show only attributes with a particular class"
+                                                   Adornment="Adornment.Start"
+                                                   AdornmentIcon="@Icons.Material.Filled.FilterAlt"
+                                                   IconSize="Size.Small">
+                                            @foreach (var className in selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
+                                            {
+                                                <MudSelectItem T="string" Value="@className">@className</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
+                                }
+
                                 <MudItem xs="12">
                                     <MudCheckBox 
                                         @bind-Checked="attributeSelectedFilter" 
@@ -524,7 +529,7 @@
     private bool IsSettingsFormValid { get; set; }
     private string[] SettingsFormErrors { get; set; } = { };
     private Dictionary<string, string> SettingsFormCustomErrors { get; set; } = new Dictionary<string, string>();
-    private bool IsNewRunProfileFormValid { get; set; }    
+    private bool IsNewRunProfileFormValid { get; set; }
 
     private ConnectedSystem? connectedSystem;
     private bool settingsBeingSaved = false;
@@ -533,6 +538,7 @@
     private string? partitionAndHierarchyText;
     private bool schemaBeingRetrieved = false;
     private ConnectedSystemObjectType? selectedObjectType;
+    private bool selectedObjectTypeHasClasses;
     private bool hierarchyBeingRetrieved;
     private string schemaSearchString = "";
     private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile { PageSize = 500 };
@@ -689,6 +695,9 @@
             selectedObjectType = null;
         else if (selectedObjectType != null && selectedObjectType.Id == connectedSystemObjectType.Id && !isObjectTypeChecked)
             selectedObjectType = null;
+
+        // some parts of the UI only make sense if the attributes have classes
+        selectedObjectTypeHasClasses = connectedSystemObjectType.Attributes.Any(q => q.ClassName != null);
     }
 
     private void HandleActiveObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType)
