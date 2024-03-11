@@ -42,6 +42,8 @@
         <MudCheckBox @bind-Checked="@connector.SupportsDeltaImport" Disabled="true">Supports delta import?</MudCheckBox>
         <MudCheckBox @bind-Checked="@connector.SupportsExport" Disabled="true">Supports export?</MudCheckBox>
         <MudCheckBox @bind-Checked="@connector.SupportsSecondaryExternalId" Disabled="true">Supports secondary external id?</MudCheckBox>
+        <MudCheckBox @bind-Checked="@connector.SupportsUserSelectedExternalId" Disabled="true">Supports user selected external id?</MudCheckBox>
+        <MudCheckBox @bind-Checked="@connector.SupportsUserSeletedAttributeTypes" Disabled="true">Supports user selected attribute types?</MudCheckBox>
     </MudPaper>
 
     <MudTable Items="@connector.Files" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
