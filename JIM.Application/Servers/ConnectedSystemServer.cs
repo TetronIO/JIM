@@ -148,7 +148,7 @@ namespace JIM.Application.Servers
             connectedSystem.LastUpdated = DateTime.UtcNow;
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Models.Activities.Activity
+            var activity = new Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -251,7 +251,7 @@ namespace JIM.Application.Servers
             ValidateConnectedSystemParameter(connectedSystem);
 
             // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
-            var activity = new Models.Activities.Activity
+            var activity = new Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,

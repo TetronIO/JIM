@@ -645,7 +645,9 @@ namespace JIM.Application.Servers
                 SupportsExport = connectorCapabilities.SupportsExport,
                 SupportsPartitions = connectorCapabilities.SupportsPartitions,
                 SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
-                SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId
+                SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
+                SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
+                SupportsUserSeletedAttributeTypes = connectorCapabilities.SupportsUserSeletedAttributeTypes
             };
 
             Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
