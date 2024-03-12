@@ -323,6 +323,10 @@
                         Elevation="0">
                         <HeaderContent>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
+                            @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+                            {
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)">External ID</MudTableSortLabel></MudTh>                        
+                            }
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                             @if (selectedObjectTypeHasClasses)
                             {
@@ -336,6 +340,12 @@
                             <MudTd DataLabel="Selected">
                                 <MudSwitch @bind-Checked="@context.Selected" Color="@Color.Primary"></MudSwitch>
                             </MudTd>
+                            @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+                            {
+                                <MudTd DataLabel="External ID">
+                                    <MudSwitch @bind-Checked="@context.IsExternalId" Color="@Color.Primary"></MudSwitch>
+                                </MudTd>
+                            }
                             <MudTd DataLabel="Name">@context.Name</MudTd>
                             @if (selectedObjectTypeHasClasses)
                             {

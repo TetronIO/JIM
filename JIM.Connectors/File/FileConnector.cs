@@ -11,12 +11,6 @@ namespace JIM.Connectors.File
 {
     public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingFiles
     {
-        /// <summary>
-        /// This is the in-container path, where we expect Docker Volumes to be mounted to, when users need to make
-        /// files available to JIM for import/export via this Connector.
-        /// </summary>
-        private const string _filePathPrefix = $"/var/connector-files/";
-
         #region IConnector members
         public string Name => ConnectorConstants.FileConnectorName;
 
@@ -48,7 +42,7 @@ namespace JIM.Connectors.File
         {
             return new List<ConnectorSetting>
             {
-                new() { Name = _settingFilePath, Required = true, Description = "Supply a UNC full path to the file, i.e. \\\\fs001\\idam\\users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new() { Name = _settingFilePath, Required = true, Description = "Supply the path to the file in the container. The container path is determined by the Docker Volume configuration item. i.e. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
@@ -72,15 +66,15 @@ namespace JIM.Connectors.File
             }
 
             // test that we can access the file
-            var filenameSettingValue = settingValues.Single(q => q.Setting.Name == _settingFilePath);
-            if (!string.IsNullOrEmpty(filenameSettingValue.StringValue))
+            var filePathSettingValue = settingValues.Single(q => q.Setting.Name == _settingFilePath);
+            if (!string.IsNullOrEmpty(filePathSettingValue.StringValue))
             {
-                if (!System.IO.File.Exists(GetFilePath(filenameSettingValue.StringValue)))
+                if (!System.IO.File.Exists(filePathSettingValue.StringValue))
                 {
                     var connectivityTestResult = new ConnectorSettingValueValidationResult
                     {
                         IsValid = false,
-                        ErrorMessage = $"File either doesn't exist, or it couldn't be accessed. Has a '{_filePathPrefix}' mount been provided by a volume?"
+                        ErrorMessage = $"File either doesn't exist, or it couldn't be accessed. Does '{filePathSettingValue.StringValue}' map to a Docker Volume in the docker-compose.yml file?"
                     };
                     response.Add(connectivityTestResult);
                 }
@@ -118,9 +112,8 @@ namespace JIM.Connectors.File
                 cultureInfo = new CultureInfo(culture.StringValue);
 
             var config = new CsvConfiguration(CultureInfo.CurrentCulture) { Delimiter = delimiter.StringValue };
-            var filePath = _filePathPrefix + path.StringValue;
-            logger.Debug($"GetSchemaAsync: {nameof(filePath)}: '{filePath}'");
-            using var reader = new StreamReader(filePath);
+            logger.Debug($"GetSchemaAsync: Attempting to read '{path.StringValue}'");
+            using var reader = new StreamReader(path.StringValue);
             using var csv = new CsvReader(reader, config);
 
             await csv.ReadAsync();
@@ -214,10 +207,5 @@ namespace JIM.Connectors.File
             throw new NotImplementedException();
         }
         #endregion
-
-        private static string GetFilePath(string filename)
-        {
-            return _filePathPrefix + filename;
-        }
     }
 }
