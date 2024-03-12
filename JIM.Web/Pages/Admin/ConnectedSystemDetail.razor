@@ -334,7 +334,10 @@
                             }
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)">Type</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
+                            @if (selectedObjectTypeHasDescriptions)
+                            {
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
+                            }
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Selected">
@@ -353,7 +356,10 @@
                             }
                             <MudTd DataLabel="Type">@context.Type</MudTd>
                             <MudTd DataLabel="Plurality" Class="jim-no-wrap">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
-                            <MudTd DataLabel="Description">@context.Description</MudTd>
+                            @if (selectedObjectTypeHasDescriptions)
+                            {
+                                <MudTd DataLabel="Description">@context.Description</MudTd>
+                            }
                         </RowTemplate>
                         <NoRecordsContent>
                             @if (attributeSelectedFilter) {
@@ -560,6 +566,7 @@
     private bool schemaBeingRetrieved = false;
     private ConnectedSystemObjectType? selectedObjectType;
     private bool selectedObjectTypeHasClasses;
+    private bool selectedObjectTypeHasDescriptions;
     private bool hierarchyBeingRetrieved;
     private string schemaSearchString = "";
     private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile { PageSize = 500 };
@@ -719,6 +726,7 @@
 
         // some parts of the UI only make sense if the attributes have classes
         selectedObjectTypeHasClasses = connectedSystemObjectType.Attributes.Any(q => q.ClassName != null);
+        selectedObjectTypeHasDescriptions = connectedSystemObjectType.Attributes.Any(q => q.Description != null);
     }
 
     private void HandleActiveObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType)
