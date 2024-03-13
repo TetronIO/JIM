@@ -8,6 +8,7 @@
 @using JIM.Models.Transactional;
 @using JIM.Web.Models;
 @using JIM.Utilities;
+@using Serilog
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -245,14 +246,16 @@
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
                             <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
-                            <MudSelect T="string" Label="External ID Attribute"
+                            <MudSelect T="ConnectedSystemObjectTypeAttribute" 
+                                       Label="External ID Attribute"
                                        Variant="Variant.Outlined"
                                        Class="mt-5"
                                        Required="true"
-                                       RequiredError="You must select an attribute as the External ID.">
-                                @foreach (var attribute in selectedObjectType.Attributes)
+                                       RequiredError="You must select an attribute as the External ID."
+                                       ValueChanged="HandleMakeExternalId">
+                                @foreach (var otAttribute in selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
                                 {
-                                    <MudSelectItem Value="@(attribute.Id.ToString())">@(attribute.Name)</MudSelectItem>
+                                    <MudSelectItem Value="@otAttribute">@(otAttribute.Name)</MudSelectItem>
                                 }
                             </MudSelect>
                         </MudPaper>
@@ -333,10 +336,6 @@
                         Outlined="true"
                         Elevation="0">
                         <HeaderContent>
-                            @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
-                            {
-                                <MudTh></MudTh>
-                            }
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)">External ID</MudTableSortLabel></MudTh>                        
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
@@ -352,15 +351,6 @@
                             }
                         </HeaderContent>
                         <RowTemplate>
-                            @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
-                            {
-                                <MudTd>
-                                @if (!context.IsExternalId)
-                                {
-                                    <MudButton Size="Size.Small" Color="Color.Default" Variant="Variant.Text" DisableElevation="true" OnClick="HandleMakeExternalId(context.Id)">Make External ID</MudButton>
-                                }
-                                </MudTd>
-                            }
                             <MudTd DataLabel="Selected">
                                 <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary"></MudSwitch>
                             </MudTd>
@@ -752,18 +742,22 @@
         selectedObjectType = connectedSystemObjectType;
     }
 
-    private EventCallback HandleMakeExternalId(int attributeId)
+    private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
     {
         if (selectedObjectType == null)
-            return EventCallback.Empty;
+        {
+            Log.Error($"CS Detail > HandleMakeExternalId: {nameof(selectedObjectType)} is null!");
+            return;
+        }
 
         // make sure there's not already an attribute marked as the external id
         foreach (var attribute in selectedObjectType.Attributes.Where(a => a.IsExternalId))
             attribute.IsExternalId = false;
 
-        // mark the intended attribute as the external id
-        selectedObjectType.Attributes.Single(a => a.Id == attributeId).IsExternalId = true;
-        return EventCallback.Empty;
+        // mark the intended attribute as the external id, and select it
+        selectedAttribute.IsExternalId = true;
+        selectedAttribute.Selected = true;
+        Log.Verbose($"CS Detail > HandleMakeExternalId: Set attribute id {selectedAttribute} as the external id.");
     }
 
     private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
