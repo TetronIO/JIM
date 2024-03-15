@@ -382,7 +382,13 @@
                     </MudTable>
                 }
 
-                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" Class="mt-5" DisableElevation="true">Save Changes</MudButton>
+                <MudButton 
+                    Color="Color.Primary" 
+                    Variant="Variant.Filled" 
+                    OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" 
+                    Class="mt-5" 
+                    DisableElevation="true"
+                    Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
             }
 
         </MudTabPanel>
@@ -1034,5 +1040,25 @@
             return true; // BOTH IDS ARE 0 WHEN THEY'RE DIFFERENT TYPES! HOW?! - BECAUSE THEY HAVEN'T BEEN PERSISTED YET!
 
         return false;
+    }
+
+    /// <summary>
+    /// Determines whether or not the Save Schema changes button should be disabledor not.
+    /// </summary>
+    private bool DisableSaveSchemaButton()
+    {
+        // must select at least one object type
+        // all selected object types must have an external id selected
+
+        if (connectedSystem == null || connectedSystem.ObjectTypes == null)
+            return true;
+
+        var objectTypesSelected = connectedSystem.ObjectTypes.Any(ot => ot.Selected);
+        var externalIdsSet = connectedSystem.ObjectTypes.Where(ot => ot.Selected).All(ot => ot.Attributes.Any(a => a.IsExternalId));
+
+        if (objectTypesSelected && externalIdsSet)
+            return false;
+
+        return true;
     }
 }
