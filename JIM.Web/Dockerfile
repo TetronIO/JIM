@@ -7,7 +7,7 @@ EXPOSE 443
 
 RUN apt-get update \
     && apt-get install -y libldap-2.4-2 \
-    && apt-get install -y gss-ntlmssp \
+    && apt-get install -y cifs-utils \
     && apt-get install -y --no-install-recommends iputils-ping \
     && apt-get install -y --no-install-recommends netcat \
     && rm -rf /var/lib/apt/lists/*

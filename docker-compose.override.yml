@@ -1,6 +1,7 @@
 version: '3.4'
 
 services:
+
   jim.web:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
@@ -11,6 +12,8 @@ services:
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
+      - "c:/temp/jim-connector-files:/var/connector-files"
+
   jim.api:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
@@ -21,3 +24,7 @@ services:
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
+
+  jim.worker:
+    volumes:
+      - "c:/temp/jim-connector-files:/var/connector-files"

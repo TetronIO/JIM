@@ -1,4 +1,5 @@
-﻿using JIM.Connectors.LDAP;
+﻿using JIM.Connectors.File;
+using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -147,7 +148,7 @@ namespace JIM.Application.Servers
             connectedSystem.LastUpdated = DateTime.UtcNow;
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Models.Activities.Activity
+            var activity = new Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -217,6 +218,11 @@ namespace JIM.Application.Servers
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
                 return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
 
+            if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
+                return new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
+
+            // todo: support custom connectors.
+
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
         }
 
@@ -245,7 +251,7 @@ namespace JIM.Application.Servers
             ValidateConnectedSystemParameter(connectedSystem);
 
             // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
-            var activity = new Models.Activities.Activity
+            var activity = new Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -261,6 +267,8 @@ namespace JIM.Application.Servers
             ConnectorSchema schema;
             if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
                 schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+            else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
+                schema = await new FileConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
             else
                 throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
 
@@ -288,12 +296,12 @@ namespace JIM.Application.Servers
                     }).ToList()
                 };
 
-                // take the External Id attribute recommendation as the default, and allow the user to potentially change it later if they want/need
-                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedExternalIdAttribute.Name);
+                // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
+                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => objectType.RecommendedExternalIdAttribute != null && a.Name == objectType.RecommendedExternalIdAttribute.Name);
                 if (attribute != null)
                     attribute.IsExternalId = true;
-                else
-                    Log.Error($"Recommended External Id attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes!");
+                //else
+                //   Log.Error($"A recommended External Id attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes.");
 
                 // if the connector supports it (requires it), take the secondary external id from the schema and mark the attribute as such
                 if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && objectType.RecommendedSecondaryExternalIdAttribute != null)

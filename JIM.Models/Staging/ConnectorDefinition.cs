@@ -1,6 +1,8 @@
-﻿namespace JIM.Models.Staging
+﻿using JIM.Models.Interfaces;
+
+namespace JIM.Models.Staging
 {
-    public class ConnectorDefinition
+    public class ConnectorDefinition : IConnectorCapabilities
     {
         public int Id { get; set; }
 
@@ -70,6 +72,10 @@
         /// even though this is not an immutable identifier, but still has to be used to do things like resolve references. If the connected system needs to use a secondary ID, set this to true.
         /// </summary>
         public bool SupportsSecondaryExternalId { get; set; }
+
+        public bool SupportsUserSelectedExternalId { get; set; }
+
+        public bool SupportsUserSeletedAttributeTypes { get; set; }
         #endregion
     }
 }

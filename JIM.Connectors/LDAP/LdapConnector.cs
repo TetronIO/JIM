@@ -20,12 +20,14 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorCapability members
-        public bool SupportsFullImport { get => true; }
-        public bool SupportsDeltaImport { get => false; }
-        public bool SupportsExport { get => false; }
-        public bool SupportsPartitions { get => true; }
-        public bool SupportsPartitionContainers { get => true; }
-        public bool SupportsSecondaryExternalId { get => true; }
+        public bool SupportsFullImport => true;
+        public bool SupportsDeltaImport => false;
+        public bool SupportsExport => false;
+        public bool SupportsPartitions => true;
+        public bool SupportsPartitionContainers => true;
+        public bool SupportsSecondaryExternalId => true;
+        public bool SupportsUserSelectedExternalId => false;
+        public bool SupportsUserSeletedAttributeTypes => false;
         #endregion
 
         #region IConnectorSettings members
@@ -67,7 +69,7 @@ namespace JIM.Connectors.LDAP
         /// </summary>
         public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            Log.Verbose($"ValidateSettingValues() called for {Name}");
+            logger.Verbose($"ValidateSettingValues() called for {Name}");
             var response = new List<ConnectorSettingValueValidationResult>();
 
             // validate that we can connect to the directory service with the supplied setting credentials
@@ -124,7 +126,7 @@ namespace JIM.Connectors.LDAP
         #region IConnectorImportUsingCalls members
         public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            Log.Verbose("OpenImportConnection() called");
+            logger.Verbose("OpenImportConnection() called");
             var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
             var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
             var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
@@ -217,7 +219,7 @@ namespace JIM.Connectors.LDAP
             }
             catch (Exception ex)
             {
-                Log.Error(ex, $"TestDirectoryConnectivity failed");
+                logger.Error(ex, $"TestDirectoryConnectivity failed");
                 return new ConnectorSettingValueValidationResult
                 {
                     ErrorMessage = $"Unable to connect. Message: {ex.Message}",

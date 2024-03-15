@@ -23,6 +23,9 @@ services:
      - SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=${SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE}
     volumes:
       - jim-logs-volume:/var/log/jim
+    cap_add:
+      - DAC_READ_SEARCH
+      - SYS_ADMIN
     build:
       context: .
       dockerfile: JIM.Web/Dockerfile
