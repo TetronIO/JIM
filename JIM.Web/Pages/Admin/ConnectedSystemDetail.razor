@@ -297,10 +297,6 @@
                                 </MudItem>
                             }
 
-                            <MudItem xs="12">
-                                <MudCheckBox @bind-Checked="attributeSelectedFilter"
-                                            Color="Color.Primary">Show only selected?</MudCheckBox>
-                            </MudItem>
                             <MudItem xs="10">
                                 <MudTextField T="string"
                                             Label="Select attributes via CSV"
@@ -318,6 +314,10 @@
                                         Class="mt-4"
                                         Color="Color.Default"
                                         OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
+                            </MudItem>
+
+                            <MudItem xs="12" Class="pb-0">
+                                <MudCheckBox @bind-Checked="attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
