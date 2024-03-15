@@ -8,7 +8,6 @@
 @using JIM.Models.Transactional;
 @using JIM.Web.Models;
 @using JIM.Utilities;
-@using Serilog
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -24,10 +23,10 @@
 
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
-                <MudForm IsValid="@IsDetailsFormValid" Errors="@DetailsFormErrors">
-                    <MudTextField T="string" Label="Connector" Value="connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
-                    <MudTextField T="string" Label="Name" Value="connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
-                    <MudTextField T="string" Label="Description" Required="false" Value="connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
+                <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
+                    <MudTextField T="string" Label="Connector" @bind-Value="connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
+                    <MudTextField T="string" Label="Name" @bind-Value="connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
+                    <MudTextField T="string" Label="Description" Required="false" @bind-Value="connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DisableElevation="true">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
@@ -35,7 +34,7 @@
 
         <MudTabPanel Text="Settings">
             <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
-            <MudForm IsValid="@IsSettingsFormValid" Errors="@SettingsFormErrors" Class="mt-5">
+            <MudForm @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
                 @if (settingCategories != null)
                 {
                     @for (var i = 0; i < settingCategories.Count; i++)
@@ -57,52 +56,51 @@
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
                                 {
                                     <MudTextField T="string"
-                                        Label="@settingValue.Setting.Name"
-                                        Value="settingValue.StringValue"
-                                        Required="@settingValue.Setting.Required"
-                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                        HelperText="@settingValue.Setting.Description"
-                                        Variant="Variant.Outlined"
-                                        Class="mb-5" />
+                                                  Label="@settingValue.Setting.Name"
+                                                  @bind-Value="settingValue.StringValue"
+                                                  Required="@settingValue.Setting.Required"
+                                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                  HelperText="@settingValue.Setting.Description"
+                                                  Variant="Variant.Outlined"
+                                                  Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                 {
                                     <MudTextField T="string"
-                                        Label="@settingValue.Setting.Name"
-                                        Value="settingValue.StringEncryptedValue"
-                                        Required="@settingValue.Setting.Required"
-                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                        HelperText="@settingValue.Setting.Description"
-                                        InputType="InputType.Password"
-                                        Variant="Variant.Outlined"
-                                        Class="mb-5" />
+                                                  Label="@settingValue.Setting.Name"
+                                                  @bind-Value="settingValue.StringEncryptedValue"
+                                                  Required="@settingValue.Setting.Required"
+                                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                  HelperText="@settingValue.Setting.Description"
+                                                  InputType="InputType.Password"
+                                                  Variant="Variant.Outlined"
+                                                  Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
                                 {
                                     <MudTextField T="int?"
-                                        Label="@settingValue.Setting.Name"
-                                        Value="settingValue.IntValue"
-                                        Required="@settingValue.Setting.Required"
-                                        RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                        HelperText="@settingValue.Setting.Description"
-                                        InputType="InputType.Number"
-                                        Variant="Variant.Outlined"
-                                        Class="mb-5" />
+                                                  Label="@settingValue.Setting.Name"
+                                                  @bind-Value="settingValue.IntValue"
+                                                  Required="@settingValue.Setting.Required"
+                                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                  HelperText="@settingValue.Setting.Description"
+                                                  InputType="InputType.Number"
+                                                  Variant="Variant.Outlined"
+                                                  Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
-                                    <MudSwitch Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
+                                    <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                 {
-                                    <MudSelect 
-                                            Value="settingValue.StringValue" 
-                                            HelperText="@settingValue.Setting.Description" 
-                                            Label="@settingValue.Setting.Name" 
-                                            Variant="Variant.Outlined" 
-                                            Class="mb-5" 
-                                            Required="@settingValue.Setting.Required"
-                                            RequiredError="@($"A {settingValue.Setting.Name} is required")">
+                                    <MudSelect @bind-Value="settingValue.StringValue"
+                                               HelperText="@settingValue.Setting.Description"
+                                               Label="@settingValue.Setting.Name"
+                                               Variant="Variant.Outlined"
+                                               Class="mb-5"
+                                               Required="@settingValue.Setting.Required"
+                                               RequiredError="@($"A {settingValue.Setting.Name} is required")">
                                         @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
                                         {
                                             <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
@@ -170,14 +168,13 @@
                         permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     </MudText>
                 }
-                <MudButton 
-                    Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
-                    Disabled="@(schemaBeingRetrieved)"
-                    Variant="Variant.Filled" 
-                    Size="Size.Small" 
-                    OnClick="HandleImportSchemaAsync" 
-                    Class="mt-5" 
-                    DisableElevation="true">
+                <MudButton Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
+                           Disabled="@(schemaBeingRetrieved)"
+                           Variant="Variant.Filled"
+                           Size="Size.Small"
+                           OnClick="HandleImportSchemaAsync"
+                           Class="mt-5"
+                           DisableElevation="true">
                     @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
                     {
                         if (schemaBeingRetrieved)
@@ -216,128 +213,114 @@
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                             @foreach (var objectType in connectedSystem.ObjectTypes)
                             {
-                                <MudCheckBox T="Boolean" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                                <MudCheckBox T="Boolean" Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" CheckedChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
                             }
                         </div>
                     </MudPaper>
                 }
 
-                @if (connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
+                @if (connectedSystem.ObjectTypes.Count(q => q.Selected) > 0)
                 {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
-                        <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                            <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
-                                @foreach (ConnectedSystemObjectType objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
+                        @if (connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
+                        {
+                            <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                                <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
+                                    @foreach (ConnectedSystemObjectType objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
+                                    {
+                                        <MudButton OnClick="@((e) => HandleActiveObjectTypeClick(objectType))"
+                                                   Disabled="DisableSelectedSchemaObjectType(objectType)"
+                                                   DisableElevation="true">@objectType.Name</MudButton>
+                                    }
+                                </MudButtonGroup>
+                            </div>
+                        }
+
+                        @if (selectedObjectType != null)
+                        {
+                            <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                                Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.
+                            </MudText>
+                            <MudText Typo="Typo.h6">@selectedObjectType.Name</MudText>
+
+                            <MudGrid Class="mt-3 mb-3">
+                                <MudItem xs="@(selectedObjectTypeHasClasses ? 6 : 12)">
+                                    <MudTextField T="string"
+                                                  @bind-Value="schemaSearchString"
+                                                  Label="Filter by name"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                                  IconSize="Size.Small"
+                                                  Variant="Variant.Outlined"
+                                                  HelperText="Show only attributes where the name containers a specific value"
+                                                  autocomplete="schema_search_string" />
+                                </MudItem>
+
+                                @if (selectedObjectTypeHasClasses)
                                 {
-                                    <MudButton 
-                                        OnClick="@((e) => HandleActiveObjectTypeClick(objectType))" 
-                                        Disabled="DisableSelectedSchemaObjectType(objectType)" 
-                                        DisableElevation="true">@objectType.Name</MudButton>
+                                    <MudItem xs="6">
+                                        <MudSelect T="string"
+                                                   Label="Filter by class"
+                                                   MultiSelection="true"
+                                                   @bind-SelectedValues="attributeClassFilterSelectedValues"
+                                                   Variant="Variant.Outlined"
+                                                   HelperText="Show only attributes with a particular class"
+                                                   Adornment="Adornment.Start"
+                                                   AdornmentIcon="@Icons.Material.Filled.FilterAlt"
+                                                   IconSize="Size.Small">
+                                            @foreach (var className in selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
+                                            {
+                                                <MudSelectItem T="string" Value="@className">@className</MudSelectItem>
+                                            }
+                                        </MudSelect>
+                                    </MudItem>
                                 }
-                            </MudButtonGroup>
-                        </div>
+
+                                <MudItem xs="12">
+                                    <MudCheckBox @bind-Checked="attributeSelectedFilter"
+                                                 Color="Color.Primary">Show only selected?</MudCheckBox>
+                                </MudItem>
+                                <MudItem xs="10">
+                                    <MudTextField T="string"
+                                                  Label="Select attributes via CSV"
+                                                  @bind-Value="attributeSelectionCsv"
+                                                  HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
+                                                  InputType="InputType.Text"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Input"
+                                                  IconSize="Size.Small"
+                                                  Variant="Variant.Outlined" />
+                                </MudItem>
+                                <MudItem xs="2">
+                                    <MudButton Variant="Variant.Filled"
+                                               DisableElevation="true"
+                                               Class="mt-4"
+                                               Color="Color.Default"
+                                               OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        }
                     </MudPaper>
                 }
 
                 @if (selectedObjectType != null)
                 {
-                    <MudText Typo="Typo.h6" Class="mt-5">@selectedObjectType.Name</MudText>
-                    @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
-                    {
-                        <MudPaper Outlined="true" Class="pa-4 mt-5">
-                            <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
-                            <MudSelect T="ConnectedSystemObjectTypeAttribute" 
-                                       Label="External ID Attribute"
-                                       Variant="Variant.Outlined"
-                                       Class="mt-5"
-                                       Required="true"
-                                       RequiredError="You must select an attribute as the External ID."
-                                       ValueChanged="HandleMakeExternalId">
-                                @foreach (var otAttribute in selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
-                                {
-                                    <MudSelectItem Value="@otAttribute">@(otAttribute.Name)</MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudPaper>
-                    }
-
-                    <MudPaper Outlined="true" Class="pa-4 mt-5">
-                        <MudText>
-                            Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.
-                        </MudText>
-
-                        <MudGrid Class="mt-3 mb-3">
-                            <MudItem xs="@(selectedObjectTypeHasClasses ? 6 : 12)">
-                                <MudTextField T="string"
-                                              Value="schemaSearchString"
-                                              Label="Filter by name"
-                                              Adornment="Adornment.Start"
-                                              AdornmentIcon="@Icons.Material.Filled.Search"
-                                              IconSize="Size.Small"
-                                              Variant="Variant.Outlined"
-                                              HelperText="Show only attributes where the name containers a specific value"
-                                              autocomplete="schema_search_string" />
-                            </MudItem>
-
-                            @if (selectedObjectTypeHasClasses)
-                            {
-                                <MudItem xs="6">
-                                    <MudSelect T="string"
-                                               Label="Filter by class"
-                                               MultiSelection="true"
-                                               SelectedValues="attributeClassFilterSelectedValues"
-                                               Variant="Variant.Outlined"
-                                               HelperText="Show only attributes with a particular class"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.FilterAlt"
-                                               IconSize="Size.Small">
-                                        @foreach (var className in selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
-                                        {
-                                            <MudSelectItem T="string" Value="@className">@className</MudSelectItem>
-                                        }
-                                    </MudSelect>
-                                </MudItem>
-                            }
-
-                            <MudItem xs="12">
-                                <MudCheckBox Value="attributeSelectedFilter"
-                                             Color="Color.Primary">Show only selected?</MudCheckBox>
-                            </MudItem>
-                            <MudItem xs="10">
-                                <MudTextField T="string"
-                                              Label="Select attributes via CSV"
-                                              @bind-Value="attributeSelectionCsv"
-                                              HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
-                                              InputType="InputType.Text"
-                                              Adornment="Adornment.Start"
-                                              AdornmentIcon="@Icons.Material.Filled.Input"
-                                              IconSize="Size.Small"
-                                              Variant="Variant.Outlined" />
-                            </MudItem>
-                            <MudItem xs="2">
-                                <MudButton Variant="Variant.Filled"
-                                           DisableElevation="true"
-                                           Class="mt-4"
-                                           Color="Color.Default"
-                                           OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
-                            </MudItem>
-                        </MudGrid>
-                    </MudPaper>
-
-                    <MudTable 
-                        Items="@selectedObjectType.Attributes" 
-                        Virtualize="true" 
-                        Hover="true" 
-                        Dense="true" 
-                        Breakpoint="Breakpoint.Sm" 
-                        SortLabel="Sort By" 
-                        Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
-                        Class="mt-5"
-                        Outlined="true"
-                        Elevation="0">
+                    <MudTable Items="@selectedObjectType.Attributes"
+                              Virtualize="true"
+                              Hover="true"
+                              Dense="true"
+                              Breakpoint="Breakpoint.Sm"
+                              SortLabel="Sort By"
+                              Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
+                              Class="mt-5"
+                              Outlined="true"
+                              Elevation="0">
                         <HeaderContent>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)">External ID</MudTableSortLabel></MudTh>                        
+                            @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+                            {
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)">External ID</MudTableSortLabel></MudTh>
+                            }
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                             @if (selectedObjectTypeHasClasses)
                             {
@@ -352,11 +335,14 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Selected">
-                                <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary"></MudSwitch>
+                                <MudSwitch @bind-Checked="@context.Selected" Color="@Color.Primary"></MudSwitch>
                             </MudTd>
-                            <MudTd DataLabel="External ID">
-                                @(context.IsExternalId ? "Yes" : "-")
-                            </MudTd>
+                            @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+                            {
+                                <MudTd DataLabel="External ID">
+                                    <MudSwitch @bind-Checked="@context.IsExternalId" Color="@Color.Primary"></MudSwitch>
+                                </MudTd>
+                            }
                             <MudTd DataLabel="Name">@context.Name</MudTd>
                             @if (selectedObjectTypeHasClasses)
                             {
@@ -370,14 +356,17 @@
                             }
                         </RowTemplate>
                         <NoRecordsContent>
-                            @if (attributeSelectedFilter) {
+                            @if (attributeSelectedFilter)
+                            {
                                 <MudText>There are no selected attributes for this object type.</MudText>
-                            } else {
+                            }
+                            else
+                            {
                                 <MudText>There are no attributes to show.</MudText>
                             }
                         </NoRecordsContent>
                     </MudTable>
-                }               
+                }
 
                 <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" Class="mt-5" DisableElevation="true">Save Changes</MudButton>
             }
@@ -401,14 +390,13 @@
                             Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
                         </MudText>
                     }
-                    <MudButton 
-                        Disabled="@hierarchyBeingRetrieved"
-                        Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
-                        Size="Size.Small"
-                        OnClick="HandleImportHierarchyAsync"
-                        Variant="Variant.Filled"
-                        Class="mt-5"
-                        DisableElevation="true">
+                    <MudButton Disabled="@hierarchyBeingRetrieved"
+                               Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
+                               Size="Size.Small"
+                               OnClick="HandleImportHierarchyAsync"
+                               Variant="Variant.Filled"
+                               Class="mt-5"
+                               DisableElevation="true">
                         @if (connectedSystem.Partitions?.Count == 0)
                         {
                             if (hierarchyBeingRetrieved)
@@ -467,18 +455,18 @@
                                                 @if (context.Included)
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                        Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                        CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                        UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                        Disabled="true"
-                                                        title="Included" />
+                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                                 UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                                 Disabled="true"
+                                                                 title="Included" />
                                                 }
                                                 else
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                        Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                        CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
-                                                        title="@(context.Selected ? "Selected" : "")" />
+                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                                 title="@(context.Selected ? "Selected" : "")" />
                                                 }
 
                                                 <MudText>@context.Name</MudText>
@@ -742,24 +730,6 @@
         selectedObjectType = connectedSystemObjectType;
     }
 
-    private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
-    {
-        if (selectedObjectType == null)
-        {
-            Log.Error($"CS Detail > HandleMakeExternalId: {nameof(selectedObjectType)} is null!");
-            return;
-        }
-
-        // make sure there's not already an attribute marked as the external id
-        foreach (var attribute in selectedObjectType.Attributes.Where(a => a.IsExternalId))
-            attribute.IsExternalId = false;
-
-        // mark the intended attribute as the external id, and select it
-        selectedAttribute.IsExternalId = true;
-        selectedAttribute.Selected = true;
-        Log.Verbose($"CS Detail > HandleMakeExternalId: Set attribute id {selectedAttribute} as the external id.");
-    }
-
     private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
     {
         if (connectedSystem == null)
@@ -825,7 +795,7 @@
         {
             if (element.Selected)
                 return true;
-            else 
+            else
                 return false;
         }
 
@@ -952,13 +922,14 @@
             return;
 
         // copy the form bound object to a new one we can persist separately from the form bind
-        var runProfile = new ConnectedSystemRunProfile { 
-            ConnectedSystemId = connectedSystem.Id,
-            Name = newRunProfile.Name,
-            RunType = newRunProfile.RunType,
-            Partition = newRunProfile.Partition,
-            PageSize = newRunProfile.PageSize
-        };
+        var runProfile = new ConnectedSystemRunProfile
+            {
+                ConnectedSystemId = connectedSystem.Id,
+                Name = newRunProfile.Name,
+                RunType = newRunProfile.RunType,
+                Partition = newRunProfile.Partition,
+                PageSize = newRunProfile.PageSize
+            };
 
         // attribute the action to the user and create the run profile
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
