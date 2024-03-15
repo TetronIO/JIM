@@ -514,6 +514,10 @@
 
                 <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
                     <MudTextField T="string" @bind-Value="newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
+
+                    <!-- would like to make this conditional, but the connector definition needs to state if it's file-based or not. this can be determined for custom connectors, but not built-in as there are no files for those. -->
+                    <MudTextField T="string" @bind-Value="newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined" Class="mt-3" HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/Users.csv" />
+
                     <MudSelect T="ConnectedSystemRunType" @bind-Value="newRunProfile.RunType" Label="Run Type" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="A run profile type is required">
                         @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
                         {
@@ -541,6 +545,7 @@
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)">Run Type</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition.Name)">Partition</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">Page Size</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath)">File Path</MudTableSortLabel></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>
@@ -552,6 +557,7 @@
                     <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
                     <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
                     <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
+                    <MudTd DataLabel="File Path">@(context.FilePath != null ? context.FilePath : "-")</MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
                     There are no run profiles. Create your first.
@@ -965,7 +971,8 @@
             Name = newRunProfile.Name,
             RunType = newRunProfile.RunType,
             Partition = newRunProfile.Partition,
-            PageSize = newRunProfile.PageSize
+            PageSize = newRunProfile.PageSize,
+            FilePath = newRunProfile.FilePath
         };
 
         // attribute the action to the user and create the run profile
