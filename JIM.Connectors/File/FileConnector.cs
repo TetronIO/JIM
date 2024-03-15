@@ -32,7 +32,7 @@ namespace JIM.Connectors.File
 
         #region IConnectorSettings members
         // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
-        private readonly string _settingFilePath = "File Path";
+        private readonly string _settingExampleFilePath = "Example File Path";
         private readonly string _settingObjectTypeColumn = "Object Type Column";
         private readonly string _settingObjectType = "Object Type";
         private readonly string _settingCulture = "Culture";
@@ -42,7 +42,7 @@ namespace JIM.Connectors.File
         {
             return new List<ConnectorSetting>
             {
-                new() { Name = _settingFilePath, Required = true, Description = "Supply the path to the file in the container. The container path is determined by the Docker Volume configuration item. i.e. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new() { Name = _settingExampleFilePath, Required = true, Description = "Supply the path to the example file in the container. The container path is determined by the Docker Volume configuration item. i.e. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
                 new() { Name = _settingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
@@ -66,7 +66,7 @@ namespace JIM.Connectors.File
             }
 
             // test that we can access the file
-            var filePathSettingValue = settingValues.Single(q => q.Setting.Name == _settingFilePath);
+            var filePathSettingValue = settingValues.Single(q => q.Setting.Name == _settingExampleFilePath);
             if (!string.IsNullOrEmpty(filePathSettingValue.StringValue))
             {
                 if (!System.IO.File.Exists(filePathSettingValue.StringValue))
@@ -90,9 +90,9 @@ namespace JIM.Connectors.File
         /// </summary>
         public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            var path = settingValues.SingleOrDefault(q => q.Setting.Name == _settingFilePath);
-            if (path == null || string.IsNullOrEmpty(path.StringValue))
-                throw new InvalidSettingValuesException($"Missing setting value for {_settingFilePath}.");
+            var exampleFilePath = settingValues.SingleOrDefault(q => q.Setting.Name == _settingExampleFilePath);
+            if (exampleFilePath == null || string.IsNullOrEmpty(exampleFilePath.StringValue))
+                throw new InvalidSettingValuesException($"Missing setting value for {_settingExampleFilePath}.");
 
             var delimiter = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDelimiter);
             if (delimiter == null || string.IsNullOrEmpty(delimiter.StringValue))
@@ -112,8 +112,8 @@ namespace JIM.Connectors.File
                 cultureInfo = new CultureInfo(culture.StringValue);
 
             var config = new CsvConfiguration(CultureInfo.CurrentCulture) { Delimiter = delimiter.StringValue };
-            logger.Debug($"GetSchemaAsync: Attempting to read '{path.StringValue}'");
-            using var reader = new StreamReader(path.StringValue);
+            logger.Debug($"GetSchemaAsync: Attempting to read '{exampleFilePath.StringValue}'");
+            using var reader = new StreamReader(exampleFilePath.StringValue);
             using var csv = new CsvReader(reader, config);
 
             await csv.ReadAsync();
