@@ -8,6 +8,7 @@
 @using JIM.Models.Transactional;
 @using JIM.Web.Models;
 @using JIM.Utilities;
+@using Serilog
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -168,13 +169,14 @@
                         permissions needed to retrieve the schema, and consider a database backup before proceeeding.
                     </MudText>
                 }
-                <MudButton Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
-                           Disabled="@(schemaBeingRetrieved)"
-                           Variant="Variant.Filled"
-                           Size="Size.Small"
-                           OnClick="HandleImportSchemaAsync"
-                           Class="mt-5"
-                           DisableElevation="true">
+                <MudButton 
+                        Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
+                        Disabled="@(schemaBeingRetrieved)"
+                        Variant="Variant.Filled"
+                        Size="Size.Small"
+                        OnClick="HandleImportSchemaAsync"
+                        Class="mt-5"
+                        DisableElevation="true">
                     @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
                     {
                         if (schemaBeingRetrieved)
@@ -238,6 +240,25 @@
 
                         @if (selectedObjectType != null)
                         {
+                            <MudText Typo="Typo.h6" Class="mt-5">@selectedObjectType.Name</MudText>
+                            @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+                            {
+                                <MudPaper Outlined="true" Class="pa-4 mt-5">
+                                    <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
+                                    <MudSelect T="ConnectedSystemObjectTypeAttribute" 
+                                            Label="External ID Attribute"
+                                            Variant="Variant.Outlined"
+                                            Class="mt-5"
+                                            Required="true"
+                                            RequiredError="You must select an attribute as the External ID."
+                                            ValueChanged="HandleMakeExternalId">
+                                        @foreach (var otAttribute in selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
+                                        {
+                                            <MudSelectItem Value="@otAttribute">@(otAttribute.Name)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudPaper>
+                            }
                             <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                                 Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.
                             </MudText>
@@ -390,13 +411,14 @@
                             Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
                         </MudText>
                     }
-                    <MudButton Disabled="@hierarchyBeingRetrieved"
-                               Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
-                               Size="Size.Small"
-                               OnClick="HandleImportHierarchyAsync"
-                               Variant="Variant.Filled"
-                               Class="mt-5"
-                               DisableElevation="true">
+                    <MudButton 
+                            Disabled="@hierarchyBeingRetrieved"
+                            Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
+                            Size="Size.Small"
+                            OnClick="HandleImportHierarchyAsync"
+                            Variant="Variant.Filled"
+                            Class="mt-5"
+                            DisableElevation="true">
                         @if (connectedSystem.Partitions?.Count == 0)
                         {
                             if (hierarchyBeingRetrieved)
@@ -730,6 +752,24 @@
         selectedObjectType = connectedSystemObjectType;
     }
 
+    private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
+    {
+        if (selectedObjectType == null)
+        {
+            Log.Error($"CS Detail > HandleMakeExternalId: {nameof(selectedObjectType)} is null!");
+            return;
+        }
+
+        // make sure there's not already an attribute marked as the external id
+        foreach (var attribute in selectedObjectType.Attributes.Where(a => a.IsExternalId))
+            attribute.IsExternalId = false;
+
+        // mark the intended attribute as the external id, and select it
+        selectedAttribute.IsExternalId = true;
+        selectedAttribute.Selected = true;
+        Log.Verbose($"CS Detail > HandleMakeExternalId: Set attribute id {selectedAttribute} as the external id.");
+    }
+
     private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
     {
         if (connectedSystem == null)
@@ -922,14 +962,13 @@
             return;
 
         // copy the form bound object to a new one we can persist separately from the form bind
-        var runProfile = new ConnectedSystemRunProfile
-            {
-                ConnectedSystemId = connectedSystem.Id,
-                Name = newRunProfile.Name,
-                RunType = newRunProfile.RunType,
-                Partition = newRunProfile.Partition,
-                PageSize = newRunProfile.PageSize
-            };
+        var runProfile = new ConnectedSystemRunProfile {
+            ConnectedSystemId = connectedSystem.Id,
+            Name = newRunProfile.Name,
+            RunType = newRunProfile.RunType,
+            Partition = newRunProfile.Partition,
+            PageSize = newRunProfile.PageSize
+        };
 
         // attribute the action to the user and create the run profile
         var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
