@@ -1483,9 +1483,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("FilePath")
-                        .HasColumnType("text");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");

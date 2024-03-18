@@ -1,6 +1,5 @@
 using JIM.Application;
 using JIM.Connectors;
-using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -167,8 +166,6 @@ namespace JIM.Worker
                                             IConnector connector;
                                             if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
                                                 connector = new LdapConnector();
-                                            else if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.FileConnectorName)
-                                                connector = new FileConnector();
                                             else
                                                 throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for worker processing.");
 
