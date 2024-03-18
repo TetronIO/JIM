@@ -73,8 +73,14 @@ namespace JIM.Models.Staging
         /// </summary>
         public bool SupportsSecondaryExternalId { get; set; }
 
+        /// <summary>
+        /// Some connectors require the user to specify the attribute to use as the external id as the system is unknown.
+        /// </summary>
         public bool SupportsUserSelectedExternalId { get; set; }
 
+        /// <summary>
+        /// Some connectors require the user to be able to specify the data type for the attribute, where the system is unknown, or where auto-detection is performed but cannot guarantee accuracy.
+        /// </summary>
         public bool SupportsUserSeletedAttributeTypes { get; set; }
         #endregion
     }

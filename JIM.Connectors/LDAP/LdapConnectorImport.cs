@@ -241,11 +241,12 @@ namespace JIM.Connectors.LDAP
             {
                 if (_cancellationToken.IsCancellationRequested)
                 {
-                    _logger.Debug("ConvertLdapResults: Cancellation requested. Stopping");
+                    _logger.Information("ConvertLdapResults: Cancellation requested. Stopping.");
                     return importObjects;
                 }
 
                 // start to build the object that will represent the object in the connected system. we will pass this back to JIM 
+                // TODO: expand this to support the UPDATE scenario
                 var importObject = new ConnectedSystemImportObject
                 {
                     ChangeType = ObjectChangeType.Create
@@ -270,7 +271,7 @@ namespace JIM.Connectors.LDAP
                 foreach (string attributeName in searchResult.Attributes.AttributeNames)
                 {
                     // get the schema attribute for this search result attribute, so we can work out what type it is
-                    var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName, StringComparison.CurrentCultureIgnoreCase));
+                    var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase));
                     if (schemaAttribute == null)
                     {
                         importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;
