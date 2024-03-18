@@ -45,7 +45,11 @@
         </ToolBarContent>
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue)">External Id</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue)">Secondary External Id</MudTableSortLabel></MudTh>
+            @* TODO: change this so a check is done on whether the connector supports secondary external ids or not so we don't have to do two linq queries *@
+            @if (connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
+            {
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue)">Secondary External Id</MudTableSortLabel></MudTh>
+            }
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName)">Display Name</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
@@ -57,7 +61,10 @@
             <MudTd DataLabel="External Id">
                 <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(context))">@context.ExternalIdAttributeValue</MudLink>
             </MudTd>
-            <MudTd DataLabel="Secondary External Id">@context.SecondaryExternalIdAttributeValue</MudTd>
+            @if (connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
+            {
+                <MudTd DataLabel="Secondary External Id">@context.SecondaryExternalIdAttributeValue</MudTd>
+            }
             <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">@context.Created</MudTd>
