@@ -12,6 +12,6 @@ namespace JIM.Models.Interfaces
         /// You can map a network share on the Docker host and expose this to JIM using the Connector Files volume.
         /// </summary>
         /// <param name="runProfile">Defines what type of import is being performed, i.e. delta import or full import.</param>
-        public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemSettingValue> settings, ILogger logger, CancellationToken cancellationToken);
+        public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken);
     }
 }

@@ -70,72 +70,24 @@ namespace JIM.Worker.Processors
                         await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedBy, _activity);
                     }
 
-                    // decision: do we want to load the whole connector space into memory to maximise performance? for now, let's keep it db-centric.
-                    // todo: experiment with using parallel foreach to see if we can speed up processing
-                    foreach (var importObject in result.ImportObjects)
-                    {
-                        // this will store the detail for the import object that will persist in the history for the run
-                        var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
-
-                        // validate the results.
-                        // are any of the attribute values duplicated? stop processing if so
-                        var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.InvariantCultureIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
-                        if (duplicateAttributeNames != null && duplicateAttributeNames.Count > 0)
-                        {
-                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
-                            activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
-                            
-                            // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
-                            continue;
-                        }
-
-                        // is this a new, or existing object for the Connected System within JIM?
-                        // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
-
-                        // match the string object type to a name of an object type in the schema..
-                        var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
-                        if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
-                        {
-                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldntMatchObjectType;
-                            activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
-                            continue;
-                        }
-
-                        // see if we already have a matching connected system object for this imported object within JIM
-                        var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
-
-                        // is new - new cso required
-                        // is existing - apply any changes to the cso from the import object
-                        if (connectedSystemObject == null)
-                        {
-                            activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
-                            connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
-                        }
-                        else
-                        {
-                            // existing connected system object - update from import object if necessary
-                            activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
-                            activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                            UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, activityRunProfileExecutionItem);
-                        }
-
-                        // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
-                        if (connectedSystemObject != null)
-                            connectedSystemObjectsBeingProcessed.Add(connectedSystemObject);
-                    }
+                    // process the results from this page
+                    await ProcessImportObjectsAsync(result, connectedSystemObjectsBeingProcessed);
 
                     // todo: process deletes - what wasn't imported? how do we do this when paging is being used?
                     // make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
 
                     if (initialPage)
-                        initialPage = false;   
+                        initialPage = false;
                 }
 
                 callBasedImportConnector.CloseImportConnection();
             }
-            else if (_connector is IConnectorImportUsingFiles)
+            else if (_connector is IConnectorImportUsingFiles fileBasedImportConnector)
             {
-                throw new NotImplementedException("Import connector using files it not yet supported.");
+                var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+
+                // process the results from this page
+                await ProcessImportObjectsAsync(result, connectedSystemObjectsBeingProcessed);
             }
             else
             {
@@ -152,6 +104,66 @@ namespace JIM.Worker.Processors
             // update the activity with the results from all pages.
             // this will also persist the AcivityRunProfileExecutionItem and ConnectedSystemObjectChanges for each CSO.
             await _jim.Activities.UpdateActivityAsync(_activity);
+        }
+
+        private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, List<ConnectedSystemObject> connectedSystemObjectsBeingProcessed)
+        {
+            if (_connectedSystem.ObjectTypes == null)
+                throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
+
+            // decision: do we want to load the whole connector space into memory to maximise performance? for now, let's keep it db-centric.
+            // todo: experiment with using parallel foreach to see if we can speed up processing
+            foreach (var importObject in connectedSystemImportResult.ImportObjects)
+            {
+                // this will store the detail for the import object that will persist in the history for the run
+                var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
+
+                // validate the results.
+                // are any of the attribute values duplicated? stop processing if so
+                var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.InvariantCultureIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
+                if (duplicateAttributeNames != null && duplicateAttributeNames.Count > 0)
+                {
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
+                    activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+
+                    // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                    continue;
+                }
+
+                // is this a new, or existing object for the Connected System within JIM?
+                // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
+
+                // match the string object type to a name of an object type in the schema..
+                var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+                if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
+                {
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldntMatchObjectType;
+                    activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                    continue;
+                }
+
+                // see if we already have a matching connected system object for this imported object within JIM
+                var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
+
+                // is new - new cso required
+                // is existing - apply any changes to the cso from the import object
+                if (connectedSystemObject == null)
+                {
+                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
+                    connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
+                }
+                else
+                {
+                    // existing connected system object - update from import object if necessary
+                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
+                    activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                    UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, activityRunProfileExecutionItem);
+                }
+
+                // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
+                if (connectedSystemObject != null)
+                    connectedSystemObjectsBeingProcessed.Add(connectedSystemObject);
+            }
         }
 
         private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)

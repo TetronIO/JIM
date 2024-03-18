@@ -185,7 +185,7 @@ namespace JIM.Connectors.File
         #endregion
 
         #region IConnectorImportUsingFiles members
-        public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemSettingValue> settingValues, ILogger logger, CancellationToken cancellationToken)
+        public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken)
         {
             logger.Verbose("ImportAsync() called");
 
@@ -193,8 +193,8 @@ namespace JIM.Connectors.File
             if (string.IsNullOrEmpty(runProfile.FilePath))
                 throw new InvalidDataException($"ImportAsync: FilePath is missing or empty!");
 
-            var reader = GetCsvReader(runProfile.FilePath, settingValues, logger);
-            var objectTypeInfo = GetFileConnectorObjectTypeInfo(settingValues, logger);
+            var reader = GetCsvReader(runProfile.FilePath, connectedSystem.SettingValues, logger);
+            var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
             var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, logger, cancellationToken);
             
             if (runProfile.RunType == ConnectedSystemRunType.FullImport)
