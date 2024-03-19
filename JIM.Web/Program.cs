@@ -3,6 +3,8 @@ using JIM.Data;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using MudBlazor;
 using MudBlazor.Services;
 using Serilog;
@@ -13,10 +15,10 @@ using System.Security.Claims;
 // -------------------------------
 // LOGGING_LEVEL
 // LOGGING_PATH
-// DB_HOSTNAME - validated by data layer
-// DB_NAME - validated by data layer
-// DB_USERNAME - validated by data layer
-// DB_PASSWORD - validated by data layer
+// DB_HOSTNAME - validated by the data layer
+// DB_NAME - validated by the data layer
+// DB_USERNAME - validated by the data layer
+// DB_PASSWORD - validated by the data layer
 // SSO_AUTHORITY
 // SSO_CLIENT_ID
 // SSO_SECRET
@@ -46,19 +48,18 @@ try
     var clientSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
     builder.Services.AddAuthentication(options =>
     {
-        options.DefaultScheme = "Cookies";
-        options.DefaultChallengeScheme = "oidc";
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
     })
-        .AddCookie("Cookies")
-        .AddOpenIdConnect("oidc", options =>
+        .AddCookie()
+        .AddOpenIdConnect(options =>
         {
+            options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            options.UseTokenLifetime = true; // use the idps token lifetime as our session lifetime
             options.Authority = authority;
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
-            options.ResponseType = "code id_token";
-            options.SaveTokens = false;
-            options.Scope.Clear();
-            options.Scope.Add("openid");
+            options.ResponseType = "code";
             options.Scope.Add("profile");
 
             // intercept the user login when a token is received and validate we can map them to a JIM user
@@ -175,7 +176,7 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 static async Task InitialiseJimApplicationAsync()
 {
     // collect auth config variables
-    Log.Verbose("Program.InitialiseJimApplicationAsync()...");
+    Log.Verbose("InitialiseJimApplicationAsync: Called.");
     var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
     if (string.IsNullOrEmpty(ssoAuthority))
         throw new Exception("SSO_AUTHORITY environment variable missing");
@@ -226,7 +227,7 @@ static async Task InitialiseJimApplicationAsync()
 /// </summary>
 static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 {
-    Log.Verbose("AuthoriseAndUpdateUserAsync()...");
+    Log.Verbose("AuthoriseAndUpdateUserAsync: Called.");
 
     if (context.Principal == null || context.Principal.Identity == null)
     {
@@ -263,14 +264,16 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     {
         // we mapped a token user to a Metaverse user, now we need to create a new identity that represents an internal view
         // of the user, with their roles claims. We have to create a new identity as we cannot modify the default one.
-        // This will do for MVP, when we need more a more developed RBAC system later, we might need to extend ClaimsIdentity to accomodate our more scomplex roles.
+        // This will do for MVP, when we need more a more developed RBAC system later, we might need to extend ClaimsIdentity to accomodate more complex roles.
 
         var roles = await jim.Security.GetMetaverseObjectRolesAsync(user);
+
+        // prepare a list of JIM-specific claims for our new identity
         var claims = new List<Claim>();
         foreach (var role in roles)
             claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name));
 
-        // add a virtual claim for user
+        // add a virtual-role claim for user
         // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much
         claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
 
@@ -278,6 +281,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         // we'll use this to attribute user actions to the claims identity.
         claims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
 
+        // the new JIM-specific identity is read, now add it to the .NET identity so it can be easily retrieved later
         var jimIdentity = new ClaimsIdentity(claims) { Label = "JIM.Web" };
         context.Principal.AddIdentity(jimIdentity);
 
@@ -294,6 +298,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 
 static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, MetaverseObject user, ClaimsPrincipal claimsPrincipal)
 {
+    Log.Verbose("UpdateUserAttributesFromClaimsAsync: Called.");
     var updateRequired = false;
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.DisplayName))
     {

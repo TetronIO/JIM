@@ -48,8 +48,8 @@ namespace JIM.Application
         }
 
         /// <summary>
-        /// Stores SSO information in the database so the user can view it in the interface.
-        /// Also ensures there is always a user with the admin role assignment.
+        /// Copies SSO information provided by Docker configuration to the database so the user can view it in the interface.
+        /// Also ensures there is always a user with an admin role assignment.
         /// </summary>
         public async Task InitialiseSSOAsync(
             string ssoAuthority,
@@ -96,8 +96,8 @@ namespace JIM.Application
             }
 
             // INBOUND CLAIM MAPPING:
-            // We want to make it easy for IDP and JIM teams to enable SSO. We don't want them to have to add JIM-specific claims to the OIDC ID token if possible.
-            // we want to allow an IDP team to setup the relying party for JIM using their standard integration approach, where possible.
+            // We want to make it easy for IDP and JIM admin teams to enable SSO. We don't want them to have to add JIM-specific claims to the OIDC ID token if possible.
+            // we want to allow an IDP admin team to setup the client for JIM using their standard integration approach, where possible.
             // this will provide the slickest integration experience.
             if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType) || serviceSettings.SSOUniqueIdentifierClaimType != uniqueIdentifierClaimType)
             {
