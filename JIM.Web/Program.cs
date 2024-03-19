@@ -46,6 +46,7 @@ try
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
     var clientId = Environment.GetEnvironmentVariable("SSO_CLIENT_ID");
     var clientSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
+
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -300,6 +301,28 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
 {
     Log.Verbose("UpdateUserAttributesFromClaimsAsync: Called.");
     var updateRequired = false;
+
+    if (!user.HasAttributeValue(Constants.BuiltInAttributes.DisplayName))
+    {
+        var nameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "name");
+        if (nameClaim != null)
+        {
+            var displayNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName);
+            if (displayNameAttribute != null)
+            {
+                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = displayNameAttribute,
+                    StringValue = nameClaim.Value
+                });
+
+                updateRequired = true;
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + nameClaim.Type);
+            }
+        }
+    }
+
+    // do it again. some IDPs use "name" instad of the xmlsoap version below for conveying display name
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.DisplayName))
     {
         var nameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");
