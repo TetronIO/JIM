@@ -53,15 +53,21 @@ namespace JIM.Models.Logic
         /// <summary>
         /// The sources that provide the value for the target attribute when the mapping is evaluated. 
         /// Suppported scenarios:
-        /// - Just one: for mapping a single attribute to the target attribute.
-        /// - Just one: for using a single function to generate a value for the target attribute.
-        /// - Just one: for using an expression to generate a value for the target attribute.
-        /// - Multiple: for usign multiple function calls that chain through each other to generate a value for the target attribute.
+        /// - Just one: for mapping a single attribute to the target attribute. i.e. attribute_1 => attribute
+        /// - Just one: for using a single function to generate a value for the target attribute, i.e. Trim(attribute) => attribute
+        /// - Just one: for using an expression to generate a value for the target attribute. i.e attribte_1 ?? attribte_2 => attribute
+        /// - Multiple: for using multiple function calls that chain through each other to generate a value for the target attribute.
         /// </summary>
         public List<SyncRuleMappingSource> Sources { get; set; }
 
+        /// <summary>
+        /// For an import rule, this is where the imported attribute value ends up being assigned to.
+        /// </summary>
         public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
 
+        /// <summary>
+        /// For an export rule, this is where the exported attribute value ends up being assigned to.
+        /// </summary>
         public ConnectedSystemObjectTypeAttribute? TargetConnectedSystemAttribute { get; set; }
 
         public SyncRuleMapping()
