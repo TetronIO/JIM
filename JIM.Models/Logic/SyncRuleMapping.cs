@@ -46,7 +46,7 @@ namespace JIM.Models.Logic
         public SyncRule? ObjectMatchingSynchronisationRule { get; set; }
 
         /// <summary>
-        /// Denotes what the purpose of this mapping is for, i.e. attribute flow, or object matching (joining/correlating).
+        /// Denotes what the purpose of this mapping is for, i.e. attribute flow, or object matching (aka joining/correlating).
         /// </summary>
         public SyncRuleMappingType Type { get; set; }
 

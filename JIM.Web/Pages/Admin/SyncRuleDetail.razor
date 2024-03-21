@@ -8,6 +8,7 @@
 @using JIM.Models.Staging.DTOs
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject IDialogService DialogService
 
 <PageTitle>Synchronisation Rule: @syncRuleNameOrCreate</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Synchronisation Rule:</span> @syncRuleNameOrCreate</MudText>
@@ -123,13 +124,30 @@
 
             <MudButton StartIcon="@Icons.Material.Filled.Add"
                        Variant="Variant.Filled"
-                       Href="/admin/connected-systems/sync-rules/new"
+                       OnClick="OpenAddMatchingRuleDialog"
                        Color="Color.Default"
                        Class="mt-5"
                        Disabled="@(syncRule.MetaverseObjectType == null || syncRule.ConnectedSystemObjectType == null)"
-                       DisableElevation="true">Create Mapping</MudButton>
+                       DisableElevation="true">Create a Mapping</MudButton>
 
         </MudPaper>
+
+        <MudDialog @bind-IsVisible="addMatchingRuleDialogVisible" Options="addMatchingRuleDialogOptions">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> Create Mapping
+                </MudText>
+            </TitleContent>
+            <DialogContent class="pa-4">
+
+
+                <p>Form goes here...</p>
+                
+            </DialogContent>
+            <DialogActions>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddMatchingRuleSubmit" Class="px-10">Create Mapping</MudButton>
+            </DialogActions>
+        </MudDialog>
 
         <!-- list of matching rules to go here -->
     }
@@ -147,6 +165,11 @@
     private List<ConnectedSystemHeader> connectedSystemHeaders = null!;
     private List<MetaverseObjectType> metaverseObjectTypes = null!;
     private List<ConnectedSystemObjectType> connectedSystemObjectTypes = null!;
+
+    private bool addMatchingRuleDialogVisible;
+    private void OpenAddMatchingRuleDialog() => addMatchingRuleDialogVisible = true;
+    void AddMatchingRuleSubmit() => addMatchingRuleDialogVisible = false;
+    private DialogOptions addMatchingRuleDialogOptions = new() { FullWidth = true };
 
     protected override async Task OnInitializedAsync()
     {
