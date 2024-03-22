@@ -146,9 +146,10 @@ namespace JIM.PostgresData.Repositories
             runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
 
             types = await Repository.Database.ConnectedSystemObjectTypes
-                .Include(ot => ot.Attributes)
+                .Include(ot => ot.Attributes.OrderBy(a => a.Name))
                 .Where(q => q.ConnectedSystem.Id == id).ToListAsync();
 
+            // supporting 11 levels deep. arbitary, unless performance profiling identifies issues, or admins need to go deeper
             partitions = await Repository.Database.ConnectedSystemPartitions
                 .Include(p => p.Containers)
                 .ThenInclude(c => c.ChildContainers)

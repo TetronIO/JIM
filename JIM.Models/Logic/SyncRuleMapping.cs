@@ -12,7 +12,7 @@ namespace JIM.Models.Logic
     /// ** Object Matching Scenario **
     /// 
     /// There can be multiple mappings against a sync rule for the same target Metaverse attribute.
-    /// i.e. you might have a primary attribute you want to join on defined in one mapping, and then a fall-back attribute in another mapping.
+    /// i.e. you might have a primary connected system attribute you want to join on defined in one mapping, and then match on a fall-back attribute in another mapping.
     /// 
     /// ** Attribute Flow Scenario **
     /// 
@@ -62,11 +62,13 @@ namespace JIM.Models.Logic
 
         /// <summary>
         /// For an import rule, this is where the imported attribute value ends up being assigned to.
+        /// Also where Object Matching Rules map to. i.e. a connected system attribute might be a direct, or transform comparison to the Metaverse attribute.
         /// </summary>
         public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
 
         /// <summary>
         /// For an export rule, this is where the exported attribute value ends up being assigned to.
+        /// Does not apply to Object Matching Rules, as the target is always a Metaverse attribute in that context.
         /// </summary>
         public ConnectedSystemObjectTypeAttribute? TargetConnectedSystemAttribute { get; set; }
 

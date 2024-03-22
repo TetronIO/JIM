@@ -280,9 +280,11 @@ namespace JIM.Application.Servers
             // then we need to break any sync rule attribute flow relationships. this could be done gracefully to allow the user the opportunity to revise them, 
             // i.e. instead of just deleting the attribute flow and the user not knowing what they've lost, perhaps disable the attribute flow and leave a copy of the cs attrib name in place, 
             // so they can see it's not valid anymore and have information that will enable them to work out what to do about it.
+            schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
             connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>(); 
             foreach (var objectType in schema.ObjectTypes)
             {
+                objectType.Attributes = objectType.Attributes.OrderBy(a => a.Name).ToList();
                 var connectedSystemObjectType = new ConnectedSystemObjectType
                 {
                     Name = objectType.Name,

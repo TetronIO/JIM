@@ -25,11 +25,10 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<List<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
         {
-            var result = Repository.Database.MetaverseObjectTypes;
             if (includeChildObjects)
-                 result.Include(q => q.Attributes);
-
-            return await result.OrderBy(x => x.Name).ToListAsync();
+                return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes.OrderBy(a => a.Name)).OrderBy(x => x.Name).ToListAsync();
+            else
+                return await Repository.Database.MetaverseObjectTypes.OrderBy(x => x.Name).ToListAsync();
         }
 
         public async Task<List<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
@@ -254,11 +253,11 @@ namespace JIM.PostgresData.Repositories
         }
 
         public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
-            PredefinedSearch predefinedSearch, 
+            PredefinedSearch predefinedSearch,
             int page,
             int pageSize,
             int maxResults,
-            QuerySortBy querySortBy = QuerySortBy.DateCreated, 
+            QuerySortBy querySortBy = QuerySortBy.DateCreated,
             QueryRange queryRange = QueryRange.Forever)
         {
             if (pageSize < 1)
@@ -298,7 +297,7 @@ namespace JIM.PostgresData.Repositories
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.StartsWith(criteria.StringValue)));
                             break;
                         case PredefinedSearchComparisonType.NotStartsWith:
-                            objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue  == null || !av.StringValue.StartsWith(criteria.StringValue))));
+                            objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.StartsWith(criteria.StringValue))));
                             break;
                         case PredefinedSearchComparisonType.EndsWith:
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.EndsWith(criteria.StringValue)));
@@ -308,7 +307,7 @@ namespace JIM.PostgresData.Repositories
                             break;
 
                         case PredefinedSearchComparisonType.Contains: // need to loopkup if we need to handle contains different with postgres
-                        case PredefinedSearchComparisonType.NotContains: 
+                        case PredefinedSearchComparisonType.NotContains:
                         case PredefinedSearchComparisonType.LessThan: // for numbers, we need a number value property on the criteria object
                         case PredefinedSearchComparisonType.LessThanOrEquals:
                         case PredefinedSearchComparisonType.GreaterThan:
@@ -329,7 +328,7 @@ namespace JIM.PostgresData.Repositories
 
                 // todo: handle group nesting as well
             }
-                          
+
             if (queryRange != QueryRange.Forever)
             {
                 switch (queryRange)
