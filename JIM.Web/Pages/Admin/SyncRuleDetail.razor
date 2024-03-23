@@ -6,6 +6,7 @@
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
@@ -152,50 +153,82 @@
                     <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
                 </MudSelect>
 
-                @if (syncRuleMappingSourceType == "Attribute")
+                @if (syncRuleMapping != null && syncRuleMappingSource != null)
                 {
-                    <MudSelect T="MetaverseAttribute"
-                               @bind-Value="syncRuleMappingSource.MetaverseAttribute"
-                               Label="Metaverse Attribute"
-                               Placeholder="Please select a Metaverse attribute"
-                               Required="true"
-                               Class="mt-5"
-                               Variant="Variant.Outlined">
-                        @foreach (var metaverseAttribute in syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
-                        {
-                            <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
-                        }
-                    </MudSelect>
+                    @if (syncRuleMappingSourceType == "Attribute")
+                    {
+                        <MudSelect T="MetaverseAttribute"
+                                   @bind-Value="syncRuleMapping.TargetMetaverseAttribute"
+                                   Label="Metaverse Attribute"
+                                   Placeholder="Please select a Metaverse attribute"
+                                   Required="true"
+                                   Class="mt-5"
+                                   Variant="Variant.Outlined">
+                            @foreach (var metaverseAttribute in syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                            {
+                                <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
+                            }
+                        </MudSelect>
 
-                    <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                               @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
-                               Label="Connected System Attribute"
-                               Placeholder="Please select the Connected System attribute"
-                               Required="true"
-                               Class="mt-5"
-                               Variant="Variant.Outlined">
-                        @foreach (var connectedSystemObjectTypeAttribute in syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
-                        {
-                            <MudSelectItem Value="@connectedSystemObjectTypeAttribute">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
-                        }
-                    </MudSelect>
+                        <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                                   @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
+                                   Label="Connected System Attribute"
+                                   Placeholder="Please select the Connected System attribute"
+                                   Required="true"
+                                   Class="mt-5"
+                                   Variant="Variant.Outlined">
+                            @foreach (var connectedSystemObjectTypeAttribute in syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                            {
+                                <MudSelectItem Value="@connectedSystemObjectTypeAttribute">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else if (syncRuleMappingSourceType == "Function")
+                    {
+                        <MudText Class="mt-5">Sorry, functions are no yet supported.</MudText>
+                    }
+                    else if (syncRuleMappingSourceType == "Expression")
+                    {
+                        <MudText Class="mt-5">Sorry, expressions are no yet supported.</MudText>
+                    }
                 }
-                else if (syncRuleMappingSourceType == "Function")
-                {
-                    <MudText Class="mt-5">Sorry, functions are no yet supported.</MudText>
-                }
-                else if (syncRuleMappingSourceType == "Expression")
-                {
-                    <MudText Class="mt-5">Sorry, expressions are no yet supported.</MudText>
-                }
-
             </DialogContent>
             <DialogActions>
                 <MudButton Disabled="DisableAddMappingButton()" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
             </DialogActions>
         </MudDialog>
 
-        <!-- list of matching rules to go here -->
+        @foreach (var objectMatchingRule in syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
+        {
+            var sourceType = objectMatchingRule.GetSourceType();
+            <MudPaper Class="pa-4 mt-5" Outlined="true">
+
+                @if (sourceType == SyncRuleMappingSourcesType.AttributeMapping)
+                {
+                    <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @objectMatchingRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+                    <div>
+                        <MudChip>
+                            <AvatarContent>
+                                <MudTooltip Text="Metaverse Attribute">
+                                    <MudAvatar>MV</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
+                        </MudChip>
+                        <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
+                        <MudChip>
+                            <AvatarContent>
+                                <MudTooltip Text="Connected System Attribute">
+                                    <MudAvatar>CS</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@objectMatchingRule.Sources[0].ConnectedSystemAttribute.Name</ChildContent>
+                        </MudChip>
+                    </div>
+                }
+
+            </MudPaper>
+        }
     }
 }
 
@@ -214,9 +247,9 @@
 
     private bool addMatchingRuleDialogVisible;
     private DialogOptions addMatchingRuleDialogOptions = new() { FullWidth = true };
-    private SyncRuleMapping syncRuleMapping = null!;
-    private SyncRuleMappingSource syncRuleMappingSource = null!;
-    private string syncRuleMappingSourceType = null!;
+    private SyncRuleMapping? syncRuleMapping;
+    private SyncRuleMappingSource? syncRuleMappingSource;
+    private string? syncRuleMappingSourceType;
 
     protected override async Task OnInitializedAsync()
     {
@@ -283,9 +316,19 @@
 
     private void HandleOpenAddMappingDialog()
     {
-        if (syncRuleMapping == null)
-            syncRuleMapping = new SyncRuleMapping { Type = SyncRuleMappingType.ObjectMatching };
+        if (syncRule == null)
+            return;
 
+        if (syncRuleMapping == null)
+        {
+            syncRuleMapping = new SyncRuleMapping {
+                    Type = SyncRuleMappingType.ObjectMatching,
+                    Order = syncRule.ObjectMatchingRules.Count == 0 ? 0 : syncRule.ObjectMatchingRules.Select(q => q.Order).Max() + 1
+            };
+            syncRuleMappingSource = new SyncRuleMappingSource();
+        }
+
+        syncRuleMapping.Sources.Add(syncRuleMappingSource);
         addMatchingRuleDialogVisible = true;
     }
 
@@ -300,27 +343,42 @@
     private bool DisableAddMappingButton()
     {
         if (syncRuleMapping == null)
+        {
+            Console.WriteLine("DisableAddMappingButton: syncRuleMapping NULL");
             return true;
+        }
 
         if (syncRuleMappingSource == null)
+        {
+            Console.WriteLine("DisableAddMappingButton: syncRuleMappingSource NULL");
             return true;
+        }
 
-        if (syncRuleMappingSource.MetaverseAttribute == null)
+        if (syncRuleMapping.TargetMetaverseAttribute == null)
+        {
+            Console.WriteLine("DisableAddMappingButton: syncRuleMapping.TargetMetaverseAttribute NULL");
             return true;
+        }
 
         if (syncRuleMapping.Type != SyncRuleMappingType.ObjectMatching)
+        {
+            Console.WriteLine("DisableAddMappingButton: syncRuleMapping.Type != SyncRuleMappingType.ObjectMatching");
             return true;
+        }
 
         // the rest depends on what type of source has been chosen by the user
-        if (syncRuleMappingSource.ConnectedSystemAttribute == null && syncRuleMappingSource.Function == null && (syncRuleMappingSource.ParameterValues == null || syncRuleMappingSource.ParameterValues.Count == 0))
+        if (syncRuleMappingSource.ConnectedSystemAttribute == null && (syncRuleMappingSource.Function == null || (syncRuleMappingSource.Function != null && (syncRuleMappingSource.ParameterValues == null || syncRuleMappingSource.ParameterValues.Count == 0))))
+        {
+            Console.WriteLine("DisableAddMappingButton: attrib/function/params missing");
             return true;
+        }
 
         return false;
     }
 
     private void HandleAddMappingButtonClick()
     {
-        if (syncRule == null)
+        if (syncRule == null || syncRuleMapping == null)
             return;
 
         // add the mapping to the rule
@@ -329,7 +387,8 @@
         // close the add mapping dialog
         addMatchingRuleDialogVisible = false;
 
-        // re-initialise the mapping rule, ready for the next use
-        syncRuleMapping = new SyncRuleMapping();
+        // re-initialise the mapping rule and source, ready for the next use
+        syncRuleMapping = null;
+        syncRuleMappingSource = null;
     }
 }

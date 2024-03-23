@@ -78,5 +78,28 @@ namespace JIM.Models.Logic
             Type = SyncRuleMappingType.NotSet;
             Created = DateTime.UtcNow;
         }
+
+        /// <summary>
+        /// Helper method to provide a description for the user on what type of source configuration this is.
+        /// </summary>
+        public SyncRuleMappingSourcesType GetSourceType()
+        {
+            if (Sources.Count == 0)
+                return SyncRuleMappingSourcesType.NotSet;
+
+            if (Sources.All(s => s.ConnectedSystemAttribute != null || s.MetaverseAttribute != null))
+            {
+                return SyncRuleMappingSourcesType.AttributeMapping;
+            }
+            else if (Sources.All(s => s.Function != null))
+            {
+                return SyncRuleMappingSourcesType.FunctionMapping;
+            }
+            else
+            {
+                // expressions not yet suppported
+                return SyncRuleMappingSourcesType.AdvancedMapping;
+            }
+        }
     }
 }
