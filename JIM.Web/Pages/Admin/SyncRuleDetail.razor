@@ -170,18 +170,29 @@
                             }
                         </MudSelect>
 
-                        <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                                   @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
-                                   Label="Connected System Attribute"
-                                   Placeholder="Please select the Connected System attribute"
-                                   Required="true"
-                                   Class="mt-5"
-                                   Variant="Variant.Outlined">
-                            @foreach (var connectedSystemObjectTypeAttribute in syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                        if (syncRuleMapping.TargetMetaverseAttribute != null)
+                        {
+                            var selectableConnectedSystemAttributes = syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued && a.Type == syncRuleMapping.TargetMetaverseAttribute.Type).ToList();
+                            if (selectableConnectedSystemAttributes.Count > 0)
                             {
-                                <MudSelectItem Value="@connectedSystemObjectTypeAttribute">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
+                                <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                                           @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
+                                           Label="Connected System Attribute"
+                                           Placeholder="Please select the Connected System attribute"
+                                           Required="true"
+                                           Class="mt-5"
+                                           Variant="Variant.Outlined">
+                                    @foreach (var connectedSystemObjectTypeAttribute in selectableConnectedSystemAttributes)
+                                    {
+                                        <MudSelectItem Value="@connectedSystemObjectTypeAttribute">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
+                                    }
+                                </MudSelect>
                             }
-                        </MudSelect>
+                            else
+                            {
+                                <MudAlert class="mt-5" Severity="Severity.Error">There are no attributes of type @syncRuleMapping.TargetMetaverseAttribute.Type on the Connected System type @syncRule.ConnectedSystemObjectType.Name to use for mapping. Select another type of attribute.</MudAlert>
+                            }
+                        }
                     }
                     else if (syncRuleMappingSourceType == "Function")
                     {
