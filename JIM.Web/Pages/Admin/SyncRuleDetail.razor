@@ -214,28 +214,33 @@
             var sourceType = objectMatchingRule.GetSourceType();
             <MudPaper Class="pa-4 mt-5" Outlined="true">
 
-                @if (sourceType == SyncRuleMappingSourcesType.AttributeMapping)
+                @if (sourceType == SyncRuleMappingSourcesType.AttributeMapping && objectMatchingRule.TargetMetaverseAttribute != null)
                 {
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @objectMatchingRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    <div>
-                        <MudChip>
-                            <AvatarContent>
-                                <MudTooltip Text="Metaverse Attribute">
-                                    <MudAvatar>MV</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
-                        </MudChip>
-                        <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
-                        <MudChip>
-                            <AvatarContent>
-                                <MudTooltip Text="Connected System Attribute">
-                                    <MudAvatar>CS</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@objectMatchingRule.Sources[0].ConnectedSystemAttribute.Name</ChildContent>
-                        </MudChip>
-                    </div>
+                    <MudGrid>
+                        <MudItem xs="11">
+                            <MudChip>
+                                <AvatarContent>
+                                    <MudTooltip Text="Metaverse Attribute">
+                                        <MudAvatar>MV</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
+                            </MudChip>
+                            <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
+                            <MudChip>
+                                <AvatarContent>
+                                    <MudTooltip Text="Connected System Attribute">
+                                        <MudAvatar>CS</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@objectMatchingRule.Sources[0].ConnectedSystemAttribute.Name</ChildContent>
+                            </MudChip>
+                        </MudItem>
+                        <MudItem xs="1" Class="d-flex justify-end">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClick(objectMatchingRule))"></MudIconButton>
+                        </MudItem>
+                    </MudGrid>
                 }
 
             </MudPaper>
@@ -401,5 +406,13 @@
         // re-initialise the mapping rule and source, ready for the next use
         syncRuleMapping = null;
         syncRuleMappingSource = null;
+    }
+
+    private void HandleObjectMatchingRuleDeleteClick(SyncRuleMapping objectMatchingRule)
+    {
+        if (syncRule == null)
+            return;
+
+        syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
     }
 }
