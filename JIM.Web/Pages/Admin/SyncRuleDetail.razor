@@ -425,13 +425,16 @@
         if (syncRule == null)
             return;
 
-        var confirmationResult = await DialogService.ShowMessageBox(
-        "Warning",
-        "Are you sure you want to remove this Matching Rule?",
-        yesText: "Remove!", cancelText: "Cancel");
-
+        var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to remove this Matching Rule?", yesText: "Remove!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
+        {
             syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
+
+            // re-order the items
+            var orderedItems = syncRule.ObjectMatchingRules.OrderBy(q=>q.Order).ToList();
+            for (var i = 0; i < orderedItems.Count; i++)
+                orderedItems[i].Order = i;
+        }
     }
 
     private void HandleObjectMatchingRuleChangeOrder(SyncRuleMapping objectMatchingRule, string direction)
