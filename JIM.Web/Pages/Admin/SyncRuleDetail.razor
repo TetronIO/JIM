@@ -431,7 +431,7 @@
             syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
 
             // re-order the items
-            var orderedItems = syncRule.ObjectMatchingRules.OrderBy(q=>q.Order).ToList();
+            var orderedItems = syncRule.ObjectMatchingRules.OrderBy(q => q.Order).ToList();
             for (var i = 0; i < orderedItems.Count; i++)
                 orderedItems[i].Order = i;
         }
