@@ -172,26 +172,18 @@
 
                         if (syncRuleMapping.TargetMetaverseAttribute != null)
                         {
-                            var selectableConnectedSystemAttributes = syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued && a.Type == syncRuleMapping.TargetMetaverseAttribute.Type).ToList();
-                            if (selectableConnectedSystemAttributes.Count > 0)
-                            {
-                                <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                                           @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
-                                           Label="Connected System Attribute"
-                                           Placeholder="Please select the Connected System attribute"
-                                           Required="true"
-                                           Class="mt-5"
-                                           Variant="Variant.Outlined">
-                                    @foreach (var connectedSystemObjectTypeAttribute in selectableConnectedSystemAttributes)
-                                    {
-                                        <MudSelectItem Value="@connectedSystemObjectTypeAttribute">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            }
-                            else
-                            {
-                                <MudAlert class="mt-5" Severity="Severity.Error">There are no attributes of type @syncRuleMapping.TargetMetaverseAttribute.Type on the Connected System type @syncRule.ConnectedSystemObjectType.Name to use for mapping. Select another type of attribute.</MudAlert>
-                            }
+                            <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                                        @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
+                                        Label="Connected System Attribute"
+                                        Placeholder="Please select the Connected System attribute"
+                                        Required="true"
+                                        Class="mt-5"
+                                        Variant="Variant.Outlined">
+                                @foreach (var connectedSystemObjectTypeAttribute in syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                                {
+                                    <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != syncRuleMapping.TargetMetaverseAttribute.Type)">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
+                                }
+                            </MudSelect>
                         }
                     }
                     else if (syncRuleMappingSourceType == "Function")
@@ -216,31 +208,42 @@
 
                 @if (sourceType == SyncRuleMappingSourcesType.AttributeMapping && objectMatchingRule.TargetMetaverseAttribute != null)
                 {
-                    <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @objectMatchingRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    <MudGrid>
-                        <MudItem xs="11">
-                            <MudChip>
-                                <AvatarContent>
-                                    <MudTooltip Text="Metaverse Attribute">
-                                        <MudAvatar>MV</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
-                            </MudChip>
-                            <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
-                            <MudChip>
-                                <AvatarContent>
-                                    <MudTooltip Text="Connected System Attribute">
-                                        <MudAvatar>CS</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@objectMatchingRule.Sources[0].ConnectedSystemAttribute.Name</ChildContent>
-                            </MudChip>
-                        </MudItem>
-                        <MudItem xs="1" Class="d-flex justify-end">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClick(objectMatchingRule))"></MudIconButton>
-                        </MudItem>
-                    </MudGrid>
+                    var source = objectMatchingRule.Sources[0];
+                    if (source.ConnectedSystemAttribute != null)
+                    {
+                        <MudGrid Spacing="0">
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @objectMatchingRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+                            </MudItem>
+                            <MudItem xs="6" Class="d-flex align-center justify-end">
+                                <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudChip>
+                                    <AvatarContent>
+                                        <MudTooltip Text="Metaverse Attribute">
+                                            <MudAvatar>MV</MudAvatar>
+                                        </MudTooltip>
+                                    </AvatarContent>
+                                    <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
+                                </MudChip>
+                                <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
+                                <MudChip>
+                                    <AvatarContent>
+                                        <MudTooltip Text="Connected System Attribute">
+                                            <MudAvatar>CS</MudAvatar>
+                                        </MudTooltip>
+                                    </AvatarContent>
+                                    <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
+                                </MudChip>
+                            </MudItem>
+                            <MudItem xs="6" Class="d-flex align-center justify-end">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small" Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))" Disabled="@DisableObjectMappingRuleOrderButton(objectMatchingRule, "up")" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small" Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))" Disabled="@DisableObjectMappingRuleOrderButton(objectMatchingRule, "down")" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))"></MudIconButton>
+                            </MudItem>
+                        </MudGrid>
+                    }
                 }
 
             </MudPaper>
@@ -343,6 +346,11 @@
             };
             syncRuleMappingSource = new SyncRuleMappingSource();
         }
+        else
+        {
+            if (syncRuleMappingSource == null)
+                return;
+        }
 
         syncRuleMapping.Sources.Add(syncRuleMappingSource);
         addMatchingRuleDialogVisible = true;
@@ -408,11 +416,61 @@
         syncRuleMappingSource = null;
     }
 
-    private void HandleObjectMatchingRuleDeleteClick(SyncRuleMapping objectMatchingRule)
+    private async Task HandleObjectMatchingRuleDeleteClickAsync(SyncRuleMapping objectMatchingRule)
     {
         if (syncRule == null)
             return;
 
-        syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
+        var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to remove this Matching Rule?", yesText: "Remove!", cancelText: "Cancel");
+        if (confirmationResult.HasValue && confirmationResult.Value)
+        {
+            syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
+
+            // re-order the items
+            var orderedItems = syncRule.ObjectMatchingRules.OrderBy(q => q.Order).ToList();
+            for (var i = 0; i < orderedItems.Count; i++)
+                orderedItems[i].Order = i;
+        }
+    }
+
+    private void HandleObjectMatchingRuleChangeOrder(SyncRuleMapping objectMatchingRule, string direction)
+    {
+        // invalid scenarios
+        if (syncRule == null || syncRule.ObjectMatchingRules.Count == 1)
+            return;
+
+        if (direction == "up")
+        {
+            // cannot promote the first item
+            if (objectMatchingRule.Order == 0)
+                return;
+
+            var preceedingItem = syncRule.ObjectMatchingRules.Single(q => q.Order == (objectMatchingRule.Order - 1));
+            preceedingItem.Order++;
+            objectMatchingRule.Order--;
+        }
+        else
+        {
+            // cannot demote the last item
+            if (objectMatchingRule.Order == (syncRule.ObjectMatchingRules.Count - 1))
+                return;
+
+            var followingItem = syncRule.ObjectMatchingRules.Single(q => q.Order == (objectMatchingRule.Order + 1));
+            followingItem.Order--;
+            objectMatchingRule.Order++;
+        }
+    }
+
+    private bool DisableObjectMappingRuleOrderButton(SyncRuleMapping objectMatchingRule, string direction)
+    {
+        if (syncRule == null)
+            return true;
+
+        if (direction == "up" && objectMatchingRule.Order == 0)
+            return true;
+        else if (direction == "down" && objectMatchingRule.Order == syncRule.ObjectMatchingRules.Max(q => q.Order))
+            return true;
+
+        return false;
     }
 }
