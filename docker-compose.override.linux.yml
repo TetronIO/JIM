@@ -1,0 +1,27 @@
+version: '3.4'
+
+services:
+  jim.web:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=https://+:443;http://+:80
+      - ASPNETCORE_HTTPS_PORTS=5201
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=1Password1!
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx 
+    ports:
+      - "5200:80"
+      - "5201:443"
+    volumes:
+      - ~/.aspnet/https:/https:ro
+  jim.api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=https://+:443;http://+:80
+      - ASPNETCORE_HTTPS_PORTS=4201
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=1Password1!
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx 
+    ports:
+      - "4200:80"
+      - "4201:443"
+    volumes:
+      - ~/.aspnet/https:/https:ro
