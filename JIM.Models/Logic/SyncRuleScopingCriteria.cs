@@ -1,8 +1,9 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Search;
 
-namespace JIM.Models.Search
+namespace JIM.Models.Logic
 {
-    public class PredefinedSearchCriteria
+    public class SyncRuleScopingCriteria
     {
         public int Id { get; set; }
 

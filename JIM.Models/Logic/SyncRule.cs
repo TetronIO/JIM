@@ -74,9 +74,14 @@ namespace JIM.Models.Logic
         // back-link for EF
         public List<Activity> Activities { get; set; } = null!;
 
-        // todo: scoping filters
-        // what happens when an object is in scope, then falls out of scope?
+        // TODO: what happens when an object is in scope, then falls out of scope?
         // should/can we provide an option to cause deprovisioning?
+
+        /// <summary>
+        /// Contains all the logic that determines which Metaverse objects should be exported to the Connected System.
+        /// No rules means that all objects of the Metaverse Object Type will be in scope of an outbound sync rule.
+        /// </summary>
+        public List<SyncRuleScopingCriteriaGroup> ObjectScopingCriteriaGroups { get; set; }
 
         public SyncRule()
         {
@@ -84,6 +89,7 @@ namespace JIM.Models.Logic
             Created = DateTime.UtcNow;
             AttributeFlowRules = new List<SyncRuleMapping>();
             ObjectMatchingRules = new List<SyncRuleMapping>();
+            ObjectScopingCriteriaGroups = new List<SyncRuleScopingCriteriaGroup>();
         }
     }
 }

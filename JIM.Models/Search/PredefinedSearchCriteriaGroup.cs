@@ -4,7 +4,7 @@
     {
         public int Id { get; set; }
 
-        public PredefinedSearchGroupType Type { get; set; }
+        public SearchGroupType Type { get; set; }
 
         public List<PredefinedSearchCriteria> Criteria { get; set; }
 

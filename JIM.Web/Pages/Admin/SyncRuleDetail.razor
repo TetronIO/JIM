@@ -4,6 +4,7 @@
 @using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Logic
+@using JIM.Models.Search
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
@@ -249,6 +250,59 @@
             </MudPaper>
         }
     }
+    else if (syncRule.MetaverseObjectType != null)
+    {
+        <MudPaper Class="pa-4 mt-5" Outlined="true">
+            <MudText Typo="Typo.h4">Scoping Rules</MudText>
+            <MudText Class="mt-5">
+                By default, all Metaverse objects of type '@syncRule.MetaverseObjectType.Name' will be in scope of this Synchronisation Rule, though to
+                have it apply to a subset of those objects, i.e. you might only want this rule to apply to Staff, not Contractors.
+            </MudText>
+            <MudRadioGroup @bind-Value="syncRuleScopingFiltered" Class="mt-5">
+                <MudRadio Value="false">All Objects</MudRadio>
+                <MudRadio Value="true">Filtered</MudRadio>
+            </MudRadioGroup>
+
+            @if (syncRuleScopingFiltered)
+            {
+                <MudButton StartIcon="@Icons.Material.Filled.Add"
+                           Variant="Variant.Filled"
+                           OnClick="@(() => HandleOpenAddScopingCriteriaGroupDialog(null))"
+                           Class="mt-5"
+                           DisableElevation="true">Add Criteria Group</MudButton>
+
+                <MudDialog @bind-IsVisible="addScopingCriteriaGroupDialogVisible" Options="addMatchingRuleDialogOptions">
+                    <TitleContent>
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
+                        </MudText>
+                    </TitleContent>
+                    <DialogContent>
+                        <MudSelect 
+                            T="string"
+                            Label="Please choose a group type"
+                            Required="true"
+                            Variant="Variant.Outlined"
+                            @bind-Value="criteriaGroupTypeText">
+                            @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                            {
+                                <MudSelectItem Value="@type.ToString()" />
+                            }
+                        </MudSelect>
+                    </DialogContent>
+                    <DialogActions>
+                        <MudButton 
+                            Variant="Variant.Filled" 
+                            Color="Color.Primary" 
+                            OnClick="HandleAddCriteriaGroupButtonClick"
+                            Disabled="DisableAddScopingCriteriaGroupFormButton()"
+                            Class="ma-4">Add Criteria Group</MudButton>
+                    </DialogActions>
+                </MudDialog>
+            }
+
+        </MudPaper>
+    }
 }
 
 @code {
@@ -269,6 +323,11 @@
     private SyncRuleMapping? syncRuleMapping;
     private SyncRuleMappingSource? syncRuleMappingSource;
     private string? syncRuleMappingSourceType;
+
+    private bool syncRuleScopingFiltered = false;
+    private bool addScopingCriteriaGroupDialogVisible;
+    private string? criteriaGroupTypeText;
+    private SyncRuleScopingCriteriaGroup? syncRuleScopingCriteriaGroup;
 
     protected override async Task OnInitializedAsync()
     {
@@ -472,5 +531,42 @@
             return true;
 
         return false;
+    }
+
+    private void HandleOpenAddScopingCriteriaGroupDialog(SyncRuleScopingCriteriaGroup? parentSyncRuleScopingCriteriaGroup)
+    {
+        Console.WriteLine("HandleOpenAddScopingCriteriaGroupDialog: Called");
+        syncRuleScopingCriteriaGroup = new SyncRuleScopingCriteriaGroup();
+        syncRuleScopingCriteriaGroup.ParentGroup = parentSyncRuleScopingCriteriaGroup;
+        addScopingCriteriaGroupDialogVisible = true;
+    }
+
+    private bool DisableAddScopingCriteriaGroupFormButton()
+    {
+        Console.WriteLine($"DisableAddScopingCriteriaGroupFormButton: '{criteriaGroupTypeText}'");
+        return string.IsNullOrEmpty(criteriaGroupTypeText);
+    }
+
+    private void HandleAddCriteriaGroupButtonClick()
+    {
+        if (syncRule == null || syncRuleScopingCriteriaGroup == null || criteriaGroupTypeText == null)
+            return;
+
+        syncRuleScopingCriteriaGroup.Type = (SearchGroupType)Enum.Parse(typeof(SearchGroupType), criteriaGroupTypeText);
+
+        if (syncRuleScopingCriteriaGroup.ParentGroup == null)
+        {
+            // root-level criteria group
+            syncRule.ObjectScopingCriteriaGroups.Add(syncRuleScopingCriteriaGroup);
+        }
+        else
+        {
+            // add the criteria group to the parent's children, i.e. mak sure the relationships is esablished on both the parent and the new criteria group
+            syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Add(syncRuleScopingCriteriaGroup);
+        }
+
+        // all done, reset
+        addScopingCriteriaGroupDialogVisible = false;
+        syncRuleScopingCriteriaGroup = null;
     }
 }

@@ -313,10 +313,10 @@ namespace JIM.Application.Servers
 
                 peopleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
-                    Type = PredefinedSearchGroupType.All,
+                    Type = SearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new() {
-                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            ComparisonType = SearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
                             StringValue = "Person"
                         }
@@ -345,10 +345,10 @@ namespace JIM.Application.Servers
 
                 servicePrincipleUsersPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
-                    Type = PredefinedSearchGroupType.All,
+                    Type = SearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new() {
-                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            ComparisonType = SearchComparisonType.Equals,
                             MetaverseAttribute = typeAttribute,
                             StringValue = "Service"
                         }
@@ -398,10 +398,10 @@ namespace JIM.Application.Servers
                 securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 3 });
 
                 securityGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup {
-                    Type = PredefinedSearchGroupType.All,
+                    Type = SearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new() {
-                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            ComparisonType = SearchComparisonType.Equals,
                             MetaverseAttribute = groupTypeAttribute,
                             StringValue = "Security" 
                         } 
@@ -431,10 +431,10 @@ namespace JIM.Application.Servers
 
                 distributionGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup
                 {
-                    Type = PredefinedSearchGroupType.All,
+                    Type = SearchGroupType.All,
                     Criteria = new List<PredefinedSearchCriteria> {
                         new() {
-                            ComparisonType = PredefinedSearchComparisonType.Equals,
+                            ComparisonType = SearchComparisonType.Equals,
                             MetaverseAttribute = groupTypeAttribute,
                             StringValue = "Distribution"
                         }

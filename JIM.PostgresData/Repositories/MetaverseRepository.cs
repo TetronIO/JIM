@@ -287,36 +287,36 @@ namespace JIM.PostgresData.Repositories
                 {
                     switch (criteria.ComparisonType)
                     {
-                        case PredefinedSearchComparisonType.Equals:
+                        case SearchComparisonType.Equals:
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue == criteria.StringValue));
                             break;
-                        case PredefinedSearchComparisonType.NotEquals:
+                        case SearchComparisonType.NotEquals:
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != criteria.StringValue));
                             break;
-                        case PredefinedSearchComparisonType.StartsWith:
+                        case SearchComparisonType.StartsWith:
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.StartsWith(criteria.StringValue)));
                             break;
-                        case PredefinedSearchComparisonType.NotStartsWith:
+                        case SearchComparisonType.NotStartsWith:
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.StartsWith(criteria.StringValue))));
                             break;
-                        case PredefinedSearchComparisonType.EndsWith:
+                        case SearchComparisonType.EndsWith:
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.EndsWith(criteria.StringValue)));
                             break;
-                        case PredefinedSearchComparisonType.NotEndsWith:
+                        case SearchComparisonType.NotEndsWith:
                             objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.EndsWith(criteria.StringValue))));
                             break;
 
-                        case PredefinedSearchComparisonType.Contains: // need to loopkup if we need to handle contains different with postgres
-                        case PredefinedSearchComparisonType.NotContains:
-                        case PredefinedSearchComparisonType.LessThan: // for numbers, we need a number value property on the criteria object
-                        case PredefinedSearchComparisonType.LessThanOrEquals:
-                        case PredefinedSearchComparisonType.GreaterThan:
-                        case PredefinedSearchComparisonType.GreaterThanOrEquals:
+                        case SearchComparisonType.Contains: // need to loopkup if we need to handle contains different with postgres
+                        case SearchComparisonType.NotContains:
+                        case SearchComparisonType.LessThan: // for numbers, we need a number value property on the criteria object
+                        case SearchComparisonType.LessThanOrEquals:
+                        case SearchComparisonType.GreaterThan:
+                        case SearchComparisonType.GreaterThanOrEquals:
                             throw new NotSupportedException($"Not currently supporting PredefinedSearchComparisonType.{criteria.ComparisonType}");
                     }
                 }
 
-                if (group.Type == PredefinedSearchGroupType.All)
+                if (group.Type == SearchGroupType.All)
                 {
                     // err?    
                 }

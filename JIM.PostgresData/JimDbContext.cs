@@ -46,7 +46,7 @@ namespace JIM.PostgresData
         internal DbSet<PendingExport> PendingExports { get; set; } = null!;
         internal DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
         internal DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
-        internal DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; } = null!;
+        internal DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; } = null!; // can this be removed? is it not inferred as a child of criteria groups?
         internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; } = null!;
         internal DbSet<Role> Roles { get; set; } = null!;
         internal DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
