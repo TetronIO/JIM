@@ -262,46 +262,88 @@
                 <MudRadio Value="false">All Objects</MudRadio>
                 <MudRadio Value="true">Filtered</MudRadio>
             </MudRadioGroup>
-
-            @if (syncRuleScopingFiltered)
-            {
-                <MudButton StartIcon="@Icons.Material.Filled.Add"
-                           Variant="Variant.Filled"
-                           OnClick="@(() => HandleOpenAddScopingCriteriaGroupDialog(null))"
-                           Class="mt-5"
-                           DisableElevation="true">Add Criteria Group</MudButton>
-
-                <MudDialog @bind-IsVisible="addScopingCriteriaGroupDialogVisible" Options="addMatchingRuleDialogOptions">
-                    <TitleContent>
-                        <MudText Typo="Typo.h6">
-                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
-                        </MudText>
-                    </TitleContent>
-                    <DialogContent>
-                        <MudSelect 
-                            T="string"
-                            Label="Please choose a group type"
-                            Required="true"
-                            Variant="Variant.Outlined"
-                            @bind-Value="criteriaGroupTypeText">
-                            @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
-                            {
-                                <MudSelectItem Value="@type.ToString()" />
-                            }
-                        </MudSelect>
-                    </DialogContent>
-                    <DialogActions>
-                        <MudButton 
-                            Variant="Variant.Filled" 
-                            Color="Color.Primary" 
-                            OnClick="HandleAddCriteriaGroupButtonClick"
-                            Disabled="DisableAddScopingCriteriaGroupFormButton()"
-                            Class="ma-4">Add Criteria Group</MudButton>
-                    </DialogActions>
-                </MudDialog>
-            }
-
         </MudPaper>
+
+        @if (syncRuleScopingFiltered)
+        {
+            <MudButton StartIcon="@Icons.Material.Filled.Add"
+                        Variant="Variant.Filled"
+                        OnClick="@(() => HandleOpenAddScopingCriteriaGroupDialog(null))"
+                        Class="mt-5"
+                        DisableElevation="true">Add Criteria Group</MudButton>
+
+            <MudDialog @bind-IsVisible="addScopingCriteriaGroupDialogVisible" Options="addMatchingRuleDialogOptions">
+                <TitleContent>
+                    <MudText Typo="Typo.h6">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
+                    </MudText>
+                </TitleContent>
+                <DialogContent>
+                    <MudSelect 
+                        T="string"
+                        Label="Please choose a group type"
+                        Required="true"
+                        Variant="Variant.Outlined"
+                        @bind-Value="criteriaGroupTypeText">
+                        @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                        {
+                            <MudSelectItem Value="@type.ToString()" />
+                        }
+                    </MudSelect>
+                </DialogContent>
+                <DialogActions>
+                    <MudButton 
+                        Variant="Variant.Filled" 
+                        Color="Color.Primary" 
+                        OnClick="HandleAddCriteriaGroupButtonClick"
+                        Disabled="DisableAddScopingCriteriaGroupFormButton()"
+                        Class="ma-4">Add Criteria Group</MudButton>
+                </DialogActions>
+            </MudDialog>
+        }
+
+        @foreach (var rootCriteriaGroup in syncRule.ObjectScopingCriteriaGroups)
+        {
+            <MudPaper Class="pa-4 mt-5" Outlined="true">
+
+                <MudGrid Spacing="0">
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @rootCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+                    </MudItem>
+                    <MudItem xs="6" Class="d-flex align-center justify-end">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(rootCriteriaGroup))"></MudIconButton>
+                    </MudItem>
+                    <MudItem xs="11">
+
+                        criteria go here...
+
+                        
+
+                        @* <MudChip>
+                            <AvatarContent>
+                                <MudTooltip Text="Metaverse Attribute">
+                                    <MudAvatar>MV</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
+                        </MudChip>
+                        <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
+                        <MudChip>
+                            <AvatarContent>
+                                <MudTooltip Text="Connected System Attribute">
+                                    <MudAvatar>CS</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
+                        </MudChip> *@
+                    </MudItem>
+                    <MudItem xs="1" Class="d-flex align-center justify-end">
+                        controls
+                    </MudItem>
+                </MudGrid>
+
+            </MudPaper>
+        }
     }
 }
 
@@ -568,5 +610,17 @@
         // all done, reset
         addScopingCriteriaGroupDialogVisible = false;
         syncRuleScopingCriteriaGroup = null;
+    }
+
+    private void HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup syncRuleScopingCriteriaGroup)
+    {
+        if (syncRule == null || syncRuleScopingCriteriaGroup == null)
+            return;
+
+        // remove child reference and remove parent reference
+        if (syncRuleScopingCriteriaGroup.ParentGroup == null)
+            syncRule.ObjectScopingCriteriaGroups.Remove(syncRuleScopingCriteriaGroup);
+        else
+            syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Remove(syncRuleScopingCriteriaGroup);
     }
 }
