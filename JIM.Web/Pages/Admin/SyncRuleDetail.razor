@@ -43,13 +43,14 @@
                     </MudSelect>
                 }
 
-                <MudSelect T="string"
-                           Label="Direction"
-                           Placeholder="Please select an attribute flow direction..."
-                           Required="true"
-                           ValueChanged="HandleSyncRuleDirectionSelection"
-                           Variant="Variant.Outlined"
-                           Class="mt-5">
+                <MudSelect 
+                    T="string"
+                    Label="Direction"
+                    Placeholder="Please select an attribute flow direction..."
+                    Required="true"
+                    ValueChanged="HandleSyncRuleDirectionSelection"
+                    Variant="Variant.Outlined"
+                    Class="mt-5">
                     @foreach (SyncRuleDirection item in Enum.GetValues(typeof(SyncRuleDirection)))
                     {
                         if (item != SyncRuleDirection.NotSet)
@@ -63,12 +64,13 @@
                 {
                     <MudGrid>
                         <MudItem xs="5">
-                            <MudSelect T="MetaverseObjectType"
-                                       Label="Metaverse Object Type"
-                                       @bind-Value="@syncRule.MetaverseObjectType"
-                                       Required="true"
-                                       Class="mt-5"
-                                       Variant="Variant.Outlined">
+                            <MudSelect 
+                                T="MetaverseObjectType"
+                                Label="Metaverse Object Type"
+                                @bind-Value="@syncRule.MetaverseObjectType"
+                                Required="true"
+                                Class="mt-5"
+                                Variant="Variant.Outlined">
                                 @foreach (var mvObjectType in metaverseObjectTypes)
                                 {
                                     <MudSelectItem Value="@mvObjectType">@mvObjectType.Name</MudSelectItem>
@@ -81,12 +83,13 @@
                             </MudPaper>
                         </MudItem>
                         <MudItem xs="5">
-                            <MudSelect T="ConnectedSystemObjectType"
-                                       Label="Connected System Object Type"
-                                       @bind-Value="@syncRule.ConnectedSystemObjectType"
-                                       Required="true"
-                                       Class="mt-5"
-                                       Variant="Variant.Outlined">
+                            <MudSelect 
+                                T="ConnectedSystemObjectType"
+                                Label="Connected System Object Type"
+                                @bind-Value="@syncRule.ConnectedSystemObjectType"
+                                Required="true"
+                                Class="mt-5"
+                                Variant="Variant.Outlined">
                                 @foreach (var csObjectType in syncRule.ConnectedSystem.ObjectTypes.Where(ot => ot.Selected))
                                 {
                                     <MudSelectItem Value="@csObjectType">@csObjectType.Name</MudSelectItem>
@@ -104,7 +107,7 @@
                 @if (syncRule.Direction == SyncRuleDirection.Export)
                 {
                     <MudSwitch @bind-Value="@syncRule.ProvisionToConnectedSystem" Color="Color.Primary" Label="Create objects in the Connected System?" />
-                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, Metaverse objects matched in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse object to be created (provisioned) in the Connected System. You would typically enable this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudAlert>
+                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, Metaverse objects matched in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse object to be created in the Connected System. You would typically enable this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudAlert>
                 }
 
                 <MudSwitch Class="mt-5" @bind-Value="@syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
@@ -116,7 +119,7 @@
     @if (syncRule.Direction == SyncRuleDirection.Import)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
-            <MudText Typo="Typo.h4">Matching Rules</MudText>
+            <MudText Typo="Typo.h5">Matching Rules</MudText>
             <MudText Class="mt-5">
                 At lest one matching rule is needed to ensure JIM can associate a Connected System Object from this sync rule with a matching Metaverse object.
                 It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for the life of the object.
@@ -124,17 +127,17 @@
                 A Connected System Object is considered Joined when a matching Metaverse object is found, and Disconnected when not.
             </MudText>
 
-            <MudButton StartIcon="@Icons.Material.Filled.Add"
-                       Variant="Variant.Filled"
-                       OnClick="HandleOpenAddMappingDialog"
-                       Color="Color.Default"
-                       Class="mt-5"
-                       Disabled="@(syncRule.MetaverseObjectType == null || syncRule.ConnectedSystemObjectType == null)"
-                       DisableElevation="true">Add Matching Rule</MudButton>
-
+            <MudButton 
+                StartIcon="@Icons.Material.Filled.Add"
+                Variant="Variant.Filled"
+                OnClick="HandleOpenAddMappingDialog"
+                Color="Color.Default"
+                Class="mt-5"
+                Disabled="@(syncRule.MetaverseObjectType == null || syncRule.ConnectedSystemObjectType == null)"
+                DisableElevation="true">Add Matching Rule</MudButton>
         </MudPaper>
 
-        <MudDialog @bind-IsVisible="addMatchingRuleDialogVisible" Options="addMatchingRuleDialogOptions">
+        <MudDialog @bind-IsVisible="addMatchingRuleDialogVisible" Options="dialogOptions">
             <TitleContent>
                 <MudText Typo="Typo.h6">
                     <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> Add Matching Rule
@@ -158,13 +161,14 @@
                 {
                     @if (syncRuleMappingSourceType == "Attribute")
                     {
-                        <MudSelect T="MetaverseAttribute"
-                                   @bind-Value="syncRuleMapping.TargetMetaverseAttribute"
-                                   Label="Metaverse Attribute"
-                                   Placeholder="Please select a Metaverse attribute"
-                                   Required="true"
-                                   Class="mt-5"
-                                   Variant="Variant.Outlined">
+                        <MudSelect
+                            T="MetaverseAttribute"
+                            @bind-Value="syncRuleMapping.TargetMetaverseAttribute"
+                            Label="Metaverse Attribute"
+                            Placeholder="Please select a Metaverse attribute"
+                            Required="true"
+                            Class="mt-5"
+                            Variant="Variant.Outlined">
                             @foreach (var metaverseAttribute in syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
                             {
                                 <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
@@ -173,13 +177,14 @@
 
                         if (syncRuleMapping.TargetMetaverseAttribute != null)
                         {
-                            <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                                        @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
-                                        Label="Connected System Attribute"
-                                        Placeholder="Please select the Connected System attribute"
-                                        Required="true"
-                                        Class="mt-5"
-                                        Variant="Variant.Outlined">
+                            <MudSelect 
+                                T="ConnectedSystemObjectTypeAttribute"
+                                @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
+                                Label="Connected System Attribute"
+                                Placeholder="Please select the Connected System attribute"
+                                Required="true"
+                                Class="mt-5"
+                                Variant="Variant.Outlined">
                                 @foreach (var connectedSystemObjectTypeAttribute in syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
                                 {
                                     <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != syncRuleMapping.TargetMetaverseAttribute.Type)">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
@@ -198,7 +203,7 @@
                 }
             </DialogContent>
             <DialogActions>
-                <MudButton Disabled="DisableAddMappingButton()" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
+                <MudButton Disabled="DisableAddMappingButton()" DisableElevation="true" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
             </DialogActions>
         </MudDialog>
 
@@ -228,7 +233,7 @@
                                     </AvatarContent>
                                     <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
                                 </MudChip>
-                                <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
+                                <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon></MudChip>
                                 <MudChip>
                                     <AvatarContent>
                                         <MudTooltip Text="Connected System Attribute">
@@ -253,7 +258,7 @@
     else if (syncRule.MetaverseObjectType != null)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
-            <MudText Typo="Typo.h4">Scoping Rules</MudText>
+            <MudText Typo="Typo.h5">Metaverse Object Scope</MudText>
             <MudText Class="mt-5">
                 By default, all Metaverse objects of type '@syncRule.MetaverseObjectType.Name' will be in scope of this Synchronisation Rule, though to
                 have it apply to a subset of those objects, i.e. you might only want this rule to apply to Staff, not Contractors.
@@ -262,87 +267,51 @@
                 <MudRadio Value="false">All Objects</MudRadio>
                 <MudRadio Value="true">Filtered</MudRadio>
             </MudRadioGroup>
+
+            @if (syncRuleScopingFiltered)
+            {
+                <MudButton StartIcon="@Icons.Material.Filled.Add"
+                           Variant="Variant.Filled"
+                           OnClick="@(() => HandleOpenAddScopingCriteriaGroupDialog(null))"
+                           Class="mt-5"
+                           DisableElevation="true">Add Criteria Group</MudButton>
+
+                <MudDialog @bind-IsVisible="addScopingCriteriaGroupDialogVisible" Options="dialogOptions">
+                    <TitleContent>
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
+                        </MudText>
+                    </TitleContent>
+                    <DialogContent>
+                        <MudSelect 
+                            T="string"
+                            Label="Please choose a group type"
+                            Required="true"
+                            Variant="Variant.Outlined"
+                            @bind-Value="criteriaGroupTypeText">
+                            @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                            {
+                                <MudSelectItem Value="@type.ToString()" />
+                            }
+                        </MudSelect>
+                    </DialogContent>
+                    <DialogActions>
+                        <MudButton 
+                            Variant="Variant.Filled"
+                            Color="Color.Primary"
+                            OnClick="HandleAddCriteriaGroupButtonClick"
+                            Disabled="DisableAddScopingCriteriaGroupFormButton()"
+                            DisableElevation="true"
+                            Class="ma-4">Add Group</MudButton>
+                    </DialogActions>
+                </MudDialog>
+            }
+
         </MudPaper>
-
-        @if (syncRuleScopingFiltered)
-        {
-            <MudButton StartIcon="@Icons.Material.Filled.Add"
-                        Variant="Variant.Filled"
-                        OnClick="@(() => HandleOpenAddScopingCriteriaGroupDialog(null))"
-                        Class="mt-5"
-                        DisableElevation="true">Add Criteria Group</MudButton>
-
-            <MudDialog @bind-IsVisible="addScopingCriteriaGroupDialogVisible" Options="addMatchingRuleDialogOptions">
-                <TitleContent>
-                    <MudText Typo="Typo.h6">
-                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
-                    </MudText>
-                </TitleContent>
-                <DialogContent>
-                    <MudSelect 
-                        T="string"
-                        Label="Please choose a group type"
-                        Required="true"
-                        Variant="Variant.Outlined"
-                        @bind-Value="criteriaGroupTypeText">
-                        @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
-                        {
-                            <MudSelectItem Value="@type.ToString()" />
-                        }
-                    </MudSelect>
-                </DialogContent>
-                <DialogActions>
-                    <MudButton 
-                        Variant="Variant.Filled" 
-                        Color="Color.Primary" 
-                        OnClick="HandleAddCriteriaGroupButtonClick"
-                        Disabled="DisableAddScopingCriteriaGroupFormButton()"
-                        Class="ma-4">Add Criteria Group</MudButton>
-                </DialogActions>
-            </MudDialog>
-        }
 
         @foreach (var rootCriteriaGroup in syncRule.ObjectScopingCriteriaGroups)
         {
-            <MudPaper Class="pa-4 mt-5" Outlined="true">
-
-                <MudGrid Spacing="0">
-                    <MudItem xs="6">
-                        <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @rootCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    </MudItem>
-                    <MudItem xs="6" Class="d-flex align-center justify-end">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(rootCriteriaGroup))"></MudIconButton>
-                    </MudItem>
-                    <MudItem xs="11">
-
-                        criteria go here...
-
-                        
-
-                        @* <MudChip>
-                            <AvatarContent>
-                                <MudTooltip Text="Metaverse Attribute">
-                                    <MudAvatar>MV</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
-                        </MudChip>
-                        <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
-                        <MudChip>
-                            <AvatarContent>
-                                <MudTooltip Text="Connected System Attribute">
-                                    <MudAvatar>CS</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                        </MudChip> *@
-                    </MudItem>
-                    <MudItem xs="1" Class="d-flex align-center justify-end">
-                        controls
-                    </MudItem>
-                </MudGrid>
-
-            </MudPaper>
+            <SyncRuleDetailScopingCriteriaGroup SyncRule="syncRule" SyncRuleScopingCriteriaGroup="rootCriteriaGroup" SyncRuleChanged="HandleStateHasChanged" SyncRuleScopingCriteriaGroupChanged="HandleStateHasChanged" />
         }
     }
 }
@@ -361,7 +330,7 @@
     private List<ConnectedSystemObjectType> connectedSystemObjectTypes = null!;
 
     private bool addMatchingRuleDialogVisible;
-    private DialogOptions addMatchingRuleDialogOptions = new() { FullWidth = true };
+    private DialogOptions dialogOptions = new() { FullWidth = true };
     private SyncRuleMapping? syncRuleMapping;
     private SyncRuleMappingSource? syncRuleMappingSource;
     private string? syncRuleMappingSourceType;
@@ -612,15 +581,8 @@
         syncRuleScopingCriteriaGroup = null;
     }
 
-    private void HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup syncRuleScopingCriteriaGroup)
+    private void HandleStateHasChanged()
     {
-        if (syncRule == null || syncRuleScopingCriteriaGroup == null)
-            return;
-
-        // remove child reference and remove parent reference
-        if (syncRuleScopingCriteriaGroup.ParentGroup == null)
-            syncRule.ObjectScopingCriteriaGroups.Remove(syncRuleScopingCriteriaGroup);
-        else
-            syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Remove(syncRuleScopingCriteriaGroup);
+        StateHasChanged();
     }
 }

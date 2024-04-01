@@ -12,17 +12,18 @@
     /// </summary>
     public enum SearchComparisonType
     {
-        Equals = 0,
-        NotEquals = 1,
-        StartsWith = 2,
-        NotStartsWith = 3,
-        EndsWith = 4,
-        NotEndsWith = 5,
-        Contains = 6,
-        NotContains = 7,
-        LessThan = 8,
-        LessThanOrEquals = 9,
-        GreaterThan = 10,
-        GreaterThanOrEquals = 11
+        NotSet = 0,
+        Equals = 1,
+        NotEquals = 2,
+        StartsWith = 3,
+        NotStartsWith = 4,
+        EndsWith = 5,
+        NotEndsWith = 6,
+        Contains = 7,
+        NotContains = 8,
+        LessThan = 9,
+        LessThanOrEquals = 10,
+        GreaterThan = 11,
+        GreaterThanOrEquals = 12
     }
 }
