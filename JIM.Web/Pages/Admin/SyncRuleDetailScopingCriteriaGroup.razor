@@ -8,66 +8,92 @@
 
     <MudGrid Spacing="0">
         <MudItem xs="6">
-            <MudText Typo="Typo.overline"><span class="mud-text-secondary">LOGIC TYPE:</span> @SyncRuleScopingCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+            <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @SyncRuleScopingCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
         </MudItem>
         <MudItem xs="6" Class="d-flex align-center justify-end">
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
         </MudItem>
     </MudGrid>
 
-    @if (SyncRuleScopingCriteriaGroup.ChildGroups.Count > 0)
-    {
-        foreach (var criteriaGroup in SyncRuleScopingCriteriaGroup.ChildGroups)
-        {
-            <SyncRuleDetailScopingCriteriaGroup SyncRule="SyncRule" SyncRuleScopingCriteriaGroup="criteriaGroup" SyncRuleChanged="HandleStateHasChanged" SyncRuleScopingCriteriaGroupChanged="HandleStateHasChanged" />
-        }
-    }
-    else
-    {
-        <MudButton StartIcon="@Icons.Material.Filled.Add"
-                   Variant="Variant.Filled"
-                   Class="mt-5"
-                   OnClick="HandleShowAddCriteriaDialogButtonClick"
-                   DisableElevation="true">Add Criteria</MudButton>
+    <MudButton StartIcon="@Icons.Material.Filled.Add"
+               Variant="Variant.Filled"
+               Class="me-3"
+               OnClick="HandleOpenAddCriteriaGroupDialog"
+               DisableElevation="true">Add Criteria Group</MudButton>
 
-        if (SyncRuleScopingCriteriaGroup.Criteria.Count == 0)
-        {
-            <MudAlert Severity="Severity.Info" Class="mt-5">Add your first criteria...</MudAlert>
-        }
-        else
-        {
-            foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
-            {
-                <div class="mt-5">
-                    <MudChip>
-                        <AvatarContent>
-                            <MudTooltip Text="Metaverse Attribute">
-                                <MudAvatar>MV</MudAvatar>
-                            </MudTooltip>
-                        </AvatarContent>
-                        <ChildContent>@criteria.MetaverseAttribute.Name</ChildContent>
-                    </MudChip>
-                    <MudChip>@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
-                    <MudChip>@criteria.ToString()</MudChip>
-                </div>
-            }
-        }
+    <MudButton StartIcon="@Icons.Material.Filled.Add"
+               Variant="Variant.Filled"
+               OnClick="HandleShowAddCriteriaDialogButtonClick"
+               DisableElevation="true">Add Criteria</MudButton>
+
+    @if (SyncRuleScopingCriteriaGroup.ChildGroups.Count == 0 && SyncRuleScopingCriteriaGroup.Criteria.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-5">Add your first criteria...</MudAlert>
     }
 
-</MudPaper>
+    @foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
+    {
+        <div class="mt-5">
+            <MudChip>
+                <AvatarContent>
+                    <MudTooltip Text="Metaverse Attribute">
+                        <MudAvatar>MV</MudAvatar>
+                    </MudTooltip>
+                </AvatarContent>
+                <ChildContent>@criteria.MetaverseAttribute.Name</ChildContent>
+            </MudChip>
+            <MudChip>@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
+            <MudChip>@criteria.ToString()</MudChip>
+        </div>
+    }
 
-@if (syncRuleScopingCriteria != null)
-{
-    <MudDialog @bind-IsVisible="addCriteriaDialogVisible" Options="dialogOptions">
+    @foreach (var criteriaGroup in SyncRuleScopingCriteriaGroup.ChildGroups)
+    {
+        <SyncRuleDetailScopingCriteriaGroup SyncRule="SyncRule" SyncRuleScopingCriteriaGroup="criteriaGroup" SyncRuleChanged="HandleStateHasChanged" SyncRuleScopingCriteriaGroupChanged="HandleStateHasChanged" />
+    }
+
+    <!-- this needs to move to a component and for SyncRuleDetail to use it as well, to avoid duplication. -->
+    <MudDialog @bind-IsVisible="addCriteriaGroupDialogVisible" Options="dialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> Add Criteria
+                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
             </MudText>
         </TitleContent>
         <DialogContent>
+            <MudSelect T="string"
+                       Label="Please choose a group type"
+                       Required="true"
+                       Variant="Variant.Outlined"
+                       @bind-Value="criteriaGroupTypeText">
+                @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                {
+                    <MudSelectItem Value="@type.ToString()" />
+                }
+            </MudSelect>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="HandleAddCriteriaGroupButtonClick"
+                       Disabled="DisableAddCriteriaGroupFormButton()"
+                       DisableElevation="true"
+                       Class="ma-4">Add Group</MudButton>
+        </DialogActions>
+    </MudDialog>
 
+</MudPaper>
+
+<MudDialog @bind-IsVisible="addCriteriaDialogVisible" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> Add Criteria
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (newSyncRuleScopingCriteria != null)
+        {
             <MudSelect T="MetaverseAttribute"
-                       @bind-Value="syncRuleScopingCriteria.MetaverseAttribute"
+                       @bind-Value="newSyncRuleScopingCriteria.MetaverseAttribute"
                        Label="Metaverse Attribute"
                        Placeholder="Please select a Metaverse attribute"
                        Required="true"
@@ -78,61 +104,61 @@
                     <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
                 }
             </MudSelect>
+        }
 
-            <MudSelect T="string"
-                       Label="Comparison Type"
-                       Placeholder="Please select the type of comparison to make"
-                       Required="true"
-                       ValueChanged="HandleComparisonTypeSelection"
-                       Class="mt-5"
-                       Variant="Variant.Outlined">
-                @foreach (SearchComparisonType searchComparisonType in Enum.GetValues(typeof(SearchComparisonType)))
-                {
-                    if (searchComparisonType == SearchComparisonType.NotSet)
-                        continue;
-
-                    <MudSelectItem Value="@searchComparisonType.ToString()">@searchComparisonType.ToString().SplitOnCapitalLetters()</MudSelectItem>
-                }
-            </MudSelect>
-
-            @if (syncRuleScopingCriteria.MetaverseAttribute != null)
+        <MudSelect T="string"
+                    Label="Comparison Type"
+                    Placeholder="Please select the type of comparison to make"
+                    Required="true"
+                    ValueChanged="HandleComparisonTypeSelection"
+                    Class="mt-5"
+                    Variant="Variant.Outlined">
+            @foreach (SearchComparisonType searchComparisonType in Enum.GetValues(typeof(SearchComparisonType)))
             {
-                @if (syncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Text)
-                {
-                    <MudTextField @bind-Value="syncRuleScopingCriteria.StringValue" Required="true" Label="Text Value" Variant="Variant.Outlined" Class="mt-5"></MudTextField>
-                }
-                else if (syncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Guid)
-                {
-                    <MudTextField @bind-Value="syncRuleScopingCriteria.GuidValue" Required="true" Label="Guid Value" Variant="Variant.Outlined" Class="mt-5"></MudTextField>
-                }
-                else if (syncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Number)
-                {
-                    <MudNumericField @bind-Value="syncRuleScopingCriteria.IntValue" Label="Number Value" Variant="Variant.Outlined" Class="mt-5" />
-                }
-                else if (syncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.DateTime)
-                {
-                    <MudDatePicker @bind-Date="syncRuleScopingCriteria.DateTimeValue" Label="Date Value" Variant="Variant.Outlined" Class="mt-5" />
-                }
-                else if (syncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Boolean)
-                {
-                    <MudCheckBox @bind-Value="syncRuleScopingCriteria.BoolValue" TriState="true" Class="mt-5" Label="Boolean Value">: @(!syncRuleScopingCriteria.BoolValue.HasValue ? "Null" : syncRuleScopingCriteria.BoolValue.ToString())</MudCheckBox>
-                }
-                else if (syncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Reference)
-                {
-                    <MudAlert Severity="Severity.Warning" Class="mt-5">Apologies, references are not yet supported here.</MudAlert>
-                }
-                else if (syncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Binary)
-                {
-                    <MudAlert Severity="Severity.Warning" Class="mt-5">Apologies, binary types are not yet supported here.</MudAlert>
-                }
-            }
+                if (searchComparisonType == SearchComparisonType.NotSet)
+                    continue;
 
-        </DialogContent>
-        <DialogActions>
-            <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DisableElevation="true" Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick" Class="ma-4">Add Criteria</MudButton>
-        </DialogActions>
-    </MudDialog>
-}
+                <MudSelectItem Value="@searchComparisonType.ToString()">@searchComparisonType.ToString().SplitOnCapitalLetters()</MudSelectItem>
+            }
+        </MudSelect>
+
+        @if (newSyncRuleScopingCriteria != null && newSyncRuleScopingCriteria.MetaverseAttribute != null)
+        {
+            @if (newSyncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Text)
+            {
+                <MudTextField @bind-Value="newSyncRuleScopingCriteria.StringValue" Required="true" Label="Text Value" Variant="Variant.Outlined" Class="mt-5"></MudTextField>
+            }
+            else if (newSyncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Guid)
+            {
+                <MudTextField @bind-Value="newSyncRuleScopingCriteria.GuidValue" Required="true" Label="Guid Value" Variant="Variant.Outlined" Class="mt-5"></MudTextField>
+            }
+            else if (newSyncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Number)
+            {
+                <MudNumericField @bind-Value="newSyncRuleScopingCriteria.IntValue" Label="Number Value" Variant="Variant.Outlined" Class="mt-5" />
+            }
+            else if (newSyncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.DateTime)
+            {
+                <MudDatePicker @bind-Date="newSyncRuleScopingCriteria.DateTimeValue" Label="Date Value" Variant="Variant.Outlined" Class="mt-5" />
+            }
+            else if (newSyncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Boolean)
+            {
+                <MudCheckBox @bind-Value="newSyncRuleScopingCriteria.BoolValue" TriState="true" Class="mt-5" Label="Boolean Value">: @(!newSyncRuleScopingCriteria.BoolValue.HasValue ? "Null" : newSyncRuleScopingCriteria.BoolValue.ToString())</MudCheckBox>
+            }
+            else if (newSyncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Reference)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-5">Apologies, references are not yet supported here.</MudAlert>
+            }
+            else if (newSyncRuleScopingCriteria.MetaverseAttribute.Type == AttributeDataType.Binary)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-5">Apologies, binary types are not yet supported here.</MudAlert>
+            }
+        }
+
+    </DialogContent>
+    <DialogActions>
+        <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DisableElevation="true" Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick" Class="ma-4">Add Criteria</MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     [Parameter]
@@ -147,9 +173,13 @@
     [Parameter]
     public EventCallback<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroupChanged { get; set; }
 
+    private bool addCriteriaGroupDialogVisible;
+    private string? criteriaGroupTypeText;
+    private SyncRuleScopingCriteriaGroup? newChildCriteriaGroup;
+
     private bool addCriteriaDialogVisible;
     private DialogOptions dialogOptions = new() { FullWidth = true };
-    private SyncRuleScopingCriteria? syncRuleScopingCriteria;
+    private SyncRuleScopingCriteria? newSyncRuleScopingCriteria;
 
     private void HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup syncRuleScopingCriteriaGroup)
     {
@@ -165,7 +195,7 @@
 
     private void HandleShowAddCriteriaDialogButtonClick()
     {
-        syncRuleScopingCriteria = new SyncRuleScopingCriteria();
+        newSyncRuleScopingCriteria = new SyncRuleScopingCriteria();
         addCriteriaDialogVisible = true;
     }
 
@@ -182,29 +212,29 @@
     {
         // convert to enum and assign
         // should never happen, but performing for linting reasons
-        if (SyncRule == null || syncRuleScopingCriteria == null)
+        if (SyncRule == null || newSyncRuleScopingCriteria == null)
             return;
 
         var searchComparisonType = (SearchComparisonType)Enum.Parse(typeof(SearchComparisonType), searchComparisonTypeName);
-        syncRuleScopingCriteria.ComparisonType = searchComparisonType;
+        newSyncRuleScopingCriteria.ComparisonType = searchComparisonType;
     }
 
     private bool DisableAddCriteriaButton()
     {
-        if (syncRuleScopingCriteria == null)
+        if (newSyncRuleScopingCriteria == null)
             return true;
 
-        if (syncRuleScopingCriteria.MetaverseAttribute == null)
+        if (newSyncRuleScopingCriteria.MetaverseAttribute == null)
             return true;
 
-        if (syncRuleScopingCriteria.ComparisonType == SearchComparisonType.NotSet)
+        if (newSyncRuleScopingCriteria.ComparisonType == SearchComparisonType.NotSet)
             return true;
 
-        if (!syncRuleScopingCriteria.IntValue.HasValue &&
-            string.IsNullOrEmpty(syncRuleScopingCriteria.StringValue) &&
-            !syncRuleScopingCriteria.BoolValue.HasValue &&
-            !syncRuleScopingCriteria.DateTimeValue.HasValue &&
-            !syncRuleScopingCriteria.GuidValue.HasValue)
+        if (!newSyncRuleScopingCriteria.IntValue.HasValue &&
+            string.IsNullOrEmpty(newSyncRuleScopingCriteria.StringValue) &&
+            !newSyncRuleScopingCriteria.BoolValue.HasValue &&
+            !newSyncRuleScopingCriteria.DateTimeValue.HasValue &&
+            !newSyncRuleScopingCriteria.GuidValue.HasValue)
             return true;
 
         return false;
@@ -212,13 +242,51 @@
 
     private void HandleAddCriteriaButtonClick()
     {
-        if (syncRuleScopingCriteria == null)
+        if (newSyncRuleScopingCriteria == null)
             return;
 
-        SyncRuleScopingCriteriaGroup.Criteria.Add(syncRuleScopingCriteria);
+        SyncRuleScopingCriteriaGroup.Criteria.Add(newSyncRuleScopingCriteria);
 
         // all done, reset
         addCriteriaDialogVisible = false;
-        syncRuleScopingCriteria = null;
+        newSyncRuleScopingCriteria = null;
+    }
+
+    private void HandleOpenAddCriteriaGroupDialog()
+    {
+        Console.WriteLine("HandleOpenAddCriteriaGroupDialog: Called");
+        newChildCriteriaGroup = new SyncRuleScopingCriteriaGroup();
+        newChildCriteriaGroup.ParentGroup = SyncRuleScopingCriteriaGroup;
+        addCriteriaGroupDialogVisible = true;
+    }
+
+    private void HandleAddCriteriaGroupButtonClick()
+    {
+        Console.WriteLine("HandleAddCriteriaGroupButtonClick: Called");
+        if (newChildCriteriaGroup == null || criteriaGroupTypeText == null)
+            return;
+
+        newChildCriteriaGroup.Type = (SearchGroupType)Enum.Parse(typeof(SearchGroupType), criteriaGroupTypeText);
+
+        if (newChildCriteriaGroup.ParentGroup == null)
+        {
+            // the current criteria group is a root-level one. there's nothing to do for this scenario.
+        }
+        else
+        {
+            // the current criteria group is a child group of another.
+            // add the criteria group to the parent's children, i.e. make sure the relationships is esablished on both the parent and the new criteria group.
+            newChildCriteriaGroup.ParentGroup.ChildGroups.Add(newChildCriteriaGroup);
+        }
+
+        // all done, reset
+        addCriteriaGroupDialogVisible = false;
+        newChildCriteriaGroup = null;
+    }
+
+    private bool DisableAddCriteriaGroupFormButton()
+    {
+        Console.WriteLine($"DisableAddCriteriaGroupFormButton: '{criteriaGroupTypeText}'");
+        return string.IsNullOrEmpty(criteriaGroupTypeText);
     }
 }

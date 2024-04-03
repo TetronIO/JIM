@@ -270,11 +270,14 @@
 
             @if (syncRuleScopingFiltered)
             {
-                <MudButton StartIcon="@Icons.Material.Filled.Add"
+                @if (syncRule.ObjectScopingCriteriaGroups.Count == 0)
+                {
+                    <MudButton StartIcon="@Icons.Material.Filled.Add"
                            Variant="Variant.Filled"
-                           OnClick="@(() => HandleOpenAddScopingCriteriaGroupDialog(null))"
+                           OnClick="HandleOpenAddScopingCriteriaGroupDialog"
                            Class="mt-5"
                            DisableElevation="true">Add Criteria Group</MudButton>
+                }
 
                 <MudDialog @bind-IsVisible="addScopingCriteriaGroupDialogVisible" Options="dialogOptions">
                     <TitleContent>
@@ -544,11 +547,10 @@
         return false;
     }
 
-    private void HandleOpenAddScopingCriteriaGroupDialog(SyncRuleScopingCriteriaGroup? parentSyncRuleScopingCriteriaGroup)
+    private void HandleOpenAddScopingCriteriaGroupDialog()
     {
         Console.WriteLine("HandleOpenAddScopingCriteriaGroupDialog: Called");
         syncRuleScopingCriteriaGroup = new SyncRuleScopingCriteriaGroup();
-        syncRuleScopingCriteriaGroup.ParentGroup = parentSyncRuleScopingCriteriaGroup;
         addScopingCriteriaGroupDialogVisible = true;
     }
 
