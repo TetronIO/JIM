@@ -11,7 +11,7 @@
             <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @SyncRuleScopingCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
         </MudItem>
         <MudItem xs="6" Class="d-flex align-center justify-end">
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Variant="Variant.Filled" DisableElevation="true" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
         </MudItem>
     </MudGrid>
 
@@ -44,6 +44,13 @@
             </MudChip>
             <MudChip>@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
             <MudChip>@criteria.ToString()</MudChip>
+            <MudIconButton 
+                Icon="@Icons.Material.Filled.Delete" 
+                Variant="Variant.Filled"
+                DisableElevation="true"
+                Size="Size.Small" 
+                aria-label="delete"
+                OnClick="@(() => HandleDeleteCriteria(criteria))"></MudIconButton>
         </div>
     }
 
@@ -288,5 +295,13 @@
     {
         Console.WriteLine($"DisableAddCriteriaGroupFormButton: '{criteriaGroupTypeText}'");
         return string.IsNullOrEmpty(criteriaGroupTypeText);
+    }
+
+    private void HandleDeleteCriteria(SyncRuleScopingCriteria criteriaToDelete)
+    {
+        if (criteriaToDelete == null)
+            return;
+
+        SyncRuleScopingCriteriaGroup.Criteria.Remove(criteriaToDelete);
     }
 }
