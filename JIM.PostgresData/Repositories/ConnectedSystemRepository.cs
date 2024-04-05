@@ -515,7 +515,27 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
-            return await Repository.Database.SyncRules.SingleOrDefaultAsync(x => x.Id == id);
+            return await Repository.Database.SyncRules
+                .Include(sr => sr.AttributeFlowRules)
+                .Include(sr => sr.ConnectedSystem)
+                .Include(sr => sr.ConnectedSystemObjectType)
+                .Include(sr => sr.ObjectScopingCriteriaGroups)
+                .Include(sr => sr.CreatedBy)
+                .Include(sr => sr.MetaverseObjectType)
+                .Include(sr => sr.ObjectMatchingRules)
+                .SingleOrDefaultAsync(x => x.Id == id);
+        }
+
+        public async Task CreateSyncRuleAsync(SyncRule syncRule)
+        {
+            Repository.Database.SyncRules.Add(syncRule);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        public async Task UpdateSyncRuleAsync(SyncRule syncRule)
+        {
+            Repository.Database.Update(syncRule);
+            await Repository.Database.SaveChangesAsync();
         }
         #endregion
     }

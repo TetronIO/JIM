@@ -1,13 +1,15 @@
 ﻿using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 
 namespace JIM.Models.Logic
 {
     /// <summary>
     /// Defines the rules for how one or more attributes should flow between JIM and a connected system, or visa-versa.
     /// </summary>
-    public class SyncRule
+    public class SyncRule: IValidated
     {
         public int Id { get; set; }
         
@@ -82,6 +84,44 @@ namespace JIM.Models.Logic
         /// No rules means that all objects of the Metaverse Object Type will be in scope of an outbound sync rule.
         /// </summary>
         public List<SyncRuleScopingCriteriaGroup> ObjectScopingCriteriaGroups { get; set; }
+
+        public override string ToString()
+        {
+            return $"Sync Rule: {Name} ({Id})";
+        }
+
+        public bool IsValid()
+        {
+            return !Validate().Any(q => q.Level > ValidityStatusItemLevel.Warning);
+        }
+
+        public List<ValidityStatusItem> Validate()
+        {
+            var response = new List<ValidityStatusItem>();
+
+            if (string.IsNullOrEmpty(Name))
+                response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Name must be set."));
+
+            if (ConnectedSystem == null)
+                response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System must be set."));
+
+            if (ConnectedSystemObjectType == null)
+                response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System Object Type must be set."));
+
+            if (MetaverseObjectType == null)
+                response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Metaverse Object Type must be set."));
+
+            if (Direction == SyncRuleDirection.NotSet)
+                response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Direction must be set."));
+
+            if (Direction == SyncRuleDirection.Import && ObjectMatchingRules.Count == 0)
+                response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No object matching rules have been defined. Whilst valid, this is not recommended. Object Matching rules help minimise synchronisation errors in uncommon, but important scenarios."));
+
+            if (AttributeFlowRules.Count == 0)
+                response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No attribute flow rules have been defined. Whilst valid, this means objects will lack nearly all attributes."));
+
+            return response;
+        }
 
         public SyncRule()
         {

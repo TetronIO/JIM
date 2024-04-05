@@ -123,7 +123,7 @@ namespace JIM.Application.Servers
             SanitiseConnectedSystemUserInput(connectedSystem);
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Models.Activities.Activity
+            var activity = new Activity
             {
                 TargetName = connectedSystem.Name,
                 TargetType = ActivityTargetType.ConnectedSystem,
@@ -455,15 +455,6 @@ namespace JIM.Application.Servers
             return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectOfTypeCountAsync(connectedSystemObjectType.Id);
         }
 
-        //public async Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId)
-        //{
-        //    var stopwatch = Stopwatch.StartNew();
-        //    var ids = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsWithUnresolvedReferencesAsync(connectedSystemId);
-        //    stopwatch.Stop();
-        //    Log.Debug($"GetConnectedSystemObjectsWithUnresolvedReferencesAsync: completed for CS id {connectedSystemId} in {stopwatch.Elapsed}");
-        //    return ids;
-        //}
-
         public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
         {
             // persist the cso first, so there's something to reference when persisting attribute values later
@@ -788,6 +779,46 @@ namespace JIM.Application.Servers
         public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
             return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
+        }
+
+        public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject initiatedBy, Activity? parentActivity = null)
+        {
+            // validate the sync rule
+            if (syncRule == null)
+                throw new NullReferenceException(nameof(syncRule));
+
+            Log.Verbose($"CreateOrUpdateSyncRuleAsync() called for: {syncRule}");
+
+            if (!syncRule.IsValid())
+                return false;
+
+            // every crud operation must be tracked via an Activity
+            var activity = new Activity
+            {
+                TargetName = syncRule.Name,
+                TargetType = ActivityTargetType.SyncRule,
+                ParentActivityId = parentActivity?.Id
+            };
+
+            if (syncRule.Id == 0)
+            {
+                // new sync rule - create
+                activity.TargetOperationType = ActivityTargetOperationType.Create;
+                syncRule.CreatedBy = initiatedBy;
+                await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+                await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
+            }
+            else
+            {
+                // existing sync rule - update
+                activity.TargetOperationType = ActivityTargetOperationType.Update;
+                syncRule.LastUpdated = DateTime.UtcNow;
+                await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+                await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+            }
+
+            await Application.Activities.CompleteActivityAsync(activity);
+            return true;
         }
         #endregion
     }

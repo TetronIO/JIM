@@ -7,6 +7,7 @@
 @using JIM.Models.Search
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Utility
 @using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -314,14 +315,45 @@
 
         @foreach (var rootCriteriaGroup in syncRule.ObjectScopingCriteriaGroups)
         {
-            <SyncRuleDetailScopingCriteriaGroup SyncRule="syncRule" SyncRuleScopingCriteriaGroup="rootCriteriaGroup" SyncRuleChanged="HandleStateHasChanged" SyncRuleScopingCriteriaGroupChanged="HandleStateHasChanged" />
+            <SyncRuleDetailScopingCriteriaGroup 
+                SyncRule="syncRule" 
+                SyncRuleScopingCriteriaGroup="rootCriteriaGroup" 
+                SyncRuleChanged="HandleStateHasChanged" 
+                SyncRuleScopingCriteriaGroupChanged="HandleStateHasChanged" />
         }
     }
+
+    <!-- TODO: attribute flow rules! -->
+
+    @if (syncRule.Validate().Count > 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="mt-5">
+            <MudText>There are issues:</MudText>
+            <MudList>
+                @foreach (var item in syncRule.Validate())
+                {
+                    <MudListItem IconColor="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)" Icon="@(item.Level == JIM.Models.Utility.ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)">
+                        @item.Message
+                    </MudListItem>
+                }    
+            </MudList>
+        </MudAlert>
+    }
+
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               Class="mt-5"
+               OnClick="HandleCreateOrUpdateSyncRuleAsync"
+               Disabled="!syncRule.IsValid()"
+               DisableElevation="true">@(syncRule.Id == 0 ? "Create" : "Update") Sync Rule</MudButton>
 }
 
 @code {
     [Parameter]
     public int? Id { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? authenticationStateTask { get; set; }
 
     private string syncRuleNameOrCreate = "New";
     private List<BreadcrumbItem> breadcrumbs = null!;
@@ -362,6 +394,7 @@
                 return;
             }
 
+            syncRuleNameOrCreate = syncRule.Name;
             breadcrumbs.Add(new BreadcrumbItem(syncRule.Name, href: null, disabled: true));
         }
         else
@@ -585,6 +618,25 @@
 
     private void HandleStateHasChanged()
     {
+        // yes, this is necessary.
         StateHasChanged();
+    }
+
+    private async Task HandleCreateOrUpdateSyncRuleAsync()
+    {
+        if (syncRule == null)
+            return;
+
+        // are we transitioning from new to existing?
+        var isSyncRuleNew = syncRule.Id == 0;
+
+        // attribute the operation to the user
+        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        var wasSuccessful = await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, user);
+
+        // send the user to the existing-sync-rule view.
+        // this helps ensure links are good to be shared/bookmarked, etc.
+        if (wasSuccessful && isSyncRuleNew)
+            NavManager.NavigateTo($"/admin/connected-systems/sync-rules/{syncRule.Id}");
     }
 }

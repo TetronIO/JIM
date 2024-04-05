@@ -45,7 +45,7 @@
                     {
                         <MudLink Href="@Utilities.GetMetaverseObjectHref(metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(metaverseObjectHeader)</MudLink>
                     }
-                    else if (activity.TargetType == ActivityTargetType.SynchronisationRule)
+                    else if (activity.TargetType == ActivityTargetType.SyncRule)
                     {
                         <MudLink Href="@($"/admin/connected-systems/sync-rules/{activity.SyncRuleId}")">@activity.TargetName</MudLink>
                     }

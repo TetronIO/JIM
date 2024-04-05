@@ -24,7 +24,6 @@ namespace JIM.Data.Repositories
         public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
         public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
         public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
-        //public Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId);
         public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
         public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
@@ -45,6 +44,7 @@ namespace JIM.Data.Repositories
         public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
         public Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
         public Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem);
+        public Task CreateSyncRuleAsync(SyncRule syncRule);
 
 
         public Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
@@ -52,6 +52,7 @@ namespace JIM.Data.Repositories
         public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
         public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
         public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+        public Task UpdateSyncRuleAsync(SyncRule syncRule);
 
 
         public Task DeleteAllConnectedSystemObjectsAsync(int connectedSystemId, bool deleteAllConnectedSystemObjectChangeObjects);
