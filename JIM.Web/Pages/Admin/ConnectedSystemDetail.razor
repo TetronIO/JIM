@@ -90,7 +90,7 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
-                                    <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
+                                    <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                 {
@@ -214,7 +214,7 @@
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                             @foreach (var objectType in connectedSystem.ObjectTypes)
                             {
-                                <MudCheckBox T="Boolean" Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" CheckedChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                                <MudCheckBox T="Boolean" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
                             }
                         </div>
                     </MudPaper>
@@ -322,7 +322,7 @@
                             </MudItem>
 
                             <MudItem xs="12" Class="pb-0">
-                                <MudCheckBox @bind-Checked="attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
+                                <MudCheckBox @bind-Value="attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
@@ -355,7 +355,7 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Selected">
-                                <MudSwitch @bind-Checked="@context.Selected" Color="@Color.Primary"></MudSwitch>
+                                <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary"></MudSwitch>
                             </MudTd>
                             <MudTd DataLabel="External ID">
                                 @(context.IsExternalId ? "Yes" : "-")
@@ -456,7 +456,7 @@
                         <MudPaper Class="mt-5" Outlined="true">
                             <div class="pa-4">
                                 <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
-                                <MudSwitch @bind-Checked="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
+                                <MudSwitch @bind-Value="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
                             </div>
                             <MudDivider />
 
@@ -476,8 +476,8 @@
                                                 @if (context.Included)
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
                                                                  UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
                                                                  Disabled="true"
                                                                  title="Included" />
@@ -485,8 +485,8 @@
                                                 else
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
                                                                  title="@(context.Selected ? "Selected" : "")" />
                                                 }
 
@@ -816,7 +816,7 @@
 
     private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, schemaSearchString, attributeClassFilterSelectedValues, attributeSelectionCsv, attributeSelectedFilter);
 
-    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, string attributeSelectionCsv, bool attributeSelectedFilter)
+    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, string? attributeSelectionCsv, bool attributeSelectedFilter)
     {
         // what type of search is this? name, class or csv?
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
