@@ -11,37 +11,37 @@
 
 <PageTitle>Create a Connected System</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected Systems:</span> New</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Provide some basic details here, and then we'll move on to configuring the Connected System.
 </MudText>
  
 <MudPaper Class="pa-4 mt-5" Outlined="true">
-    <MudForm @bind-IsValid="@isFormValid" @bind-Errors="@formErrors">
-        <MudSelect T="string" Label="Connector" Placeholder="Please select a connector..." Required="true" @bind-Value="model.ConnectorId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start" Variant="Variant.Outlined">
-            @if (connectorDefinitionHeaders != null)
+    <MudForm @bind-IsValid="@_isFormValid" @bind-Errors="@_formErrors">
+        <MudSelect T="string" Label="Connector" Placeholder="Please select a connector..." Required="true" @bind-Value="_model.ConnectorId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start" Variant="Variant.Outlined">
+            @if (_connectorDefinitionHeaders != null)
             {
-                foreach (var header in connectorDefinitionHeaders)
+                foreach (var header in _connectorDefinitionHeaders)
                 {
                     <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
                 }
             }
         </MudSelect>
-        <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="model.Name" Variant="Variant.Outlined" />
-        <MudTextField Label="Description" @bind-Value="model.Description" Lines="5" Variant="Variant.Outlined" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!isFormValid)" Class="mt-5" OnClick="HandleValidSubmit" DisableElevation="true">Create Connected System</MudButton>
+        <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_model.Name" Variant="Variant.Outlined" />
+        <MudTextField Label="Description" @bind-Value="_model.Description" Lines="5" Variant="Variant.Outlined" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_isFormValid)" Class="mt-5" OnClick="HandleValidSubmit" DisableElevation="true">Create Connected System</MudButton>
     </MudForm>
 </MudPaper>
 
 @code {
     [CascadingParameter]
-    private Task<AuthenticationState>? authenticationStateTask { get; set; }
-    private IList<ConnectorDefinitionHeader>? connectorDefinitionHeaders;
-    private ConnectedSystemCreateViewModel model = new ConnectedSystemCreateViewModel();
-    private bool isFormValid;
-    private string[] formErrors = { };
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+    private IList<ConnectorDefinitionHeader>? _connectorDefinitionHeaders;
+    private readonly ConnectedSystemCreateViewModel _model = new();
+    private bool _isFormValid;
+    private string[] _formErrors = { };
 
-    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
         new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
         new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
@@ -50,24 +50,24 @@
 
     protected override async Task OnInitializedAsync()
     {
-        connectorDefinitionHeaders = await Jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+        _connectorDefinitionHeaders = await Jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }
 
     private async Task HandleValidSubmit()
     {
-        var connectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(model.ConnectorId));
+        var connectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(_model.ConnectorId));
         if (connectorDefinition == null)
             return;
 
-        var connectedSystem = new JIM.Models.Staging.ConnectedSystem
+        var connectedSystem = new ConnectedSystem
         {
-            Name = model.Name,
-            Description = model.Description,
+            Name = _model.Name,
+            Description = _model.Description,
             ConnectorDefinition = connectorDefinition
         };
 
         // attribute the operation to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user);
         NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}");
     }
