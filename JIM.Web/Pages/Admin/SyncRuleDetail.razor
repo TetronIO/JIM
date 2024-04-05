@@ -12,6 +12,7 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>Synchronisation Rule: @syncRuleNameOrCreate</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Synchronisation Rule:</span> @syncRuleNameOrCreate</MudText>
@@ -641,5 +642,9 @@
         // this helps ensure links are good to be shared/bookmarked, etc.
         if (wasSuccessful && isSyncRuleNew)
             NavManager.NavigateTo($"/admin/connected-systems/sync-rules/{syncRule.Id}");
+        else if (wasSuccessful)
+            Snackbar.Add("Changes saved.", Severity.Success);
+        else if (!wasSuccessful)
+            Snackbar.Add("There was a problem saving your changes. Please check the details and try again.", Severity.Error);
     }
 }
