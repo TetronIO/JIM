@@ -88,7 +88,7 @@
                                 {
                                     <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
                                 }
-                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
+                                else if (settingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
                                 {
                                     <MudSelect @bind-Value="settingValue.StringValue"
                                                HelperText="@settingValue.Setting.Description"
@@ -151,7 +151,7 @@
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
 
-            <MudAlert Severity="(_connectedSystem.ObjectTypes != null && _connectedSystem.ObjectTypes.Count > 0 ? Severity.Warning : Severity.Info)">
+            <MudAlert Severity="(_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info)">
                 @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                 {
                     <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
@@ -161,7 +161,7 @@
                     <MudText>
                         <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
                         i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right
-                        permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                        permissions needed to retrieve the schema, and consider a database backup before proceeding.
                     </MudText>
                 }
                 <MudButton 
@@ -393,7 +393,7 @@
         {
             <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
 
-                <MudAlert Severity="(_connectedSystem.Partitions != null && _connectedSystem.Partitions.Count > 0 ? Severity.Warning : Severity.Info)">
+                <MudAlert Severity="(_connectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)">
                     @if (_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0)
                     {
                         <MudText>Retrieve the hierarchy @_partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
@@ -401,9 +401,9 @@
                     else
                     {
                         <MudText>
-                            <strong>Refreshing the @_partitionAndHierarchyText heirarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted
+                            <strong>Refreshing the @_partitionAndHierarchyText hierarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted
                             from the Connected System, which depending on your configuration, could result in those objects being deprovisioned from the Metaverse and any downstream Connected Systems. Refresh with caution.
-                            Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
+                            Ensure the Connected System identity has the right permissions needed to retrieve the hierarchy, and consider a database backup before proceeding.
                         </MudText>
                     }
                     <MudButton 
@@ -441,7 +441,7 @@
                     </MudButton>
                 </MudAlert>
 
-                @if (_connectedSystem.Partitions != null && _connectedSystem.Partitions.Count > 0)
+                @if (_connectedSystem.Partitions is { Count: > 0 })
                 {
                     <MudText Class="mt-5">Select which @_partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
 
@@ -523,7 +523,7 @@
                     @if (_connectedSystem.ConnectorDefinition.SupportsPartitions && _connectedSystem.Partitions != null)
                     {
                         <MudSelect T="ConnectedSystemPartition" @bind-Value="_newRunProfile.Partition" Label="Partition" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="@_connectedSystem.ConnectorDefinition.SupportsPartitions" RequiredError="A run profile partition is required">
-                            @foreach (ConnectedSystemPartition partition in _connectedSystem.Partitions.Where(p => p.Selected))
+                            @foreach (var partition in _connectedSystem.Partitions.Where(p => p.Selected))
                             {
                                 <MudSelectItem Value="@partition" />
                             }
@@ -553,7 +553,7 @@
                     <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
                     <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
                     <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
-                    <MudTd DataLabel="File Path">@(context.FilePath != null ? context.FilePath : "-")</MudTd>
+                    <MudTd DataLabel="File Path">@(context.FilePath ?? "-")</MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
                     There are no run profiles. Create your first.
