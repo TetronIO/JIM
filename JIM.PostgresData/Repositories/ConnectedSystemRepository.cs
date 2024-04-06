@@ -519,10 +519,22 @@ namespace JIM.PostgresData.Repositories
                 .Include(sr => sr.AttributeFlowRules)
                 .Include(sr => sr.ConnectedSystem)
                 .Include(sr => sr.ConnectedSystemObjectType)
+                .ThenInclude(csot => csot.Attributes)
                 .Include(sr => sr.ObjectScopingCriteriaGroups)
                 .Include(sr => sr.CreatedBy)
                 .Include(sr => sr.MetaverseObjectType)
+                .ThenInclude(mvot => mvot.Attributes)
                 .Include(sr => sr.ObjectMatchingRules)
+                .ThenInclude(omr => omr.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+                .Include(sr => sr.ObjectMatchingRules)
+                .ThenInclude(omr => omr.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+                .Include(sr => sr.ObjectMatchingRules)
+                .ThenInclude(omr => omr.Sources)
+                .ThenInclude(s => s.Function)
+                .Include(sr => sr.ObjectMatchingRules)
+                .ThenInclude(omr => omr.TargetMetaverseAttribute)
                 .SingleOrDefaultAsync(x => x.Id == id);
         }
 

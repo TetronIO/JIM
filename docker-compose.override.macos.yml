@@ -12,7 +12,7 @@ services:
     volumes:
       - ~/.aspnet/https:/root/.aspnet/https:ro
       - ~/.microsoft/usersecrets:/root/.microsoft/usersecrets:ro
-      - ~/temp/jim-connector-files:/var/connector-files"
+      - "~/temp/jim-connector-files:/var/connector-files"
 
   jim.api:
     environment:
@@ -27,4 +27,4 @@ services:
 
   jim.worker:
     volumes:
-      - ~/temp/jim-connector-files:/var/connector-files"
+      - "~/temp/jim-connector-files:/var/connector-files"

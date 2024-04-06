@@ -2,11 +2,7 @@
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.Core
-@using JIM.Models.Core.DTOs
-@using JIM.Models.Staging.DTOs
 @using JIM.Models.Staging;
-@using JIM.Models.Transactional;
-@using JIM.Web.Models;
 @using JIM.Utilities;
 @using Serilog
 @inject JimApplication Jim
@@ -90,7 +86,7 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
-                                    <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
+                                    <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
                                 {
@@ -214,7 +210,7 @@
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                             @foreach (var objectType in _connectedSystem.ObjectTypes)
                             {
-                                <MudCheckBox T="Boolean" Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" CheckedChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                                <MudCheckBox T="Boolean" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
                             }
                         </div>
                     </MudPaper>
@@ -322,7 +318,7 @@
                             </MudItem>
 
                             <MudItem xs="12" Class="pb-0">
-                                <MudCheckBox @bind-Checked="_attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
+                                <MudCheckBox @bind-Value="_attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
@@ -355,7 +351,7 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Selected">
-                                <MudSwitch @bind-Checked="@context.Selected" Color="@Color.Primary"></MudSwitch>
+                                <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary"></MudSwitch>
                             </MudTd>
                             <MudTd DataLabel="External ID">
                                 @(context.IsExternalId ? "Yes" : "-")
@@ -476,8 +472,8 @@
                                                 @if (context.Included)
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
+                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
                                                                  UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
                                                                  Disabled="true"
                                                                  title="Included" />
@@ -485,8 +481,8 @@
                                                 else
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
+                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
                                                                  title="@(context.Selected ? "Selected" : "")" />
                                                 }
 
@@ -833,7 +829,7 @@
         return !attributeSelectedFilter || element.Selected;
     }
 
-    private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
+    private static void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
     {
         // if included and clicked, change to not included, not selected
         if (container.Included)
@@ -878,7 +874,7 @@
         }
     }
 
-    private void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
+    private static void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
     {
         foreach (var child in container.ChildContainers)
         {
@@ -888,7 +884,7 @@
         }
     }
 
-    private void ApplyContainerIncludedToPartitions(ConnectedSystem connectedSystemInQuestion)
+    private static void ApplyContainerIncludedToPartitions(ConnectedSystem connectedSystemInQuestion)
     {
         if (connectedSystemInQuestion.Partitions == null)
             return;
@@ -917,7 +913,7 @@
         }
     }
 
-    private void CorrectUpwardContainerStatus(ConnectedSystemContainer parentContainer)
+    private static void CorrectUpwardContainerStatus(ConnectedSystemContainer parentContainer)
     {
         if (parentContainer.ChildContainers.All(q => q.Selected))
         {
