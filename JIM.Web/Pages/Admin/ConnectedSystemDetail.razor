@@ -2,32 +2,28 @@
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.Core
-@using JIM.Models.Core.DTOs
-@using JIM.Models.Staging.DTOs
 @using JIM.Models.Staging;
-@using JIM.Models.Transactional;
-@using JIM.Web.Models;
 @using JIM.Utilities;
 @using Serilog
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 
-<PageTitle>Connected System: @connectedSystem?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @connectedSystem?.Name</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @_connectedSystem?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</MudText>
 
-@if (connectedSystem != null)
+@if (_connectedSystem != null)
 {
     <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-5" Outlined="true">
 
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
                 <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
-                    <MudTextField T="string" Label="Connector" @bind-Value="connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
-                    <MudTextField T="string" Label="Name" @bind-Value="connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
-                    <MudTextField T="string" Label="Description" Required="false" @bind-Value="connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
+                    <MudTextField T="string" Label="Connector" @bind-Value="_connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
+                    <MudTextField T="string" Label="Name" @bind-Value="_connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
+                    <MudTextField T="string" Label="Description" Required="false" @bind-Value="_connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DisableElevation="true">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
@@ -36,14 +32,14 @@
         <MudTabPanel Text="Settings">
             <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
             <MudForm @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
-                @if (settingCategories != null)
+                @if (_settingCategories != null)
                 {
-                    @for (var i = 0; i < settingCategories.Count; i++)
+                    @for (var i = 0; i < _settingCategories.Count; i++)
                     {
-                        var settingCategory = @settingCategories[i];
+                        var settingCategory = _settingCategories[i];
                         <MudText Typo="Typo.h5" Class="mt-5">@settingCategory.ToString()</MudText>
                         <MudPaper Class="pa-4 mt-5" Outlined="true">
-                            @foreach (var settingValue in connectedSystem.SettingValues.Where(sv => sv.Setting.Category == settingCategory))
+                            @foreach (var settingValue in _connectedSystem.SettingValues.Where(sv => sv.Setting.Category == settingCategory))
                             {
                                 if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
                                 {
@@ -90,9 +86,9 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
-                                    <MudSwitch @bind-Checked="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
+                                    <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
                                 }
-                                else if (settingValue.Setting.Type == ConnectedSystemSettingType.DropDown && settingValue.Setting.DropDownValues != null)
+                                else if (settingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
                                 {
                                     <MudSelect @bind-Value="settingValue.StringValue"
                                                HelperText="@settingValue.Setting.Description"
@@ -139,8 +135,8 @@
                     </MudAlert>
                 }
 
-                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || settingsBeingSaved)" Class="mt-5" DisableElevation="true" OnClick="HandleValidSettingsSubmitAsync">
-                    @if (settingsBeingSaved)
+                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DisableElevation="true" OnClick="HandleValidSettingsSubmitAsync">
+                    @if (_settingsBeingSaved)
                     {
                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
                         <MudText Class="ms-2">Processing</MudText>
@@ -155,8 +151,8 @@
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
 
-            <MudAlert Severity="(connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0 ? Severity.Warning : Severity.Info)">
-                @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
+            <MudAlert Severity="(_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info)">
+                @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                 {
                     <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
                 }
@@ -165,20 +161,20 @@
                     <MudText>
                         <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
                         i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right
-                        permissions needed to retrieve the schema, and consider a database backup before proceeeding.
+                        permissions needed to retrieve the schema, and consider a database backup before proceeding.
                     </MudText>
                 }
                 <MudButton 
-                    Color="(connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
-                    Disabled="@(schemaBeingRetrieved)"
+                    Color="(_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
+                    Disabled="@(_schemaBeingRetrieved)"
                     Variant="Variant.Filled"
                     Size="Size.Small"
                     OnClick="HandleImportSchemaAsync"
                     Class="mt-5"
                     DisableElevation="true">
-                    @if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
+                    @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                     {
-                        if (schemaBeingRetrieved)
+                        if (_schemaBeingRetrieved)
                         {
                             <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
                             <MudText Class="ms-2">Retrieving Schema</MudText>
@@ -190,7 +186,7 @@
                     }
                     else
                     {
-                        if (schemaBeingRetrieved)
+                        if (_schemaBeingRetrieved)
                         {
                             <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
                             <MudText Class="ms-2">Refreshing Schema</MudText>
@@ -203,29 +199,29 @@
                 </MudButton>
             </MudAlert>
 
-            @if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count > 0)
+            @if (_connectedSystem.ObjectTypes != null && _connectedSystem.ObjectTypes.Count > 0)
             {
-                if (connectedSystem.ObjectTypes.Count > 1 || (connectedSystem.ObjectTypes.Count == 1 && !connectedSystem.ObjectTypes[0].Selected))
+                if (_connectedSystem.ObjectTypes.Count > 1 || (_connectedSystem.ObjectTypes.Count == 1 && !_connectedSystem.ObjectTypes[0].Selected))
                 {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                             Select which object types you would like to manage with JIM.
                         </MudText>
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                            @foreach (var objectType in connectedSystem.ObjectTypes)
+                            @foreach (var objectType in _connectedSystem.ObjectTypes)
                             {
-                                <MudCheckBox T="Boolean" Checked="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" CheckedChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                                <MudCheckBox T="Boolean" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
                             }
                         </div>
                     </MudPaper>
                 }
 
-                @if (connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
+                @if (_connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
                 {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                             <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
-                                @foreach (ConnectedSystemObjectType objectType in connectedSystem.ObjectTypes.Where(q => q.Selected))
+                                @foreach (ConnectedSystemObjectType objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
                                 {
                                     <MudButton 
                                         OnClick="@((e) => HandleActiveObjectTypeClick(objectType))"
@@ -237,10 +233,10 @@
                     </MudPaper>
                 }
 
-                @if (selectedObjectType != null)
+                @if (_selectedObjectType != null)
                 {
-                    <MudText Typo="Typo.h6" Class="mt-5">@selectedObjectType.Name</MudText>
-                    @if (connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+                    <MudText Typo="Typo.h6" Class="mt-5">@_selectedObjectType.Name</MudText>
+                    @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
                             <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
@@ -252,7 +248,7 @@
                                 Required="true"
                                 RequiredError="You must select an attribute as the External ID."
                                 ValueChanged="HandleMakeExternalId">
-                                @foreach (var otAttribute in selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
+                                @foreach (var otAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
                                 {
                                     <MudSelectItem Value="@otAttribute">@(otAttribute.Name)</MudSelectItem>
                                 }
@@ -266,10 +262,10 @@
                         </MudText>
 
                         <MudGrid Class="mt-3 mb-3">
-                            <MudItem xs="@(selectedObjectTypeHasClasses ? 6 : 12)">
+                            <MudItem xs="@(_selectedObjectTypeHasClasses ? 6 : 12)">
                                 <MudTextField 
                                     T="string"
-                                    @bind-Value="schemaSearchString"
+                                    @bind-Value="_schemaSearchString"
                                     Label="Filter by name"
                                     Adornment="Adornment.Start"
                                     AdornmentIcon="@Icons.Material.Filled.Search"
@@ -279,20 +275,20 @@
                                     autocomplete="schema_search_string" />
                             </MudItem>
 
-                            @if (selectedObjectTypeHasClasses)
+                            @if (_selectedObjectTypeHasClasses)
                             {
                                 <MudItem xs="6">
                                     <MudSelect 
                                         T="string"
                                         Label="Filter by class"
                                         MultiSelection="true"
-                                        @bind-SelectedValues="attributeClassFilterSelectedValues"
+                                        @bind-SelectedValues="AttributeClassFilterSelectedValues"
                                         Variant="Variant.Outlined"
                                         HelperText="Show only attributes with a particular class"
                                         Adornment="Adornment.Start"
                                         AdornmentIcon="@Icons.Material.Filled.FilterAlt"
                                         IconSize="Size.Small">
-                                        @foreach (var className in selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
+                                        @foreach (var className in _selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
                                         {
                                             <MudSelectItem T="string" Value="@className">@className</MudSelectItem>
                                         }
@@ -304,7 +300,7 @@
                                 <MudTextField 
                                     T="string"
                                     Label="Select attributes via CSV"
-                                    @bind-Value="attributeSelectionCsv"
+                                    @bind-Value="_attributeSelectionCsv"
                                     HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
                                     InputType="InputType.Text"
                                     Adornment="Adornment.Start"
@@ -322,13 +318,13 @@
                             </MudItem>
 
                             <MudItem xs="12" Class="pb-0">
-                                <MudCheckBox @bind-Checked="attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
+                                <MudCheckBox @bind-Value="_attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
                 
                     <MudTable 
-                        Items="@selectedObjectType.Attributes"
+                        Items="@_selectedObjectType.Attributes"
                         Virtualize="true"
                         Hover="true"
                         Dense="true"
@@ -342,38 +338,38 @@
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)">External ID</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
-                            @if (selectedObjectTypeHasClasses)
+                            @if (_selectedObjectTypeHasClasses)
                             {
                                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName)">Class</MudTableSortLabel></MudTh>
                             }
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)">Type</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
-                            @if (selectedObjectTypeHasDescriptions)
+                            @if (_selectedObjectTypeHasDescriptions)
                             {
                                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
                             }
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Selected">
-                                <MudSwitch @bind-Checked="@context.Selected" Color="@Color.Primary"></MudSwitch>
+                                <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary"></MudSwitch>
                             </MudTd>
                             <MudTd DataLabel="External ID">
                                 @(context.IsExternalId ? "Yes" : "-")
                             </MudTd>
                             <MudTd DataLabel="Name">@context.Name</MudTd>
-                            @if (selectedObjectTypeHasClasses)
+                            @if (_selectedObjectTypeHasClasses)
                             {
                                 <MudTd DataLabel="Class">@context.ClassName</MudTd>
                             }
                             <MudTd DataLabel="Type">@context.Type</MudTd>
                             <MudTd DataLabel="Plurality" Class="jim-no-wrap">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
-                            @if (selectedObjectTypeHasDescriptions)
+                            @if (_selectedObjectTypeHasDescriptions)
                             {
                                 <MudTd DataLabel="Description">@context.Description</MudTd>
                             }
                         </RowTemplate>
                         <NoRecordsContent>
-                            @if (attributeSelectedFilter) {
+                            @if (_attributeSelectedFilter) {
                                 <MudText>There are no selected attributes for this object type.</MudText>
                             } else {
                                 <MudText>There are no attributes to show.</MudText>
@@ -393,34 +389,34 @@
 
         </MudTabPanel>
 
-        @if (connectedSystem.ConnectorDefinition.SupportsPartitions)
+        @if (_connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
             <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
 
-                <MudAlert Severity="(connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0 ? Severity.Warning : Severity.Info)">
-                    @if (connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0)
+                <MudAlert Severity="(_connectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)">
+                    @if (_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0)
                     {
-                        <MudText>Retrieve the hierarchy @partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
+                        <MudText>Retrieve the hierarchy @_partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
                     }
                     else
                     {
                         <MudText>
-                            <strong>Refreshing the @partitionAndHierarchyText heirarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted
+                            <strong>Refreshing the @_partitionAndHierarchyText hierarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted
                             from the Connected System, which depending on your configuration, could result in those objects being deprovisioned from the Metaverse and any downstream Connected Systems. Refresh with caution.
-                            Ensure the Connected System identity has the right permissions needed to retrieve the heirarchy, and consider a database backup before proceeeding.
+                            Ensure the Connected System identity has the right permissions needed to retrieve the hierarchy, and consider a database backup before proceeding.
                         </MudText>
                     }
                     <MudButton 
-                            Disabled="@hierarchyBeingRetrieved"
-                            Color="(connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
+                            Disabled="@_hierarchyBeingRetrieved"
+                            Color="(_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
                             Size="Size.Small"
                             OnClick="HandleImportHierarchyAsync"
                             Variant="Variant.Filled"
                             Class="mt-5"
                             DisableElevation="true">
-                        @if (connectedSystem.Partitions?.Count == 0)
+                        @if (_connectedSystem.Partitions?.Count == 0)
                         {
-                            if (hierarchyBeingRetrieved)
+                            if (_hierarchyBeingRetrieved)
                             {
                                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
                                 <MudText Class="ms-2">Retrieving Hierarchy</MudText>
@@ -432,7 +428,7 @@
                         }
                         else
                         {
-                            if (hierarchyBeingRetrieved)
+                            if (_hierarchyBeingRetrieved)
                             {
                                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
                                 <MudText Class="ms-2">Refreshing Hierarchy</MudText>
@@ -445,13 +441,13 @@
                     </MudButton>
                 </MudAlert>
 
-                @if (connectedSystem.Partitions != null && connectedSystem.Partitions.Count > 0)
+                @if (_connectedSystem.Partitions is { Count: > 0 })
                 {
-                    <MudText Class="mt-5">Select which @partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
+                    <MudText Class="mt-5">Select which @_partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
 
-                    @for (var i = 0; i < connectedSystem.Partitions.Count; i++)
+                    @for (var i = 0; i < _connectedSystem.Partitions.Count; i++)
                     {
-                        var partition = connectedSystem.Partitions[i];
+                        var partition = _connectedSystem.Partitions[i];
 
                         <MudPaper Class="mt-5" Outlined="true">
                             <div class="pa-4">
@@ -476,8 +472,8 @@
                                                 @if (context.Included)
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
                                                                  UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
                                                                  Disabled="true"
                                                                  title="Included" />
@@ -485,8 +481,8 @@
                                                 else
                                                 {
                                                     <MudCheckBox T="bool?"
-                                                                 Checked="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 CheckedChanged="@((e) => ConnectedSystemContainerSelectedChanged(context, e))"
+                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
                                                                  title="@(context.Selected ? "Selected" : "")" />
                                                 }
 
@@ -513,32 +509,32 @@
                 <MudText Typo="Typo.h6">Create a New Run Profile</MudText>
 
                 <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
-                    <MudTextField T="string" @bind-Value="newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
+                    <MudTextField T="string" @bind-Value="_newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
 
                     <!-- would like to make this conditional, but the connector definition needs to state if it's file-based or not. this can be determined for custom connectors, but not built-in as there are no files for those. -->
-                    <MudTextField T="string" @bind-Value="newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined" Class="mt-3" HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/Users.csv" />
+                    <MudTextField T="string" @bind-Value="_newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined" Class="mt-3" HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/Users.csv" />
 
-                    <MudSelect T="ConnectedSystemRunType" @bind-Value="newRunProfile.RunType" Label="Run Type" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="A run profile type is required">
+                    <MudSelect T="ConnectedSystemRunType" @bind-Value="_newRunProfile.RunType" Label="Run Type" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="A run profile type is required">
                         @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
                         {
                             <MudSelectItem Value="@runType">@runType.ToString().SplitOnCapitalLetters()</MudSelectItem>
                         }
                     </MudSelect>
-                    @if (connectedSystem.ConnectorDefinition.SupportsPartitions && connectedSystem.Partitions != null)
+                    @if (_connectedSystem.ConnectorDefinition.SupportsPartitions && _connectedSystem.Partitions != null)
                     {
-                        <MudSelect T="ConnectedSystemPartition" @bind-Value="newRunProfile.Partition" Label="Partition" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="@connectedSystem.ConnectorDefinition.SupportsPartitions" RequiredError="A run profile partition is required">
-                            @foreach (ConnectedSystemPartition partition in connectedSystem.Partitions.Where(p => p.Selected))
+                        <MudSelect T="ConnectedSystemPartition" @bind-Value="_newRunProfile.Partition" Label="Partition" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="@_connectedSystem.ConnectorDefinition.SupportsPartitions" RequiredError="A run profile partition is required">
+                            @foreach (var partition in _connectedSystem.Partitions.Where(p => p.Selected))
                             {
                                 <MudSelectItem Value="@partition" />
                             }
                         </MudSelect>
                     }
-                    <MudNumericField @bind-Value="newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
+                    <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DisableElevation="true">Create Run Profile</MudButton>
                 </MudForm>
             </MudPaper>
 
-            <MudTable Items="@connectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
+            <MudTable Items="@_connectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
                 <HeaderContent>
                     <MudTh>Actions</MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
@@ -557,7 +553,7 @@
                     <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
                     <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
                     <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
-                    <MudTd DataLabel="File Path">@(context.FilePath != null ? context.FilePath : "-")</MudTd>
+                    <MudTd DataLabel="File Path">@(context.FilePath ?? "-")</MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
                     There are no run profiles. Create your first.
@@ -573,132 +569,135 @@
     [Parameter]
     public int Id { get; set; }
     [CascadingParameter]
-    private Task<AuthenticationState>? authenticationStateTask { get; set; }
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
     private bool IsDetailsFormValid { get; set; }
     private string[] DetailsFormErrors { get; set; } = { };
     private bool IsSettingsFormValid { get; set; }
     private string[] SettingsFormErrors { get; set; } = { };
-    private Dictionary<string, string> SettingsFormCustomErrors { get; set; } = new Dictionary<string, string>();
+    private Dictionary<string, string> SettingsFormCustomErrors { get; } = new();
     private bool IsNewRunProfileFormValid { get; set; }
-    private ConnectedSystem? connectedSystem;
-    private bool settingsBeingSaved = false;
-    private List<ConnectedSystemSettingCategory>? settingCategories;
-    private string? partitionsAndHierarchiesText;
-    private string? partitionAndHierarchyText;
-    private bool schemaBeingRetrieved = false;
-    private ConnectedSystemObjectType? selectedObjectType;
-    private bool selectedObjectTypeHasClasses;
-    private bool selectedObjectTypeHasDescriptions;
-    private bool hierarchyBeingRetrieved;
-    private string schemaSearchString = "";
-    private ConnectedSystemRunProfile newRunProfile = new ConnectedSystemRunProfile { PageSize = 500 };
-    private IEnumerable<string> attributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
-    private bool attributeSelectedFilter;
-    private string? attributeSelectionCsv;
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private ConnectedSystem? _connectedSystem;
+    private bool _settingsBeingSaved;
+    private List<ConnectedSystemSettingCategory>? _settingCategories;
+    private string? _partitionsAndHierarchiesText;
+    private string? _partitionAndHierarchyText;
+    private bool _schemaBeingRetrieved;
+    private ConnectedSystemObjectType? _selectedObjectType;
+    private bool _selectedObjectTypeHasClasses;
+    private bool _selectedObjectTypeHasDescriptions;
+    private bool _hierarchyBeingRetrieved;
+    private string _schemaSearchString = "";
+    private ConnectedSystemRunProfile _newRunProfile = new() { PageSize = 500 };
+    private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
+    private bool _attributeSelectedFilter;
+    private string? _attributeSelectionCsv;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
-        connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(Id);
-        if (connectedSystem == null)
+        _connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(Id);
+        if (_connectedSystem == null)
         {
             // connected system not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
 
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
-            new BreadcrumbItem(connectedSystem.Name, href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(_connectedSystem.Name, href: null, disabled: true)
         };
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
-        settingCategories = connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
+        _settingCategories = _connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
 
         // to save us having to perform this comparison all over the view
-        if (connectedSystem.ConnectorDefinition.SupportsPartitions && connectedSystem.ConnectorDefinition.SupportsPartitionContainers)
+        if (_connectedSystem.ConnectorDefinition is { SupportsPartitions: true, SupportsPartitionContainers: true })
         {
-            partitionsAndHierarchiesText = "partitions and containers";
-            partitionAndHierarchyText = "partition and container";
+            _partitionsAndHierarchiesText = "partitions and containers";
+            _partitionAndHierarchyText = "partition and container";
         }
-        else if (connectedSystem.ConnectorDefinition.SupportsPartitions)
+        else if (_connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
-            partitionsAndHierarchiesText = "partitions";
-            partitionAndHierarchyText = "partition";
+            _partitionsAndHierarchiesText = "partitions";
+            _partitionAndHierarchyText = "partition";
         }
 
         // show the first selected object type attribute table
-        if (connectedSystem.ObjectTypes != null)
-            selectedObjectType = connectedSystem.ObjectTypes.FirstOrDefault(q => q.Selected);
+        if (_connectedSystem.ObjectTypes != null)
+            _selectedObjectType = _connectedSystem.ObjectTypes.FirstOrDefault(q => q.Selected);
 
-        ApplyContainerIncludedToPartitions(connectedSystem);
+        ApplyContainerIncludedToPartitions(_connectedSystem);
     }
 
     private bool AreSettingDependentTabsDisabled()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
             return true;
-        else if (connectedSystem.SettingValuesValid)
-            return false;
-        else
-            return true;
+        
+        return !_connectedSystem.SettingValuesValid;
     }
 
     private async Task HandleValidDetailsSubmitAsync()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
         {
             Console.WriteLine($"{nameof(HandleValidDetailsSubmitAsync)}: connectedSystem was null");
             return;
         }
 
         // attribute the update to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, user);
         Snackbar.Add("Your details changes have been saved.", Severity.Success);
     }
 
     private async Task HandleValidSettingsSubmitAsync()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
         {
             Console.WriteLine($"{nameof(HandleValidSettingsSubmitAsync)}: connectedSystem was null");
             return;
         }
 
-        settingsBeingSaved = true;
+        _settingsBeingSaved = true;
         SettingsFormCustomErrors.Clear();
 
         StateHasChanged();
         await Task.Delay(1);
 
         // validate the form
-        var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(_connectedSystem);
         for (var i = 0; i < results.Count; i++)
         {
             var result = results[i];
             if (result.IsValid)
                 continue;
 
-            if (result.SettingValue != null && result.SettingValue.Setting != null && result.SettingValue.Setting.Name != null && !string.IsNullOrEmpty(result.ErrorMessage))
-                SettingsFormCustomErrors.Add(result.SettingValue.Setting.Name, result.ErrorMessage);
-            else if (result.SettingValue == null && !string.IsNullOrEmpty(result.ErrorMessage))
-                SettingsFormCustomErrors.Add($"General issue {i + 1}", result.ErrorMessage);
+            switch (result.SettingValue)
+            {
+                case { Setting.Name: not null } when !string.IsNullOrEmpty(result.ErrorMessage):
+                    SettingsFormCustomErrors.Add(result.SettingValue.Setting.Name, result.ErrorMessage);
+                    break;
+                case null when !string.IsNullOrEmpty(result.ErrorMessage):
+                    SettingsFormCustomErrors.Add($"General issue {i + 1}", result.ErrorMessage);
+                    break;
+            }
         }
 
         if (SettingsFormCustomErrors.Any())
         {
-            settingsBeingSaved = false;
+            _settingsBeingSaved = false;
             return;
         }
 
         // attribute the update to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, user);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);
-        settingsBeingSaved = false;
+        _settingsBeingSaved = false;
 
         StateHasChanged();
         await Task.Delay(1);
@@ -706,66 +705,66 @@
 
     private async Task HandleImportSchemaAsync()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
             return;
 
         // attribute the import to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
 
-        schemaBeingRetrieved = true;
+        _schemaBeingRetrieved = true;
         StateHasChanged();
         await Task.Delay(1);
 
-        await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, user);
+        await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(_connectedSystem, user);
 
         // if there's just a single object type in the schema, auto-select it
-        if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count == 1)
-            HandleSelectedObjectTypeClick(connectedSystem.ObjectTypes[0], true);
+        if (_connectedSystem.ObjectTypes != null && _connectedSystem.ObjectTypes.Count == 1)
+            HandleSelectedObjectTypeClick(_connectedSystem.ObjectTypes[0], true);
 
-        schemaBeingRetrieved = false;
+        _schemaBeingRetrieved = false;
         StateHasChanged();
         await Task.Delay(1);
     }
 
     private void HandleSelectedObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType, bool isObjectTypeChecked)
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
             return;
 
         // actuate the state change
         connectedSystemObjectType.Selected = isObjectTypeChecked;
 
-        // now cascacde
+        // now cascade
         // if only one type is selected, make that the selected object type
         // if none are selected, clear selected object type
         // if the selected type is being de-selected, null the selected type
-        if (connectedSystem.ObjectTypes != null && connectedSystem.ObjectTypes.Count(q => q.Selected) == 1)
-            selectedObjectType = connectedSystem.ObjectTypes.Single(q => q.Selected);
-        else if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count(q => q.Selected) == 0)
-            selectedObjectType = null;
-        else if (selectedObjectType != null && selectedObjectType.Id == connectedSystemObjectType.Id && !isObjectTypeChecked)
-            selectedObjectType = null;
+        if (_connectedSystem.ObjectTypes != null && _connectedSystem.ObjectTypes.Count(q => q.Selected) == 1)
+            _selectedObjectType = _connectedSystem.ObjectTypes.Single(q => q.Selected);
+        else if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count(q => q.Selected) == 0)
+            _selectedObjectType = null;
+        else if (_selectedObjectType != null && _selectedObjectType.Id == connectedSystemObjectType.Id && !isObjectTypeChecked)
+            _selectedObjectType = null;
 
         // some parts of the UI only make sense if the attributes have classes
-        selectedObjectTypeHasClasses = connectedSystemObjectType.Attributes.Any(q => q.ClassName != null);
-        selectedObjectTypeHasDescriptions = connectedSystemObjectType.Attributes.Any(q => q.Description != null);
+        _selectedObjectTypeHasClasses = connectedSystemObjectType.Attributes.Any(q => q.ClassName != null);
+        _selectedObjectTypeHasDescriptions = connectedSystemObjectType.Attributes.Any(q => q.Description != null);
     }
 
     private void HandleActiveObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType)
     {
-        selectedObjectType = connectedSystemObjectType;
+        _selectedObjectType = connectedSystemObjectType;
     }
 
     private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
     {
-        if (selectedObjectType == null)
+        if (_selectedObjectType == null)
         {
-            Log.Error($"CS Detail > HandleMakeExternalId: {nameof(selectedObjectType)} is null!");
+            Log.Error($"CS Detail > HandleMakeExternalId: {nameof(_selectedObjectType)} is null!");
             return;
         }
 
         // make sure there's not already an attribute marked as the external id
-        foreach (var attribute in selectedObjectType.Attributes.Where(a => a.IsExternalId))
+        foreach (var attribute in _selectedObjectType.Attributes.Where(a => a.IsExternalId))
             attribute.IsExternalId = false;
 
         // mark the intended attribute as the external id, and select it
@@ -776,77 +775,61 @@
 
     private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
             return;
 
         // attribute the update to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, user);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
     }
 
     private async Task HandleImportHierarchyAsync()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
             return;
 
         // attribute the import to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
 
-        hierarchyBeingRetrieved = true;
+        _hierarchyBeingRetrieved = true;
         StateHasChanged();
         await Task.Delay(1);
 
-        await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, user);
-        hierarchyBeingRetrieved = false;
+        await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(_connectedSystem, user);
+        _hierarchyBeingRetrieved = false;
         StateHasChanged();
         await Task.Delay(1);
     }
 
     private async Task HandleHierarchySelectionSubmitAsync()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
             return;
 
-        // attribute the actiont to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, user);
+        // attribute the action to the user
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, user);
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
     }
 
-    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, schemaSearchString, attributeClassFilterSelectedValues, attributeSelectionCsv, attributeSelectedFilter);
+    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter);
 
-    private bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, string attributeSelectionCsv, bool attributeSelectedFilter)
+    private static bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, bool attributeSelectedFilter)
     {
         // what type of search is this? name, class or csv?
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
 
         if (!string.IsNullOrEmpty(searchString))
-        {
-            if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-                return true;
-            else
-                return false;
-        }
-        else if (classHashset.Count > 0)
-        {
-            if (classHashset.Any(q => q == element.ClassName))
-                return true;
-            else
-                return false;
-        }
-        else if (attributeSelectedFilter)
-        {
-            if (element.Selected)
-                return true;
-            else
-                return false;
-        }
+            return element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase);
 
-        return true;
+        if (classHashset.Count > 0)
+            return classHashset.Any(q => q == element.ClassName);
+        
+        return !attributeSelectedFilter || element.Selected;
     }
 
-    private void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container, bool? newCheckboxValue)
+    private static void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
     {
         // if included and clicked, change to not included, not selected
         if (container.Included)
@@ -865,7 +848,7 @@
         if (container.Selected)
         {
             // all children should be included and not selected
-            foreach (ConnectedSystemContainer child in container.ChildContainers)
+            foreach (var child in container.ChildContainers)
             {
                 child.Included = true;
                 child.Selected = false;
@@ -875,7 +858,7 @@
         else
         {
             // all children should be not selected and not included
-            foreach (ConnectedSystemContainer child in container.ChildContainers)
+            foreach (var child in container.ChildContainers)
             {
                 child.Included = false;
                 child.Selected = false;
@@ -891,9 +874,9 @@
         }
     }
 
-    private void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
+    private static void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
     {
-        foreach (ConnectedSystemContainer child in container.ChildContainers)
+        foreach (var child in container.ChildContainers)
         {
             child.Included = included;
             child.Selected = selected;
@@ -901,18 +884,18 @@
         }
     }
 
-    private void ApplyContainerIncludedToPartitions(ConnectedSystem connectedSystem)
+    private static void ApplyContainerIncludedToPartitions(ConnectedSystem connectedSystemInQuestion)
     {
-        if (connectedSystem.Partitions == null)
+        if (connectedSystemInQuestion.Partitions == null)
             return;
 
-        foreach (var partition in connectedSystem.Partitions)
+        foreach (var partition in connectedSystemInQuestion.Partitions)
             if (partition.Containers != null)
                 foreach (var container in partition.Containers)
                     ApplyContainerIncludedRecursively(container, container.Selected);
     }
 
-    private void ApplyContainerIncludedRecursively(ConnectedSystemContainer connectedSystemContainer, bool aParentWasSelected)
+    private static void ApplyContainerIncludedRecursively(ConnectedSystemContainer connectedSystemContainer, bool aParentWasSelected)
     {
         foreach (var childContainer in connectedSystemContainer.ChildContainers)
         {
@@ -930,7 +913,7 @@
         }
     }
 
-    private void CorrectUpwardContainerStatus(ConnectedSystemContainer parentContainer)
+    private static void CorrectUpwardContainerStatus(ConnectedSystemContainer parentContainer)
     {
         if (parentContainer.ChildContainers.All(q => q.Selected))
         {
@@ -951,49 +934,46 @@
 
     private bool IsRunProfilesTabDisabled()
     {
-        if (connectedSystem == null)
+        if (_connectedSystem == null)
             return true;
 
-        if (connectedSystem.ConnectorDefinition.SupportsPartitions && (connectedSystem.Partitions == null || connectedSystem.Partitions.Count == 0))
-            return true;
-
-        return false;
+        return _connectedSystem.ConnectorDefinition.SupportsPartitions && (_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0);
     }
 
     private async Task HandleNewRunProfileFormSubmitAsync()
     {
-        if (connectedSystem == null || connectedSystem.RunProfiles == null)
+        if (_connectedSystem == null || _connectedSystem.RunProfiles == null)
             return;
 
         // copy the form bound object to a new one we can persist separately from the form bind
         var runProfile = new ConnectedSystemRunProfile {
-            ConnectedSystemId = connectedSystem.Id,
-            Name = newRunProfile.Name,
-            RunType = newRunProfile.RunType,
-            Partition = newRunProfile.Partition,
-            PageSize = newRunProfile.PageSize,
-            FilePath = newRunProfile.FilePath
+            ConnectedSystemId = _connectedSystem.Id,
+            Name = _newRunProfile.Name,
+            RunType = _newRunProfile.RunType,
+            Partition = _newRunProfile.Partition,
+            PageSize = _newRunProfile.PageSize,
+            FilePath = _newRunProfile.FilePath
         };
 
         // attribute the action to the user and create the run profile
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         await Jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, user);
 
         Snackbar.Add("New run profile added.", Severity.Success);
 
         // reset the object we've bound to the form so a new run profile can be created if the user chooses
-        newRunProfile = new ConnectedSystemRunProfile();
+        _newRunProfile = new ConnectedSystemRunProfile();
     }
 
     private async Task HandleRunProfileDeleteAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
     {
-        if (connectedSystem == null || connectedSystem.RunProfiles == null)
+        if (_connectedSystem == null || _connectedSystem.RunProfiles == null)
             return;
 
-        connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
+        _connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
 
         // attribute the action to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile, user);
 
         Snackbar.Add("Run profile removed.", Severity.Success);
@@ -1001,27 +981,27 @@
 
     private void HandleAttributeCsvSubmit()
     {
-        if (selectedObjectType == null)
+        if (_selectedObjectType == null)
         {
             Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: connectedSystem was null");
             return;
         }
 
-        if (string.IsNullOrEmpty(attributeSelectionCsv))
+        if (string.IsNullOrEmpty(_attributeSelectionCsv))
         {
             Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: attributeSelectionCsv is null or empty");
             return;
         }
 
         // clear the other search boxes
-        schemaSearchString = string.Empty;
-        ((HashSet<string>)attributeClassFilterSelectedValues).Clear();
+        _schemaSearchString = string.Empty;
+        ((HashSet<string>)AttributeClassFilterSelectedValues).Clear();
 
         // convert the csv to a list and trim the entries
         // go through each attribute on the object type and select it
-        foreach (var attributeName in attributeSelectionCsv.Split(','))
+        foreach (var attributeName in _attributeSelectionCsv.Split(','))
         {
-            var attribute = selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var attribute = _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
             if (attribute == null)
                 continue;
 
@@ -1029,10 +1009,10 @@
         }
 
         // filter by selected
-        attributeSelectedFilter = true;
+        _attributeSelectedFilter = true;
 
         // clear the attribute csv textbox
-        attributeSelectionCsv = null;
+        _attributeSelectionCsv = null;
 
         // all done, let the user know
         Snackbar.Add("Attributes selected.", Severity.Success);
@@ -1040,32 +1020,29 @@
 
     private bool DisableSelectedSchemaObjectType(ConnectedSystemObjectType connectedSystemObjectType)
     {
-        if (selectedObjectType == null)
+        if (_selectedObjectType == null)
             return false;
 
-        if (connectedSystemObjectType.Id.Equals(selectedObjectType.Id))
+        if (connectedSystemObjectType.Id.Equals(_selectedObjectType.Id))
             return true; // BOTH IDS ARE 0 WHEN THEY'RE DIFFERENT TYPES! HOW?! - BECAUSE THEY HAVEN'T BEEN PERSISTED YET!
 
         return false;
     }
 
     /// <summary>
-    /// Determines whether or not the Save Schema changes button should be disabledor not.
+    /// Determines whether or not the Save Schema changes button should be disabled or not.
     /// </summary>
     private bool DisableSaveSchemaButton()
     {
         // must select at least one object type
         // all selected object types must have an external id selected
 
-        if (connectedSystem == null || connectedSystem.ObjectTypes == null)
+        if (_connectedSystem == null || _connectedSystem.ObjectTypes == null)
             return true;
 
-        var objectTypesSelected = connectedSystem.ObjectTypes.Any(ot => ot.Selected);
-        var externalIdsSet = connectedSystem.ObjectTypes.Where(ot => ot.Selected).All(ot => ot.Attributes.Any(a => a.IsExternalId));
+        var objectTypesSelected = _connectedSystem.ObjectTypes.Any(ot => ot.Selected);
+        var externalIdsSet = _connectedSystem.ObjectTypes.Where(ot => ot.Selected).All(ot => ot.Attributes.Any(a => a.IsExternalId));
 
-        if (objectTypesSelected && externalIdsSet)
-            return false;
-
-        return true;
+        return !objectTypesSelected || !externalIdsSet;
     }
 }
