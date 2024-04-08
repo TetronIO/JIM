@@ -3,7 +3,6 @@ using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
-using System.Data;
 using System.Diagnostics;
 using System.DirectoryServices.Protocols;
 using System.Text.Json;
@@ -133,7 +132,8 @@ namespace JIM.Connectors.LDAP
                     _logger.Warning("QueryDirectoryForLastChangeNumber: ldapResponse is null");
                     return 0;
                 }
-                else if (ldapResponse.ResultCode != ResultCode.Success || ldapResponse.Entries.Count == 0)
+
+                if (ldapResponse.ResultCode != ResultCode.Success || ldapResponse.Entries.Count == 0)
                 {
                     _logger.Warning($"QueryDirectoryForLastChangeNumber: Didn't get an expected result. Result code: {ldapResponse.ResultCode}, entries: {ldapResponse.Entries.Count}");
                     return 0;
@@ -161,7 +161,7 @@ namespace JIM.Connectors.LDAP
                 Scope = SearchScope.Base,
             };
 
-            request.Attributes.AddRange(new string[] {
+            request.Attributes.AddRange(new[] {
                 "DNSHostName",
                 "HighestCommittedUSN",
                 "LastChangeNumber"
@@ -205,7 +205,7 @@ namespace JIM.Connectors.LDAP
 
             var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
             var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize);
-            if (lastRunsCookie != null && lastRunsCookie.Length > 0)
+            if (lastRunsCookie is { Length: > 0 })
                 pageResultRequestControl.Cookie = lastRunsCookie;
 
             searchRequest.Controls.Add(pageResultRequestControl);
@@ -290,13 +290,13 @@ namespace JIM.Connectors.LDAP
                     {
                         case AttributeDataType.Text:
                             var stringValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
-                            if (stringValues != null && stringValues.Count > 0)
+                            if (stringValues is { Count: > 0 })
                                 importObjectAttribute.StringValues.AddRange(stringValues);
                             break;
 
                         case AttributeDataType.Number:
                             var numberValues = LdapConnectorUtilities.GetEntryAttributeIntValues(searchResult, attributeName);
-                            if (numberValues != null && numberValues.Count > 0)
+                            if (numberValues is { Count: > 0 })
                                 importObjectAttribute.IntValues.AddRange(numberValues);
                             break;
 
@@ -306,27 +306,30 @@ namespace JIM.Connectors.LDAP
 
                         case AttributeDataType.DateTime:
                             var dateTimeValues = LdapConnectorUtilities.GetEntryAttributeDateTimeValues(searchResult, attributeName);
-                            if (dateTimeValues != null && dateTimeValues.Count > 0)
+                            if (dateTimeValues is { Count: > 0 })
                                 importObjectAttribute.DateTimeValues.AddRange(dateTimeValues);
                             break;
 
                         case AttributeDataType.Guid:
                             var guidValues = LdapConnectorUtilities.GetEntryAttributeGuidValues(searchResult, attributeName);
-                            if (guidValues != null && guidValues.Count > 0)
+                            if (guidValues is { Count: > 0 })
                                 importObjectAttribute.GuidValues.AddRange(guidValues);
                             break;
 
                         case AttributeDataType.Binary:
                             var binaryValues = LdapConnectorUtilities.GetEntryAttributeBinaryValues(searchResult, attributeName);
-                            if (binaryValues != null && binaryValues.Count > 0)
+                            if (binaryValues is { Count: > 0 })
                                 importObjectAttribute.ByteValues.AddRange(binaryValues);
                             break;
 
                         case AttributeDataType.Reference:
                             var referenceValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
-                            if (referenceValues != null && referenceValues.Count > 0)
+                            if (referenceValues is { Count: > 0 })
                                 importObjectAttribute.ReferenceValues.AddRange(referenceValues);
                             break;
+                        case AttributeDataType.NotSet:
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
 
                     importObject.Attributes.Add(importObjectAttribute);

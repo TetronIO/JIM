@@ -1,5 +1,4 @@
-﻿using CsvHelper;
-using JIM.Models.Core;
+﻿using JIM.Models.Core;
 using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
@@ -134,7 +133,7 @@ namespace JIM.Connectors.File
             }
 
             stopwatch.Stop();
-            _reader?.Dispose();
+            _reader.Dispose();
             _logger.Debug($"GetFullImportObjects: Executed in {stopwatch.Elapsed}");
             return result;
         }

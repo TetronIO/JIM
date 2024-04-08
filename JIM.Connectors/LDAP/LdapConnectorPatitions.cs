@@ -59,19 +59,14 @@ namespace JIM.Connectors.LDAP
 
             var request = new SearchRequest(partition.Name, "(|(objectClass=organizationalUnit)(objectClass=container))", SearchScope.Subtree);
             var response = (SearchResponse)_connection.SendRequest(request);
-            var containers = new List<ConnectorContainer>();
 
             // copy the search result entries to a list we can manipulate
-            var entries = new List<SearchResultEntry>();
-            foreach (SearchResultEntry entry in response.Entries)
-                entries.Add(entry);
-            var totalEntries = entries.Count;
+            var entries = response.Entries.Cast<SearchResultEntry>().ToList();
 
             // move top-level containers to the new list
             var topLevelContainers = entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(partition.Name, StringComparison.CurrentCultureIgnoreCase)).ToList();
             entries.RemoveAll(q => topLevelContainers.Contains(q));
-            foreach (var topLevelContainer in topLevelContainers)
-                containers.Add(new ConnectorContainer(topLevelContainer.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(topLevelContainer, "name")));
+            var containers = topLevelContainers.Select(topLevelContainer => new ConnectorContainer(topLevelContainer.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(topLevelContainer, "name"))).ToList();
 
             // keep track of how many entries we've processed so we can validate completion
             var entriesProcessedCounter = containers.Count;

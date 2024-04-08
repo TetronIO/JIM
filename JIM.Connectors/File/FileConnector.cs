@@ -31,22 +31,22 @@ namespace JIM.Connectors.File
         #endregion
 
         #region IConnectorSettings members
-        // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
-        private readonly string _settingExampleFilePath = "Example File Path";
-        private readonly string _settingObjectTypeColumn = "Object Type Column";
-        private readonly string _settingObjectType = "Object Type";
-        private readonly string _settingCulture = "Culture";
-        private readonly string _settingDelimiter = "Delimiter";
+        // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
+        private const string SettingExampleFilePath = "Example File Path";
+        private const string SettingObjectTypeColumn = "Object Type Column";
+        private const string SettingObjectType = "Object Type";
+        private const string SettingCulture = "Culture";
+        private const string SettingDelimiter = "Delimiter";
 
         public List<ConnectorSetting> GetSettings()
         {
             return new List<ConnectorSetting>
             {
-                new() { Name = _settingExampleFilePath, Required = true, Description = "Supply the path to the example file in the container. The container path is determined by the Docker Volume configuration item. i.e. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-                new() { Name = _settingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-                new() { Name = _settingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-                new() { Name = _settingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-                new() { Name = _settingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String }
+                new() { Name = SettingExampleFilePath, Required = true, Description = "Supply the path to the example file in the container. The container path is determined by the Docker Volume configuration item. i.e. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+                new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+                new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+                new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+                new() { Name = SettingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String }
             };
         }
 
@@ -66,7 +66,7 @@ namespace JIM.Connectors.File
             }
 
             // test that we can access the file
-            var filePathSettingValue = settingValues.Single(q => q.Setting.Name == _settingExampleFilePath);
+            var filePathSettingValue = settingValues.Single(q => q.Setting.Name == SettingExampleFilePath);
             if (!string.IsNullOrEmpty(filePathSettingValue.StringValue))
             {
                 if (!System.IO.File.Exists(filePathSettingValue.StringValue))
@@ -90,14 +90,14 @@ namespace JIM.Connectors.File
         /// </summary>
         public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
-            var exampleFilePath = settingValues.SingleOrDefault(q => q.Setting.Name == _settingExampleFilePath);
+            var exampleFilePath = settingValues.SingleOrDefault(q => q.Setting.Name == SettingExampleFilePath);
             if (exampleFilePath == null || string.IsNullOrEmpty(exampleFilePath.StringValue))
-                throw new InvalidSettingValuesException($"Missing setting value for {_settingExampleFilePath}.");
+                throw new InvalidSettingValuesException($"Missing setting value for {SettingExampleFilePath}.");
 
-            var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectTypeColumn);
-            var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectType);
+            var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectTypeColumn);
+            var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectType);
             if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
-                throw new InvalidSettingValuesException($"Either a {_settingObjectTypeColumn} or {_settingObjectType} need a setting value specifying.");
+                throw new InvalidSettingValuesException($"Either a {SettingObjectTypeColumn} or {SettingObjectType} need a setting value specifying.");
 
             var reader = GetCsvReader(exampleFilePath.StringValue, settingValues, logger);
             await reader.CsvReader.ReadAsync();
@@ -159,14 +159,14 @@ namespace JIM.Connectors.File
                         continue;
 
                     // attempt to infer the data type
-                    // conflating ints and doubles may turn out to be a bad idea
-                    if (int.TryParse(field, out var fieldInt) || double.TryParse(field, out var fieldDouble))
+                    // conflating integers and doubles may turn out to be a bad idea
+                    if (int.TryParse(field, out _) || double.TryParse(field, out _))
                         schemaAttribute.Type = AttributeDataType.Number;
-                    else if (bool.TryParse(field, out var fieldBool))
+                    else if (bool.TryParse(field, out _))
                         schemaAttribute.Type = AttributeDataType.Boolean;
-                    else if (Guid.TryParse(field, out var fieldGuid))
+                    else if (Guid.TryParse(field, out _))
                         schemaAttribute.Type = AttributeDataType.Guid;
-                    else if (DateTime.TryParse(field, out var fieldDate))
+                    else if (DateTime.TryParse(field, out _))
                         schemaAttribute.Type = AttributeDataType.DateTime;
                     else
                         schemaAttribute.Type = AttributeDataType.Text;
@@ -179,7 +179,7 @@ namespace JIM.Connectors.File
                 rowsInspected++;
             }
 
-            reader?.Dispose();
+            reader.Dispose();
             return schema;
         }
         #endregion
@@ -226,13 +226,13 @@ namespace JIM.Connectors.File
             var cultureInfo = CultureInfo.InvariantCulture;
 
             // though the user can specify a specific culture if they're having problems with characters not being transferred between systems correctly.
-            var culture = settingValues.SingleOrDefault(q => q.Setting.Name == _settingCulture);
+            var culture = settingValues.SingleOrDefault(q => q.Setting.Name == SettingCulture);
             if (culture != null && !string.IsNullOrEmpty(culture.StringValue))
                 cultureInfo = new CultureInfo(culture.StringValue);
 
-            var delimiter = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDelimiter);
+            var delimiter = settingValues.SingleOrDefault(q => q.Setting.Name == SettingDelimiter);
             if (delimiter == null || string.IsNullOrEmpty(delimiter.StringValue))
-                throw new InvalidSettingValuesException($"Missing setting value for {_settingDelimiter}.");
+                throw new InvalidSettingValuesException($"Missing setting value for {SettingDelimiter}.");
 
             var config = new CsvConfiguration(CultureInfo.CurrentCulture) { Delimiter = delimiter.StringValue };
             logger.Debug($"GetCSvReader: Attempting to read '{filePath}'.");
@@ -247,10 +247,10 @@ namespace JIM.Connectors.File
         private FileConnectorObjectTypeInfo GetFileConnectorObjectTypeInfo(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
         {
             logger.Verbose("GetFileConnectorObjectTypeInfo: Called.");
-            var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectTypeColumn);
-            var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == _settingObjectType);
+            var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectTypeColumn);
+            var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectType);
             if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
-                throw new InvalidSettingValuesException($"Either a {_settingObjectTypeColumn} or {_settingObjectType} need a setting value specifying.");
+                throw new InvalidSettingValuesException($"Either a {SettingObjectTypeColumn} or {SettingObjectType} need a setting value specifying.");
 
             var info = new FileConnectorObjectTypeInfo();
 

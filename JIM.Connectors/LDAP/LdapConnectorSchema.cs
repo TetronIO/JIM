@@ -76,7 +76,7 @@ namespace JIM.Connectors.LDAP
             var continueGettingClasses = true;
             string? ldapdisplayname;
             string? subclassof;
-            string objectClassName = objectType.Name;
+            var objectClassName = objectType.Name;
 
             while (continueGettingClasses)
             {
@@ -117,25 +117,25 @@ namespace JIM.Connectors.LDAP
             
             if (objectClassEntry.Attributes.Contains("maycontain"))
                 foreach (string attributeName in objectClassEntry.Attributes["maycontain"].GetValues(typeof(string)))
-                    if (!objectType.Attributes.Any(q => q.Name == attributeName))
+                    if (objectType.Attributes.All(q => q.Name != attributeName))
                         objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false));
 
             if (objectClassEntry.Attributes.Contains("mustcontain"))
                 foreach (string attributeName in objectClassEntry.Attributes["mustcontain"].GetValues(typeof(string)))
-                    if (!objectType.Attributes.Any(q => q.Name == attributeName))
+                    if (objectType.Attributes.All(q => q.Name != attributeName))
                         objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true));
 
             if (objectClassEntry.Attributes.Contains("systemmaycontain"))
                 foreach (string attributeName in objectClassEntry.Attributes["systemmaycontain"].GetValues(typeof(string)))
-                    if (!objectType.Attributes.Any(q => q.Name == attributeName))
+                    if (objectType.Attributes.All(q => q.Name != attributeName))
                         objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false));
 
             if (objectClassEntry.Attributes.Contains("systemmustcontain"))
                 foreach (string attributeName in objectClassEntry.Attributes["systemmustcontain"].GetValues(typeof(string)))
-                    if (!objectType.Attributes.Any(q => q.Name == attributeName))
+                    if (objectType.Attributes.All(q => q.Name != attributeName))
                         objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true));
 
-            // now recurse into any auxliary and system auxiliary classes
+            // now recurse into any auxiliary and system auxiliary classes
             var auxiliaryClasses = LdapConnectorUtilities.GetEntryAttributeStringValues(objectClassEntry, "auxiliaryclass");
             var systemAuxiliaryClasses = LdapConnectorUtilities.GetEntryAttributeStringValues(objectClassEntry, "systemauxiliaryclass");
 
@@ -150,15 +150,15 @@ namespace JIM.Connectors.LDAP
                 }
             }
 
-            if (systemAuxiliaryClasses != null)
+            if (systemAuxiliaryClasses == null) 
+                return;
+            
+            foreach (var systemAuxiliaryClass in systemAuxiliaryClasses)
             {
-                foreach (var systemAuxiliaryClass in systemAuxiliaryClasses)
-                {
-                    var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={systemAuxiliaryClass})") ?? 
-                        throw new Exception($"Couldn't find auxiliary class entry: {systemAuxiliaryClass}");
+                var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={systemAuxiliaryClass})") ?? 
+                                                throw new Exception($"Couldn't find auxiliary class entry: {systemAuxiliaryClass}");
 
-                    GetObjectClassAttributesRecursively(systemAuxiliaryClassEntry, objectType);
-                }
+                GetObjectClassAttributesRecursively(systemAuxiliaryClassEntry, objectType);
             }
         }
 
@@ -168,12 +168,12 @@ namespace JIM.Connectors.LDAP
                 throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
 
             var description = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "description");
-            var admindescription = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "admindescription");
+            var adminDescription = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "admindescription");
             
             // isSingleValued comes back as TRUE/FALSE string
             // if we can't convert to a bool, assume it's single-valued
             var isSingleValuedRawValue = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "issinglevalued");
-            if (!bool.TryParse(isSingleValuedRawValue, out bool isSingleValued))
+            if (!bool.TryParse(isSingleValuedRawValue, out var isSingleValued))
             {
                 isSingleValued = true;
                 Log.Verbose($"GetSchemaAttribute: Could not establish if SVA/MVA for attribute {attributeName}. Assuming SVA. Raw value: '{isSingleValuedRawValue}'");
@@ -230,8 +230,8 @@ namespace JIM.Connectors.LDAP
 
             if (!string.IsNullOrEmpty(description))
                 attribute.Description = description;
-            else if (!string.IsNullOrEmpty(admindescription))
-                attribute.Description = admindescription;            
+            else if (!string.IsNullOrEmpty(adminDescription))
+                attribute.Description = adminDescription;            
 
             return attribute;
         }

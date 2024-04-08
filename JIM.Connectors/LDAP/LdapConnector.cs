@@ -31,7 +31,7 @@ namespace JIM.Connectors.LDAP
         #endregion
 
         #region IConnectorSettings members
-        // variablising the names to reduce repitition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
+        // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
         private readonly string _settingDirectoryServer = "Host";
         private readonly string _settingDirectoryServerPort = "Port";
         //private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
@@ -55,7 +55,7 @@ namespace JIM.Connectors.LDAP
                 new() { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
 
                 new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
-                new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the direcory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
+                new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the directory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
                 new() { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
                 new() { Name = _settingAuthType, Required = true, Description = "What type of authentication is required for this credential?", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.SETTING_AUTH_TYPE_SIMPLE, LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM }},
 
@@ -138,8 +138,8 @@ namespace JIM.Connectors.LDAP
                 password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
                 authTypeSettingValue == null || string.IsNullOrEmpty(authTypeSettingValue.StringValue) ||
                 directoryServer == null || string.IsNullOrEmpty(directoryServer.StringValue) ||
-                directoryServerPort == null || !directoryServerPort.IntValue.HasValue ||
-                timeoutSeconds == null || !timeoutSeconds.IntValue.HasValue)
+                directoryServerPort is not { IntValue: not null } ||
+                timeoutSeconds is not { IntValue: not null })
                 throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername},{_settingPassword}, or {_settingAuthType}.");
 
             logger.Debug($"OpenImportConnection() Trying to connect to '{directoryServer.StringValue}' on port '{directoryServerPort.IntValue}' with username '{username.StringValue}' via auth type {authTypeSettingValue.StringValue}.");
@@ -147,7 +147,7 @@ namespace JIM.Connectors.LDAP
             var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
 
             // allow the user to specify what type of authentication to perform against the supplied credential.
-            string authTypeSettingValueString = authTypeSettingValue.StringValue;
+            var authTypeSettingValueString = authTypeSettingValue.StringValue;
             var authTypeEnumValue = AuthType.Anonymous;
             if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_SIMPLE)
                 authTypeEnumValue = AuthType.Basic;
@@ -162,7 +162,7 @@ namespace JIM.Connectors.LDAP
             _connection.Bind();
         }
 
-        public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken)
+        public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken)
         {
             logger.Verbose("ImportAsync() called");
             // todo: wrap this in a task to eliminate the compiler warning. still needs to propagate exceptions and return values.
@@ -177,19 +177,19 @@ namespace JIM.Connectors.LDAP
 
             var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, paginationTokens, persistedConnectorData, logger, cancellationToken);
 
-            if (runProfile.RunType == ConnectedSystemRunType.FullImport)
+            switch (runProfile.RunType)
             {
-                logger.Debug("ImportAsync: Full Import requested");
-                return import.GetFullImportObjects();
-            }
-            else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
-            {
-                logger.Debug("ImportAsync: Delta Import requested");
-                throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");
-            }
-            else
-            {
-                throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}");
+                case ConnectedSystemRunType.FullImport:
+                    logger.Debug("ImportAsync: Full Import requested");
+                    return Task.FromResult(import.GetFullImportObjects());
+                case ConnectedSystemRunType.DeltaImport:
+                    logger.Debug("ImportAsync: Delta Import requested");
+                    throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");
+                case ConnectedSystemRunType.FullSynchronisation:
+                case ConnectedSystemRunType.DeltaSynchronisation:
+                case ConnectedSystemRunType.Export:
+                default:
+                    throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}");
             }
         }
 
@@ -215,7 +215,7 @@ namespace JIM.Connectors.LDAP
             {
                 return new ConnectorSettingValueValidationResult
                 {
-                    ErrorMessage = "Unable to test connectivity due to missing diretory server, port, username and/or password values"
+                    ErrorMessage = "Unable to test connectivity due to missing directory server, port, username and/or password values"
                 };
             }
             catch (Exception ex)

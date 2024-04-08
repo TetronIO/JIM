@@ -19,8 +19,8 @@ namespace JIM.Connectors.File
 
         public void Dispose()
         {
-            Reader?.Dispose();
-            CsvReader?.Dispose();
+            Reader.Dispose();
+            CsvReader.Dispose();
         }
     }
 }
