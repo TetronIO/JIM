@@ -1,9 +1,8 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Models.Search.DTOs;
-using System;
 
-namespace JIM.Application.Search
+namespace JIM.Application.Servers
 {
     public class SearchServer
     {

@@ -145,7 +145,7 @@ namespace JIM.Application.Servers
 
         public async Task CompleteWorkerTaskAsync(WorkerTask workerTask)
         {
-            if (workerTask.Activity != null && workerTask.Activity.Status == ActivityStatus.InProgress)
+            if (workerTask.Activity is { Status: ActivityStatus.InProgress })
                 await Application.Activities.CompleteActivityAsync(workerTask.Activity);
 
             await Application.Repository.Tasking.DeleteWorkerTaskAsync(workerTask);

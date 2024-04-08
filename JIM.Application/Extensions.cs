@@ -3,19 +3,20 @@
     public static class Extensions
     {
         /// <summary>
-        /// Pickes a random item from a collection of values, where the likelyhood on which item is selected depends 
+        /// Picks a random item from a collection of values, where the likelihood on which item is selected depends 
         /// on the weight of the item in the collection.
         /// 
         /// Usage: variable.RandomElementByWeight(x => x.Weight);
         /// </summary>
         public static T? RandomElementByWeight<T>(this IEnumerable<T> sequence, Func<T, float> weightSelector)
         {
-            float totalWeight = sequence.Sum(weightSelector);
+            var enumerable = sequence as T[] ?? sequence.ToArray();
+            var totalWeight = enumerable.Sum(weightSelector);
             // The weight we are after...
-            float itemWeightIndex = (float)new Random().NextDouble() * totalWeight;
+            var itemWeightIndex = (float)new Random().NextDouble() * totalWeight;
             float currentWeightIndex = 0;
 
-            foreach (var item in from weightedItem in sequence select new { Value = weightedItem, Weight = weightSelector(weightedItem) })
+            foreach (var item in from weightedItem in enumerable select new { Value = weightedItem, Weight = weightSelector(weightedItem) })
             {
                 currentWeightIndex += item.Weight;
 

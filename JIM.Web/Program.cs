@@ -208,7 +208,7 @@ static async Task InitialiseJimApplicationAsync()
         var jimApplication = new JimApplication(new PostgresDataRepository());
         if (await jimApplication.IsApplicationReadyAsync())
         {
-            await jimApplication.InitialiseSSOAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
+            await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
             break;
         }
 

@@ -1,4 +1,3 @@
-using JIM.Application.Search;
 using JIM.Application.Servers;
 using JIM.Data;
 using JIM.Models.Core;
@@ -9,7 +8,7 @@ namespace JIM.Application
     public class JimApplication
     {
         internal IRepository Repository { get; }
-        internal SeedingServer Seeding { get; }
+        private SeedingServer Seeding { get; }
         public ActivityServer Activities { get; }
         public ConnectedSystemServer ConnectedSystems { get; }
         public DataGenerationServer DataGeneration { get; }
@@ -51,7 +50,7 @@ namespace JIM.Application
         /// Copies SSO information provided by Docker configuration to the database so the user can view it in the interface.
         /// Also ensures there is always a user with an admin role assignment.
         /// </summary>
-        public async Task InitialiseSSOAsync(
+        public async Task InitialiseSsoAsync(
             string ssoAuthority,
             string ssoClientId,
             string ssoSecret,
@@ -160,10 +159,7 @@ namespace JIM.Application
         {
             Log.Verbose("JIM.Application: IsApplicationReadyAsync()");
             var serviceSettings = await ServiceSettings.GetServiceSettingsAsync();
-            if (serviceSettings == null || serviceSettings.IsServiceInMaintenanceMode)
-                return false;
-
-            return true;
+            return serviceSettings is { IsServiceInMaintenanceMode: false };
         }
     }
 }
