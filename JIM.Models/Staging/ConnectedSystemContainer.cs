@@ -48,7 +48,7 @@ namespace JIM.Models.Staging
         /// Containers can container children containers.
         /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
         /// </summary>
-        public HashSet<ConnectedSystemContainer> ChildContainers { get; }
+        public HashSet<ConnectedSystemContainer> ChildContainers { get; } = new();
 
         #region For MudBlazor TreeView
         public ConnectedSystemContainer? ParentContainer { get; set; }
@@ -59,11 +59,6 @@ namespace JIM.Models.Staging
         [NotMapped]
         public bool Included { get; set; }
         #endregion
-
-        public ConnectedSystemContainer()
-        {
-            ChildContainers = new HashSet<ConnectedSystemContainer>();
-        }
 
         public void AddChildContainer(ConnectedSystemContainer container)
         {
@@ -80,14 +75,10 @@ namespace JIM.Models.Staging
                 return true;
 
             // look further down the tree
-            foreach (var childContainer in ChildContainers)
-                if (DetermineIfAnyChildrenAreSelected(childContainer))
-                    return true;
-
-            return false;
+            return ChildContainers.Any(DetermineIfAnyChildrenAreSelected);
         }
 
-        private bool DetermineIfAnyChildrenAreSelected(ConnectedSystemContainer connectedSystemContainer)
+        private static bool DetermineIfAnyChildrenAreSelected(ConnectedSystemContainer connectedSystemContainer)
         {
             if (connectedSystemContainer.ChildContainers.Any(c => c.Selected))
                 return true;

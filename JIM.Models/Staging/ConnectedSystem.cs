@@ -13,26 +13,26 @@ namespace JIM.Models.Staging
 
         public string? Description { get; set; }
 
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         public DateTime LastUpdated { get; set; }
 
-        public List<ConnectedSystemRunProfile>? RunProfiles { get; set; }
+        public List<ConnectedSystemRunProfile>? RunProfiles { get; set; } = new();
 
-        public List<ConnectedSystemObject> Objects { get; set; }
+        public List<ConnectedSystemObject> Objects { get; set; } = new();
 
-        public List<ConnectedSystemObjectType>? ObjectTypes { get; set; }
+        public List<ConnectedSystemObjectType>? ObjectTypes { get; set; } = new();
 
         public List<PendingExport> PendingExports { get; set; } = null!;
 
         public ConnectorDefinition ConnectorDefinition { get; set; } = null!;
 
-        public List<ConnectedSystemSettingValue> SettingValues { get; set; }
+        public List<ConnectedSystemSettingValue> SettingValues { get; set; } = new();
 
         /// <summary>
         /// We track whether or not setting values have been validated by the Connector so that we can prevent the user from navigating to configuration phases that are dependent upon valid setting values.
         /// When a connected system is created, this will be false as there are no values supplied yet.
-        /// When any setting values are changed by the usre, this will be toggled to false until the settings are validated
+        /// When any setting values are changed by the user, this will be toggled to false until the settings are validated
         /// </summary>
         public bool SettingValuesValid { get; set; }
 
@@ -48,19 +48,10 @@ namespace JIM.Models.Staging
         /// </summary>
         public string? PersistedConnectorData { get; set; }
 
-        /// <summary>
+        /// <summary>/home/jay
         /// EF back-link.
         /// </summary>
         public List<Activity>? Activities { get; set; }
-
-        public ConnectedSystem()
-        {
-            RunProfiles = new List<ConnectedSystemRunProfile>();
-            Objects = new List<ConnectedSystemObject>();
-            ObjectTypes = new List<ConnectedSystemObjectType>();
-            SettingValues = new List<ConnectedSystemSettingValue>();
-            Created = DateTime.UtcNow;
-        }
 
         public override string ToString()
         {
