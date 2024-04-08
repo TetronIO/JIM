@@ -9,7 +9,7 @@ namespace JIM.Models.Staging
         #region accessors
         public Guid Id { get; set; }
 
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         public DateTime? LastUpdated { get; set; }
 
@@ -38,9 +38,9 @@ namespace JIM.Models.Staging
         /// </summary>
         public int? SecondaryExternalIdAttributeId { get; set; }
 
-        public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; }
+        public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; } = new();
 
-        public ConnectedSystemObjectStatus Status { get; set; }
+        public ConnectedSystemObjectStatus Status { get; set; } = ConnectedSystemObjectStatus.Normal;
 
         /// <summary>
         /// If there's a link to a MetaverseObject here, then this is a connected object,
@@ -50,7 +50,7 @@ namespace JIM.Models.Staging
         /// <summary>
         /// How was this CSO joined to an MVO, if at all?
         /// </summary>
-        public ConnectedSystemObjectJoinType JoinType { get; set; }
+        public ConnectedSystemObjectJoinType JoinType { get; set; } = ConnectedSystemObjectJoinType.NotJoined;
 
         /// <summary>
         /// When this Connector Space Object was joined to the Metaverse.
@@ -79,7 +79,7 @@ namespace JIM.Models.Staging
         {  
             get
             {
-                if (AttributeValues == null || AttributeValues.Count == 0)
+                if (AttributeValues.Count == 0)
                     return null;
 
                 return AttributeValues.SingleOrDefault(q => q.Attribute.Id == ExternalIdAttributeId);
@@ -91,7 +91,7 @@ namespace JIM.Models.Staging
         {
             get
             {
-                if (AttributeValues == null || AttributeValues.Count == 0)
+                if (AttributeValues.Count == 0)
                     return null;
 
                 return AttributeValues.SingleOrDefault(q => q.Attribute.Id == SecondaryExternalIdAttributeId);
@@ -103,7 +103,7 @@ namespace JIM.Models.Staging
         {
             get
             {
-                if (AttributeValues == null || AttributeValues.Count == 0)
+                if (AttributeValues.Count == 0)
                     return null;
 
                 // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that are less standards baseds
@@ -113,21 +113,8 @@ namespace JIM.Models.Staging
                     return av.StringValue;
 
                 // no displayName attribute on this object, return the external id instead
-                if (ExternalIdAttributeValue != null)
-                    return ExternalIdAttributeValue.ToString();
-
-                return null;
+                return ExternalIdAttributeValue?.ToString();
             }
-        }
-        #endregion
-
-        #region constructors
-        public ConnectedSystemObject()
-        {
-            Created = DateTime.UtcNow;
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
-            Status = ConnectedSystemObjectStatus.Normal;
-            JoinType = ConnectedSystemObjectJoinType.NotJoined;
         }
         #endregion
 
@@ -240,10 +227,7 @@ namespace JIM.Models.Staging
         public ConnectedSystemObjectAttributeValue? GetAttributeValue(string attributeName)
         {
             var attributeValue = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase));
-            if (attributeValue != null)
-                return attributeValue;
-
-            return null;
+            return attributeValue ?? null;
         }
         #endregion
     }

@@ -15,7 +15,7 @@ namespace JIM.Models.Staging
         /// </summary>
         public string? ObjectType { get; set; }
 
-        public List<ConnectedSystemImportObjectAttribute> Attributes { get; set; } = new List<ConnectedSystemImportObjectAttribute>();
+        public List<ConnectedSystemImportObjectAttribute> Attributes { get; set; } = new();
 
         public ObjectChangeType ChangeType { get; set; } = ObjectChangeType.NotSet;    
         
