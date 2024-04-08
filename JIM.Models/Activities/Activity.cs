@@ -4,7 +4,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Activities;
 
 /// <summary>
-/// Enables all activities being performed in JIM, whether user or system initited to be tracked and logged.
+/// Enables all activities being performed in JIM, whether user or system initiated to be tracked and logged.
 /// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being run or about
 /// to be run, then the relevant page can filter for those activities, and the same for say metaverse object updates to see when a
 /// group membership was updated, or a user created, or sync rules changed, etc.
@@ -21,8 +21,8 @@ public class Activity
     public DateTime Created { get; set; } = DateTime.UtcNow;
     
     /// <summary>
-    /// Activities that are not executed in real-time, such as those initiated by JIM.Service procesing a queue to get to a task for the activity will have an Executed time
-    /// noticably later than the created time for the Activity. This enables you to see what the overall, user-experienced activity completion time is, and the actual system execution time.
+    /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to get to a task for the activity will have an Executed time
+    /// noticeably later than the created time for the Activity. This enables you to see what the overall, user-experienced activity completion time is, and the actual system execution time.
     /// </summary>
     public DateTime Executed {  get; set; }
 
@@ -36,7 +36,7 @@ public class Activity
 
     /// <summary>
     /// When the activity is complete, a value for how long the activity took to complete should be stored here. 
-    /// This may be a noticably smaller value than the total activity time, as some activities take a while before they
+    /// This may be a noticeably smaller value than the total activity time, as some activities take a while before they
     /// are executed, i.e. those processed by JIM.Service which employs a queue and may take time to get round to 
     /// executing the task the activity is for.
     /// </summary>
@@ -91,7 +91,7 @@ public class Activity
     // - result item with operation type (create/update/delete) and link to mv object
     // - result item with operation type (create/update/delete) and link to mv object and json snapshot of imported/exported object
 
-    public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; set; } = new List<ActivityRunProfileExecutionItem>();
+    public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; set; } = new();
 
     // --------------------------------------------------------
     // object changes (created/update/delete)

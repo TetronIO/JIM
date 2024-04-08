@@ -24,7 +24,7 @@ namespace JIM.Models.Tests
                 Pattern = "dummy-value"
             };
 
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject.Validate);
         }
 
         [Test]
@@ -36,7 +36,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 0,
                 Pattern = "dummy-value"
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject.Validate);
         }
 
         [Test]
@@ -48,7 +48,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 101,
                 Pattern = "dummy-value"
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject.Validate);
         }
 
         [Test]
@@ -61,7 +61,7 @@ namespace JIM.Models.Tests
                 MinNumber = 100,
                 MaxNumber = 50
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -70,7 +70,7 @@ namespace JIM.Models.Tests
                 SequentialNumbers = true,
                 RandomNumbers = true
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
         }
 
         [Test]
@@ -83,7 +83,7 @@ namespace JIM.Models.Tests
                 MinDate = DateTime.UtcNow.AddDays(1),
                 MaxDate = DateTime.UtcNow
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -92,7 +92,7 @@ namespace JIM.Models.Tests
                 MinDate = DateTime.UtcNow,
                 MaxDate = DateTime.UtcNow.AddDays(-1)
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
         }
 
         [Test]
@@ -104,7 +104,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -112,7 +112,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MinDate = DateTime.UtcNow                
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -121,7 +121,7 @@ namespace JIM.Models.Tests
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
 
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject3.Validate);
 
             var subject4 = new DataGenerationTemplateAttribute
             {
@@ -129,7 +129,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolShouldBeRandom = true
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject3.Validate);
         }
 
         [Test]
@@ -141,7 +141,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -149,7 +149,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MinDate = DateTime.UtcNow
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -157,7 +157,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject3.Validate);
 
             var subject4 = new DataGenerationTemplateAttribute
             {
@@ -165,7 +165,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject4.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject4.Validate);
 
             var subject5 = new DataGenerationTemplateAttribute
             {
@@ -173,7 +173,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 SequentialNumbers = true
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject5.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject5.Validate);
         }
 
         [Test]
@@ -185,7 +185,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 Pattern = "dummy-value"
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -193,7 +193,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolShouldBeRandom = true
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
 
             var subject3 = new DataGenerationTemplateAttribute
             {
@@ -201,7 +201,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance() }
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject3.Validate);
 
             var subject4 = new DataGenerationTemplateAttribute
             {
@@ -209,7 +209,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 RandomNumbers = true
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject4.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject4.Validate);
         }
 
         [Test]
@@ -221,7 +221,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 BoolShouldBeRandom = true
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             var subject2 = new DataGenerationTemplateAttribute
             {
@@ -229,7 +229,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MinDate = DateTime.UtcNow
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
         }
 
         [Test]
@@ -248,7 +248,7 @@ namespace JIM.Models.Tests
                 BoolShouldBeRandom = true
             };
 
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
         }
 
         [Test]
@@ -261,7 +261,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 ManagerDepthPercentage = 50
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             // ManagerDepthPercentage cannot be zero. If you don't want to use ManagerDepthPercentage, then set it to null
             var subject2 = new DataGenerationTemplateAttribute
@@ -269,7 +269,7 @@ namespace JIM.Models.Tests
                 ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 0
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
 
             // not everyone can be a manager
             var subject3 = new DataGenerationTemplateAttribute
@@ -277,7 +277,7 @@ namespace JIM.Models.Tests
                 ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 100
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject3.Validate);
 
             // outside of bounds
             var subject4 = new DataGenerationTemplateAttribute
@@ -285,7 +285,7 @@ namespace JIM.Models.Tests
                 ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 120
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject4.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject4.Validate);
 
             // outside of bounds
             var subject5 = new DataGenerationTemplateAttribute
@@ -293,7 +293,7 @@ namespace JIM.Models.Tests
                 ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = -10
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject5.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject5.Validate);
 
             // ManagerDepthPercentage can only be used on reference attribute types
             var subject6 = new DataGenerationTemplateAttribute
@@ -301,7 +301,7 @@ namespace JIM.Models.Tests
                 ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text, Name = Constants.BuiltInAttributes.Manager },
                 ManagerDepthPercentage = 50
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject6.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject6.Validate);
         }
 
         [Test]
@@ -314,7 +314,7 @@ namespace JIM.Models.Tests
                 PopulatedValuesPercentage = 100,
                 MvaRefMinAssignments = -1
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject1.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject1.Validate);
 
             // min must be less than max
             var subject2 = new DataGenerationTemplateAttribute
@@ -325,7 +325,7 @@ namespace JIM.Models.Tests
                 MvaRefMinAssignments = 100,
                 MvaRefMaxAssignments = 10
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject2.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject2.Validate);
 
             // min must be less than max
             var subject3 = new DataGenerationTemplateAttribute
@@ -336,7 +336,7 @@ namespace JIM.Models.Tests
                 MvaRefMinAssignments = 10,
                 MvaRefMaxAssignments = 10
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject3.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject3.Validate);
 
             // can't use MvaRefMinAssignments or MvaRefMaxAssignments on non-mva reference attributes
             var subject4 = new DataGenerationTemplateAttribute
@@ -347,7 +347,7 @@ namespace JIM.Models.Tests
                 MvaRefMinAssignments = 0,
                 MvaRefMaxAssignments = 10
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject4.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject4.Validate);
 
             var subject5 = new DataGenerationTemplateAttribute
             {
@@ -357,7 +357,7 @@ namespace JIM.Models.Tests
                 MvaRefMinAssignments = 0,
                 MvaRefMaxAssignments = 10
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject5.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject5.Validate);
 
             // ReferenceMetaverseObjectTypes are needed
             var subject6 = new DataGenerationTemplateAttribute
@@ -367,7 +367,7 @@ namespace JIM.Models.Tests
                 MvaRefMinAssignments = 0,
                 MvaRefMaxAssignments = 10
             };
-            Assert.Catch<DataGeneratationTemplateAttributeException>(subject6.Validate);
+            Assert.Catch<DataGenerationTemplateAttributeException>(subject6.Validate);
         }
     }
 }

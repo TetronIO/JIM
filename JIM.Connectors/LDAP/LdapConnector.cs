@@ -27,7 +27,7 @@ namespace JIM.Connectors.LDAP
         public bool SupportsPartitionContainers => true;
         public bool SupportsSecondaryExternalId => true;
         public bool SupportsUserSelectedExternalId => false;
-        public bool SupportsUserSeletedAttributeTypes => false;
+        public bool SupportsUserSelectedAttributeTypes => false;
         #endregion
 
         #region IConnectorSettings members

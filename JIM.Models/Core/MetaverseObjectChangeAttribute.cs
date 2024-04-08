@@ -14,6 +14,6 @@
         /// <summary>
         /// A list of what values were added to or removed from this attribute.
         /// </summary>
-        public List<MetaverseObjectChangeAttributeValue> ValueChanges { get; set; } = new List<MetaverseObjectChangeAttributeValue>();
+        public List<MetaverseObjectChangeAttributeValue> ValueChanges { get; set; } = new();
     }
 }

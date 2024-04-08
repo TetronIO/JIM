@@ -1,4 +1,5 @@
-﻿using JIM.Models.Enums;
+﻿using System.Globalization;
+using JIM.Models.Enums;
 
 namespace JIM.Models.Staging
 {
@@ -42,7 +43,7 @@ namespace JIM.Models.Staging
                 return StringValue;
 
             if (DateTimeValue.HasValue)
-                return DateTimeValue.Value.ToString();
+                return DateTimeValue.Value.ToString(CultureInfo.InvariantCulture);
 
             if (IntValue.HasValue)
                 return IntValue.Value.ToString();

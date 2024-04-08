@@ -76,7 +76,7 @@ namespace JIM.Application.Servers
             var hideFromAddressListsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HideFromAddressLists, AttributePlurality.SingleValued, AttributeDataType.Boolean, attributesToCreate);
             var infoAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Info, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
             var mailNicknameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MailNickname, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-            var objectGuidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectGUID, AttributePlurality.SingleValued, AttributeDataType.Guid, attributesToCreate);
+            var objectGuidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectGuid, AttributePlurality.SingleValued, AttributeDataType.Guid, attributesToCreate);
             var objectSidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
             var startDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
             var typeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Type, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -89,7 +89,7 @@ namespace JIM.Application.Servers
             var countryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Country, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
             var countryCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.CountryCode, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
             var departmentAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Department, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-            var employeeIdAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeID, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+            var employeeIdAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeId, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
             var employeeTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeType, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
             var facsimileTelephoneNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FacsimileTelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
             var firstNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FirstName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -647,7 +647,7 @@ namespace JIM.Application.Servers
                 SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
                 SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
                 SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
-                SupportsUserSeletedAttributeTypes = connectorCapabilities.SupportsUserSeletedAttributeTypes
+                SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes
             };
 
             Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
@@ -717,12 +717,12 @@ namespace JIM.Application.Servers
                 });
             }
 
-            var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeID);
+            var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeId);
             if (employeeIdAttribute == null)
             {
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
-                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeID),
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeId),
                     PopulatedValuesPercentage = 100,
                     MinNumber = 100001,
                     SequentialNumbers = true
@@ -808,12 +808,12 @@ namespace JIM.Application.Servers
                 });
             }
 
-            var objectGuidAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ObjectGUID);
+            var objectGuidAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ObjectGuid);
             if (objectGuidAttribute == null)
             {
                 userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
                 {
-                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ObjectGUID),
+                    MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ObjectGuid),
                     PopulatedValuesPercentage = 100
                 });
             }

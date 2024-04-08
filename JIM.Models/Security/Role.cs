@@ -12,18 +12,12 @@ namespace JIM.Models.Security
 
         public bool BuiltIn { get; set; }
 
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
-        public List<MetaverseObject> StaticMembers { get; set; }
+        public List<MetaverseObject> StaticMembers { get; set; } = new();
 
         // todo: resource scope
         // todo: permissions
         // todo: dynamic membership
-
-        public Role()
-        {
-            StaticMembers = new List<MetaverseObject>();
-            Created = DateTime.UtcNow;
-        }
     }
 }

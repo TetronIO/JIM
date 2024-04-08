@@ -5,7 +5,7 @@ namespace JIM.Models.Utility
     public class PagedResultSet<T>
     {
         #region accessors
-        public List<T> Results { get; set; }
+        public List<T> Results { get; set; } = new();
         public virtual int TotalResults { get; set; }
         public int PageSize { get; set; }
         public int CurrentPage { get; set; }
@@ -27,13 +27,6 @@ namespace JIM.Models.Utility
         public int MaximumResults { get; set; }
         public QuerySortBy QuerySortBy { get; set; }
         public QueryRange QueryRange { get; set; }
-        #endregion
-
-        #region constructors
-        public PagedResultSet()
-        {
-            Results = new List<T>();
-        }
         #endregion
 
         #region methods

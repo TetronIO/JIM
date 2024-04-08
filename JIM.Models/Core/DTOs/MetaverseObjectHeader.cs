@@ -10,7 +10,7 @@
 
         public int TypeId { get; set; }
 
-        public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
+        public List<MetaverseObjectAttributeValue> AttributeValues { get; set; } = new();
 
         public MetaverseObjectStatus Status { get; set; }
 
@@ -18,7 +18,7 @@
         { 
             get
             {
-                if (AttributeValues == null || AttributeValues.Count == 0)
+                if (AttributeValues.Count == 0)
                     return null;
 
                 var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
@@ -27,11 +27,6 @@
 
                 return null;
             } 
-        }
-
-        public MetaverseObjectHeader()
-        {
-            AttributeValues = new List<MetaverseObjectAttributeValue>();
         }
 
         public MetaverseObjectAttributeValue? GetAttributeValue(string name)

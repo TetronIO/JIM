@@ -9,14 +9,8 @@ namespace JIM.Models.DataGeneration
         public int Id { get; set; }
         public string Name { get; set; } = null!;
         public bool BuiltIn { get; set; }
-        public DateTime Created { set; get; }
-        public List<DataGenerationObjectType> ObjectTypes { get; set; }
-
-        public DataGenerationTemplate()
-        {
-            Created = DateTime.UtcNow;
-            ObjectTypes = new List<DataGenerationObjectType>();
-        }
+        public DateTime Created { set; get; } = DateTime.UtcNow;
+        public List<DataGenerationObjectType> ObjectTypes { get; } = new();
 
         public void Validate()
         {
@@ -26,9 +20,8 @@ namespace JIM.Models.DataGeneration
             if (ObjectTypes == null || ObjectTypes.Count == 0)
                 throw new DataGeneratationTemplateException("Null or empty ObjectTypes");
 
-            foreach (var type in ObjectTypes)
-                foreach (var attribute in type.TemplateAttributes)
-                    attribute.Validate();
+            foreach (var attribute in ObjectTypes.SelectMany(type => type.TemplateAttributes))
+                attribute.Validate();
         }
     }
 }

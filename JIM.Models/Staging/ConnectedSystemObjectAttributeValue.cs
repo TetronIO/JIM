@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 
 namespace JIM.Models.Staging
 {
@@ -50,7 +51,7 @@ namespace JIM.Models.Staging
                 return StringValue;
 
             if (DateTimeValue.HasValue)
-                return DateTimeValue.Value.ToString();
+                return DateTimeValue.Value.ToString(CultureInfo.InvariantCulture);
 
             if (IntValue.HasValue)
                 return IntValue.Value.ToString();

@@ -17,12 +17,7 @@
             }
         }
 
-        public List<ValidityStatusItem> Items { get; set; }
-
-        public ValidityStatus() 
-        {
-            Items = new List<ValidityStatusItem>();
-        }
+        public List<ValidityStatusItem> Items { get; } = new();
 
         public void AddItem(ValidityStatusItemLevel level, string message) 
         { 
@@ -48,12 +43,12 @@
         NotSet = 0,
         
         /// <summary>
-        /// The object will funciton, and can be persisted, but it's not in a recommended state.
+        /// The object will function, and can be persisted, but it's not in a recommended state.
         /// </summary>
         Warning = 1,
         
         /// <summary>
-        /// The object will not funciton, and cannot be persisted in its current state.
+        /// The object will not function, and cannot be persisted in its current state.
         /// </summary>
         Error = 2
     }

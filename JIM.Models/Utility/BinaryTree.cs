@@ -7,13 +7,11 @@ namespace JIM.Models.Utility
     /// </summary>
     public class BinaryTree
     {
-        public MetaverseObject MetaverseObject = null!;
-        public BinaryTree Left = null!;
-        public BinaryTree Right = null!;
+        public readonly MetaverseObject MetaverseObject;
+        public readonly BinaryTree? Left;
+        public readonly BinaryTree? Right;
 
-        public BinaryTree(List<MetaverseObject> values) : this(values, 0) { }
-
-        public BinaryTree(List<MetaverseObject> values, int index)
+        public BinaryTree(IReadOnlyList<MetaverseObject> values, int index = 0)
         {
             MetaverseObject = values[index];
             if (index * 2 + 1 < values.Count)

@@ -9,7 +9,7 @@ namespace JIM.Models.Staging
         public string? Description { get; set; }
 
         /// <summary>
-        /// Some types of connected systems have a concept of heirarchy where an attribute is inherited from a class that the object type inherits, i.e. an LDAP object class.
+        /// Some types of connected systems have a concept of hierarchy where an attribute is inherited from a class that the object type inherits, i.e. an LDAP object class.
         /// Storing this information in JIM and presenting it to the user when configuring a Connected System can help them with understanding what might or might not need managing, attribute wise.
         /// </summary>
         public string? ClassName { get; set; }

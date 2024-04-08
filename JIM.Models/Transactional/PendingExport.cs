@@ -33,19 +33,13 @@ namespace JIM.Models.Transactional
 
         public PendingExportChangeType ChangeType { get; set; }
 
-        public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; }
+        public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = new();
 
-        public PendingExportStatus Status { get; set; }
+        public PendingExportStatus Status { get; set; } = PendingExportStatus.Pending;
 
         /// <summary>
         /// How many times have we encounted an error whilst trying to export this change?
         /// </summary>
         public int? ErrorCount { get; set; }
-
-        public PendingExport()
-        {
-            Status = PendingExportStatus.Pending;
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>();
-        }
     }
 }

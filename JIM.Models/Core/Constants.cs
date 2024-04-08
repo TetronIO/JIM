@@ -39,7 +39,7 @@
             public static string ExtensionAttribute9 => "Extension Attribute 9";
             public static string HideFromAddressLists => "Hide From Address Lists";
             public static string MailNickname => "Mail Nickname";
-            public static string ObjectGUID => "objectGUID";
+            public static string ObjectGuid => "objectGUID";
             public static string ObjectSid => "objectSid";
             public static string ProxyAddresses => "Proxy Addresses";
 
@@ -57,7 +57,7 @@
             public static string Description => "Description";
             public static string DistinguishedName => "Distinguished Name";
             public static string Email => "Email";
-            public static string EmployeeID => "Employee ID";
+            public static string EmployeeId => "Employee ID";
             public static string EmployeeType => "Employee Type";
             public static string FacsimileTelephoneNumber => "Facsimile Telephone Number";
             public static string FirstName => "First Name";

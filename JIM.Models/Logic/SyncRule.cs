@@ -15,7 +15,7 @@ namespace JIM.Models.Logic
         
         public string Name { get; set; } = null!;
         
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         public MetaverseObject? CreatedBy { get; set; }
         
@@ -61,17 +61,17 @@ namespace JIM.Models.Logic
         /// A sync rule can be disabled, meaning it will not be evaluated when run profiles are executed.
         /// This can be especially useful for admins when they need to be able to easily stop synchronising specific objects for a given system, without changing the sync schedule(s).
         /// </summary>
-        public bool Enabled { get; set; }
+        public bool Enabled { get; set; } = true;
 
         /// <summary>
         /// Contains all the logic that controls what attributes on a metaverse object should flow to what connected system object attribute, or visa-versa, depending on the sync rule direction.
         /// </summary>
-        public List<SyncRuleMapping> AttributeFlowRules { get; set; }
+        public List<SyncRuleMapping> AttributeFlowRules { get; set; } = new();
 
         /// <summary>
         /// Contains all the logic that determines how connected system objects should match a counterpart in the metaverse for inbound sync rules.
         /// </summary>
-        public List<SyncRuleMapping> ObjectMatchingRules { get; set; }
+        public List<SyncRuleMapping> ObjectMatchingRules { get; set; } = new();
 
         // back-link for EF
         public List<Activity> Activities { get; set; } = null!;
@@ -83,7 +83,7 @@ namespace JIM.Models.Logic
         /// Contains all the logic that determines which Metaverse objects should be exported to the Connected System.
         /// No rules means that all objects of the Metaverse Object Type will be in scope of an outbound sync rule.
         /// </summary>
-        public List<SyncRuleScopingCriteriaGroup> ObjectScopingCriteriaGroups { get; set; }
+        public List<SyncRuleScopingCriteriaGroup> ObjectScopingCriteriaGroups { get; set; } = new();
 
         public override string ToString()
         {
@@ -121,15 +121,6 @@ namespace JIM.Models.Logic
                 response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No attribute flow rules have been defined. Whilst valid, this means objects will lack nearly all attributes."));
 
             return response;
-        }
-
-        public SyncRule()
-        {
-            Enabled = true;
-            Created = DateTime.UtcNow;
-            AttributeFlowRules = new List<SyncRuleMapping>();
-            ObjectMatchingRules = new List<SyncRuleMapping>();
-            ObjectScopingCriteriaGroups = new List<SyncRuleScopingCriteriaGroup>();
         }
     }
 }

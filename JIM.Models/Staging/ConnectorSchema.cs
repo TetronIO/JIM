@@ -2,11 +2,6 @@
 {
     public class ConnectorSchema
     {
-        public List<ConnectorSchemaObjectType> ObjectTypes { get; set; }
-
-        public ConnectorSchema()
-        {
-            ObjectTypes = new List<ConnectorSchemaObjectType>();
-        }
+        public List<ConnectorSchemaObjectType> ObjectTypes { get; set; } = new();
     }
 }

@@ -11,11 +11,11 @@ namespace JIM.Models.Tasking
 		/// Typically the value for the timestamp will be when the task was created, though the value can
 		/// be changed to change the order in which the tasks will be processed in relation to others, i.e. it controls ordering.
 		/// </summary>
-		public DateTime Timestamp { get; set; }
+		public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
-		public WorkerTaskStatus Status { get; set; }
+		public WorkerTaskStatus Status { get; set; } = WorkerTaskStatus.Queued;
 
-		public WorkerTaskExecutionMode ExecutionMode { get; set; }
+		public WorkerTaskExecutionMode ExecutionMode { get; set; } = WorkerTaskExecutionMode.Sequential;
 
 		/// <summary>
 		/// If this task was initiated by a user, reference them here.
@@ -32,12 +32,5 @@ namespace JIM.Models.Tasking
 		/// is initiated then the execution time must be set, and when complete, the activity must also be completed.
 		/// </summary>
 		public Activity Activity { get; set; } = null!;
-
-        public WorkerTask()
-        {
-			Timestamp = DateTime.UtcNow;
-			Status = WorkerTaskStatus.Queued;
-			ExecutionMode = WorkerTaskExecutionMode.Sequential;
-        }
 	}
 }

@@ -24,7 +24,7 @@ namespace JIM.Models.Logic
     {
         public int Id { get; set; }
 
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         public MetaverseObject? CreatedBy { get; set; }
 
@@ -48,17 +48,17 @@ namespace JIM.Models.Logic
         /// <summary>
         /// Denotes what the purpose of this mapping is for, i.e. attribute flow, or object matching (aka joining/correlating).
         /// </summary>
-        public SyncRuleMappingType Type { get; set; }
+        public SyncRuleMappingType Type { get; set; } = SyncRuleMappingType.NotSet;
 
         /// <summary>
         /// The sources that provide the value for the target attribute when the mapping is evaluated. 
-        /// Suppported scenarios:
+        /// Supported scenarios:
         /// - Just one: for mapping a single attribute to the target attribute. i.e. attribute_1 => attribute
         /// - Just one: for using a single function to generate a value for the target attribute, i.e. Trim(attribute) => attribute
         /// - Just one: for using an expression to generate a value for the target attribute. i.e attribte_1 ?? attribte_2 => attribute
         /// - Multiple: for using multiple function calls that chain through each other to generate a value for the target attribute.
         /// </summary>
-        public List<SyncRuleMappingSource> Sources { get; set; }
+        public List<SyncRuleMappingSource> Sources { get; set; } = new();
 
         /// <summary>
         /// For an import rule, this is where the imported attribute value ends up being assigned to.
@@ -72,13 +72,6 @@ namespace JIM.Models.Logic
         /// </summary>
         public ConnectedSystemObjectTypeAttribute? TargetConnectedSystemAttribute { get; set; }
 
-        public SyncRuleMapping()
-        {
-            Sources = new List<SyncRuleMappingSource>();
-            Type = SyncRuleMappingType.NotSet;
-            Created = DateTime.UtcNow;
-        }
-
         /// <summary>
         /// Helper method to provide a description for the user on what type of source configuration this is.
         /// </summary>
@@ -88,18 +81,13 @@ namespace JIM.Models.Logic
                 return SyncRuleMappingSourcesType.NotSet;
 
             if (Sources.All(s => s.ConnectedSystemAttribute != null || s.MetaverseAttribute != null))
-            {
                 return SyncRuleMappingSourcesType.AttributeMapping;
-            }
-            else if (Sources.All(s => s.Function != null))
-            {
+
+            if (Sources.All(s => s.Function != null))
                 return SyncRuleMappingSourcesType.FunctionMapping;
-            }
-            else
-            {
-                // expressions not yet suppported
-                return SyncRuleMappingSourcesType.AdvancedMapping;
-            }
+
+            // expressions not yet supported
+            return SyncRuleMappingSourcesType.AdvancedMapping;
         }
     }
 }

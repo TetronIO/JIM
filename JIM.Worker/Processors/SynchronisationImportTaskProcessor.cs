@@ -137,7 +137,7 @@ namespace JIM.Worker.Processors
                 var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
                 if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
                 {
-                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldntMatchObjectType;
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
                     activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                     continue;
                 }

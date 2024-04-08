@@ -41,12 +41,7 @@ namespace JIM.Models.Logic
         /// If a Function or Expression is to be the source of the target attribute value, then parameters for those need to be defined.
         /// They in term can be sourced from attributes, or constant values.
         /// </summary>
-        public List<SyncRuleMappingSourceParamValue> ParameterValues { get; set; }
-
-        public SyncRuleMappingSource()
-        {
-            ParameterValues = new List<SyncRuleMappingSourceParamValue>();
-        }
+        public List<SyncRuleMappingSourceParamValue> ParameterValues { get; set; } = new();
 
         public bool IsValid()
         {

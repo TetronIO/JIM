@@ -27,7 +27,7 @@ namespace JIM.Connectors.File
         public bool SupportsPartitionContainers => false;
         public bool SupportsSecondaryExternalId => false;
         public bool SupportsUserSelectedExternalId => true;
-        public bool SupportsUserSeletedAttributeTypes => true;
+        public bool SupportsUserSelectedAttributeTypes => true;
         #endregion
 
         #region IConnectorSettings members

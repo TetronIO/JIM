@@ -18,6 +18,6 @@
         /// <summary>
         /// A list of what values were added to or removed from this attribute.
         /// </summary>
-        public List<ConnectedSystemObjectChangeAttributeValue> ValueChanges { get; set; } = new List<ConnectedSystemObjectChangeAttributeValue>();
+        public List<ConnectedSystemObjectChangeAttributeValue> ValueChanges { get; set; } = new();
     }
 }

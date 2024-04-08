@@ -8,7 +8,7 @@ namespace JIM.Models.Core
     {
         public int Id { get; set; }
 
-        public DateTime Created { set; get; }
+        public DateTime Created { set; get; } = DateTime.UtcNow;
 
         public string Name { get; set; } = null!;
 
@@ -21,10 +21,5 @@ namespace JIM.Models.Core
         public List<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
 
         public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; } = null!;
-
-        public MetaverseAttribute()
-        {
-            Created = DateTime.UtcNow;
-        }
     }
 }

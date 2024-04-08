@@ -11,7 +11,7 @@ namespace JIM.Models.Search
     {
         public int Id { get; set; }
 
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         /// <summary>
         /// The type of Metaverse object this search will result results for.
@@ -43,18 +43,11 @@ namespace JIM.Models.Search
         /// <summary>
         /// The attribute(s) to return in the result of the search. They can be different for each predefined search.
         /// </summary>
-        public List<PredefinedSearchAttribute> Attributes { get; set; }
+        public List<PredefinedSearchAttribute> Attributes { get; set; } = new();
 
         /// <summary>
         /// The criteria used to filter the results, i.e. the search query.
         /// </summary>
-        public List<PredefinedSearchCriteriaGroup> CriteriaGroups { get; set; }
-
-        public PredefinedSearch()
-        {
-            Attributes = new List<PredefinedSearchAttribute>();
-            CriteriaGroups = new List<PredefinedSearchCriteriaGroup>();
-            Created = DateTime.UtcNow;
-        }
+        public List<PredefinedSearchCriteriaGroup> CriteriaGroups { get; set; } = new();
     }
 }

@@ -11,15 +11,10 @@
 
         public string Version { get; set; } = null!;
 
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         public DateTime LastUpdated { get; set; }
 
         // todo: signing info?
-
-        public FunctionLibrary()
-        {
-            Created = DateTime.UtcNow;
-        }
     }
 }

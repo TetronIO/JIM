@@ -54,13 +54,13 @@ namespace JIM.Models.DataGeneration
         /// One or more can be supplied with a Pattern value and index-based pattern variables can be used to say how the ExampleDataSets should be used, 
         /// i.e. "{0} {1}" means use a random value from the first ExampleDataSet, a space and then a random value from the second ExampleDataSet.
         /// </summary>
-        public List<ExampleDataSetInstance> ExampleDataSetInstances { get; set; }
+        public List<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = new();
 
         /// <summary>
         /// Instead of random selection from a dataset, you can specify specific string values to choose from, with weights to control, roughly, how many
         /// of each value should be selected, i.e. majority can be 'active', some can be 'retired'.
         /// </summary>
-        public List<DataGenerationTemplateAttributeWeightedValue> WeightedStringValues { get; set; } = null!;
+        public List<DataGenerationTemplateAttributeWeightedValue>? WeightedStringValues { get; set; }
 
         /// <summary>
         /// If you want Manager attributes to be assigned, specify how far into the organisational hierarchy managers should be present.
@@ -93,14 +93,6 @@ namespace JIM.Models.DataGeneration
         public DataGenerationTemplateAttributeDependency? AttributeDependency { get; set; }
         #endregion
 
-        #region constructors
-        public DataGenerationTemplateAttribute()
-        {
-            // needs to be non-null at all times for ERM reasons
-            ExampleDataSetInstances = new List<ExampleDataSetInstance>();
-        }
-        #endregion
-
         #region public methods
         public bool IsUsingNumbers()
         {
@@ -115,24 +107,24 @@ namespace JIM.Models.DataGeneration
         public bool IsUsingStrings()
         {
             return !string.IsNullOrEmpty(Pattern) ||
-                (ExampleDataSetInstances != null && ExampleDataSetInstances.Count > 0) ||
-                (WeightedStringValues != null && WeightedStringValues.Count > 0);
+                ExampleDataSetInstances.Count > 0 ||
+                WeightedStringValues is { Count: > 0 };
         }
 
         public void Validate()
         {
             var usingPattern = !string.IsNullOrEmpty(Pattern);
-            var usingExampleData = ExampleDataSetInstances != null && ExampleDataSetInstances.Count > 0;
+            var usingExampleData = ExampleDataSetInstances.Count > 0;
             var usingMvaRefMinMaxAttributes = MvaRefMinAssignments.HasValue || MvaRefMaxAssignments.HasValue;
-            var usingWeightedStringValues = WeightedStringValues != null && WeightedStringValues.Count > 0;
+            var usingWeightedStringValues = WeightedStringValues is { Count: > 0 };
 
             // need either a cs or mv attribute reference
             if (ConnectedSystemObjectTypeAttribute == null && MetaverseAttribute == null)
-                throw new DataGeneratationTemplateAttributeException("ConnectedSystemAttribute and MetaverseAttribute are null");
+                throw new DataGenerationTemplateAttributeException("ConnectedSystemAttribute and MetaverseAttribute are null");
 
             // needs to be within a 1-100 range
             if (PopulatedValuesPercentage < 1 || PopulatedValuesPercentage > 100)
-                throw new DataGeneratationTemplateAttributeException("PopulatedValuesPercentage is less than 1 or greater than 100");
+                throw new DataGenerationTemplateAttributeException("PopulatedValuesPercentage is less than 1 or greater than 100");
 
             // check for invalid use of type-specific properties
             AttributeDataType attributeDataType;
@@ -152,63 +144,63 @@ namespace JIM.Models.DataGeneration
                 attributeName = MetaverseAttribute.Name;
             }
             else
-                throw new DataGeneratationTemplateAttributeException("Either a MetaverseAttribute OR a ConnectedSystemAttribute reference is required. None was present.");
+                throw new DataGenerationTemplateAttributeException("Either a MetaverseAttribute OR a ConnectedSystemAttribute reference is required. None was present.");
 
 
             if (attributeDataType != AttributeDataType.Boolean && (BoolTrueDistribution != null || BoolShouldBeRandom != null))
-                throw new DataGeneratationTemplateAttributeException("Not Bool and BoolTrueDistribution is not null or BoolShouldBeRandom is not null");
+                throw new DataGenerationTemplateAttributeException("Not Bool and BoolTrueDistribution is not null or BoolShouldBeRandom is not null");
 
             if (attributeDataType != AttributeDataType.DateTime && IsUsingDates())
-                throw new DataGeneratationTemplateAttributeException("Not DateTime and MinDate is not null or MaxDate is not null");
+                throw new DataGenerationTemplateAttributeException("Not DateTime and MinDate is not null or MaxDate is not null");
 
             if (attributeDataType != AttributeDataType.Text)
             {
                 // pattern can only be used with string attributes
                 if (usingPattern)
-                    throw new DataGeneratationTemplateAttributeException("Not string but using pattern");
+                    throw new DataGenerationTemplateAttributeException("Not string but using pattern");
 
                 // Example Data can only be used with string attributes
                 if (usingExampleData)
-                    throw new DataGeneratationTemplateAttributeException("Not string but using example data");
+                    throw new DataGenerationTemplateAttributeException("Not string but using example data");
             }
 
             if (attributeDataType != AttributeDataType.Reference)
             {
-                if (ReferenceMetaverseObjectTypes != null && ReferenceMetaverseObjectTypes.Count > 0)
-                    throw new DataGeneratationTemplateAttributeException("ReferenceMetaverseObjectTypes can only be used with reference attribute data types");
+                if (ReferenceMetaverseObjectTypes is { Count: > 0 })
+                    throw new DataGenerationTemplateAttributeException("ReferenceMetaverseObjectTypes can only be used with reference attribute data types");
 
                 if (ManagerDepthPercentage.HasValue)
-                    throw new DataGeneratationTemplateAttributeException("ManagerDepthPercentage can only be used with reference attribute data types");
+                    throw new DataGenerationTemplateAttributeException("ManagerDepthPercentage can only be used with reference attribute data types");
             }            
 
             if (attributeDataType != AttributeDataType.Reference && usingMvaRefMinMaxAttributes)
-                throw new DataGeneratationTemplateAttributeException("MvaRefMinAssignments or MvaRefMaxAssignments can only be used with reference attribute data types");
+                throw new DataGenerationTemplateAttributeException("MvaRefMinAssignments or MvaRefMaxAssignments can only be used with reference attribute data types");
 
             if (attributeDataType == AttributeDataType.Text && !usingPattern && !usingExampleData && !usingWeightedStringValues && !IsUsingNumbers())
-                throw new DataGeneratationTemplateAttributeException("String but not using pattern, example data, weighted string values or numbers");
+                throw new DataGenerationTemplateAttributeException("String but not using pattern, example data, weighted string values or numbers");
 
             if (attributeDataType == AttributeDataType.Boolean)
             {
                 if (IsUsingNumbers())
-                    throw new DataGeneratationTemplateAttributeException("Bool but using number properties. This is not supported");
+                    throw new DataGenerationTemplateAttributeException("Bool but using number properties. This is not supported");
 
                 if (usingExampleData)
-                    throw new DataGeneratationTemplateAttributeException("Bool but using number example data. This is not supported");
+                    throw new DataGenerationTemplateAttributeException("Bool but using number example data. This is not supported");
 
                 if (usingPattern)
-                    throw new DataGeneratationTemplateAttributeException("Bool but using a pattern. This is not supported");
+                    throw new DataGenerationTemplateAttributeException("Bool but using a pattern. This is not supported");
             }
 
             if (IsUsingNumbers())
             {
                 if (MaxNumber <= MinNumber)
-                    throw new DataGeneratationTemplateAttributeException("Number and max number is less than or equal to min number");
+                    throw new DataGenerationTemplateAttributeException("Number and max number is less than or equal to min number");
 
                 if (MinNumber >= MaxNumber)
-                    throw new DataGeneratationTemplateAttributeException("Number and min number is equal or greater than max number");
+                    throw new DataGenerationTemplateAttributeException("Number and min number is equal or greater than max number");
 
                 if (SequentialNumbers == true && RandomNumbers == true)
-                    throw new DataGeneratationTemplateAttributeException("Number and sequential nubmers and random numbers");
+                    throw new DataGenerationTemplateAttributeException("Number and sequential nubmers and random numbers");
             }
 
             if (attributeDataType == AttributeDataType.DateTime)
@@ -216,43 +208,43 @@ namespace JIM.Models.DataGeneration
                 if (MinDate != null && MaxDate != null)
                 {
                     if (MinDate >= MaxDate)
-                        throw new DataGeneratationTemplateAttributeException("DateTime and min date is equal or greater than max date");
+                        throw new DataGenerationTemplateAttributeException("DateTime and min date is equal or greater than max date");
 
                     if (MaxDate <= MinDate)
-                        throw new DataGeneratationTemplateAttributeException("DateTime and max date is less than or equal to min date");
+                        throw new DataGenerationTemplateAttributeException("DateTime and max date is less than or equal to min date");
                 }
 
                 if (usingPattern || usingExampleData || IsUsingNumbers())
-                    throw new DataGeneratationTemplateAttributeException("DateTime and non-DateTime properties used. This is not supported");
+                    throw new DataGenerationTemplateAttributeException("DateTime and non-DateTime properties used. This is not supported");
             }
 
             if (attributeDataType == AttributeDataType.Reference)
             {
                 if (attributeName != Constants.BuiltInAttributes.Manager && (ReferenceMetaverseObjectTypes == null || ReferenceMetaverseObjectTypes.Count == 0))
-                    throw new DataGeneratationTemplateAttributeException($"ReferenceMetaverseObjectTypes not populated. Attribute: {attributeName}");
+                    throw new DataGenerationTemplateAttributeException($"ReferenceMetaverseObjectTypes not populated. Attribute: {attributeName}");
 
                 if (ManagerDepthPercentage.HasValue)
                 {
                     if (PopulatedValuesPercentage.HasValue)
-                        throw new DataGeneratationTemplateAttributeException("ManagerDepthPercentage cannot be used with PopulatedValuesPercentage. Ensure it's set to null");
+                        throw new DataGenerationTemplateAttributeException("ManagerDepthPercentage cannot be used with PopulatedValuesPercentage. Ensure it's set to null");
 
-                    if (ManagerDepthPercentage < 1 || ManagerDepthPercentage > 99)
-                        throw new DataGeneratationTemplateAttributeException("ManagerDepthPercentage must be between 1-99(%)");
+                    if (ManagerDepthPercentage is < 1 or > 99)
+                        throw new DataGenerationTemplateAttributeException("ManagerDepthPercentage must be between 1-99(%)");
                 }
 
-                if (usingMvaRefMinMaxAttributes)
-                {
-                    if (attributePlurality != AttributePlurality.MultiValued)
-                        throw new DataGeneratationTemplateAttributeException("MvaRefMinAssignments and MvaRefMaxAssignments can only be used on multi-valued attributes.");
+                if (!usingMvaRefMinMaxAttributes) 
+                    return;
+                
+                if (attributePlurality != AttributePlurality.MultiValued)
+                    throw new DataGenerationTemplateAttributeException("MvaRefMinAssignments and MvaRefMaxAssignments can only be used on multi-valued attributes.");
 
-                    // min must be equal or greater than zero
-                    if (MvaRefMinAssignments.HasValue && MvaRefMinAssignments < 0)
-                        throw new DataGeneratationTemplateAttributeException("MvaRefMinAssignments must be equal or more than 0");
+                // min must be equal or greater than zero
+                if (MvaRefMinAssignments is < 0)
+                    throw new DataGenerationTemplateAttributeException("MvaRefMinAssignments must be equal or more than 0");
 
-                    // min must be less than max
-                    if (MvaRefMinAssignments.HasValue && MvaRefMaxAssignments.HasValue && MvaRefMinAssignments.Value >= MvaRefMaxAssignments.Value)
-                        throw new DataGeneratationTemplateAttributeException("MvaRefMinAssignments must be less than MvaRefMaxAssignments");
-                }
+                // min must be less than max
+                if (MvaRefMinAssignments.HasValue && MvaRefMaxAssignments.HasValue && MvaRefMinAssignments.Value >= MvaRefMaxAssignments.Value)
+                    throw new DataGenerationTemplateAttributeException("MvaRefMinAssignments must be less than MvaRefMaxAssignments");
             }
         }
         #endregion

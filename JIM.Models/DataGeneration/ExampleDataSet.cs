@@ -8,7 +8,7 @@ namespace JIM.Models.DataGeneration
         
         public string Name { get; set; } = null!;
 
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
 
         public bool BuiltIn { get; set; }
         
@@ -18,15 +18,9 @@ namespace JIM.Models.DataGeneration
         /// </summary>
         public string Culture { get; set; } = null!;
 
-        public List<ExampleDataSetValue> Values { get; set; }
+        public List<ExampleDataSetValue> Values { get; set; } = new();
 
         [JsonIgnore]
         public List<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
-
-        public ExampleDataSet()
-        {
-            Created = DateTime.UtcNow;
-            Values = new List<ExampleDataSetValue>();
-        }
     }
 }

@@ -9,7 +9,7 @@ namespace JIM.Models.Logic
 
         public MetaverseAttribute MetaverseAttribute { get; set; } = null!;
 
-        public SearchComparisonType ComparisonType { get; set; }
+        public SearchComparisonType ComparisonType { get; set; } = SearchComparisonType.NotSet;
 
         public string? StringValue { get; set; }
 
@@ -21,11 +21,6 @@ namespace JIM.Models.Logic
 
         public Guid? GuidValue {  get; set; }
 
-        public SyncRuleScopingCriteria()
-        {
-            ComparisonType = SearchComparisonType.NotSet;
-        }
-
         public override string ToString()
         {
             switch (MetaverseAttribute.Type)
@@ -35,11 +30,11 @@ namespace JIM.Models.Logic
                 case AttributeDataType.Number:
                     return "Number: " + StringValue;
                 case AttributeDataType.Boolean:
-                    return "Boolean: " + ((BoolValue == null || !BoolValue.HasValue) ? "Null" : BoolValue.Value.ToString());
+                    return "Boolean: " + (BoolValue is null ? "Null" : BoolValue.Value.ToString());
                 case AttributeDataType.DateTime:
-                    return "Date: " + DateTimeValue.ToString();
+                    return "Date: " + DateTimeValue;
                 case AttributeDataType.Guid:
-                    return "Guid: " + GuidValue.ToString();
+                    return "Guid: " + GuidValue;
             }
 
             return "Unsupported data type";

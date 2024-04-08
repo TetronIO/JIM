@@ -9,16 +9,10 @@ namespace JIM.Models.Core
     {
         public int Id { get; set; }
         public string Name { get; set; } = null!;
-        public DateTime Created { get; set; }
-        public List<MetaverseAttribute> Attributes { get; set; }
+        public DateTime Created { get; set; } = DateTime.UtcNow;
+        public List<MetaverseAttribute> Attributes { get; set; } = new();
         public bool BuiltIn { get; set; }
         public List<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;
         public List<PredefinedSearch> PredefinedSearches { get; set; } = null!;
-
-        public MetaverseObjectType()
-        {
-            Created = DateTime.UtcNow;
-            Attributes = new List<MetaverseAttribute>();
-        }
     }
 }

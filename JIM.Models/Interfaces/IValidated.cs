@@ -3,7 +3,7 @@
 namespace JIM.Models.Interfaces
 {
     /// <summary>
-    /// Enableds a JIM object to have it's state evaluated for validity, i.e. to determine whether or not it can be persisted, and/or executed in its current state.
+    /// Enables a JIM object to have it's state evaluated for validity, i.e. to determine whether or not it can be persisted, and/or executed in its current state.
     /// To be managed by Servers in JIM.Application.
     /// </summary>
     public interface IValidated

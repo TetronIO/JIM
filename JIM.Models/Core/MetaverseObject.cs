@@ -27,7 +27,7 @@ namespace JIM.Models.Core
         { 
             get
             {
-                if (AttributeValues == null || AttributeValues.Count == 0)
+                if (AttributeValues.Count == 0)
                     return null;
 
                 // as a built-in attribute, we know DisplayName is a single-valued attribute, so no need to do a attribute plurality check
