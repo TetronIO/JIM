@@ -108,13 +108,13 @@ namespace JIM.Application.Servers
                     Setting = connectedSystemDefinitionSetting
                 };
 
-                if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.CheckBox && connectedSystemDefinitionSetting.DefaultCheckboxValue != null)
+                if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
                     settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
 
                 if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String && !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
                     settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
 
-                if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.Integer && connectedSystemDefinitionSetting.DefaultIntValue.HasValue)
+                if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
                     settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
 
                 connectedSystem.SettingValues.Add(settingValue);
@@ -143,7 +143,7 @@ namespace JIM.Application.Servers
 
             // are the settings valid?
             var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-            connectedSystem.SettingValuesValid = !validationResults.Any(q => q.IsValid == false);
+            connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
 
             connectedSystem.LastUpdated = DateTime.UtcNow;
 
@@ -374,12 +374,12 @@ namespace JIM.Application.Servers
                 {
                     Name = partition.Name,
                     ExternalId = partition.Id,
-                    Containers = partition.Containers.Select(cc => BuildConnectedSystemContainerTree(cc)).ToHashSet()
+                    Containers = partition.Containers.Select(BuildConnectedSystemContainerTree).ToHashSet()
                 });
             }
 
             // for now though, we will just persist and let the user select containers later
-            // pass in this user-initiated activity, so that sub-operations can be associated with it, i.e. the partition persiting operation
+            // pass in this user-initiated activity, so that sub-operations can be associated with it, i.e. the partition persisting operation
             await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
 
             // finish the activity
@@ -737,7 +737,7 @@ namespace JIM.Application.Servers
                 throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
             // every CRUD operation requires tracking with an activity...
-            var activity = new Models.Activities.Activity
+            var activity = new Activity
             {
                 TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                 TargetOperationType = ActivityTargetOperationType.Update,

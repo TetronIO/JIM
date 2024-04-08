@@ -3,7 +3,6 @@ using JIM.Models.DataGeneration;
 using JIM.Models.DataGeneration.DTOs;
 using JIM.Models.Utility;
 using Serilog;
-using System.Data;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -137,23 +136,21 @@ namespace JIM.Application.Servers
             // we've had issues with EF not returning values for example datasets when retrieving the template
             // so we're going to get all the example datasets referenced in a template separately and passing them in as needed.
             var exampleDataSets = new List<ExampleDataSet>();
-            foreach (var objectType in template.ObjectTypes)
-                foreach (var templateAttribute in objectType.TemplateAttributes)
-                    foreach (var datasetInstance in templateAttribute.ExampleDataSetInstances)
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                        {
-                            Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from data set processing prematurely.");
-                            return;
-                        }
+            foreach (var datasetInstance in from objectType in template.ObjectTypes from templateAttribute in objectType.TemplateAttributes from datasetInstance in templateAttribute.ExampleDataSetInstances select datasetInstance)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from data set processing prematurely.");
+                    return;
+                }
 
-                        if (datasetInstance != null && datasetInstance.ExampleDataSet != null && !exampleDataSets.Any(q => q.Id == datasetInstance.ExampleDataSet.Id))
-                        {
-                            var exampleDataSet = await GetExampleDataSetAsync(datasetInstance.ExampleDataSet.Id);
-                            if (exampleDataSet != null)
-                                exampleDataSets.Add(exampleDataSet);
-                        }
-                    }
+                if (datasetInstance == null || datasetInstance.ExampleDataSet == null || !exampleDataSets.All(q => q.Id != datasetInstance.ExampleDataSet.Id)) 
+                    continue;
+                
+                var exampleDataSet = await GetExampleDataSetAsync(datasetInstance.ExampleDataSet.Id);
+                if (exampleDataSet != null)
+                    exampleDataSets.Add(exampleDataSet);
+            }
 
             foreach (var objectType in template.ObjectTypes)
             {
@@ -165,11 +162,13 @@ namespace JIM.Application.Servers
 
                 var objectTypeStopWatch = Stopwatch.StartNew();
                 Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
+                var trackers = dataGenerationValueTrackers;
+                var create = metaverseObjectsToCreate;
                 Parallel.For(0, objectType.ObjectsToCreate,
                 index =>
                 {
                     var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
-                    // make sure we process attributes with no depedencies first
+                    // make sure we process attributes with no dependencies first
                     foreach (var templateAttribute in objectType.TemplateAttributes.OrderBy(q => q.AttributeDependency))
                     {
                         if (cancellationToken.IsCancellationRequested)
@@ -192,20 +191,18 @@ namespace JIM.Application.Servers
                                     // there's no dependent attribute, so nothing to compare. do not generate a value
                                     continue;
                                 }
+
+                                if (templateAttribute.AttributeDependency.ComparisonType == ComparisonType.Equals)
+                                {
+                                    if (dependentAttributeValue.StringValue != templateAttribute.AttributeDependency.StringValue)
+                                    {
+                                        Log.Debug($"ExecuteTemplateAsync: Not generating {templateAttribute.MetaverseAttribute.Name} attribute value, as dependent attribute value '{dependentAttributeValue.StringValue}' does not equal '{templateAttribute.AttributeDependency.StringValue}'");
+                                        continue;
+                                    }
+                                }
                                 else
                                 {
-                                    if (templateAttribute.AttributeDependency.ComparisonType == ComparisonType.Equals)
-                                    {
-                                        if (dependentAttributeValue.StringValue != templateAttribute.AttributeDependency.StringValue)
-                                        {
-                                            Log.Debug($"ExecuteTemplateAsync: Not generating {templateAttribute.MetaverseAttribute.Name} attribute value, as dependent attribute value '{dependentAttributeValue.StringValue}' does not equal '{templateAttribute.AttributeDependency.StringValue}'");
-                                            continue;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        throw new NotSupportedException("Not currently supporting ComparisonTypes other than Equals");
-                                    }
+                                    throw new NotSupportedException("Not currently supporting ComparisonTypes other than Equals");
                                 }
                             }
 
@@ -213,13 +210,13 @@ namespace JIM.Application.Servers
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.Text:
-                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, exampleDataSets, random, dataGenerationValueTrackers);
+                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, exampleDataSets, random, trackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
                                     break;
                                 case AttributeDataType.Number:
-                                    GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random, dataGenerationValueTrackers);
+                                    GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random, trackers);
                                     break;
                                 case AttributeDataType.DateTime:
                                     GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
@@ -228,14 +225,20 @@ namespace JIM.Application.Servers
                                     GenerateMetaverseBooleanValue(metaverseObject, templateAttribute, random);
                                     break;
                                 case AttributeDataType.Reference:
-                                    GenerateMetaverseReferenceValue(metaverseObject, templateAttribute, random, metaverseObjectsToCreate);
+                                    GenerateMetaverseReferenceValue(metaverseObject, templateAttribute, random, create);
                                     break;
+                                case AttributeDataType.NotSet:
+                                    break;
+                                case AttributeDataType.Binary:
+                                    break;
+                                default:
+                                    throw new ArgumentOutOfRangeException();
                             }
                         }
                     }
 
                     lock (_metaverseObjectLock)
-                        metaverseObjectsToCreate.Add(metaverseObject);
+                        create.Add(metaverseObject);
 
                     Interlocked.Add(ref totalObjectsCreated, 1);
                 });
@@ -249,7 +252,7 @@ namespace JIM.Application.Servers
 
             // ensure that attribute population percentage values are respected
             // do this by assigning all attributes with values (done), then go and randomly delete the required amount
-            RemoveUnecessaryAttributeValues(template, metaverseObjectsToCreate, random);
+            RemoveUnnecessaryAttributeValues(template, metaverseObjectsToCreate, random);
             Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count:N0} objects");
             objectPreparationStopwatch.Stop();
 
@@ -278,9 +281,7 @@ namespace JIM.Application.Servers
 
             // trying to help garbage collection along. data generation results in a lot of ram usage.
             metaverseObjectsToCreate.Clear();
-            metaverseObjectsToCreate = null;
             dataGenerationValueTrackers.Clear();
-            dataGenerationValueTrackers = null;
         }
         #endregion
 
@@ -288,7 +289,7 @@ namespace JIM.Application.Servers
         private void GenerateMetaverseStringValue(
             MetaverseObject metaverseObject,
             DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
-            List<ExampleDataSet> exampleDataSets,
+            IEnumerable<ExampleDataSet> exampleDataSets,
             Random random,
             List<DataGenerationValueTracker> dataGenerationValueTrackers)
         {
@@ -300,7 +301,7 @@ namespace JIM.Application.Servers
             {
                 // logic:
                 // - if no pattern: handle one or more data set value assignments
-                // - if pattern: replace attrivute vars, replace system vars and replace example data set vars
+                // - if pattern: replace attribute vars, replace system vars and replace example data set vars
 
                 string output;
                 if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSetInstances.Count == 1)
@@ -419,7 +420,6 @@ namespace JIM.Application.Servers
             if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
                 throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-            DateTime date;
             var startDate = DateTime.MinValue;
             var endDate = DateTime.MaxValue;
             if (dataGenerationTemplateAttribute.MinDate.HasValue && dataGenerationTemplateAttribute.MaxDate.HasValue)
@@ -441,7 +441,7 @@ namespace JIM.Application.Servers
 
             var timeSpan = endDate - startDate;
             var newSpan = new TimeSpan(0, random.Next(0, (int)timeSpan.TotalMinutes), 0);
-            date = startDate + newSpan;
+            var date = startDate + newSpan;
 
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
@@ -511,7 +511,7 @@ namespace JIM.Application.Servers
                 var max = templateAttribute.MvaRefMaxAssignments ?? metaverseObjectsOfTypes.Count;
                 var attributeValuesToCreate = random.Next(min, max);
 
-                for (int i = 0; i < attributeValuesToCreate; i++)
+                for (var i = 0; i < attributeValuesToCreate; i++)
                 {
                     var referencedObject = metaverseObjectsOfTypes[random.Next(0, metaverseObjectsOfTypes.Count - 1)];
                     metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -530,65 +530,65 @@ namespace JIM.Application.Servers
                 ta.MetaverseAttribute != null &&
                 ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
 
-            if (objectType.MetaverseObjectType.Name == Constants.BuiltInObjectTypes.Users && templateManagerAttribute != null && templateManagerAttribute.MetaverseAttribute != null && templateManagerAttribute.ManagerDepthPercentage.HasValue)
+            if (objectType.MetaverseObjectType.Name != Constants.BuiltInObjectTypes.Users || templateManagerAttribute is not { MetaverseAttribute: not null, ManagerDepthPercentage: not null }) 
+                return;
+            
+            // binary tree approach:
+            // - project users to new list
+            // - create manager list and remove manager from user list
+            // - create binary tree using managers
+            // - navigate binary tree and assign manager attributes to user objects
+            // - then work out how to gradually assign more subordinates from the non-managers list as you go deeper into the tree
+
+            if (templateManagerAttribute == null)
+                return;
+
+            if (templateManagerAttribute.ManagerDepthPercentage == null)
+                return;
+
+            if (templateManagerAttribute.MetaverseAttribute == null)
+                return;
+
+            var users = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType).ToList();
+            var managerTreePrepStopwatch = Stopwatch.StartNew();
+            var managerAttribute = templateManagerAttribute.MetaverseAttribute;
+            var managersNeeded = users.Count / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
+
+            // randomly select managers and remove them from the users list so we have a list of managers and a list of potential direct reports
+            var managers = new List<MetaverseObject>();
+            for (var i = 0; i < managersNeeded; i++)
             {
-                // binary tree approach
-                // - project users to new list
-                // - create manager list and remove manager from user list
-                // - create binary tree using managers
-                // - navigate binary tree and assign manager attributes to user objects
-                // - then work out how to gradually assign more subordinates from the non-managers list as you go deeper into the tree
-
-                if (templateManagerAttribute == null)
-                    return;
-
-                if (templateManagerAttribute.ManagerDepthPercentage == null)
-                    return;
-
-                if (templateManagerAttribute.MetaverseAttribute == null)
-                    return;
-
-                var users = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType).ToList();
-                var managerTreePrepStopwatch = Stopwatch.StartNew();
-                var managerAttribute = templateManagerAttribute.MetaverseAttribute;
-                var managersNeeded = users.Count / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
-
-                // randomly select managers and remove them from the users list so we have a list of managers and a list of potential direct reports
-                var managers = new List<MetaverseObject>();
-                for (var i = 0; i < managersNeeded; i++)
-                {
-                    var userIndex = random.Next(0, users.Count - 1);
-                    managers.Add(users[userIndex]);
-                    users.RemoveAt(userIndex);
-                }
-
-                // we've now got a list of managers, and we've got a list of users who are not managers, and can become non-manager subordinates
-                var managerTree = new BinaryTree(managers);
-                managerTreePrepStopwatch.Stop();
-                var managerTreeNodeCount = 0;
-                RecursivelyCountBinaryTreeNodes(managerTree, ref managerTreeNodeCount);
-                Log.Verbose($"ExecuteTemplateAsync: Manager tree node count: {managerTreeNodeCount:N0}");
-                Log.Verbose($"ExecuteTemplateAsync: Manager tree prep took: {managerTreePrepStopwatch.Elapsed}");
-
-                // navigate the binary tree and assign manager attributes
-                var assignManagersStopwatch = Stopwatch.StartNew();
-                RecursivelyAssignUserManagers(managerTree, templateManagerAttribute.MetaverseAttribute, users);
-
-                // do the same for non-manager subordinates, i.e. assign everyone else a manager
-                var subordinatesAssigned = 0;
-                var subordinatesToAssign = users.Count / (managerTreeNodeCount - 1);
-                RecursivelyAssignSubordinates(managerTree, subordinatesToAssign, users, isFirstNode: true, templateManagerAttribute.MetaverseAttribute, ref subordinatesAssigned);
-                Log.Verbose($"ExecuteTemplateAsync: Assigned {subordinatesAssigned:N0} subordinates a manager");
-
-                managerTree = null;
-                assignManagersStopwatch.Stop();
-                Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
+                var userIndex = random.Next(0, users.Count - 1);
+                managers.Add(users[userIndex]);
+                users.RemoveAt(userIndex);
             }
+
+            // we've now got a list of managers, and we've got a list of users who are not managers, and can become non-manager subordinates
+            var managerTree = new BinaryTree(managers);
+            managerTreePrepStopwatch.Stop();
+            var managerTreeNodeCount = 0;
+            RecursivelyCountBinaryTreeNodes(managerTree, ref managerTreeNodeCount);
+            Log.Verbose($"ExecuteTemplateAsync: Manager tree node count: {managerTreeNodeCount:N0}");
+            Log.Verbose($"ExecuteTemplateAsync: Manager tree prep took: {managerTreePrepStopwatch.Elapsed}");
+
+            // navigate the binary tree and assign manager attributes
+            var assignManagersStopwatch = Stopwatch.StartNew();
+            RecursivelyAssignUserManagers(managerTree, templateManagerAttribute.MetaverseAttribute);
+
+            // do the same for non-manager subordinates, i.e. assign everyone else a manager
+            var subordinatesAssigned = 0;
+            var subordinatesToAssign = users.Count / (managerTreeNodeCount - 1);
+            RecursivelyAssignSubordinates(managerTree, subordinatesToAssign, users, isFirstNode: true, templateManagerAttribute.MetaverseAttribute, ref subordinatesAssigned);
+            Log.Verbose($"ExecuteTemplateAsync: Assigned {subordinatesAssigned:N0} subordinates a manager");
+
+            managerTree = null;
+            assignManagersStopwatch.Stop();
+            Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
         }
 
-        private static void RemoveUnecessaryAttributeValues(DataGenerationTemplate dataGenerationTemplate, List<MetaverseObject> metaverseObjects, Random random)
+        private static void RemoveUnnecessaryAttributeValues(DataGenerationTemplate dataGenerationTemplate, IReadOnlyCollection<MetaverseObject> metaverseObjects, Random random)
         {
-            Log.Verbose("RemoveUnecessaryAttributeValues: Started...");
+            Log.Verbose("RemoveUnnecessaryAttributeValues: Started...");
             var stopwatch = Stopwatch.StartNew();
             var attributeValuesRemoved = 0;
             foreach (var dataGenerationObjectType in dataGenerationTemplate.ObjectTypes)
@@ -613,7 +613,7 @@ namespace JIM.Application.Servers
                 }
             }
             stopwatch.Stop();
-            Log.Verbose($"RemoveUnecessaryAttributeValues: Removed {attributeValuesRemoved:N0} attribute values. Took {stopwatch.Elapsed} to complete");
+            Log.Verbose($"RemoveUnnecessaryAttributeValues: Removed {attributeValuesRemoved:N0} attribute values. Took {stopwatch.Elapsed} to complete");
         }
         #endregion
 
@@ -623,7 +623,7 @@ namespace JIM.Application.Servers
             // match attribute variables (that do not contain numbers)
             // enumerate, find their value and replace
             var regex = new Regex(@"({.*?[^\d]})", RegexOptions.Compiled);
-            foreach (Match match in regex.Matches(textToProcess).Cast<Match>())
+            foreach (var match in regex.Matches(textToProcess).Cast<Match>())
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
                 var attributeName = match.Value[1..^1];
@@ -646,44 +646,41 @@ namespace JIM.Application.Servers
             // enumerate, process
             var regex = new Regex(@"(\[.*?\])", RegexOptions.Compiled);
             var systemVars = regex.Matches(textToProcess);
-            foreach (Match match in systemVars.Cast<Match>())
+            foreach (var match in systemVars.Cast<Match>())
             {
                 // snip off the brackets: {} to get the attribute name, i.e FirstName
                 var variableName = match.Value[1..^1];
 
                 // keeping these as strings for now. They will need evolving into part of the Functions feature at some point
-                if (variableName == "UniqueInt")
+                if (variableName != "UniqueInt") 
+                    continue;
+                
+                // is the string value unique amongst all MetaverseObjects of the same type?
+                // if so, replace the system variable with an empty string
+                // if not, add a uniqueness in in place of the system variable
+
+                // get the text value without any unique int added, i.e. "joe.bloggs@demo.tetron.io"
+                var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
+                
+                lock (_valuesLock)
                 {
-                    // is the string value unique amongst all MetaverseObjects of the same type?
-                    // if so, replace the system variable with an empty string
-                    // if not, add a uniqueness in in place of the system variable
-
-                    // get the text value without any unique int added, i.e. "joe.bloggs@demo.tetron.io"
-                    var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
-
                     // have we already generated this value, and therefore need to add a unique int to it?
-                    DataGenerationValueTracker? uniqueIntTracker = null;
-
-                    lock (_valuesLock)
+                    var uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
+                    if (uniqueIntTracker == null)
                     {
-                        uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
+                        // this is a unique value, not previously assigned. it does not need a unique int added.
+                        textToProcess = textWithoutSystemVar;
 
-                        if (uniqueIntTracker == null)
-                        {
-                            // this is a unique value, not previously assigned. it does not need a unique int added.
-                            textToProcess = textWithoutSystemVar;
-
-                            // add it to the tracker
-                            dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
-                        }
-                        else
-                        {
-                            // this is not a unique value, we've generated it before. we need a unique int added.
-                            // increase the tracker last int assigned value by one as well for next time we generate the same value again
-                            uniqueIntTracker.LastIntAssigned += 1;
+                        // add it to the tracker
+                        dataGenerationValueTrackers.Add(new DataGenerationValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
+                    }
+                    else
+                    {
+                        // this is not a unique value, we've generated it before. we need a unique int added.
+                        // increase the tracker last int assigned value by one as well for next time we generate the same value again
+                        uniqueIntTracker.LastIntAssigned += 1;
                             
-                            textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
-                        }
+                        textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
                     }
                 }
             }
@@ -741,13 +738,10 @@ namespace JIM.Application.Servers
                     completeGeneratedValue = completeGeneratedValue.Replace(match.Value, randomValue);
                 }
 
-                // is the generated value unique? exit if so
-                DataGenerationValueTracker? uniqueStringTracker = null;
-
                 lock (_valuesLock)
                 {
-                    uniqueStringTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == completeGeneratedValue);
-
+                    // is the generated value unique? exit if so
+                    var uniqueStringTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == completeGeneratedValue);
                     if (uniqueStringTracker == null)
                     {
                         // generated value is unique
@@ -830,7 +824,7 @@ namespace JIM.Application.Servers
         #endregion
 
         #region Manager Assignment
-        private void RecursivelyCountBinaryTreeNodes(BinaryTree binaryTree, ref int nodeCount)
+        private static void RecursivelyCountBinaryTreeNodes(BinaryTree binaryTree, ref int nodeCount)
         {
             nodeCount++;
             if (binaryTree.Left != null)
@@ -840,7 +834,7 @@ namespace JIM.Application.Servers
                 RecursivelyCountBinaryTreeNodes(binaryTree.Right, ref nodeCount);
         }
 
-        private void RecursivelyAssignUserManagers(BinaryTree binaryTree, MetaverseAttribute managerAttribute, List<MetaverseObject> subordinates)
+        private static void RecursivelyAssignUserManagers(BinaryTree binaryTree, MetaverseAttribute managerAttribute)
         {
             // binaryTree.MetaverseObject is the manager
             // assign this in a manager attribute to both the left and right branches
@@ -853,22 +847,22 @@ namespace JIM.Application.Servers
                     ReferenceValue = binaryTree.MetaverseObject
                 });
 
-                RecursivelyAssignUserManagers(binaryTree.Left, managerAttribute, subordinates);
+                RecursivelyAssignUserManagers(binaryTree.Left, managerAttribute);
             }
 
-            if (binaryTree.Right != null)
+            if (binaryTree.Right == null) 
+                return;
+            
+            binaryTree.Right.MetaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
-                binaryTree.Right.MetaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
-                {
-                    Attribute = managerAttribute,
-                    ReferenceValue = binaryTree.MetaverseObject
-                });
+                Attribute = managerAttribute,
+                ReferenceValue = binaryTree.MetaverseObject
+            });
 
-                RecursivelyAssignUserManagers(binaryTree.Right, managerAttribute, subordinates);
-            }
+            RecursivelyAssignUserManagers(binaryTree.Right, managerAttribute);
         }
 
-        private void RecursivelyAssignSubordinates(BinaryTree binaryTree, int subordinatesToAssign, List<MetaverseObject> users, bool isFirstNode, MetaverseAttribute managerAttribute, ref int subordinatesAssigned)
+        private static void RecursivelyAssignSubordinates(BinaryTree binaryTree, int subordinatesToAssign, List<MetaverseObject> users, bool isFirstNode, MetaverseAttribute managerAttribute, ref int subordinatesAssigned)
         {
             if (isFirstNode)
             {
