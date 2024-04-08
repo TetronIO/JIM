@@ -149,9 +149,9 @@ namespace JIM.PostgresData.Repositories
                 .Include(ot => ot.Attributes.OrderBy(a => a.Name))
                 .Where(q => q.ConnectedSystem.Id == id).ToListAsync();
 
-            // supporting 11 levels deep. arbitary, unless performance profiling identifies issues, or admins need to go deeper
+            // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
             partitions = await Repository.Database.ConnectedSystemPartitions
-                .Include(p => p.Containers)
+                .Include(p => p.Containers)!
                 .ThenInclude(c => c.ChildContainers)
                 .ThenInclude(c => c.ChildContainers)
                 .ThenInclude(c => c.ChildContainers)
@@ -278,25 +278,14 @@ namespace JIM.PostgresData.Repositories
                 return pagedResultSet;
 
             // don't let users try and request a page that doesn't exist
-            if (page > pagedResultSet.TotalPages)
-            {
-                pagedResultSet.TotalResults = 0;
-                pagedResultSet.Results.Clear();
+            if (page <= pagedResultSet.TotalPages) 
                 return pagedResultSet;
-            }
-
+            
+            pagedResultSet.TotalResults = 0;
+            pagedResultSet.Results.Clear();
             return pagedResultSet;
-        }
 
-        ///// <summary>
-        ///// Returns an array of ids for Connected System Objects that have attributes where the value is an unresolved reference.
-        ///// </summary>
-        ///// <param name="connectedSystemId">The unique identifier for the Connected System to find objects within.</param>
-        ///// <returns>An array of Connected System Object unique identifiers</returns>
-        //public async Task<Guid[]> GetConnectedSystemObjectsWithUnresolvedReferencesAsync(int connectedSystemId)
-        //{
-        //    return await Repository.Database.ConnectedSystemObjects.Where(cso => cso.ConnectedSystem.Id == connectedSystemId && cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))).Select(cso => cso.Id).ToArrayAsync();
-        //}
+        }
 
         public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
         {
@@ -312,10 +301,10 @@ namespace JIM.PostgresData.Repositories
                 .ThenInclude(av => av.Attribute)
                 .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
-                .ThenInclude(cso => cso.Type)
+                .ThenInclude(cso => cso!.Type)
                 .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
-                .ThenInclude(rv => rv.AttributeValues)
+                .ThenInclude(rv => rv!.AttributeValues)
                 .ThenInclude(av => av.Attribute)
                 .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
@@ -480,7 +469,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
         {
-            using var db = new JimDbContext();
+            await using var db = new JimDbContext();
             return await db.ConnectedSystemRunProfiles.Select(rph => new ConnectedSystemRunProfileHeader
             {
                 Id = rph.Id,

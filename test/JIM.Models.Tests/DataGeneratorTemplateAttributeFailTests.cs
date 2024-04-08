@@ -240,9 +240,9 @@ namespace JIM.Models.Tests
                 MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
                 WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
                 {
-                    new DataGenerationTemplateAttributeWeightedValue { Value = "Active", Weight = 0.85f },
-                    new DataGenerationTemplateAttributeWeightedValue { Value = "Suspended", Weight = 0.1f },
-                    new DataGenerationTemplateAttributeWeightedValue { Value = "Leaver", Weight = 0.05f }
+                    new() { Value = "Active", Weight = 0.85f },
+                    new() { Value = "Suspended", Weight = 0.1f },
+                    new() { Value = "Leaver", Weight = 0.05f }
                 },
                 PopulatedValuesPercentage = 100,
                 BoolShouldBeRandom = true

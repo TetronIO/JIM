@@ -52,7 +52,7 @@ namespace JIM.PostgresData.Repositories
             if (page < 1)
                 page = 1;
 
-            // limit page size to avoid increasing latency unecessarily
+            // limit page size to avoid increasing latency unnecessarily
             if (pageSize > 100)
                 pageSize = 100;
 
@@ -62,10 +62,10 @@ namespace JIM.PostgresData.Repositories
 
             var objects = from o in Repository.Database.Activities
                 .Include(a => a.InitiatedBy)
-                .ThenInclude(ib => ib.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                 .ThenInclude(av => av.Attribute)
                 .Include(st => st.InitiatedBy)
-                .ThenInclude(ib => ib.Type)
+                .ThenInclude(ib => ib!.Type)
                 .Where(a => a.ParentActivityId == null)
                 select o;
 
@@ -98,13 +98,11 @@ namespace JIM.PostgresData.Repositories
                 return pagedResultSet;
 
             // don't let users try and request a page that doesn't exist
-            if (page > pagedResultSet.TotalPages)
-            {
-                pagedResultSet.TotalResults = 0;
-                pagedResultSet.Results.Clear();
+            if (page <= pagedResultSet.TotalPages) 
                 return pagedResultSet;
-            }
-
+            
+            pagedResultSet.TotalResults = 0;
+            pagedResultSet.Results.Clear();
             return pagedResultSet;
         }
 
@@ -112,10 +110,10 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.Activities
                 .Include(a => a.InitiatedBy)
-                .ThenInclude(ib => ib.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                 .ThenInclude(av => av.Attribute)
                 .Include(st => st.InitiatedBy)
-                .ThenInclude(ib => ib.Type)
+                .ThenInclude(ib => ib!.Type)
                 .SingleOrDefaultAsync(a => a.Id == id);
         }
 
@@ -128,7 +126,7 @@ namespace JIM.PostgresData.Repositories
             if (page < 1)
                 page = 1;
 
-            // limit page size to avoid increasing latency unecessarily
+            // limit page size to avoid increasing latency unnecessarily
             if (pageSize > 100)
                 pageSize = 100;
 
@@ -168,14 +166,13 @@ namespace JIM.PostgresData.Repositories
                 return pagedResultSet;
 
             // don't let users try and request a page that doesn't exist
-            if (page > pagedResultSet.TotalPages)
-            {
-                pagedResultSet.TotalResults = 0;
-                pagedResultSet.Results.Clear();
+            if (page <= pagedResultSet.TotalPages) 
                 return pagedResultSet;
-            }
-
+            
+            pagedResultSet.TotalResults = 0;
+            pagedResultSet.Results.Clear();
             return pagedResultSet;
+
         }
         
         public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
@@ -188,7 +185,7 @@ namespace JIM.PostgresData.Repositories
                 TotalObjectCreates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Create),
                 TotalObjectDeletes = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Delete),
                 TotalObjectUpdates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Update),
-                TotalObjectTypes = await Repository.Database.ActivityRunProfileExecutionItems.Where(q => q.Activity.Id == activityId && q.ConnectedSystemObject != null).Select(q => q.ConnectedSystemObject.Type).Distinct().CountAsync(),
+                TotalObjectTypes = await Repository.Database.ActivityRunProfileExecutionItems.Where(q => q.Activity.Id == activityId && q.ConnectedSystemObject != null).Select(q => q.ConnectedSystemObject!.Type).Distinct().CountAsync(),
             };
         }
 
@@ -196,24 +193,24 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.ActivityRunProfileExecutionItems
                 .Include(q => q.ConnectedSystemObject)
-                .ThenInclude(cso => cso.AttributeValues)
+                .ThenInclude(cso => cso!.AttributeValues)
                 .ThenInclude(av => av.Attribute)
                 .Include(q => q.ConnectedSystemObject)
-                .ThenInclude(cso => cso.Type)
+                .ThenInclude(cso => cso!.Type)
                 .Include(q => q.ConnectedSystemObjectChange)
-                .ThenInclude(c => c.AttributeChanges)
+                .ThenInclude(c => c!.AttributeChanges)
                 .ThenInclude(ac => ac.Attribute)
                 .Include(q => q.ConnectedSystemObjectChange)
-                .ThenInclude(c => c.AttributeChanges)
+                .ThenInclude(c => c!.AttributeChanges)
                 .ThenInclude(ac => ac.ValueChanges)
                 .ThenInclude(vc => vc.ReferenceValue)
-                .ThenInclude(rv => rv.AttributeValues)
+                .ThenInclude(rv => rv!.AttributeValues)
                 .ThenInclude(av => av.Attribute)
                 .Include(q => q.ConnectedSystemObjectChange)
-                .ThenInclude(c => c.AttributeChanges)
+                .ThenInclude(c => c!.AttributeChanges)
                 .ThenInclude(ac => ac.ValueChanges)
                 .ThenInclude(vc => vc.ReferenceValue)
-                .ThenInclude(rv => rv.Type)
+                .ThenInclude(rv => rv!.Type)
                 .SingleOrDefaultAsync(q => q.Id == id);
         }
         #endregion

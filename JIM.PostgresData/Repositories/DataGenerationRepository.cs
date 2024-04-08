@@ -94,7 +94,7 @@ namespace JIM.PostgresData.Repositories
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.AttributeDependency).
-                ThenInclude(ad => ad.MetaverseAttribute).
+                ThenInclude(ad => ad!.MetaverseAttribute).
                 OrderBy(t => t.Name).ToListAsync();
 
             foreach (var t in templates)
@@ -133,7 +133,7 @@ namespace JIM.PostgresData.Repositories
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.AttributeDependency).
-                ThenInclude(ad => ad.MetaverseAttribute).
+                ThenInclude(ad => ad!.MetaverseAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).
@@ -167,7 +167,7 @@ namespace JIM.PostgresData.Repositories
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.AttributeDependency).
-                ThenInclude(ad => ad.MetaverseAttribute).
+                ThenInclude(ad => ad!.MetaverseAttribute).
                 Include(t => t.ObjectTypes).
                 ThenInclude(o => o.TemplateAttributes).
                 ThenInclude(ta => ta.ExampleDataSetInstances).
@@ -183,7 +183,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<DataGenerationTemplateHeader?> GetTemplateHeaderAsync(int id)
         {
-            using var db = new JimDbContext();
+            await using var db = new JimDbContext();
             return await db.DataGenerationTemplates.Select(dgt => new DataGenerationTemplateHeader
             {
                 Name = dgt.Name,
@@ -230,18 +230,18 @@ namespace JIM.PostgresData.Repositories
         /// <summary>
         /// Bulk creates metaverse objects in the database.
         /// </summary>
-        /// <param name="metsaverseObjects">The list of MetaverseObjects to persist.</param>
+        /// <param name="metaverseObjects">The list of MetaverseObjects to persist.</param>
         /// <param name="cancellationToken">The cancellation token to use to determine if the operation should be cancelled before completion.</param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException"></exception>
         /// <exception cref="OperationCanceledException"></exception>
-        public async Task CreateMetaverseObjectsAsync(List<MetaverseObject> metsaverseObjects, CancellationToken cancellationToken)
+        public async Task CreateMetaverseObjectsAsync(List<MetaverseObject> metaverseObjects, CancellationToken cancellationToken)
         {
             Log.Verbose("CreateMetaverseObjectsAsync: Starting to persist MetaverseObjects...");
-            if (metsaverseObjects == null || metsaverseObjects.Count == 0)
-                throw new ArgumentNullException(nameof(metsaverseObjects));
+            if (metaverseObjects == null || metaverseObjects.Count == 0)
+                throw new ArgumentNullException(nameof(metaverseObjects));
 
-            Repository.Database.MetaverseObjects.AddRange(metsaverseObjects);
+            Repository.Database.MetaverseObjects.AddRange(metaverseObjects);
             await Repository.Database.SaveChangesAsync(cancellationToken);
 
             if (cancellationToken.IsCancellationRequested)
@@ -253,10 +253,9 @@ namespace JIM.PostgresData.Repositories
         #region private methods
         private static void SortExampleDataSetInstances(DataGenerationTemplate template)
         {
-            foreach (var ot in template.ObjectTypes)
-                foreach (var ta in ot.TemplateAttributes)
-                    if (ta.ExampleDataSetInstances != null && ta.ExampleDataSetInstances.Count > 0)
-                        ta.ExampleDataSetInstances = ta.ExampleDataSetInstances.OrderBy(q => q.Order).ToList();
+            foreach (var ta in template.ObjectTypes.SelectMany(ot => ot.TemplateAttributes))
+                if (ta.ExampleDataSetInstances is { Count: > 0 })
+                    ta.ExampleDataSetInstances = ta.ExampleDataSetInstances.OrderBy(q => q.Order).ToList();
         }
         #endregion
     }

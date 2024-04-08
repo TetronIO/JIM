@@ -62,7 +62,7 @@ namespace JIM.PostgresData
 
         private async Task MigrateDatabaseAsync()
         {
-            if (Database.Database.GetPendingMigrations().Any())
+            if ((await Database.Database.GetPendingMigrationsAsync()).Any())
                 await Database.Database.MigrateAsync();
         }
     }

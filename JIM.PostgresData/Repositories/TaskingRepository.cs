@@ -22,24 +22,22 @@ namespace JIM.PostgresData.Repositories
             if (workerTask.Activity == null)
                 throw new InvalidDataException("CreateWorkerTaskAsync: workerTask.Activity was null. Cannot continue.");
 
-            if (workerTask is DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask)
+            switch (workerTask)
             {
-                Repository.Database.DataGenerationTemplateWorkerTasks.Add(dataGenerationTemplateWorkerTask);
-                await Repository.Database.SaveChangesAsync();
-            }
-            else if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
-            {
-                Repository.Database.SynchronisationWorkerTasks.Add(synchronisationWorkerTask);
-                await Repository.Database.SaveChangesAsync();
-            }
-            else if (workerTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
-            {
-                Repository.Database.ClearConnectedSystemObjectsTasks.Add(clearConnectedSystemObjectsTask);
-                await Repository.Database.SaveChangesAsync();
-            }
-            else
-            {
-                throw new ArgumentException("workerTask was of an unexpected type: " + workerTask.GetType());
+                case DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask:
+                    Repository.Database.DataGenerationTemplateWorkerTasks.Add(dataGenerationTemplateWorkerTask);
+                    await Repository.Database.SaveChangesAsync();
+                    break;
+                case SynchronisationWorkerTask synchronisationWorkerTask:
+                    Repository.Database.SynchronisationWorkerTasks.Add(synchronisationWorkerTask);
+                    await Repository.Database.SaveChangesAsync();
+                    break;
+                case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
+                    Repository.Database.ClearConnectedSystemObjectsTasks.Add(clearConnectedSystemObjectsTask);
+                    await Repository.Database.SaveChangesAsync();
+                    break;
+                default:
+                    throw new ArgumentException("workerTask was of an unexpected type: " + workerTask.GetType());
             }
         }
 
@@ -48,10 +46,10 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.WorkerTasks.
                 Include(st => st.Activity).
                 Include(st => st.InitiatedBy).
-                ThenInclude(ib => ib.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+                ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
                 ThenInclude(av => av.Attribute).
                 Include(st => st.InitiatedBy).
-                ThenInclude(ib => ib.Type).
+                ThenInclude(ib => ib!.Type).
                 SingleOrDefaultAsync(st => st.Id == id);
         }
 
@@ -60,7 +58,7 @@ namespace JIM.PostgresData.Repositories
             return await Repository.Database.WorkerTasks
                 .Include(st => st.Activity)
                 .Include(st => st.InitiatedBy)
-                .ThenInclude(ib => ib.Type)
+                .ThenInclude(ib => ib!.Type)
                 .ToListAsync();
         }
 
@@ -70,10 +68,10 @@ namespace JIM.PostgresData.Repositories
             var workerTaskHeaders = new List<WorkerTaskHeader>();
             var workerTasks = await Repository.Database.WorkerTasks.
                 Include(st => st.InitiatedBy).
-                ThenInclude(ib => ib.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+                ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
                 ThenInclude(av => av.Attribute).
                 Include(st => st.InitiatedBy).
-                ThenInclude(ib => ib.Type).
+                ThenInclude(ib => ib!.Type).
                 OrderByDescending(q => q.Timestamp).ToListAsync();
 
             foreach (var workerTask in workerTasks)
@@ -83,7 +81,7 @@ namespace JIM.PostgresData.Repositories
                     Id = workerTask.Id,
                     Status = workerTask.Status,
                     Timestamp = workerTask.Timestamp,
-                    Name = await GetWorkerHeaderNameAync(workerTask),
+                    Name = await GetWorkerHeaderNameAsync(workerTask),
                     Type = GetWorkerTaskType(workerTask),
                     InitiatedBy = workerTask.InitiatedBy
                 });
@@ -106,7 +104,7 @@ namespace JIM.PostgresData.Repositories
             foreach (var task in await Repository.Database.WorkerTasks
                 .Include(st => st.Activity)
                 .Include(st => st.InitiatedBy)
-                .ThenInclude(ib => ib.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                 .ThenInclude(av => av.Attribute)
                 .Where(st => st.Status == WorkerTaskStatus.Queued)
                 .OrderBy(st => st.Timestamp).ToListAsync())
@@ -116,14 +114,11 @@ namespace JIM.PostgresData.Repositories
                     tasks.Add(task);
                     break;
                 }
-                else if (task.ExecutionMode == WorkerTaskExecutionMode.Parallel)
-                {
+
+                if (task.ExecutionMode == WorkerTaskExecutionMode.Parallel)
                     tasks.Add(task);
-                }
                 else
-                {
                     break;
-                }
             }
 
             await UpdateWorkerTasksAsProcessingAsync(tasks);
@@ -147,9 +142,9 @@ namespace JIM.PostgresData.Repositories
 
         public async Task<WorkerTaskStatus?> GetFirstDataGenerationTemplateWorkerTaskStatus(int templateId)
         {
-            using var db = new JimDbContext();
+            await using var db = new JimDbContext();
             var result = await db.DataGenerationTemplateWorkerTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
-            if (result != null && result.Count == 1)
+            if (result.Count == 1)
                 return result[0];
 
             return null;
@@ -157,29 +152,34 @@ namespace JIM.PostgresData.Repositories
 
         public async Task UpdateWorkerTaskAsync(WorkerTask workerTask)
         {
-            if (workerTask is DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask)
+            switch (workerTask)
             {
-                var dbDataGenerationTemplateWorkerTask = await Repository.Database.DataGenerationTemplateWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
-                if (dbDataGenerationTemplateWorkerTask == null)
+                case DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask:
                 {
-                    Log.Error("UpdateWorkerTaskAsync: Could not retrieve a DataGenerationTemplateWorkerTask object to update.");
-                    return;
-                }
+                    var dbDataGenerationTemplateWorkerTask = await Repository.Database.DataGenerationTemplateWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+                    if (dbDataGenerationTemplateWorkerTask == null)
+                    {
+                        Log.Error("UpdateWorkerTaskAsync: Could not retrieve a DataGenerationTemplateWorkerTask object to update.");
+                        return;
+                    }
 
-                // map scalar value updates to the db version of the object
-                Repository.Database.Entry(dbDataGenerationTemplateWorkerTask).CurrentValues.SetValues(dataGenerationTemplateWorkerTask);
-            }
-            else if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
-            {
-                var dbSynchronisationWorkerTask = await Repository.Database.SynchronisationWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
-                if (dbSynchronisationWorkerTask == null)
+                    // map scalar value updates to the db version of the object
+                    Repository.Database.Entry(dbDataGenerationTemplateWorkerTask).CurrentValues.SetValues(dataGenerationTemplateWorkerTask);
+                    break;
+                }
+                case SynchronisationWorkerTask synchronisationWorkerTask:
                 {
-                    Log.Error("UpdateWorkerTaskAsync: Could not retrieve a SynchronisationWorkerTask object to update.");
-                    return;
-                }
+                    var dbSynchronisationWorkerTask = await Repository.Database.SynchronisationWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+                    if (dbSynchronisationWorkerTask == null)
+                    {
+                        Log.Error("UpdateWorkerTaskAsync: Could not retrieve a SynchronisationWorkerTask object to update.");
+                        return;
+                    }
 
-                // map scalar value updates to the db version of the object
-                Repository.Database.Entry(dbSynchronisationWorkerTask).CurrentValues.SetValues(synchronisationWorkerTask);
+                    // map scalar value updates to the db version of the object
+                    Repository.Database.Entry(dbSynchronisationWorkerTask).CurrentValues.SetValues(synchronisationWorkerTask);
+                    break;
+                }
             }
 
             await Repository.Database.SaveChangesAsync();
@@ -201,48 +201,41 @@ namespace JIM.PostgresData.Repositories
         }
 
         #region private methods
-        private static async Task<string> GetWorkerHeaderNameAync(WorkerTask workerTask)
+        private static async Task<string> GetWorkerHeaderNameAsync(WorkerTask workerTask)
         {
-            using var db = new JimDbContext();
-            if (workerTask is DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask)
+            await using var db = new JimDbContext();
+            switch (workerTask)
             {
-                var templatePart = await db.DataGenerationTemplates.Select(q => new { q.Id, q.Name }).SingleOrDefaultAsync(q => q.Id == dataGenerationTemplateWorkerTask.TemplateId);
-                if (templatePart != null)
-                    return templatePart.Name;
-                else
-                    return "template not found!";
-            }
-            else if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
-            {
-                var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == q.ConnectedSystemId).Name }).
-                    SingleOrDefaultAsync(q => q.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
+                case DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask:
+                {
+                    var templatePart = await db.DataGenerationTemplates.Select(q => new { q.Id, q.Name }).SingleOrDefaultAsync(q => q.Id == dataGenerationTemplateWorkerTask.TemplateId);
+                    return templatePart != null ? templatePart.Name : "template not found!";
+                }
+                case SynchronisationWorkerTask synchronisationWorkerTask:
+                {
+                    var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == q.ConnectedSystemId).Name }).
+                        SingleOrDefaultAsync(q => q.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
 
-                if (runProfilePart != null)
-                    return $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}";
-                else
-                    return "run profile not found!";
-            }
-            else if (workerTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
-            {
-                // use the name of the connected system
-                return db.ConnectedSystems.Single(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId).Name;
-            }
-            else
-            {
-                return "Unknown WorkerTask type";
+                    return runProfilePart != null ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}" : "run profile not found!";
+                }
+                case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
+                    // use the name of the connected system
+                    return db.ConnectedSystems.Single(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId).Name;
+                default:
+                    return "Unknown WorkerTask type";
             }
         }
 
-        private string GetWorkerTaskType(WorkerTask workerTask)
+        private static string GetWorkerTaskType(WorkerTask workerTask)
         {
-            if (workerTask is DataGenerationTemplateWorkerTask)
-                return nameof(DataGenerationTemplateWorkerTask).SplitOnCapitalLetters();
-            else if (workerTask is SynchronisationWorkerTask)
-                return nameof(SynchronisationWorkerTask).SplitOnCapitalLetters();
-            else if (workerTask is ClearConnectedSystemObjectsWorkerTask)
-                return nameof(ClearConnectedSystemObjectsWorkerTask).SplitOnCapitalLetters();
-            else
-                return "Unknown Worker Task Type";
+            return workerTask switch
+            {
+                DataGenerationTemplateWorkerTask => nameof(DataGenerationTemplateWorkerTask).SplitOnCapitalLetters(),
+                SynchronisationWorkerTask => nameof(SynchronisationWorkerTask).SplitOnCapitalLetters(),
+                ClearConnectedSystemObjectsWorkerTask => nameof(ClearConnectedSystemObjectsWorkerTask)
+                    .SplitOnCapitalLetters(),
+                _ => "Unknown Worker Task Type"
+            };
         }
 
         private async Task UpdateWorkerTasksAsProcessingAsync(List<WorkerTask> workerTasks)
@@ -252,11 +245,11 @@ namespace JIM.PostgresData.Repositories
             {
                 workerTask.Status = WorkerTaskStatus.Processing;
                 var dbWorkerTask = await Repository.Database.WorkerTasks.SingleOrDefaultAsync(q => q.Id == workerTask.Id);
-                if (dbWorkerTask != null)
-                {
-                    dbWorkerTask.Status = WorkerTaskStatus.Processing;
-                    Repository.Database.WorkerTasks.Update(dbWorkerTask);
-                }
+                if (dbWorkerTask == null) 
+                    continue;
+                
+                dbWorkerTask.Status = WorkerTaskStatus.Processing;
+                Repository.Database.WorkerTasks.Update(dbWorkerTask);
             }
 
             await Repository.Database.SaveChangesAsync();

@@ -31,49 +31,49 @@ namespace JIM.PostgresData.Repositories
             List<ConnectorDefinition> connectorDefinitions)
         {
             var changes = false;
-            if (metaverseAttributes != null)
+            if (metaverseAttributes.Count > 0)
             {
                 Repository.Database.MetaverseAttributes.AddRange(metaverseAttributes);
                 Log.Information($"SeedDataAsync: Created {metaverseAttributes.Count} MetaverseAttributes");
                 changes = true;
             }
 
-            if (metaverseObjectTypes != null)
+            if (metaverseObjectTypes.Count > 0)
             {
                 Repository.Database.MetaverseObjectTypes.AddRange(metaverseObjectTypes);
                 Log.Information($"SeedDataAsync: Created {metaverseObjectTypes.Count} MetaverseObjectTypes");
                 changes = true;
             }
 
-            if (predefinedSearches != null)
+            if (predefinedSearches.Count > 0)
             {
                 Repository.Database.PredefinedSearches.AddRange(predefinedSearches);
                 Log.Information($"SeedDataAsync: Created {predefinedSearches.Count} PredefinedSearches");
                 changes = true;
             }
 
-            if (roles != null)
+            if (roles.Count > 0)
             {
                 Repository.Database.Roles.AddRange(roles);
                 Log.Information($"SeedDataAsync: Created {roles.Count} Roles");
                 changes = true;
             }
 
-            if (exampleDataSets != null)
+            if (exampleDataSets.Count > 0)
             {
                 Repository.Database.ExampleDataSets.AddRange(exampleDataSets);
                 Log.Information($"SeedDataAsync: Created {exampleDataSets.Count} ExampleDataSets");
                 changes = true;
             }
 
-            if (dataGenerationTemplates != null)
+            if (dataGenerationTemplates.Count > 0)
             {
                 Repository.Database.DataGenerationTemplates.AddRange(dataGenerationTemplates);
                 Log.Information($"SeedDataAsync: Created {dataGenerationTemplates.Count} DataGenerationTemplates");
                 changes = true;
             }
 
-            if (connectorDefinitions != null)
+            if (connectorDefinitions.Count > 0)
             {
                 Repository.Database.ConnectorDefinitions.AddRange(connectorDefinitions);
                 Log.Information($"SeedDataAsync: Created {connectorDefinitions.Count} ConnectorDefinitions");

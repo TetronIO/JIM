@@ -105,10 +105,10 @@ namespace JIM.PostgresData.Repositories
                 ThenInclude(av => av.Attribute).
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.ReferenceValue).
-                ThenInclude(rv => rv.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+                ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.ReferenceValue).
-                ThenInclude(rv => rv.Type).
+                ThenInclude(rv => rv!.Type).
                 SingleOrDefaultAsync(mo => mo.Id == id);
         }
 
@@ -118,7 +118,7 @@ namespace JIM.PostgresData.Repositories
                 .Include(mo => mo.Type)
                 .Include(mo => mo.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
-                .ThenInclude(rv => rv.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                 .Select(d => new MetaverseObjectHeader
                 {
                     Id = d.Id,
@@ -152,10 +152,7 @@ namespace JIM.PostgresData.Repositories
                  av.StringValue != null && av.StringValue == attributeValue &&
                  av.MetaverseObject.Type.Id == metaverseObjectType.Id);
 
-            if (av != null)
-                return av.MetaverseObject;
-
-            return null;
+            return av?.MetaverseObject;
         }
 
         public async Task<int> GetMetaverseObjectCountAsync()
@@ -242,14 +239,13 @@ namespace JIM.PostgresData.Repositories
                 return pagedResultSet;
 
             // don't let users try and request a page that doesn't exist
-            if (page > pagedResultSet.TotalPages)
-            {
-                pagedResultSet.TotalResults = 0;
-                pagedResultSet.Results.Clear();
+            if (page <= pagedResultSet.TotalPages) 
                 return pagedResultSet;
-            }
-
+            
+            pagedResultSet.TotalResults = 0;
+            pagedResultSet.Results.Clear();
             return pagedResultSet;
+
         }
 
         public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
@@ -385,14 +381,13 @@ namespace JIM.PostgresData.Repositories
                 return pagedResultSet;
 
             // don't let users try and request a page that doesn't exist
-            if (page > pagedResultSet.TotalPages)
-            {
-                pagedResultSet.TotalResults = 0;
-                pagedResultSet.Results.Clear();
+            if (page <= pagedResultSet.TotalPages) 
                 return pagedResultSet;
-            }
-
+            
+            pagedResultSet.TotalResults = 0;
+            pagedResultSet.Results.Clear();
             return pagedResultSet;
+
         }
 
         private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)

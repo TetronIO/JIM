@@ -35,7 +35,7 @@ namespace JIM.PostgresData.Repositories
 
         public async Task AddObjectToRoleAsync(Guid objectId, string roleName)
         {
-            var dbRole = await Repository.Database.Roles.SingleOrDefaultAsync(r => r.Name == roleName);
+            var dbRole = await Repository.Database.Roles.Include(role => role.StaticMembers).SingleOrDefaultAsync(r => r.Name == roleName);
             if (dbRole == null)
                 throw new ArgumentException($"No such role found: {roleName}");
 
