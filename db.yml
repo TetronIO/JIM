@@ -7,7 +7,7 @@ services:
     image: adminer
     restart: always
     ports:
-      - 8080:8080
+      - "8080:8080"
     depends_on:
       - jim.database
 
@@ -22,7 +22,7 @@ services:
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=jim
     ports:
-      - '5432:5432'
+      - "5432:5432"
 
 volumes:
   jim-db-volume:
