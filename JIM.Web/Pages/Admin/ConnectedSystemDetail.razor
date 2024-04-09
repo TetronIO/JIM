@@ -247,10 +247,11 @@
                                 Class="mt-5"
                                 Required="true"
                                 RequiredError="You must select an attribute as the External ID."
+                                Value="_selectedObjectType.Attributes.SingleOrDefault(q => q.IsExternalId)"
                                 ValueChanged="HandleMakeExternalId">
-                                @foreach (var otAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
+                                @foreach (var objectTypeAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
                                 {
-                                    <MudSelectItem Value="@otAttribute">@(otAttribute.Name)</MudSelectItem>
+                                    <MudSelectItem Value="@objectTypeAttribute">@(objectTypeAttribute.Name)</MudSelectItem>
                                 }
                             </MudSelect>
                         </MudPaper>
