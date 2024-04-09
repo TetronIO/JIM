@@ -1,18 +1,16 @@
 ﻿@page "/admin/connected-systems"
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
-@using JIM.Models.Core
-@using JIM.Models.Core.DTOs
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities;
 @inject JimApplication Jim
 
 <PageTitle>Connected Systems</PageTitle>
 <MudText Typo="Typo.h4">Connected Systems</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     JIM imports from and exports data to connected systems using Connectors.
-    @if (connectedSystemHeaders == null || connectedSystemHeaders.Count == 0)
+    @if (_connectedSystemHeaders == null || _connectedSystemHeaders.Count == 0)
     {
         <span>Configure at least one connected system to get going.</span>
     }
@@ -27,10 +25,10 @@
     </MudToolBar>
 </MudPaper>
 
-<MudTable Items="@connectedSystemHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
+<MudTable Items="@_connectedSystemHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <MudSpacer />
-        <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
@@ -65,18 +63,18 @@
 </MudTable>
 
 @code {
-    private IList<ConnectedSystemHeader>? connectedSystemHeaders;
-    private string searchString = "";
+    private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private string _searchString = "";
 
-    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
-        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new BreadcrumbItem("Connected Systems", href: null, disabled: true),
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Connected Systems", href: null, disabled: true),
     };
 
     protected override async Task OnInitializedAsync()
     {
-        connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
     }
 
     private string GetPercentageStatement(int bigNumber, int smallNumber)
@@ -88,9 +86,9 @@
         return $"({percentage}%)";
     }
 
-    private bool FilterFunc1(ConnectedSystemHeader element) => FilterFunc(element, searchString);
+    private bool FilterFunc1(ConnectedSystemHeader element) => FilterFunc(element, _searchString);
 
-    private bool FilterFunc(ConnectedSystemHeader element, string searchString)
+    private static bool FilterFunc(ConnectedSystemHeader element, string searchString)
     {
         if (string.IsNullOrWhiteSpace(searchString))
             return true;

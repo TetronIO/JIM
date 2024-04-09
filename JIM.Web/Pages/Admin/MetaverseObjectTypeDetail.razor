@@ -5,20 +5,20 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Metaverse Object Type: @metaverseObjectType?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Metaverse Object Type:</span> @metaverseObjectType?.Name</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Metaverse Object Type:</span> @_metaverseObjectType?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (metaverseObjectType != null)
+@if (_metaverseObjectType != null)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Created" Variant="Variant.Outlined">@metaverseObjectType.Created</MudField>
+                <MudField Label="Created" Variant="Variant.Outlined">@_metaverseObjectType.Created</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Outlined">@(metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="Built-in?" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -27,7 +27,7 @@
     <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">These are the attributes bound to the metaverse object type:</MudText>
 
     <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
-        @foreach (var metaverseAttribute in metaverseObjectType.Attributes)
+        @foreach (var metaverseAttribute in _metaverseObjectType.Attributes)
         {
             <MudChip Variant="Variant.Filled" Color="Color.Primary">@metaverseAttribute.Name</MudChip>
         }
@@ -38,24 +38,24 @@
     [Parameter]
     public int Id { get; set; }
 
-    private JIM.Models.Core.MetaverseObjectType? metaverseObjectType;
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private MetaverseObjectType? _metaverseObjectType;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
-        metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
-        if (metaverseObjectType == null)
+        _metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
+        if (_metaverseObjectType == null)
         {
             // object type not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
 
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Schema", href: "/admin/schema/"),
-            new BreadcrumbItem(metaverseObjectType.Name, href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Schema", href: "/admin/schema/"),
+            new(_metaverseObjectType.Name, href: null, disabled: true)
         };
     }
 }

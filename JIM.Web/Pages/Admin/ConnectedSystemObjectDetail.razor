@@ -148,22 +148,22 @@
 
         Breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
-            new BreadcrumbItem(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
-            new BreadcrumbItem("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
-            new BreadcrumbItem(CsoId.ToString(), href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
+            new("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
+            new(CsoId.ToString(), href: null, disabled: true)
         };
 
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
     }
 
-    private TableGroupDefinition<ConnectedSystemObjectAttributeValue> _groupDefinition = new()
-        {
-            GroupName = "Group",
-            Indentation = false,
-            Expandable = true,
-            Selector = (e) => e.Attribute.Name
-        };
+    private readonly TableGroupDefinition<ConnectedSystemObjectAttributeValue> _groupDefinition = new()
+    {
+        GroupName = "Group",
+        Indentation = false,
+        Expandable = true,
+        Selector = (e) => e.Attribute.Name
+    };
 }

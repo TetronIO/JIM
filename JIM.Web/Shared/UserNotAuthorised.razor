@@ -8,7 +8,7 @@
 <h1 class="display-6">Not Authorised</h1>
 <p>Apologies, you're not authorised to view that page.</p>
 
-@if (isInUsersRole)
+@if (_isInUsersRole)
 {
     <p>It seems you're missing a specific role required for this page/resoure.</p>
 }
@@ -18,40 +18,40 @@ else
 
     <h6>Technical Information</h6>
     <ul>
-        <li>Token claim name value: @userName</li>
-        <li>Token claim <span class="code">@ssoClaimType</span> value: <span class="code">@userUniqueIdClaimValue</span></li>
+        <li>Token claim name value: @_userName</li>
+        <li>Token claim <span class="code">@_ssoClaimType</span> value: <span class="code">@_userUniqueIdClaimValue</span></li>
     </ul>
 
-    <p>Help for administrators: Could not map this claim to a Metaverse user. Please check the Metaverse user exists in JIM and has a value for the SSO Metaverse attribute <span class="code">@ssoAttributeName</span></p>
+    <p>Help for administrators: Could not map this claim to a Metaverse user. Please check the Metaverse user exists in JIM and has a value for the SSO Metaverse attribute <span class="code">@_ssoAttributeName</span></p>
 }
 
 @code {
-    private string? userName;
-    private string? ssoClaimType;
-    private string? ssoAttributeName;
-    private string? userUniqueIdClaimValue;
-    private bool isInUsersRole;
+    private string? _userName;
+    private string? _ssoClaimType;
+    private string? _ssoAttributeName;
+    private string? _userUniqueIdClaimValue;
+    private bool _isInUsersRole;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        if (user == null || user.Identity == null)
+        if (user?.Identity == null)
             return;
 
-        userName = user.Identity.Name;
+        _userName = user.Identity.Name;
 
         var serviceSettings = await Jim.ServiceSettings.GetServiceSettingsAsync();
         if (serviceSettings == null)
             return;
 
-        ssoClaimType = serviceSettings.SSOUniqueIdentifierClaimType;
-        ssoAttributeName = serviceSettings.SSOUniqueIdentifierMetaverseAttribute?.Name;
+        _ssoClaimType = serviceSettings.SSOUniqueIdentifierClaimType;
+        _ssoAttributeName = serviceSettings.SSOUniqueIdentifierMetaverseAttribute?.Name;
 
-        var c = user.Claims.FirstOrDefault(c => c.Type == ssoClaimType);
+        var c = user.Claims.FirstOrDefault(c => c.Type == _ssoClaimType);
         if (c != null)
-            userUniqueIdClaimValue = c.Value;
+            _userUniqueIdClaimValue = c.Value;
 
-        isInUsersRole = user.IsInRole(Constants.BuiltInRoles.Users);
+        _isInUsersRole = user.IsInRole(Constants.BuiltInRoles.Users);
     }
 }

@@ -2,58 +2,54 @@
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
 @using JIM.Models.Activities;
-@using JIM.Models.Activities.DTOs;
-@using JIM.Models.Core
-@using JIM.Models.Core.DTOs;
 @using JIM.Models.Enums;
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
-@using JIM.Models.Utility;
 @using JIM.Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Run Profile Execution Item: @activityRunProfileExecutionItem.?Id</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution Item:</span> @(activityRunProfileExecutionItem != null ? activityRunProfileExecutionItem.Id : null)</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Run Profile Execution Item: @_activityRunProfileExecutionItem.?Id</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution Item:</span> @(_activityRunProfileExecutionItem != null ? _activityRunProfileExecutionItem.Id : null)</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-    @if (activityRunProfileExecutionItem != null)
+    @if (_activityRunProfileExecutionItem != null)
 {
     <MudStack Row="true" Class="mt-5 mb-5">
 
-        @if (connectedSystemHeader != null)
+        @if (_connectedSystemHeader != null)
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Connected System</MudText>
-                <MudText><MudLink Href="@Utilities.GetConnectedSystemHref(connectedSystemHeader)" Typo="Typo.h5">@connectedSystemHeader.Name</MudLink></MudText>
+                <MudText><MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader)" Typo="Typo.h5">@_connectedSystemHeader.Name</MudLink></MudText>
             </MudPaper>
         }
 
-        @if (activity != null)
+        @if (_activity != null)
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Run Profile</MudText>
-                <MudText Typo="Typo.h5">@activity.TargetName</MudText>
+                <MudText Typo="Typo.h5">@_activity.TargetName</MudText>
             </MudPaper>
 
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Execution Time</MudText>
-                <MudText Typo="Typo.h5">@activity.Executed</MudText>
+                <MudText Typo="Typo.h5">@_activity.Executed</MudText>
             </MudPaper>
         }
 
-        @if (activity != null && activity.InitiatedBy != null)
+        @if (_activity is { InitiatedBy: not null })
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Initiated By</MudText>
-                <MudText><MudLink Href="@(Utilities.GetMetaverseObjectHref(activity.InitiatedBy))" Typo="Typo.h5">@activity.InitiatedBy.DisplayName</MudLink></MudText>
+                <MudText><MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedBy))" Typo="Typo.h5">@_activity.InitiatedBy.DisplayName</MudLink></MudText>
             </MudPaper>
         }
-        else if (activity != null && !string.IsNullOrEmpty(activity.InitiatedByName))
+        else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Initiated By</MudText>
-                <MudText Typo="Typo.h5">@activity.InitiatedByName</MudText>
+                <MudText Typo="Typo.h5">@_activity.InitiatedByName</MudText>
             </MudPaper>
         }
         else
@@ -64,44 +60,44 @@
             </MudPaper>
         }
 
-        @if (activityRunProfileExecutionItem.ConnectedSystemObject != null)
+        @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Connected System Object</MudText>
                 <MudText>
 
                     <MudTooltip Text="Object Type">
-                        <MudChip Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema">@activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
+                        <MudChip Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
                     </MudTooltip>
 
                     <MudChip Color="Color.Info" Variant="Variant.Outlined" Label="true">
-                        @if (externalIdAttributeValue != null)
+                        @if (_externalIdAttributeValue != null)
                         {
                             <MudTooltip Text="External Id Attribute Name">
-                                <MudText>@(externalIdAttributeValue.Attribute.Name):</MudText>
+                                <MudText>@(_externalIdAttributeValue.Attribute.Name):</MudText>
                             </MudTooltip>
                             <span>&nbsp;</span>
-                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(activityRunProfileExecutionItem.ConnectedSystemObject))">@externalIdAttributeValue.ToString()</MudLink>
+                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">@_externalIdAttributeValue.ToString()</MudLink>
                         }
                         else
                         {
-                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(activityRunProfileExecutionItem.ConnectedSystemObject))">Connected System Object (No External Id yet)</MudLink>
+                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">Connected System Object (No External Id yet)</MudLink>
                         }
                     </MudChip>
                 </MudText>
             </MudPaper>
         }
 
-        <MudPaper Class="pa-5" Outlined="true" Style="@(activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Delete ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
+        <MudPaper Class="pa-5" Outlined="true" Style="@(_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Delete ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
             <MudText Typo="Typo.overline">Change Type</MudText>
-            <MudText Typo="Typo.h5">@activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudText>
+            <MudText Typo="Typo.h5">@_activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudText>
         </MudPaper>
 
     </MudStack>
 
     // display a table for what attribute values were changed as a result of this activity
     // todo: change this to a single table and consider multiple columns, i.e. one for remove, one for add
-    @if (activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
+    @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
         <MudText Typo="Typo.h5" Class="mb-5">Changes:</MudText>
         <MudSimpleTable Style="overflow-x: auto;" Elevation="0" Outlined="true" Dense="true" Hover="true">
@@ -113,9 +109,9 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach (var changeAttribute in activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges.OrderBy(q => q.Attribute.Name))
+                @foreach (var changeAttribute in _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges.OrderBy(q => q.Attribute.Name))
                 {
-                    for (int i = 0; i < changeAttribute.ValueChanges.Count; i++)
+                    for (var i = 0; i < changeAttribute.ValueChanges.Count; i++)
                     {
                         <tr>
                             @if (changeAttribute.ValueChanges.Count == 1)
@@ -155,21 +151,21 @@
         </MudSimpleTable>
     }
 
-    @if (activityRunProfileExecutionItem.ErrorType.HasValue)
+    @if (_activityRunProfileExecutionItem.ErrorType.HasValue)
     {
         <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
-            @if (!string.IsNullOrEmpty(activityRunProfileExecutionItem.ErrorMessage))
+            @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
             {
                 <MudText Typo="Typo.button">Error Message:</MudText>
-                <MudText>@activityRunProfileExecutionItem.ErrorMessage</MudText>
+                <MudText>@_activityRunProfileExecutionItem.ErrorMessage</MudText>
                 <br />
             }
 
-            @if (!string.IsNullOrEmpty(activityRunProfileExecutionItem.ErrorStackTrace))
+            @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
             {
                 <MudText Typo="Typo.button">Error Stack:</MudText>
                 <pre>
-                    @activityRunProfileExecutionItem.ErrorStackTrace
+                    @_activityRunProfileExecutionItem.ErrorStackTrace
                 </pre>
             }
         </MudPaper>
@@ -180,38 +176,38 @@
     [Parameter]
     public Guid Id { get; set; }
 
-    private JIM.Models.Activities.ActivityRunProfileExecutionItem? activityRunProfileExecutionItem;
-    private JIM.Models.Activities.Activity? activity;
-    private ConnectedSystemHeader? connectedSystemHeader;
-    private List<BreadcrumbItem> breadcrumbs = null!;
-    private ConnectedSystemObjectAttributeValue? externalIdAttributeValue;
+    private ActivityRunProfileExecutionItem? _activityRunProfileExecutionItem;
+    private Activity? _activity;
+    private ConnectedSystemHeader? _connectedSystemHeader;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
+    private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
 
     protected override async Task OnParametersSetAsync()
     {
-        activityRunProfileExecutionItem = await Jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
-        if (activityRunProfileExecutionItem == null)
+        _activityRunProfileExecutionItem = await Jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
+        if (_activityRunProfileExecutionItem == null)
         {
             // ActivityRunProfileExecutionItem not found, redirect to index page
             NavManager.NavigateTo("/activity");
             return;
         }
 
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Activity", href: "/activity"),
-            new BreadcrumbItem("Acivity Detail", href: $"/activity/{activityRunProfileExecutionItem.ActivityId}"),
-            new BreadcrumbItem(activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Activity", href: "/activity"),
+            new("Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
+            new(_activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
         };
 
-        activity = await Jim.Activities.GetActivityAsync(activityRunProfileExecutionItem.ActivityId);
+        _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
 
         // try and get the external id attribute value. we'll need the value and attribute name
-        externalIdAttributeValue = activityRunProfileExecutionItem.GetExternalIdAttributeValue();
+        _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
         // try and get the connected system this relates to (might not exist if it's been deleted)
-        var connectedSystemId = activityRunProfileExecutionItem.GetConnectedSystemId();
+        var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
         if (connectedSystemId != null)
-            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
+            _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
     }
 }

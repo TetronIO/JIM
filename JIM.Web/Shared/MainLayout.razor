@@ -11,7 +11,7 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
         <MudText Typo="Typo.h6" Class="jim-header-title">Junctional Identity Manager</MudText>
         <MudSpacer />
-        <MudTooltip Text="@(IsDarkMode ? _lightModeText : _darkModeText)">
+        <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
             <MudToggleIconButton @bind-Toggled="@IsDarkMode"
                                  Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
                                  ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
@@ -40,7 +40,7 @@
 
 @code
 {
-    private MudTheme _theme = new()
+    private readonly MudTheme _theme = new()
     {
         Typography = new Typography()
         {
@@ -91,12 +91,10 @@
     };
 
     private MudThemeProvider? _mudThemeProvider;
-    private string _lightModeText = "Light Mode";
-    private string _darkModeText = "Dark Mode";
-
+    private const string LightModeText = "Light Mode";
+    private const string DarkModeText = "Dark Mode";
     private bool IsDrawerOpen { get; set; } = true;
     private bool IsDarkMode { get; set; }
-    private bool DarkModeControlText { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

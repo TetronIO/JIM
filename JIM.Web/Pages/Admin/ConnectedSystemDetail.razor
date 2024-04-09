@@ -210,7 +210,7 @@
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                             @foreach (var objectType in _connectedSystem.ObjectTypes)
                             {
-                                <MudCheckBox T="Boolean" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                                <MudCheckBox T="bool" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
                             }
                         </div>
                     </MudPaper>
@@ -221,7 +221,7 @@
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
                             <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
-                                @foreach (ConnectedSystemObjectType objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
+                                @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
                                 {
                                     <MudButton 
                                         OnClick="@((e) => HandleActiveObjectTypeClick(objectType))"

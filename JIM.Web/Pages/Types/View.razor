@@ -6,9 +6,9 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>@MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1): @displayName</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length - 1)):</span> @displayName</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>@MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length-1): @_displayName</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">@(MetaverseObjectType?.Name.Substring(0, MetaverseObjectType.Name.Length - 1)):</span> @_displayName</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <MudPaper Class="pa-5 mt-5" Outlined="true">
     @if (MetaverseObject != null)
@@ -63,8 +63,8 @@
     public Guid IdParam { get; set; }
     private MetaverseObject? MetaverseObject { get; set; }
     private MetaverseObjectType? MetaverseObjectType { get; set; }
-    private string? displayName;
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private string? _displayName;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -84,13 +84,14 @@
             return;
         }
 
-        displayName = MetaverseObject.DisplayName;
+        _displayName = MetaverseObject.DisplayName;
 
-        breadcrumbs = new List<BreadcrumbItem>
-        {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem(MetaverseObjectType.Name, href: $"/t/{MetaverseObjectType.Name.ToLower()}"),
-            new BreadcrumbItem(MetaverseObject.DisplayName, href: null, disabled: true)
-        };
+        if (MetaverseObject.DisplayName != null)
+            _breadcrumbs = new List<BreadcrumbItem>
+            {
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new(MetaverseObjectType.Name, href: $"/t/{MetaverseObjectType.Name.ToLower()}"),
+                new(MetaverseObject.DisplayName, href: null, disabled: true)
+            };
     }
 }

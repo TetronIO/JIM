@@ -6,7 +6,7 @@
 
 <PageTitle>Predefined Searches</PageTitle>
 <MudText Typo="Typo.h4">Predefined Searches</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Predefined Searches make it easy to find objects and control what attributes are returned.</MudText>
 
 <MudSimpleTable Style="overflow-x: auto;" Hover="true" Bordered="false" Striped="false" Class="mt-5" Outlined="true" Elevation="0">
@@ -22,9 +22,9 @@
         </tr>
     </thead>
     <tbody>
-        @if (predefinedSearchHeaders != null)
+        @if (_predefinedSearchHeaders != null)
         {
-            foreach (var predefinedSearchHeader in predefinedSearchHeaders)
+            foreach (var predefinedSearchHeader in _predefinedSearchHeaders)
             {
                 <tr>
                     <td><MudLink Href="@("/admin/predefined-searches/"+predefinedSearchHeader.Uri)">@predefinedSearchHeader.Name</MudLink></td>
@@ -41,15 +41,15 @@
 </MudSimpleTable>
 
 @code {
-    private IList<PredefinedSearchHeader>? predefinedSearchHeaders;
-    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    private IList<PredefinedSearchHeader>? _predefinedSearchHeaders;
+    private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
-        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new BreadcrumbItem("Predefined Searches", href: null, disabled: true)
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Predefined Searches", href: null, disabled: true)
     };
 
     protected override async Task OnInitializedAsync()
     {
-        predefinedSearchHeaders = await Jim.Search.GetPredefinedSearchHeadersAsync();
+        _predefinedSearchHeaders = await Jim.Search.GetPredefinedSearchHeadersAsync();
     }
 }

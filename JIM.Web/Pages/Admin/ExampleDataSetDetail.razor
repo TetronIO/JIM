@@ -2,39 +2,36 @@
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.DataGeneration
-@using JIM.Models.Core
-@using JIM.Models.Tasking
-@using System.Diagnostics
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Example Data Set: @exampleDataSet?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Example Data Sets:</span> @exampleDataSet?.Name</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Example Data Set: @_exampleDataSet?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Example Data Sets:</span> @_exampleDataSet?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (exampleDataSet != null)
+@if (_exampleDataSet != null)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Created" Variant="Variant.Outlined">@exampleDataSet.Created</MudField>
+                <MudField Label="Created" Variant="Variant.Outlined">@_exampleDataSet.Created</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Outlined">@(exampleDataSet.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="Built-in?" Variant="Variant.Outlined">@(_exampleDataSet.BuiltIn ? "Yes" : "No")</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="Culture" Variant="Variant.Outlined">@exampleDataSet.Culture</MudField>
+                    <MudField Label="Culture" Variant="Variant.Outlined">@_exampleDataSet.Culture</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="Values" Variant="Variant.Outlined">@exampleDataSet.Values.Count.ToString("N0")</MudField>
+                    <MudField Label="Values" Variant="Variant.Outlined">@_exampleDataSet.Values.Count.ToString("N0")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
 
     <MudText Typo="Typo.h5" Class="mt-5">Values</MudText>
     <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
-        @foreach (var val in exampleDataSet.Values)
+        @foreach (var val in _exampleDataSet.Values)
         {
             <MudChip Variant="Variant.Filled" Color="Color.Primary">@val.StringValue</MudChip>
         }
@@ -45,28 +42,25 @@
     [Parameter]
     public int Id { get; set; }
 
-    private JIM.Models.DataGeneration.ExampleDataSet? exampleDataSet;
-    private string? builtIn;
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private ExampleDataSet? _exampleDataSet;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
-        exampleDataSet = await Jim.DataGeneration.GetExampleDataSetAsync(Id);
-        if (exampleDataSet == null)
+        _exampleDataSet = await Jim.DataGeneration.GetExampleDataSetAsync(Id);
+        if (_exampleDataSet == null)
         {
             // template not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
 
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Example Data", href: "/admin/example-data/"),
-            new BreadcrumbItem("Datasets", href: "/admin/example-data/datasets/"),
-            new BreadcrumbItem(exampleDataSet.Name, href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Example Data", href: "/admin/example-data/"),
+            new("Datasets", href: "/admin/example-data/datasets/"),
+            new(_exampleDataSet.Name, href: null, disabled: true)
         };
-
-        builtIn = exampleDataSet.BuiltIn ? "Yes" : "No";
     }
 }

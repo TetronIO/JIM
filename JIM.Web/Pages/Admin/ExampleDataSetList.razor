@@ -1,13 +1,12 @@
 ﻿@page "/admin/example-data/datasets"
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
-@using JIM.Models.DataGeneration
 @using JIM.Models.DataGeneration.DTOs
 @inject JimApplication Jim
 
 <PageTitle>Example Data Sets</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Example Data:</span> Data Sets</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
     configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.
@@ -24,11 +23,11 @@
     </MudToolBar>
 </MudPaper>
 
-<MudTable Items="@datasets" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ExampleDataSetHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
+<MudTable Items="@_datasets" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ExampleDataSetHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <MudText Typo="Typo.h6">Data Sets</MudText>
         <MudSpacer />
-        <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
@@ -50,24 +49,23 @@
 </MudTable>
 
 @code {
-    private List<ExampleDataSetHeader>? datasets;
-    private string searchString = "";
-
-    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    private List<ExampleDataSetHeader>? _datasets;
+    private string _searchString = "";
+    private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
-        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new BreadcrumbItem("Example Data", href: "/admin/example-data/"),
-        new BreadcrumbItem("Data Sets", href: null, disabled: true)
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Example Data", href: "/admin/example-data/"),
+        new("Data Sets", href: null, disabled: true)
     };
 
     protected override async Task OnInitializedAsync()
     {
-        datasets = await Jim.DataGeneration.GetExampleDataSetHeadersAsync();
+        _datasets = await Jim.DataGeneration.GetExampleDataSetHeadersAsync();
     }
 
-    private bool FilterFunc1(ExampleDataSetHeader element) => FilterFunc(element, searchString);
+    private bool FilterFunc1(ExampleDataSetHeader element) => FilterFunc(element, _searchString);
 
-    private bool FilterFunc(ExampleDataSetHeader element, string searchString)
+    private static bool FilterFunc(ExampleDataSetHeader element, string searchString)
     {
         if (string.IsNullOrWhiteSpace(searchString))
             return true;

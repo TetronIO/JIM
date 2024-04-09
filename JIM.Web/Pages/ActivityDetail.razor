@@ -3,161 +3,159 @@
 @using JIM.Application
 @using JIM.Models.Activities;
 @using JIM.Models.Activities.DTOs;
-@using JIM.Models.Core
 @using JIM.Models.Core.DTOs;
-@using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility;
 @using JIM.Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Activity: @activity?.TargetOperationType @activity?.TargetType.ToString().SplitOnCapitalLetters(): @activity?.TargetName</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @activity?.TargetOperationType @activity?.TargetType.ToString().SplitOnCapitalLetters(): @(!string.IsNullOrEmpty(activity?.TargetName) ? activity?.TargetName : "(no name)")</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): @_activity?.TargetName</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): @(!string.IsNullOrEmpty(_activity?.TargetName) ? _activity?.TargetName : "(no name)")</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (activity != null)
+@if (_activity != null)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">ID:</MudText>
-                <MudText Class="mud-text-secondary">@activity.Id</MudText>
+                <MudText Class="mud-text-secondary">@_activity.Id</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Target:</MudText>
                 <MudText Class="mud-text-secondary">
-                    @if (activity.TargetType == ActivityTargetType.DataGenerationTemplate)
+                    @if (_activity.TargetType == ActivityTargetType.DataGenerationTemplate)
                     {
-                        <MudLink Href="@($"/admin/example-data/templates/{activity.DataGenerationTemplateId}")">@activity.TargetName</MudLink>
+                        <MudLink Href="@($"/admin/example-data/templates/{_activity.DataGenerationTemplateId}")">@_activity.TargetName</MudLink>
                     }
-                    else if (activity.TargetType == ActivityTargetType.ConnectedSystem)
+                    else if (_activity.TargetType == ActivityTargetType.ConnectedSystem)
                     {
-                        <MudLink Href="@($"/admin/connected-systems/{activity.ConnectedSystemId}/")">@activity.TargetName</MudLink>
+                        <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_activity.TargetName</MudLink>
                     }
-                    else if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && connectedSystemHeader != null)
+                    else if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _connectedSystemHeader != null)
                     {
-                        <MudLink Href="@($"/admin/connected-systems/{activity.ConnectedSystemId}/")">@connectedSystemHeader.Name</MudLink> <text>/ @activity.TargetName</text>
+                        <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_connectedSystemHeader.Name</MudLink> <text>/ @_activity.TargetName</text>
                     }
-                    else if (activity.TargetType == ActivityTargetType.MetaverseObject && metaverseObjectHeader != null)
+                    else if (_activity.TargetType == ActivityTargetType.MetaverseObject && _metaverseObjectHeader != null)
                     {
-                        <MudLink Href="@Utilities.GetMetaverseObjectHref(metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(metaverseObjectHeader)</MudLink>
+                        <MudLink Href="@Utilities.GetMetaverseObjectHref(_metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(_metaverseObjectHeader)</MudLink>
                     }
-                    else if (activity.TargetType == ActivityTargetType.SyncRule)
+                    else if (_activity.TargetType == ActivityTargetType.SyncRule)
                     {
-                        <MudLink Href="@($"/admin/connected-systems/sync-rules/{activity.SyncRuleId}")">@activity.TargetName</MudLink>
+                        <MudLink Href="@($"/admin/connected-systems/sync-rules/{_activity.SyncRuleId}")">@_activity.TargetName</MudLink>
                     }
                 </MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">When:</MudText>
-                <MudText Class="mud-text-secondary">@activity.Created</MudText>
+                <MudText Class="mud-text-secondary">@_activity.Created</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Initiated By:</MudText>
-                @if (activity.InitiatedBy != null)
+                @if (_activity.InitiatedBy != null)
                 {
                     <MudText>
-                        <MudLink Href="@Utilities.GetMetaverseObjectHref(activity.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(activity.InitiatedBy)</MudLink>
+                        <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedBy)</MudLink>
                     </MudText>
                 }
-                else if (!string.IsNullOrEmpty(activity.InitiatedByName))
+                else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
                 {
-                    <MudText>@activity.InitiatedByName</MudText>
+                    <MudText>@_activity.InitiatedByName</MudText>
                 }
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Status:</MudText><br />
-                <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(activity.Status)" Class="ml-0">@activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Execution Time:</MudText>
-                <MudText Class="mud-text-secondary">@activity.ExecutionTime</MudText>
+                <MudText Class="mud-text-secondary">@_activity.ExecutionTime</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Total Activity Time:</MudText>
-                <MudText Class="mud-text-secondary">@activity.TotalActivityTime</MudText>
+                <MudText Class="mud-text-secondary">@_activity.TotalActivityTime</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
     
-    @if (!string.IsNullOrEmpty(activity.ErrorMessage) || !string.IsNullOrEmpty(activity.ErrorStackTrace))
+    @if (!string.IsNullOrEmpty(_activity.ErrorMessage) || !string.IsNullOrEmpty(_activity.ErrorStackTrace))
     {
         <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
-            @if (!string.IsNullOrEmpty(activity.ErrorMessage))
+            @if (!string.IsNullOrEmpty(_activity.ErrorMessage))
             {
                 <MudText Typo="Typo.button">Error Message:</MudText>
-                <MudText>@activity.ErrorMessage</MudText>
+                <MudText>@_activity.ErrorMessage</MudText>
                 <br />
             }
 
-            @if (!string.IsNullOrEmpty(activity.ErrorStackTrace))
+            @if (!string.IsNullOrEmpty(_activity.ErrorStackTrace))
             {
                 <MudText Typo="Typo.button">Error Stack:</MudText>
                 <pre>
-@activity.ErrorStackTrace
+@_activity.ErrorStackTrace
                 </pre>
             }
         </MudPaper>
     }
 
-    @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute && activityRunProfileExecutionItemHeaders != null)
+    @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute && _activityRunProfileExecutionItemHeaders != null)
     {
-        @if (activityRunProfileExecutionStats != null)
+        @if (_activityRunProfileExecutionStats != null)
         {
             <MudText Typo="Typo.h5" Class="mt-5">Synchronisation Results</MudText>
             <MudStack Row="true" Class="mt-5 mb-5">
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.overline">Total Objects</MudText>
-                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectChangeCount</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectChangeCount</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.overline">Objects Created</MudText>
-                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectCreates</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectCreates</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.overline">Objects Updated</MudText>
-                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectUpdates</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectUpdates</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.overline">Objects Deleted</MudText>
-                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.overline">Object Types</MudText>
-                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectTypes</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectTypes</MudText>
                 </MudPaper>
 
-                <MudPaper Class="pa-5" Outlined="true" Style="@(activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
+                <MudPaper Class="pa-5" Outlined="true" Style="@(_activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
                     <MudText Typo="Typo.overline">Errors</MudText>
-                    <MudText Typo="Typo.h3">@activityRunProfileExecutionStats.TotalObjectErrors</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectErrors</MudText>
                 </MudPaper>
 
             </MudStack>
         }
 
-        <ActivityRunProfileExecutionItemHeaderPaginator Results="@activityRunProfileExecutionItemHeaders" />
+        <ActivityRunProfileExecutionItemHeaderPaginator Results="@_activityRunProfileExecutionItemHeaders" />
 
-        <MudTable Items="@activityRunProfileExecutionItemHeaders.Results" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ActivityRunProfileExecutionItemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
+        <MudTable Items="@_activityRunProfileExecutionItemHeaders.Results" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ActivityRunProfileExecutionItemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
             <ToolBarContent>
                 <MudSpacer />
-                <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
             </ToolBarContent>
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.Id)">Internal Id</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ExternalIdValue)">External Id</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName)">Name</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType)">External Object Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ExternalIdValue!)">External Id</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName!)">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType!)">External Object Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ObjectChangeType)">Change Type</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType)">Error Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType!)">Error Type</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Internal Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.Id</MudLink></MudTd>
@@ -189,50 +187,50 @@
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
 
-    private JIM.Models.Activities.Activity? activity;
-    private ConnectedSystemHeader? connectedSystemHeader;
-    private MetaverseObjectHeader? metaverseObjectHeader;
-    private PagedResultSet<ActivityRunProfileExecutionItemHeader>? activityRunProfileExecutionItemHeaders;
-    private ActivityRunProfileExecutionStats? activityRunProfileExecutionStats;
-    private string searchString = null!;
+    private Activity? _activity;
+    private ConnectedSystemHeader? _connectedSystemHeader;
+    private MetaverseObjectHeader? _metaverseObjectHeader;
+    private PagedResultSet<ActivityRunProfileExecutionItemHeader>? _activityRunProfileExecutionItemHeaders;
+    private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
+    private string _searchString = null!;
 
-    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
-        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new BreadcrumbItem("Activity", href: "/activity"),
-        new BreadcrumbItem("Acivity Detail", href: null, disabled: true)
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Activity", href: "/activity"),
+        new("Activity Detail", href: null, disabled: true)
     };
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Page == null || Page < 1)
+        if (Page is null or < 1)
             Page = 1;
 
-        activity = await Jim.Activities.GetActivityAsync(Id);
-        if (activity == null)
+        _activity = await Jim.Activities.GetActivityAsync(Id);
+        if (_activity == null)
         {
             // activity not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
 
-        if (activity.ConnectedSystemId.HasValue)
-            connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(activity.ConnectedSystemId.Value);
+        if (_activity.ConnectedSystemId.HasValue)
+            _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(_activity.ConnectedSystemId.Value);
 
-        if ((activity.TargetType == ActivityTargetType.MetaverseObject || activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile) && activity.MetaverseObjectId != null)
-            metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(activity.MetaverseObjectId.Value);
+        if (_activity.TargetType is ActivityTargetType.MetaverseObject or ActivityTargetType.ConnectedSystemRunProfile && _activity.MetaverseObjectId != null)
+            _metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.MetaverseObjectId.Value);
 
-        if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && activity.TargetOperationType == ActivityTargetOperationType.Execute)
+        if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
         {
-            activityRunProfileExecutionStats = await Jim.Activities.GetActivityRunProfileExecutionStatsAsync(activity.Id);
-            activityRunProfileExecutionItemHeaders = await Jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(activity.Id, Page.Value, 20, 500);
+            _activityRunProfileExecutionStats = await Jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+            _activityRunProfileExecutionItemHeaders = await Jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(_activity.Id, Page.Value);
         }
     }
 
     // this search feature needs to change to support searching all results, not just what's on the page, so needs to do a server side search
-    private bool FilterFunc1(ActivityRunProfileExecutionItemHeader element) => FilterFunc(element, searchString);
+    private bool FilterFunc1(ActivityRunProfileExecutionItemHeader element) => FilterFunc(element, _searchString);
 
-    private bool FilterFunc(ActivityRunProfileExecutionItemHeader element, string searchString)
+    private static bool FilterFunc(ActivityRunProfileExecutionItemHeader element, string searchString)
     {
         if (string.IsNullOrWhiteSpace(searchString))
             return true;

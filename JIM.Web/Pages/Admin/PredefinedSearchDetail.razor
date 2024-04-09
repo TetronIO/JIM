@@ -1,36 +1,33 @@
 ﻿@page "/admin/predefined-searches/{Uri}"
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
-@using JIM.Models.DataGeneration
-@using JIM.Models.Core
-@using JIM.Models.Tasking
-@using System.Diagnostics
+@using JIM.Models.Search
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Predefined Search: @predefinedSearch?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Predefined Search:</span> @predefinedSearch?.Name</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Predefined Search:</span> @_predefinedSearch?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (predefinedSearch != null)
+@if (_predefinedSearch != null)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Name" Variant="Variant.Outlined">@predefinedSearch.Name</MudField>
+                <MudField Label="Name" Variant="Variant.Outlined">@_predefinedSearch.Name</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Uri" Variant="Variant.Outlined">@predefinedSearch.Uri</MudField>
+                <MudField Label="Uri" Variant="Variant.Outlined">@_predefinedSearch.Uri</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Object Type" Variant="Variant.Outlined">@predefinedSearch.MetaverseObjectType.Name</MudField>
+                <MudField Label="Object Type" Variant="Variant.Outlined">@_predefinedSearch.MetaverseObjectType.Name</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Is default for Object Type?" Variant="Variant.Outlined">@(predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudField>
+                <MudField Label="Is default for Object Type?" Variant="Variant.Outlined">@(_predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Outlined">@(predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="Built-in?" Variant="Variant.Outlined">@(_predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -39,19 +36,19 @@
     <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">These will be the attributes shown in the search results:</MudText>
 
     <MudPaper Class="pa-5 mt-5" Outlined="true">
-        @foreach (var psa in predefinedSearch.Attributes)
+        @foreach (var psa in _predefinedSearch.Attributes)
         {
             <MudChip Color="Color.Primary">@psa.MetaverseAttribute.Name</MudChip>
         }
     </MudPaper>
 
-    @if (predefinedSearch.CriteriaGroups.Count > 0)
+    @if (_predefinedSearch.CriteriaGroups.Count > 0)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Criteria</MudText>
         <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">This search has criteria to filter the results:</MudText>
 
         <MudStack Class="mt-5">
-            @foreach (var criteriaGroup in predefinedSearch.CriteriaGroups)
+            @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups)
             {
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.subtitle1">Type: @criteriaGroup.Type</MudText>
@@ -72,8 +69,8 @@
     [Parameter]
     public string? Uri { get; set; }
 
-    private JIM.Models.Search.PredefinedSearch? predefinedSearch;
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private PredefinedSearch? _predefinedSearch;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -84,19 +81,19 @@
             return;
         }
 
-        predefinedSearch = await Jim.Search.GetPredefinedSearchAsync(Uri);
-        if (predefinedSearch == null)
+        _predefinedSearch = await Jim.Search.GetPredefinedSearchAsync(Uri);
+        if (_predefinedSearch == null)
         {
             // predefined search not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
 
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Predefined Searches", href: "/admin/predefined-searches/"),
-            new BreadcrumbItem(predefinedSearch.Name, href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Predefined Searches", href: "/admin/predefined-searches/"),
+            new(_predefinedSearch.Name, href: null, disabled: true)
         };
     }
 }

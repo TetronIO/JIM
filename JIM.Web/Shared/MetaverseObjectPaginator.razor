@@ -1,26 +1,25 @@
 ﻿@using JIM.Models.Core
 @using JIM.Models.Utility
-@using JIM.Models.Enums
 @inject NavigationManager NavManager
 
-@if (totalPages > 1 && pageNumbers != null)
+@if (_totalPages > 1 && _pageNumbers != null)
 {
     <div class="mt-3">
         <nav aria-label="Pages">
             <ul class="pagination justify-content-center">
                 @if (Results.CurrentPage > 1)
                 {
-                    <li class="page-item"><a class="page-link" href="@Results.BuildTagQueryString(Results.CurrentPage - 1, path)">Previous</a></li>
+                    <li class="page-item"><a class="page-link" href="@Results.BuildTagQueryString(Results.CurrentPage - 1, _path)">Previous</a></li>
                 }
 
-                @foreach (var p in pageNumbers)
+                @foreach (var p in _pageNumbers)
                 {
-                    <li class="page-item@(p == Results.CurrentPage ? " active":"")"><a class="page-link" href="@Results.BuildTagQueryString(p, path)">@p</a></li>
+                    <li class="page-item@(p == Results.CurrentPage ? " active":"")"><a class="page-link" href="@Results.BuildTagQueryString(p, _path)">@p</a></li>
                 }
 
-                @if (Results.CurrentPage < totalPages)
+                @if (Results.CurrentPage < _totalPages)
                 {
-                    <li class="page-item"><a class="page-link" href="@Results.BuildTagQueryString(Results.CurrentPage + 1, path)">Next</a></li>
+                    <li class="page-item"><a class="page-link" href="@Results.BuildTagQueryString(Results.CurrentPage + 1, _path)">Next</a></li>
                 }
                 <li class="page-item disabled">
                     <span class="page-link">
@@ -37,11 +36,11 @@
     [EditorRequired]
     public PagedResultSet<MetaverseObject> Results { get; set; } = null!;
 
-    string path = null!;
-    const int maxPagesToDisplayInNav = 4;
-    int totalPages;
-    int numPagesToDisplayInNav;
-    int[]? pageNumbers;
+    string _path = null!;
+    const int MaxPagesToDisplayInNav = 4;
+    int _totalPages;
+    int _numPagesToDisplayInNav;
+    int[]? _pageNumbers;
 
     protected override void OnParametersSet()
     {
@@ -49,12 +48,9 @@
             return;
 
         var uri = new Uri(NavManager.Uri);
-        if (uri.PathAndQuery.Contains("?"))
-            path = uri.PathAndQuery.Substring(0, uri.PathAndQuery.IndexOf("?"));
-        else path = uri.PathAndQuery;
-
-        totalPages = Results.TotalPages;
-        numPagesToDisplayInNav = totalPages <= maxPagesToDisplayInNav ? totalPages : maxPagesToDisplayInNav;
-        pageNumbers = Results.GetNavigationPageNumbers(numPagesToDisplayInNav);
+        _path = uri.PathAndQuery.Contains("?") ? uri.PathAndQuery.Substring(0, uri.PathAndQuery.IndexOf("?", StringComparison.Ordinal)) : uri.PathAndQuery;
+        _totalPages = Results.TotalPages;
+        _numPagesToDisplayInNav = _totalPages <= MaxPagesToDisplayInNav ? _totalPages : MaxPagesToDisplayInNav;
+        _pageNumbers = Results.GetNavigationPageNumbers(_numPagesToDisplayInNav);
     }
 }

@@ -14,19 +14,19 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Synchronisation Rule: @syncRuleNameOrCreate</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Synchronisation Rule:</span> @syncRuleNameOrCreate</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Synchronisation Rule:</span> @_syncRuleNameOrCreate</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (syncRule != null)
+@if (_syncRule != null)
 {
     <MudPaper Class="pa-4 mt-5" Outlined="true">
-        <MudForm @bind-IsValid="@isDetailsFormValid" @bind-Errors="@detailsFormErrors">
-            <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="syncRule.Name" Variant="Variant.Outlined" />
+        <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
+            <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name" Variant="Variant.Outlined" />
 
-            @if (syncRule.Id == 0)
+            @if (_syncRule.Id == 0)
             {
-                @if (connectedSystemHeaders != null)
+                @if (_connectedSystemHeaders != null)
                 {
                     <MudSelect 
                         T="string"
@@ -38,7 +38,7 @@
                         Adornment="Adornment.Start"
                         Variant="Variant.Outlined"
                         Class="mt-5">
-                        @foreach (var header in connectedSystemHeaders)
+                        @foreach (var header in _connectedSystemHeaders)
                         {
                             <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
                         }
@@ -62,18 +62,18 @@
                     }
                 </MudSelect>
 
-                @if (syncRule.ConnectedSystem != null && syncRule.Direction != SyncRuleDirection.NotSet && metaverseObjectTypes != null && syncRule.ConnectedSystem != null && syncRule.ConnectedSystem.ObjectTypes != null)
+                @if (_syncRule.ConnectedSystem != null && _syncRule.Direction != SyncRuleDirection.NotSet && _metaverseObjectTypes != null && _syncRule.ConnectedSystem is { ObjectTypes: not null })
                 {
                     <MudGrid>
                         <MudItem xs="5">
                             <MudSelect 
                                 T="MetaverseObjectType"
                                 Label="Metaverse Object Type"
-                                @bind-Value="@syncRule.MetaverseObjectType"
+                                @bind-Value="@_syncRule.MetaverseObjectType"
                                 Required="true"
                                 Class="mt-5"
                                 Variant="Variant.Outlined">
-                                @foreach (var mvObjectType in metaverseObjectTypes)
+                                @foreach (var mvObjectType in _metaverseObjectTypes)
                                 {
                                     <MudSelectItem Value="@mvObjectType">@mvObjectType.Name</MudSelectItem>
                                 }
@@ -81,18 +81,18 @@
                         </MudItem>
                         <MudItem xs="2">
                             <MudPaper Outlined="false" Elevation="0" Class="d-flex flex-column align-center justify-center mud-width-full py-10">
-                                <MudIcon Size="Size.Medium" Icon="@(syncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)"></MudIcon>
+                                <MudIcon Size="Size.Medium" Icon="@(_syncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)"></MudIcon>
                             </MudPaper>
                         </MudItem>
                         <MudItem xs="5">
                             <MudSelect 
                                 T="ConnectedSystemObjectType"
                                 Label="Connected System Object Type"
-                                @bind-Value="@syncRule.ConnectedSystemObjectType"
+                                @bind-Value="@_syncRule.ConnectedSystemObjectType"
                                 Required="true"
                                 Class="mt-5"
                                 Variant="Variant.Outlined">
-                                @foreach (var csObjectType in syncRule.ConnectedSystem.ObjectTypes.Where(ot => ot.Selected))
+                                @foreach (var csObjectType in _syncRule.ConnectedSystem.ObjectTypes.Where(ot => ot.Selected))
                                 {
                                     <MudSelectItem Value="@csObjectType">@csObjectType.Name</MudSelectItem>
                                 }
@@ -101,14 +101,14 @@
                     </MudGrid>
                 }
 
-                @if (syncRule.Direction == SyncRuleDirection.Import)
+                @if (_syncRule.Direction == SyncRuleDirection.Import)
                 {
-                    <MudSwitch @bind-Value="@syncRule.ProjectToMetaverse" Color="Color.Primary" Label="Create imported objects in the Metaverse?" />
+                    <MudSwitch @bind-Value="@_syncRule.ProjectToMetaverse" Color="Color.Primary" Label="Create imported objects in the Metaverse?" />
                     <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, objects imported from this Connected System matched in this synchronisation rule will not result in a Metaverse object being created. Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a HR system.</MudAlert>
                 }
-                @if (syncRule.Direction == SyncRuleDirection.Export)
+                @if (_syncRule.Direction == SyncRuleDirection.Export)
                 {
-                    <MudSwitch @bind-Value="@syncRule.ProvisionToConnectedSystem" Color="Color.Primary" Label="Create objects in the Connected System?" />
+                    <MudSwitch @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary" Label="Create objects in the Connected System?" />
                     <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, Metaverse objects matched in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse object to be created in the Connected System. You would typically enable this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudAlert>
                 }
 
@@ -116,12 +116,12 @@
             }
         </MudForm>
 
-        <MudSwitch Class="mt-5" @bind-Value="@syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
+        <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
         <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">Synchronisation Rules will not be evaluated when disabled, enabling you to either prepare a rule in advance of it being needed, or to temporarily stop evaluating a sync rule..</MudAlert>
 
     </MudPaper>
 
-    @if (syncRule.Direction == SyncRuleDirection.Import)
+    @if (_syncRule.Direction == SyncRuleDirection.Import)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
             <MudText Typo="Typo.h5">Matching Rules</MudText>
@@ -138,11 +138,11 @@
                 OnClick="HandleOpenAddMappingDialog"
                 Color="Color.Default"
                 Class="mt-5"
-                Disabled="@(syncRule.MetaverseObjectType == null || syncRule.ConnectedSystemObjectType == null)"
+                Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)"
                 DisableElevation="true">Add Matching Rule</MudButton>
         </MudPaper>
 
-        <MudDialog @bind-IsVisible="addMatchingRuleDialogVisible" Options="dialogOptions">
+        <MudDialog @bind-IsVisible="_addMatchingRuleDialogVisible" Options="_dialogOptions">
             <TitleContent>
                 <MudText Typo="Typo.h6">
                     <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> Add Matching Rule
@@ -162,46 +162,46 @@
                     <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
                 </MudSelect>
 
-                @if (syncRuleMapping != null && syncRuleMappingSource != null)
+                @if (_syncRuleMapping != null && _syncRuleMappingSource != null)
                 {
-                    @if (syncRuleMappingSourceType == "Attribute")
+                    @if (_syncRuleMappingSourceType == "Attribute")
                     {
                         <MudSelect
                             T="MetaverseAttribute"
-                            @bind-Value="syncRuleMapping.TargetMetaverseAttribute"
+                            @bind-Value="_syncRuleMapping.TargetMetaverseAttribute"
                             Label="Metaverse Attribute"
                             Placeholder="Please select a Metaverse attribute"
                             Required="true"
                             Class="mt-5"
                             Variant="Variant.Outlined">
-                            @foreach (var metaverseAttribute in syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                            @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
                             {
                                 <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
                             }
                         </MudSelect>
 
-                        if (syncRuleMapping.TargetMetaverseAttribute != null)
+                        if (_syncRuleMapping.TargetMetaverseAttribute != null)
                         {
                             <MudSelect 
                                 T="ConnectedSystemObjectTypeAttribute"
-                                @bind-Value="syncRuleMappingSource.ConnectedSystemAttribute"
+                                @bind-Value="_syncRuleMappingSource.ConnectedSystemAttribute"
                                 Label="Connected System Attribute"
                                 Placeholder="Please select the Connected System attribute"
                                 Required="true"
                                 Class="mt-5"
                                 Variant="Variant.Outlined">
-                                @foreach (var connectedSystemObjectTypeAttribute in syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                                @foreach (var connectedSystemObjectTypeAttribute in _syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
                                 {
-                                    <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != syncRuleMapping.TargetMetaverseAttribute.Type)">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
+                                    <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != _syncRuleMapping.TargetMetaverseAttribute.Type)">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
                                 }
                             </MudSelect>
                         }
                     }
-                    else if (syncRuleMappingSourceType == "Function")
+                    else if (_syncRuleMappingSourceType == "Function")
                     {
                         <MudText Class="mt-5">Sorry, functions are no yet supported.</MudText>
                     }
-                    else if (syncRuleMappingSourceType == "Expression")
+                    else if (_syncRuleMappingSourceType == "Expression")
                     {
                         <MudText Class="mt-5">Sorry, expressions are no yet supported.</MudText>
                     }
@@ -212,7 +212,7 @@
             </DialogActions>
         </MudDialog>
 
-        @foreach (var objectMatchingRule in syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
+        @foreach (var objectMatchingRule in _syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
         {
             var sourceType = objectMatchingRule.GetSourceType();
             <MudPaper Class="pa-4 mt-5" Outlined="true">
@@ -260,22 +260,22 @@
             </MudPaper>
         }
     }
-    else if (syncRule.MetaverseObjectType != null)
+    else if (_syncRule.MetaverseObjectType != null)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
             <MudText Typo="Typo.h5">Metaverse Object Scope</MudText>
             <MudText Class="mt-5">
-                By default, all Metaverse objects of type '@syncRule.MetaverseObjectType.Name' will be in scope of this Synchronisation Rule, though to
+                By default, all Metaverse objects of type '@_syncRule.MetaverseObjectType.Name' will be in scope of this Synchronisation Rule, though to
                 have it apply to a subset of those objects, use a filter. i.e. you might only want this rule to apply to Staff, not Contractors.
             </MudText>
-            <MudRadioGroup @bind-Value="syncRuleScopingFiltered" Class="mt-5">
+            <MudRadioGroup @bind-Value="_syncRuleScopingFiltered" Class="mt-5">
                 <MudRadio Value="false">All Objects</MudRadio>
                 <MudRadio Value="true">Filtered</MudRadio>
             </MudRadioGroup>
 
-            @if (syncRuleScopingFiltered)
+            @if (_syncRuleScopingFiltered)
             {
-                @if (syncRule.ObjectScopingCriteriaGroups.Count == 0)
+                @if (_syncRule.ObjectScopingCriteriaGroups.Count == 0)
                 {
                     <MudButton StartIcon="@Icons.Material.Filled.Add"
                            Variant="Variant.Filled"
@@ -284,7 +284,7 @@
                            DisableElevation="true">Add Criteria Group</MudButton>
                 }
 
-                <MudDialog @bind-IsVisible="addScopingCriteriaGroupDialogVisible" Options="dialogOptions">
+                <MudDialog @bind-IsVisible="_addScopingCriteriaGroupDialogVisible" Options="_dialogOptions">
                     <TitleContent>
                         <MudText Typo="Typo.h6">
                             <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
@@ -296,7 +296,7 @@
                             Label="Please choose a group type"
                             Required="true"
                             Variant="Variant.Outlined"
-                            @bind-Value="criteriaGroupTypeText">
+                            @bind-Value="_criteriaGroupTypeText">
                             @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
                             {
                                 <MudSelectItem Value="@type.ToString()" />
@@ -317,10 +317,10 @@
 
         </MudPaper>
 
-        @foreach (var rootCriteriaGroup in syncRule.ObjectScopingCriteriaGroups)
+        @foreach (var rootCriteriaGroup in _syncRule.ObjectScopingCriteriaGroups)
         {
             <SyncRuleDetailScopingCriteriaGroup 
-                SyncRule="syncRule" 
+                SyncRule="_syncRule" 
                 SyncRuleScopingCriteriaGroup="rootCriteriaGroup" 
                 SyncRuleChanged="HandleStateHasChanged" 
                 SyncRuleScopingCriteriaGroupChanged="HandleStateHasChanged" />
@@ -329,12 +329,12 @@
 
     <!-- TODO: attribute flow rules! -->
 
-    @if (syncRule.Validate().Count > 0)
+    @if (_syncRule.Validate().Count > 0)
     {
         <MudAlert Severity="Severity.Normal" Class="mt-5">
             <MudText>There are issues:</MudText>
             <MudList>
-                @foreach (var item in syncRule.Validate())
+                @foreach (var item in _syncRule.Validate())
                 {
                     <MudListItem IconColor="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)" Icon="@(item.Level == JIM.Models.Utility.ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)">
                         @item.Message
@@ -348,8 +348,8 @@
                Color="Color.Primary"
                Class="mt-5"
                OnClick="HandleCreateOrUpdateSyncRuleAsync"
-               Disabled="!syncRule.IsValid()"
-               DisableElevation="true">@(syncRule.Id == 0 ? "Create" : "Update") Sync Rule</MudButton>
+               Disabled="!_syncRule.IsValid()"
+               DisableElevation="true">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule</MudButton>
 }
 
 @code {
@@ -357,63 +357,63 @@
     public int? Id { get; set; }
 
     [CascadingParameter]
-    private Task<AuthenticationState>? authenticationStateTask { get; set; }
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
-    private string syncRuleNameOrCreate = "New";
-    private List<BreadcrumbItem> breadcrumbs = null!;
-    private SyncRule? syncRule;
-    private bool isDetailsFormValid;
-    private string[] detailsFormErrors = { };
-    private List<ConnectedSystemHeader> connectedSystemHeaders = null!;
-    private List<MetaverseObjectType> metaverseObjectTypes = null!;
+    private string _syncRuleNameOrCreate = "New";
+    private List<BreadcrumbItem> _breadcrumbs = null!;
+    private SyncRule? _syncRule;
+    private bool _isDetailsFormValid;
+    private string[] _detailsFormErrors = { };
+    private List<ConnectedSystemHeader> _connectedSystemHeaders = null!;
+    private List<MetaverseObjectType> _metaverseObjectTypes = null!;
 
-    private bool addMatchingRuleDialogVisible;
-    private DialogOptions dialogOptions = new() { FullWidth = true };
-    private SyncRuleMapping? syncRuleMapping;
-    private SyncRuleMappingSource? syncRuleMappingSource;
-    private string? syncRuleMappingSourceType;
+    private bool _addMatchingRuleDialogVisible;
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+    private SyncRuleMapping? _syncRuleMapping;
+    private SyncRuleMappingSource? _syncRuleMappingSource;
+    private string? _syncRuleMappingSourceType;
 
-    private bool syncRuleScopingFiltered = false;
-    private bool addScopingCriteriaGroupDialogVisible;
-    private string? criteriaGroupTypeText;
-    private SyncRuleScopingCriteriaGroup? syncRuleScopingCriteriaGroup;
+    private bool _syncRuleScopingFiltered;
+    private bool _addScopingCriteriaGroupDialogVisible;
+    private string? _criteriaGroupTypeText;
+    private SyncRuleScopingCriteriaGroup? _syncRuleScopingCriteriaGroup;
 
     protected override async Task OnInitializedAsync()
     {
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync-rules/")
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Synchronisation Rules", href: "/admin/connected-systems/sync-rules/")
         };
 
         if (Id != null)
         {
             // edit an existing sync rule
-            syncRule = await Jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
-            if (syncRule == null)
+            _syncRule = await Jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
+            if (_syncRule == null)
             {
                 // sync rule not found, redirect to index page
                 NavManager.NavigateTo("../");
                 return;
             }
 
-            syncRuleNameOrCreate = syncRule.Name;
-            breadcrumbs.Add(new BreadcrumbItem(syncRule.Name, href: null, disabled: true));
+            _syncRuleNameOrCreate = _syncRule.Name;
+            _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
         }
         else
         {
             // create a new sync rule
-            syncRule = new SyncRule();
-            breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
-            connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-            metaverseObjectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(true);
+            _syncRule = new SyncRule();
+            _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
+            _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+            _metaverseObjectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
     }
 
     private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)
     {
         // should never happen, but performing for linting reasons
-        if (syncRule == null)
+        if (_syncRule == null)
             return;
 
         // convert to int and assign to SR
@@ -422,85 +422,83 @@
         if (connectedSystem == null)
             return;
 
-        syncRule.ConnectedSystem = connectedSystem;
-        Console.WriteLine($"HandleConnectedSystemSelectedAsync: Assigned ConnectedSystem: {syncRule.ConnectedSystem}");
+        _syncRule.ConnectedSystem = connectedSystem;
+        Console.WriteLine($"HandleConnectedSystemSelectedAsync: Assigned ConnectedSystem: {_syncRule.ConnectedSystem}");
     }
 
     private void HandleSyncRuleDirectionSelection(string syncRuleDirection)
     {
         // convert to enum and assign to sr
         // should never happen, but performing for linting reasons
-        if (syncRule == null)
+        if (_syncRule == null)
             return;
 
         var syncRuleDirectionEnum = (SyncRuleDirection)Enum.Parse(typeof(SyncRuleDirection), syncRuleDirection);
-        syncRule.Direction = syncRuleDirectionEnum;
-        Console.WriteLine($"HandleSyncRuleDirectionSelection: Assigned SyncRuleDirection: {syncRule.Direction}");
+        _syncRule.Direction = syncRuleDirectionEnum;
+        Console.WriteLine($"HandleSyncRuleDirectionSelection: Assigned SyncRuleDirection: {_syncRule.Direction}");
 
         // reset provision/project choices
-        syncRule.ProvisionToConnectedSystem = false;
-        syncRule.ProjectToMetaverse = false;
+        _syncRule.ProvisionToConnectedSystem = false;
+        _syncRule.ProjectToMetaverse = false;
     }
 
     private void HandleOpenAddMappingDialog()
     {
-        if (syncRule == null)
+        if (_syncRule == null)
             return;
 
-        if (syncRuleMapping == null)
+        if (_syncRuleMapping == null)
         {
-            syncRuleMapping = new SyncRuleMapping {
+            _syncRuleMapping = new SyncRuleMapping {
                     Type = SyncRuleMappingType.ObjectMatching,
-                    Order = syncRule.ObjectMatchingRules.Count == 0 ? 0 : syncRule.ObjectMatchingRules.Select(q => q.Order).Max() + 1
+                    Order = _syncRule.ObjectMatchingRules.Count == 0 ? 0 : _syncRule.ObjectMatchingRules.Select(q => q.Order).Max() + 1
             };
-            syncRuleMappingSource = new SyncRuleMappingSource();
+            _syncRuleMappingSource = new SyncRuleMappingSource();
         }
         else
         {
-            if (syncRuleMappingSource == null)
+            if (_syncRuleMappingSource == null)
                 return;
         }
 
-        syncRuleMapping.Sources.Add(syncRuleMappingSource);
-        addMatchingRuleDialogVisible = true;
+        _syncRuleMapping.Sources.Add(_syncRuleMappingSource);
+        _addMatchingRuleDialogVisible = true;
     }
 
     private void HandleAddMappingTypeValueChange(string mappingType)
     {
-        if (syncRuleMappingSource == null)
-            syncRuleMappingSource = new SyncRuleMappingSource();
-
-        syncRuleMappingSourceType = mappingType;
+        _syncRuleMappingSource ??= new SyncRuleMappingSource();
+        _syncRuleMappingSourceType = mappingType;
     }
 
     private bool DisableAddMappingButton()
     {
-        if (syncRuleMapping == null)
+        if (_syncRuleMapping == null)
         {
             Console.WriteLine("DisableAddMappingButton: syncRuleMapping NULL");
             return true;
         }
 
-        if (syncRuleMappingSource == null)
+        if (_syncRuleMappingSource == null)
         {
             Console.WriteLine("DisableAddMappingButton: syncRuleMappingSource NULL");
             return true;
         }
 
-        if (syncRuleMapping.TargetMetaverseAttribute == null)
+        if (_syncRuleMapping.TargetMetaverseAttribute == null)
         {
             Console.WriteLine("DisableAddMappingButton: syncRuleMapping.TargetMetaverseAttribute NULL");
             return true;
         }
 
-        if (syncRuleMapping.Type != SyncRuleMappingType.ObjectMatching)
+        if (_syncRuleMapping.Type != SyncRuleMappingType.ObjectMatching)
         {
             Console.WriteLine("DisableAddMappingButton: syncRuleMapping.Type != SyncRuleMappingType.ObjectMatching");
             return true;
         }
 
         // the rest depends on what type of source has been chosen by the user
-        if (syncRuleMappingSource.ConnectedSystemAttribute == null && (syncRuleMappingSource.Function == null || (syncRuleMappingSource.Function != null && (syncRuleMappingSource.ParameterValues == null || syncRuleMappingSource.ParameterValues.Count == 0))))
+        if (_syncRuleMappingSource.ConnectedSystemAttribute == null && (_syncRuleMappingSource.Function == null || (_syncRuleMappingSource.Function != null && (_syncRuleMappingSource.ParameterValues == null || _syncRuleMappingSource.ParameterValues.Count == 0))))
         {
             Console.WriteLine("DisableAddMappingButton: attrib/function/params missing");
             return true;
@@ -511,32 +509,32 @@
 
     private void HandleAddMappingButtonClick()
     {
-        if (syncRule == null || syncRuleMapping == null)
+        if (_syncRule == null || _syncRuleMapping == null)
             return;
 
         // add the mapping to the rule
-        syncRule.ObjectMatchingRules.Add(syncRuleMapping);
+        _syncRule.ObjectMatchingRules.Add(_syncRuleMapping);
 
         // close the add mapping dialog
-        addMatchingRuleDialogVisible = false;
+        _addMatchingRuleDialogVisible = false;
 
         // re-initialise the mapping rule and source, ready for the next use
-        syncRuleMapping = null;
-        syncRuleMappingSource = null;
+        _syncRuleMapping = null;
+        _syncRuleMappingSource = null;
     }
 
     private async Task HandleObjectMatchingRuleDeleteClickAsync(SyncRuleMapping objectMatchingRule)
     {
-        if (syncRule == null)
+        if (_syncRule == null)
             return;
 
         var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to remove this Matching Rule?", yesText: "Remove!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
-            syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
+            _syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
 
             // re-order the items
-            var orderedItems = syncRule.ObjectMatchingRules.OrderBy(q => q.Order).ToList();
+            var orderedItems = _syncRule.ObjectMatchingRules.OrderBy(q => q.Order).ToList();
             for (var i = 0; i < orderedItems.Count; i++)
                 orderedItems[i].Order = i;
         }
@@ -545,7 +543,7 @@
     private void HandleObjectMatchingRuleChangeOrder(SyncRuleMapping objectMatchingRule, string direction)
     {
         // invalid scenarios
-        if (syncRule == null || syncRule.ObjectMatchingRules.Count == 1)
+        if (_syncRule == null || _syncRule.ObjectMatchingRules.Count == 1)
             return;
 
         if (direction == "up")
@@ -554,17 +552,17 @@
             if (objectMatchingRule.Order == 0)
                 return;
 
-            var preceedingItem = syncRule.ObjectMatchingRules.Single(q => q.Order == (objectMatchingRule.Order - 1));
-            preceedingItem.Order++;
+            var precedingItem = _syncRule.ObjectMatchingRules.Single(q => q.Order == (objectMatchingRule.Order - 1));
+            precedingItem.Order++;
             objectMatchingRule.Order--;
         }
         else
         {
             // cannot demote the last item
-            if (objectMatchingRule.Order == (syncRule.ObjectMatchingRules.Count - 1))
+            if (objectMatchingRule.Order == (_syncRule.ObjectMatchingRules.Count - 1))
                 return;
 
-            var followingItem = syncRule.ObjectMatchingRules.Single(q => q.Order == (objectMatchingRule.Order + 1));
+            var followingItem = _syncRule.ObjectMatchingRules.Single(q => q.Order == (objectMatchingRule.Order + 1));
             followingItem.Order--;
             objectMatchingRule.Order++;
         }
@@ -572,51 +570,53 @@
 
     private bool DisableObjectMappingRuleOrderButton(SyncRuleMapping objectMatchingRule, string direction)
     {
-        if (syncRule == null)
+        if (_syncRule == null)
             return true;
 
-        if (direction == "up" && objectMatchingRule.Order == 0)
-            return true;
-        else if (direction == "down" && objectMatchingRule.Order == syncRule.ObjectMatchingRules.Max(q => q.Order))
-            return true;
-
-        return false;
+        switch (direction)
+        {
+            case "up" when objectMatchingRule.Order == 0:
+            case "down" when objectMatchingRule.Order == _syncRule.ObjectMatchingRules.Max(q => q.Order):
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void HandleOpenAddScopingCriteriaGroupDialog()
     {
         Console.WriteLine("HandleOpenAddScopingCriteriaGroupDialog: Called");
-        syncRuleScopingCriteriaGroup = new SyncRuleScopingCriteriaGroup();
-        addScopingCriteriaGroupDialogVisible = true;
+        _syncRuleScopingCriteriaGroup = new SyncRuleScopingCriteriaGroup();
+        _addScopingCriteriaGroupDialogVisible = true;
     }
 
     private bool DisableAddScopingCriteriaGroupFormButton()
     {
-        Console.WriteLine($"DisableAddScopingCriteriaGroupFormButton: '{criteriaGroupTypeText}'");
-        return string.IsNullOrEmpty(criteriaGroupTypeText);
+        Console.WriteLine($"DisableAddScopingCriteriaGroupFormButton: '{_criteriaGroupTypeText}'");
+        return string.IsNullOrEmpty(_criteriaGroupTypeText);
     }
 
     private void HandleAddCriteriaGroupButtonClick()
     {
-        if (syncRule == null || syncRuleScopingCriteriaGroup == null || criteriaGroupTypeText == null)
+        if (_syncRule == null || _syncRuleScopingCriteriaGroup == null || _criteriaGroupTypeText == null)
             return;
 
-        syncRuleScopingCriteriaGroup.Type = (SearchGroupType)Enum.Parse(typeof(SearchGroupType), criteriaGroupTypeText);
+        _syncRuleScopingCriteriaGroup.Type = (SearchGroupType)Enum.Parse(typeof(SearchGroupType), _criteriaGroupTypeText);
 
-        if (syncRuleScopingCriteriaGroup.ParentGroup == null)
+        if (_syncRuleScopingCriteriaGroup.ParentGroup == null)
         {
             // root-level criteria group
-            syncRule.ObjectScopingCriteriaGroups.Add(syncRuleScopingCriteriaGroup);
+            _syncRule.ObjectScopingCriteriaGroups.Add(_syncRuleScopingCriteriaGroup);
         }
         else
         {
             // add the criteria group to the parent's children, i.e. mak sure the relationships is esablished on both the parent and the new criteria group
-            syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Add(syncRuleScopingCriteriaGroup);
+            _syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Add(_syncRuleScopingCriteriaGroup);
         }
 
         // all done, reset
-        addScopingCriteriaGroupDialogVisible = false;
-        syncRuleScopingCriteriaGroup = null;
+        _addScopingCriteriaGroupDialogVisible = false;
+        _syncRuleScopingCriteriaGroup = null;
     }
 
     private void HandleStateHasChanged()
@@ -627,23 +627,28 @@
 
     private async Task HandleCreateOrUpdateSyncRuleAsync()
     {
-        if (syncRule == null)
+        if (_syncRule == null)
             return;
 
         // are we transitioning from new to existing?
-        var isSyncRuleNew = syncRule.Id == 0;
+        var isSyncRuleNew = _syncRule.Id == 0;
 
         // attribute the operation to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        var wasSuccessful = await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, user);
-
-        // send the user to the existing-sync-rule view.
-        // this helps ensure links are good to be shared/bookmarked, etc.
-        if (wasSuccessful && isSyncRuleNew)
-            NavManager.NavigateTo($"/admin/connected-systems/sync-rules/{syncRule.Id}");
-        else if (wasSuccessful)
-            Snackbar.Add("Changes saved.", Severity.Success);
-        else if (!wasSuccessful)
-            Snackbar.Add("There was a problem saving your changes. Please check the details and try again.", Severity.Error);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        var wasSuccessful = await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user);
+        switch (wasSuccessful)
+        {
+            // send the user to the existing-sync-rule view.
+            // this helps ensure links are good to be shared/bookmarked, etc.
+            case true when isSyncRuleNew:
+                NavManager.NavigateTo($"/admin/connected-systems/sync-rules/{_syncRule.Id}");
+                break;
+            case true:
+                Snackbar.Add("Changes saved.", Severity.Success);
+                break;
+            case false:
+                Snackbar.Add("There was a problem saving your changes. Please check the details and try again.", Severity.Error);
+                break;
+        }
     }
 }

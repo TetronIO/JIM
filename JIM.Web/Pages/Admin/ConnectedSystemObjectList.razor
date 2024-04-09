@@ -10,15 +10,15 @@
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 
-<PageTitle>Connected System Objects: @connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @connectedSystemHeader?.Name</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @_connectedSystemHeader?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation, 
     or where changes from the system are staged before being committed to the Metaverse within JIM.
 </MudText>
 
-@if (connectedSystemObjectHeaders != null)
+@if (_connectedSystemObjectHeaders != null)
 {
     <MudGrid Class="mt-5">
         <MudItem xs="6">
@@ -27,11 +27,11 @@
             </MudMenu>
         </MudItem>
         <MudItem xs="6" Class="d-flex justify-end">
-            <ConnectedSystemObjectHeaderPaginator Results="@connectedSystemObjectHeaders" />
+            <ConnectedSystemObjectHeaderPaginator Results="@_connectedSystemObjectHeaders" />
         </MudItem>
     </MudGrid>    
 
-    <MudTable Items="@connectedSystemObjectHeaders.Results"
+    <MudTable Items="@_connectedSystemObjectHeaders.Results"
               Hover="true"
               Breakpoint="Breakpoint.Sm"
               Class="mt-5 mb-5"
@@ -41,12 +41,12 @@
               Elevation="0">
         <ToolBarContent>
             <MudSpacer />
-            <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
         </ToolBarContent>
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue)">External Id</MudTableSortLabel></MudTh>
             @* TODO: change this so a check is done on whether the connector supports secondary external ids or not so we don't have to do two linq queries *@
-            @if (connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
+            @if (_connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
             {
                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue)">Secondary External Id</MudTableSortLabel></MudTh>
             }
@@ -61,7 +61,7 @@
             <MudTd DataLabel="External Id">
                 <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(context))">@context.ExternalIdAttributeValue</MudLink>
             </MudTd>
-            @if (connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
+            @if (_connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
             {
                 <MudTd DataLabel="Secondary External Id">@context.SecondaryExternalIdAttributeValue</MudTd>
             }
@@ -99,42 +99,42 @@
     public int? Page { get; set; }
 
     [CascadingParameter]
-    private Task<AuthenticationState>? authenticationStateTask { get; set; }
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private MudMessageBox? DeleteAllObjectsMessageBox { get; set; }
-    private ConnectedSystemHeader? connectedSystemHeader;
-    private PagedResultSet<ConnectedSystemObjectHeader>? connectedSystemObjectHeaders;
-    private string searchString = "";
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private ConnectedSystemHeader? _connectedSystemHeader;
+    private PagedResultSet<ConnectedSystemObjectHeader>? _connectedSystemObjectHeaders;
+    private string _searchString = "";
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
     {
         // why does this view get executed when the web app launches when debugging?
-        connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
-        if (connectedSystemHeader == null)
+        _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
+        if (_connectedSystemHeader == null)
         {
             // connected system not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
 
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
-            new BreadcrumbItem(connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(connectedSystemHeader)),
-            new BreadcrumbItem("Objects", href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
+            new("Objects", href: null, disabled: true)
         };
 
-        if (Page == null || Page < 1)
+        if (Page is null or < 1)
             Page = 1;
 
-        connectedSystemObjectHeaders = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(Id, (int)Page);
+        _connectedSystemObjectHeaders = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(Id, (int)Page);
     }
 
-    private bool FilterFunc1(ConnectedSystemObjectHeader element) => FilterFunc(element, searchString);
+    private bool FilterFunc1(ConnectedSystemObjectHeader element) => FilterFunc(element, _searchString);
 
-    private bool FilterFunc(ConnectedSystemObjectHeader element, string searchString)
+    private static bool FilterFunc(ConnectedSystemObjectHeader element, string searchString)
     {
         if (string.IsNullOrWhiteSpace(searchString))
             return true;
@@ -150,14 +150,14 @@
         if (DeleteAllObjectsMessageBox == null)
             return;
 
-        bool? userPromptResult = await DeleteAllObjectsMessageBox.Show();
-        if (userPromptResult.HasValue && userPromptResult.Value)
-        {
-            // attribute the execution to the user
-            var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-            var task = new ClearConnectedSystemObjectsWorkerTask(Id, user);
-            await Jim.Tasking.CreateWorkerTaskAsync(task);
-            Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
-        }
+        var userPromptResult = await DeleteAllObjectsMessageBox.Show();
+        if (!userPromptResult.HasValue || !userPromptResult.Value) 
+            return;
+        
+        // attribute the execution to the user
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        var task = new ClearConnectedSystemObjectsWorkerTask(Id, user);
+        await Jim.Tasking.CreateWorkerTaskAsync(task);
+        Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
     }
 }

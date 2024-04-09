@@ -3,7 +3,7 @@
 @using JIM.Models.Enums
 @inject NavigationManager NavManager
 
-@if (totalPages > 1 && pageNumbers != null)
+@if (_totalPages > 1 && _pageNumbers != null)
 {
     <div class="d-flex flex-column align-center">
         <MudPagination 
@@ -22,11 +22,11 @@
     [EditorRequired]
     public PagedResultSet<Activity> Results { get; set; } = null!;
 
-    string path = null!;
-    const int maxPagesToDisplayInNav = 4;
-    int totalPages;
-    int numPagesToDisplayInNav;
-    int[]? pageNumbers;
+    string _path = null!;
+    const int MaxPagesToDisplayInNav = 4;
+    int _totalPages;
+    int _numPagesToDisplayInNav;
+    int[]? _pageNumbers;
 
     protected override void OnParametersSet()
     {
@@ -34,14 +34,10 @@
             return;
 
         var uri = new Uri(NavManager.Uri);
-        if (uri.PathAndQuery.Contains("?"))
-            path = uri.PathAndQuery.Substring(0, uri.PathAndQuery.IndexOf("?"));
-        else 
-            path = uri.PathAndQuery;
-
-        totalPages = Results.TotalPages;
-        numPagesToDisplayInNav = totalPages <= maxPagesToDisplayInNav ? totalPages : maxPagesToDisplayInNav;
-        pageNumbers = Results.GetNavigationPageNumbers(numPagesToDisplayInNav);
+        _path = uri.PathAndQuery.Contains("?") ? uri.PathAndQuery.Substring(0, uri.PathAndQuery.IndexOf("?", StringComparison.Ordinal)) : uri.PathAndQuery;
+        _totalPages = Results.TotalPages;
+        _numPagesToDisplayInNav = _totalPages <= MaxPagesToDisplayInNav ? _totalPages : MaxPagesToDisplayInNav;
+        _pageNumbers = Results.GetNavigationPageNumbers(_numPagesToDisplayInNav);
     }
 
     private void ControlButtonClickedHandler(Page page)
@@ -49,22 +45,24 @@
         switch (page)
         {
             case Page.First:
-                NavManager.NavigateTo(Results.BuildTagQueryString(1, path));
+                NavManager.NavigateTo(Results.BuildTagQueryString(1, _path));
                 break;
             case Page.Last:
-                NavManager.NavigateTo(Results.BuildTagQueryString(Results.TotalPages, path));
+                NavManager.NavigateTo(Results.BuildTagQueryString(Results.TotalPages, _path));
                 break;
             case Page.Next:
-                NavManager.NavigateTo(Results.BuildTagQueryString(Results.CurrentPage + 1, path));
+                NavManager.NavigateTo(Results.BuildTagQueryString(Results.CurrentPage + 1, _path));
                 break;
             case Page.Previous:
-                NavManager.NavigateTo(Results.BuildTagQueryString(Results.CurrentPage - 1, path));
+                NavManager.NavigateTo(Results.BuildTagQueryString(Results.CurrentPage - 1, _path));
                 break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(page), page, null);
         }
     }
 
     private void SelectedChangedHandler(int pageNumber)
     {
-        NavManager.NavigateTo(Results.BuildTagQueryString(pageNumber, path));
+        NavManager.NavigateTo(Results.BuildTagQueryString(pageNumber, _path));
     }
 }

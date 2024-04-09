@@ -1,15 +1,12 @@
 ﻿@page "/claims"
-
 @using System.Security.Claims
-@using Microsoft.AspNetCore.Components.Authorization
-@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Your Claims</PageTitle>
 <MudText Typo="Typo.h4">Your Claims</MudText>
 
-@if (user != null)
+@if (User != null)
 {
-    <MudTable Items="@user.Claims" Hover="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
+    <MudTable Items="@User.Claims" Hover="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
         <HeaderContent>
             <MudTh>Claim Type</MudTh>
             <MudTh>Claim Value</MudTh>
@@ -23,14 +20,14 @@
 
 @code {
     [CascadingParameter]
-    private Task<AuthenticationState>? authenticationStateTask { get; set; }
-    private ClaimsPrincipal? user { get; set; }
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+    private ClaimsPrincipal? User { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
-        if (authenticationStateTask == null)
+        if (AuthenticationStateTask == null)
             return;
 
-        user = (await authenticationStateTask).User;
+        User = (await AuthenticationStateTask).User;
     }
 }

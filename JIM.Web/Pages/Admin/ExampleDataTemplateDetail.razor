@@ -8,22 +8,22 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Data Generation Template: @template?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Data Generation Template:</span> @template?.Name</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Data Generation Template: @_template?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Data Generation Template:</span> @_template?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (template != null)
+@if (_template != null)
 {
-    foreach (var objectType in template.ObjectTypes)
+    foreach (var objectType in _template.ObjectTypes)
     {
         <MudTable Items="@objectType.TemplateAttributes" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
             <ToolBarContent>
                 <MudText Typo="Typo.h6">@objectType.MetaverseObjectType.Name</MudText>
             </ToolBarContent>
             <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute.Name)">Attribute</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute.Type)">Type</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.PopulatedValuesPercentage)">Population %</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Name)">Attribute</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Type)">Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.PopulatedValuesPercentage!)">Population %</MudTableSortLabel></MudTh>
                 <MudTh>Rules</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -38,14 +38,13 @@
                             <MudChip Color="Color.Primary"><b>Pattern:</b>&nbsp;@context.Pattern</MudChip>
                         }
 
-                        if (context.ExampleDataSetInstances != null && context.ExampleDataSetInstances.Count > 0)
+                        if (context.ExampleDataSetInstances is { Count: > 0 })
                         {
-                            var setValues = "";
-                            foreach (var set in context.ExampleDataSetInstances)
-                                setValues += set.ExampleDataSet.Name + ", ";
-
+                            var setValues = context.ExampleDataSetInstances.Aggregate("", (current, set) => current + set.ExampleDataSet.Name + ", ");
                             if (setValues.EndsWith(", "))
+                            {
                                 setValues = setValues.Substring(0, setValues.Length - 2);
+                            }
 
                             <MudChip Color="Color.Primary"><b>Data set(s):</b>&nbsp;@setValues</MudChip>
                         }
@@ -60,12 +59,10 @@
                             <MudChip Color="Color.Primary"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
                         }
 
+                        var weightedStringValues = "";
                         if (context.WeightedStringValues != null && context.WeightedStringValues.Count > 0)
                         {
-                            string weightedStringValues = "";
-                            foreach (var wsv in context.WeightedStringValues)
-                                weightedStringValues += $"{wsv.Value}: {wsv.Weight}, ";
-
+                            weightedStringValues = context.WeightedStringValues.Aggregate(weightedStringValues, (current, wsv) => current + $"{wsv.Value}: {wsv.Weight}, ");
                             weightedStringValues = weightedStringValues.Substring(0, weightedStringValues.Length - 2);
                             <MudChip Color="Color.Primary"><b>Weighted Values:</b>&nbsp;@weightedStringValues</MudChip>
                         }
@@ -128,12 +125,9 @@
                             <MudChip Color="Color.Primary"><b>MVA max assignments:</b>&nbsp;@context.MvaRefMaxAssignments.Value.ToString("N0")</MudChip>
                         }
 
-                        if (context.ReferenceMetaverseObjectTypes != null && context.ReferenceMetaverseObjectTypes.Count > 0)
+                        if (context.ReferenceMetaverseObjectTypes is { Count: > 0 })
                         {
-                            var refTypes = "";
-                            foreach (var refType in context.ReferenceMetaverseObjectTypes)
-                                refTypes += refType.Name + ", ";
-
+                            var refTypes = context.ReferenceMetaverseObjectTypes.Aggregate("", (current, refType) => current + (refType.Name + ", "));
                             if (refTypes.EndsWith(", "))
                                 refTypes = refTypes.Substring(0, refTypes.Length - 2);
 
@@ -164,14 +158,14 @@
                Variant="Variant.Filled"
                StartIcon="@Icons.Material.Filled.BuildCircle"
                Color="Color.Warning"
-               Disabled="@(status != null)"
+               Disabled="@(_status != null)"
                OnClick="ExecuteTemplateAsync"
                DisableElevation="true">
-        @if (status != null && status == WorkerTaskStatus.Processing)
+        @if (_status is WorkerTaskStatus.Processing)
         {
             <text>Processing...</text>
         }
-        else if (status != null && status == WorkerTaskStatus.Queued)
+        else if (_status is WorkerTaskStatus.Queued)
         {
             <text>Queued...</text>
         }
@@ -186,40 +180,40 @@
     [Parameter]
     public int Id { get; set; }
     [CascadingParameter]
-    private Task<AuthenticationState>? authenticationStateTask { get; set; }
-    private DataGenerationTemplate? template;
-    private DataGenerationTemplateWorkerTask? task;
-    private WorkerTaskStatus? status;
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+    private DataGenerationTemplate? _template;
+    private DataGenerationTemplateWorkerTask? _task;
+    private WorkerTaskStatus? _status;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
-        template = await Jim.DataGeneration.GetTemplateAsync(Id);
-        if (template == null)
+        _template = await Jim.DataGeneration.GetTemplateAsync(Id);
+        if (_template == null)
         {
             // template not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
 
-        breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Eaxmple Data", href: "/admin/example-data/"),
-            new BreadcrumbItem(template.Name, href: null, disabled: true)
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Example Data", href: "/admin/example-data/"),
+            new(_template.Name, href: null, disabled: true)
         };
 
         // has this template already been scheduled, or is already being processed on the service queue?
         // continuously update the UI to show any change in status
         // POLLING_TO_REPLACE - tagging this functionality for replacement with an event-based ui update approach in the future
-        var timer = new Timer(new TimerCallback(async _ =>
+        new Timer(async _ =>
         {
             Debug.WriteLine("Timer loop executing...");
-            if (template != null)
+            if (_template != null)
             {
-                status = await Jim.Tasking.GetFirstDataGenerationTemplateWorkerTaskStatus(template.Id);
-                if (status != null)
-                    Debug.WriteLine("TimerLoop: status is " + status);
+                _status = await Jim.Tasking.GetFirstDataGenerationTemplateWorkerTaskStatus(_template.Id);
+                if (_status != null)
+                    Debug.WriteLine("TimerLoop: status is " + _status);
                 else
                     Debug.WriteLine("TimerLoop: status is null");
             }
@@ -228,21 +222,18 @@
                 Debug.WriteLine("TimerLoop: template is null");
             }
 
-            await InvokeAsync(() =>
-            {
-                StateHasChanged();
-            });
-        }), null, 2000, 2000);
+            await InvokeAsync(StateHasChanged);
+        }, null, 2000, 2000);
     }
 
     private async Task ExecuteTemplateAsync()
     {
-        if (template == null)
+        if (_template == null)
             return;
 
         // attribute the execution to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        task = new DataGenerationTemplateWorkerTask(template.Id, user);
-        await Jim.Tasking.CreateWorkerTaskAsync(task);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        _task = new DataGenerationTemplateWorkerTask(_template.Id, user);
+        await Jim.Tasking.CreateWorkerTaskAsync(_task);
     }
 }

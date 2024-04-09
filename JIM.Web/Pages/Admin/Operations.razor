@@ -9,12 +9,11 @@
 @attribute [Authorize(Roles = "Administrators")]
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
 
 <PageTitle>Operations</PageTitle>
 <MudText Typo="Typo.h4">Operations</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     JIM executes tasks on a queue. You can see what tasks are queued here. Tasks are made up of different types of operations within JIM, i.e. Synchronisation Tasks and Data Generation Tasks.
 </MudText>
@@ -23,19 +22,19 @@
     <MudText Typo="Typo.h6">Execute a Run Profile</MudText>
     <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
 
-    @if (connectedSystemHeaders != null && connectedSystemHeaders.Count > 0)
+    @if (_connectedSystemHeaders is { Count: > 0 })
     {
         <MudForm>
             <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="Please select a Connected System">
-                @foreach (ConnectedSystemHeader connectedSystem in connectedSystemHeaders)
+                @foreach (var connectedSystem in _connectedSystemHeaders)
                 {
                     <MudSelectItem Value="@connectedSystem" />
                 }
             </MudSelect>
-            @if (connectedSystemRunProfiles != null)
+            @if (_connectedSystemRunProfiles != null)
             {
-                <MudSelect T="ConnectedSystemRunProfile" @bind-Value="selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="A run profile is required">
-                    @foreach (ConnectedSystemRunProfile runProfile in connectedSystemRunProfiles)
+                <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="A run profile is required">
+                    @foreach (var runProfile in _connectedSystemRunProfiles)
                     {
                         <MudSelectItem Value="@runProfile" />
                     }
@@ -50,7 +49,7 @@
     }
 </MudPaper>
 
-<MudTable T="WorkerTaskHeader" Items="@workerTaskHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
     <HeaderContent>
         <MudTh>Actions</MudTh>
         <MudTh>Type</MudTh>
@@ -62,7 +61,7 @@
     <RowTemplate>
         <MudTd>
             <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="((e) => HandleCancelTaskAsync(context))">Cancel</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconSize="Size.Small" OnClick="(_) => HandleCancelTaskAsync(context)">Cancel</MudMenuItem>
             </MudMenu>
         </MudTd>
         <MudTd DataLabel="Type">@context.Type</MudTd>
@@ -83,29 +82,29 @@
 
 @code {
     [CascadingParameter]
-    private Task<AuthenticationState>? authenticationStateTask { get; set; }
-    private List<ConnectedSystemHeader>? connectedSystemHeaders;
-    private List<ConnectedSystemRunProfile>? connectedSystemRunProfiles;
-    private ConnectedSystemHeader? selectedConnectedSystemHeader;
-    private ConnectedSystemRunProfile? selectedConnectedSystemRunProfile;
-    private List<WorkerTaskHeader> workerTaskHeaders = new List<WorkerTaskHeader>();
-    private CancellationTokenSource pollingCancellationTokenSource = new CancellationTokenSource();
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+    private List<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private List<ConnectedSystemRunProfile>? _connectedSystemRunProfiles;
+    private ConnectedSystemHeader? _selectedConnectedSystemHeader;
+    private ConnectedSystemRunProfile? _selectedConnectedSystemRunProfile;
+    private List<WorkerTaskHeader> _workerTaskHeaders = new();
+    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
-    private List<BreadcrumbItem> breadcrumbs = new List<BreadcrumbItem>
+    private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
-        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new BreadcrumbItem("Operations", href: null, disabled: true)
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Operations", href: null, disabled: true)
     };
 
     protected override async Task OnInitializedAsync()
     {
-        connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
         // get initial data for worker task table rendering
-        workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
+        _workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
 
         // setup polling for worker task header updates
-        var token = pollingCancellationTokenSource.Token;
+        var token = _pollingCancellationTokenSource.Token;
         var task = Task.Factory.StartNew(async () =>
         {
             while (true)
@@ -120,31 +119,31 @@
                 // look for additions or updates...
                 foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
                 {
-                    var workerTaskHeader = workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
+                    var workerTaskHeader = _workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
                     if (workerTaskHeader == null)
                     {
                         // newWorkerTask is new, add it
                         Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Adding worker task header: " + newWorkerTaskHeader.Id);
-                        workerTaskHeaders.Add(newWorkerTaskHeader);
+                        _workerTaskHeaders.Add(newWorkerTaskHeader);
                         stateHasChanged = true;
                     }
                     else if (workerTaskHeader.Status != newWorkerTaskHeader.Status)
                     {
                         // existing worker task, so it's either unchanged, or an update
                         Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Updating worker task header: " + newWorkerTaskHeader.Id);
-                        var position = workerTaskHeaders.IndexOf(workerTaskHeader);
-                        workerTaskHeaders.Remove(workerTaskHeader);
-                        workerTaskHeaders.Insert(position, newWorkerTaskHeader);
+                        var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
+                        _workerTaskHeaders.Remove(workerTaskHeader);
+                        _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
                         stateHasChanged = true;
                     }
                 }
 
                 // look for removals, i.e. workerTasks items not in newWorkerTasks
-                var workerTaskHeadersToRemove = workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
+                var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
                 foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
                 {
                     Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Removing worker task header: " + workerTaskHeaderToRemove.Id);
-                    workerTaskHeaders.Remove(workerTaskHeaderToRemove);
+                    _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
                     stateHasChanged = true;
                 }
 
@@ -162,35 +161,25 @@
     void IDisposable.Dispose()
     {
         // make sure we cancel the polling task
-        pollingCancellationTokenSource.Cancel();
+        _pollingCancellationTokenSource.Cancel();
     }
 
     private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
     {
-        selectedConnectedSystemHeader = connectedSystemHeader;
-        connectedSystemRunProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
+        _selectedConnectedSystemHeader = connectedSystemHeader;
+        _connectedSystemRunProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
     }
 
     private async Task HandleExecuteRunProfileSubmitAsync()
     {
-        if (selectedConnectedSystemHeader == null || selectedConnectedSystemRunProfile == null)
+        if (_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)
             return;
 
         // attribute the execution to the user
-        var user = await Helpers.GetUserAsync(Jim, authenticationStateTask);
-        var task = new SynchronisationWorkerTask(selectedConnectedSystemHeader.Id, selectedConnectedSystemRunProfile.Id, user);
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        var task = new SynchronisationWorkerTask(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user);
         await Jim.Tasking.CreateWorkerTaskAsync(task);
         Snackbar.Add("Synchronisation task added.", Severity.Success);
-    }
-
-    private string GetWorkerTaskType(WorkerTask workerTask)
-    {
-        if (workerTask is DataGenerationTemplateWorkerTask)
-            return "Data Generation Template Task";
-        else if (workerTask is SynchronisationWorkerTask)
-            return "Synchronisation Task";
-        else
-            return "Unknown Task";
     }
 
     private async Task HandleCancelTaskAsync(WorkerTaskHeader workerTaskHeader)

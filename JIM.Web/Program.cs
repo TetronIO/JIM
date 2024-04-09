@@ -170,12 +170,11 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
         Log.Logger = loggerConfiguration.CreateLogger();
 }
 
-/// <summary>
-/// Sets up the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
-/// then ensure SSO and Initial admin are setup.
-/// </summary>
 static async Task InitialiseJimApplicationAsync()
 {
+    // Sets up the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
+    // then ensure SSO and Initial admin are setup.
+    
     // collect auth config variables
     Log.Verbose("InitialiseJimApplicationAsync: Called.");
     var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
@@ -217,17 +216,16 @@ static async Task InitialiseJimApplicationAsync()
     }
 }
 
-/// <summary>
-/// When a user signs in, we need to see if we can map the identity in the received token, to a user in the Metaverse.
-/// If we do, then the user's roles are retrieved and added to their identity, if not, they receive no roles and will
-/// not be able to access any part of JIM.
-/// 
-/// Also, if the user has claims that map to the user's Metaverse attributes that have no values, then those attributes
-/// will be set from the claim values, i.e. assign initial values. This ensures initial admins are represented properly,
-/// i.e. have a Display Name.
-/// </summary>
 static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 {
+    // When a user signs in, we need to see if we can map the identity in the received token, to a user in the Metaverse.
+    // If we do, then the user's roles are retrieved and added to their identity, if not, they receive no roles and will
+    // not be able to access any part of JIM.
+    // 
+    // Also, if the user has claims that map to the user's Metaverse attributes that have no values, then those attributes
+    // will be set from the claim values, i.e. assign initial values. This ensures initial admins are represented properly,
+    // i.e. have a Display Name.
+    
     Log.Verbose("AuthoriseAndUpdateUserAsync: Called.");
 
     if (context.Principal == null || context.Principal.Identity == null)
@@ -289,12 +287,9 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         // now also see if we can assign any initial user attribute values from the claims principal
         await UpdateUserAttributesFromClaimsAsync(jim, user, context.Principal);
     }
-    else
-    {
-        // we couldn't map the token user to a Metaverse user. Quit
-        // this will be the user will have no roles added, so they won't be able to access JIM.Web
-        return;
-    }
+    
+    // we couldn't map the token user to a Metaverse user. Quit
+    // this will be the user will have no roles added, so they won't be able to access JIM.Web
 }
 
 static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, MetaverseObject user, ClaimsPrincipal claimsPrincipal)

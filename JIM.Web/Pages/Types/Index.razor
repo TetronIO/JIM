@@ -12,7 +12,7 @@
 
 <PageTitle>@PageTitle</PageTitle>
 <MudText Typo="Typo.h4">@PageTitle</MudText>
-<MudBreadcrumbs Items="breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
 @if (PredefinedSearch != null)
@@ -22,14 +22,14 @@
     <MudSimpleTable Style="overflow-x: auto;" Hover="true" Bordered="false" Striped="false" Class="mt-5" Outlined="true" Elevation="0">
         <thead>
             <tr>
-                @foreach (PredefinedSearchAttribute psa in PredefinedSearch.Attributes)
+                @foreach (var psa in PredefinedSearch.Attributes)
                 {
                     <th>@psa.MetaverseAttribute.Name</th>
                 }
             </tr>
         </thead>
         <tbody>
-            @if (MetaverseObjectHeaders != null && MetaverseObjectHeaders.Results.Count > 0)
+            @if (MetaverseObjectHeaders is { Results.Count: > 0 })
             {
                 foreach (var moh in MetaverseObjectHeaders.Results)
                 {
@@ -79,7 +79,7 @@ else
     private PredefinedSearch? PredefinedSearch { get; set; }
     private string? PageTitle { get; set; }
     private string? ObjectTypeName { get; set; }
-    private List<BreadcrumbItem> breadcrumbs = null!;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -118,19 +118,19 @@ else
 
         if (PredefinedSearch == null || PredefinedSearch.IsDefaultForMetaverseObjectType)
         {
-            breadcrumbs = new List<BreadcrumbItem>
+            _breadcrumbs = new List<BreadcrumbItem>
             {
-                new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new BreadcrumbItem(MetaverseObjectType.Name, href: null, disabled: true)
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new(MetaverseObjectType.Name, href: null, disabled: true)
             };
         }
         else
         {
-            breadcrumbs = new List<BreadcrumbItem>
+            _breadcrumbs = new List<BreadcrumbItem>
             {
-                new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new BreadcrumbItem(MetaverseObjectType.Name, href: $"/t/{MetaverseObjectType.Name.ToLower()}"),
-                new BreadcrumbItem(PredefinedSearch.Name, href: null, disabled: true)
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new(MetaverseObjectType.Name, href: $"/t/{MetaverseObjectType.Name.ToLower()}"),
+                new(PredefinedSearch.Name, href: null, disabled: true)
             };
         }
     }
