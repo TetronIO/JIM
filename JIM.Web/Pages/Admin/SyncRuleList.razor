@@ -44,26 +44,53 @@
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemObjectTypeName)">Connected System Object Type</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem!)">Provision?</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse!)">Project?</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)">Enabled</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)">Status</MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Direction">
             @if (context.Direction == SyncRuleDirection.Import)
             {
-                <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowLeft" />
+                <MudChip Icon="@Icons.Material.Filled.KeyboardArrowLeft">Inbound</MudChip>
             }
             else
             {
-                <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowRight" />
+                <MudChip Icon="@Icons.Material.Filled.KeyboardArrowRight">Outbound</MudChip>
             }
         </MudTd>
         <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
         <MudTd DataLabel="Metaverse Object Type">@context.MetaverseObjectTypeName</MudTd>
         <MudTd DataLabel="Connected System Object Type">@context.ConnectedSystemObjectTypeName</MudTd>
-        <MudTd DataLabel="Provision?">@(context.ProvisionToConnectedSystem.HasValue && context.ProvisionToConnectedSystem.Value ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Project?">@(context.ProjectToMetaverse.HasValue && context.ProjectToMetaverse.Value ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Enabled">@(context.Enabled ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Provision?">
+            @if (context.Direction == SyncRuleDirection.Export)
+            {
+                @(context.ProvisionToConnectedSystem.HasValue && context.ProvisionToConnectedSystem.Value ? "Yes" : "No")
+            }
+            else
+            {
+                <MudText>-</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Project?">
+            @if (context.Direction == SyncRuleDirection.Import)
+            {
+                @(context.ProjectToMetaverse.HasValue && context.ProjectToMetaverse.Value ? "Yes" : "No")
+            }
+            else
+            {
+                <MudText>-</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            @if (context.Enabled)
+            {
+                <MudChip Color="Color.Success">Enabled</MudChip>
+            }
+            else
+            {
+                <MudChip Color="Color.Default">Disabled</MudChip>
+            }
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no synchronisation rules
