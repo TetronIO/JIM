@@ -719,7 +719,7 @@
         await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(_connectedSystem, user);
 
         // if there's just a single object type in the schema, auto-select it
-        if (_connectedSystem.ObjectTypes != null && _connectedSystem.ObjectTypes.Count == 1)
+        if (_connectedSystem.ObjectTypes is { Count: 1 })
             HandleSelectedObjectTypeClick(_connectedSystem.ObjectTypes[0], true);
 
         _schemaBeingRetrieved = false;
@@ -943,7 +943,7 @@
 
     private async Task HandleNewRunProfileFormSubmitAsync()
     {
-        if (_connectedSystem == null || _connectedSystem.RunProfiles == null)
+        if (_connectedSystem?.RunProfiles == null)
             return;
 
         // copy the form bound object to a new one we can persist separately from the form bind
@@ -1012,7 +1012,7 @@
         // filter by selected
         _attributeSelectedFilter = true;
 
-        // clear the attribute csv textbox
+        // clear the attribute csv text box
         _attributeSelectionCsv = null;
 
         // all done, let the user know
@@ -1038,7 +1038,7 @@
         // must select at least one object type
         // all selected object types must have an external id selected
 
-        if (_connectedSystem == null || _connectedSystem.ObjectTypes == null)
+        if (_connectedSystem?.ObjectTypes == null)
             return true;
 
         var objectTypesSelected = _connectedSystem.ObjectTypes.Any(ot => ot.Selected);
