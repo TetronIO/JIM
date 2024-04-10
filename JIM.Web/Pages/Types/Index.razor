@@ -59,7 +59,7 @@ else
     }
     else
     {
-    <b>Please create a default Predefined Search for this Metaverse Object Type</b>    
+        <b>Please create a default Predefined Search for this Metaverse Object Type</b>    
     }
 }
 
@@ -83,7 +83,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Page == null || Page < 1)
+        if (Page is null or < 1)
             Page = 1;
 
         var typeName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
@@ -111,7 +111,7 @@ else
         if (PredefinedSearch != null)
         {
             // get a page of results for the metaverse objects matching this type...
-            MetaverseObjectHeaders = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(PredefinedSearch, Page.Value, 20, 500);
+            MetaverseObjectHeaders = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(PredefinedSearch, Page.Value);
             PageTitle = PredefinedSearch.Name;
             ObjectTypeName = PredefinedSearch.Name.ToLower();
         }
