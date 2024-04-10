@@ -786,9 +786,23 @@ public class ConnectedSystemServer
             throw new NullReferenceException(nameof(syncRule));
 
         Log.Verbose($"CreateOrUpdateSyncRuleAsync() called for: {syncRule}");
-
+        
         if (!syncRule.IsValid())
             return false;
+        
+        // remove any mutually-exclusive property combinations
+        if (syncRule.Direction == SyncRuleDirection.Import)
+        {
+            // import rule cannot have these properties:
+            syncRule.ObjectScopingCriteriaGroups.Clear();
+            syncRule.ProvisionToConnectedSystem = null;
+        }
+        else
+        {
+            // export rule cannot have these properties:
+            syncRule.ObjectMatchingRules.Clear();
+            syncRule.ProjectToMetaverse = null;
+        }
 
         // every crud operation must be tracked via an Activity
         var activity = new Activity

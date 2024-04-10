@@ -164,46 +164,48 @@
 
                 @if (_syncRuleMapping != null && _syncRuleMappingSource != null)
                 {
-                    @if (_syncRuleMappingSourceType == "Attribute")
+                    @switch (_syncRuleMappingSourceType)
                     {
-                        <MudSelect
-                            T="MetaverseAttribute"
-                            @bind-Value="_syncRuleMapping.TargetMetaverseAttribute"
-                            Label="Metaverse Attribute"
-                            Placeholder="Please select a Metaverse attribute"
-                            Required="true"
-                            Class="mt-5"
-                            Variant="Variant.Outlined">
-                            @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
-                            {
-                                <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
-                            }
-                        </MudSelect>
-
-                        if (_syncRuleMapping.TargetMetaverseAttribute != null)
+                        case "Attribute":
                         {
-                            <MudSelect 
-                                T="ConnectedSystemObjectTypeAttribute"
-                                @bind-Value="_syncRuleMappingSource.ConnectedSystemAttribute"
-                                Label="Connected System Attribute"
-                                Placeholder="Please select the Connected System attribute"
+                            <MudSelect
+                                T="MetaverseAttribute"
+                                @bind-Value="_syncRuleMapping.TargetMetaverseAttribute"
+                                Label="Metaverse Attribute"
+                                Placeholder="Please select a Metaverse attribute"
                                 Required="true"
                                 Class="mt-5"
                                 Variant="Variant.Outlined">
-                                @foreach (var connectedSystemObjectTypeAttribute in _syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                                @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
                                 {
-                                    <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != _syncRuleMapping.TargetMetaverseAttribute.Type)">@(connectedSystemObjectTypeAttribute.Name)</MudSelectItem>
+                                    <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name</MudSelectItem>
                                 }
                             </MudSelect>
+
+                            if (_syncRuleMapping.TargetMetaverseAttribute != null)
+                            {
+                                <MudSelect 
+                                    T="ConnectedSystemObjectTypeAttribute"
+                                    @bind-Value="_syncRuleMappingSource.ConnectedSystemAttribute"
+                                    Label="Connected System Attribute"
+                                    Placeholder="Please select the Connected System attribute"
+                                    Required="true"
+                                    Class="mt-5"
+                                    Variant="Variant.Outlined">
+                                    @foreach (var connectedSystemObjectTypeAttribute in _syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                                    {
+                                        <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != _syncRuleMapping.TargetMetaverseAttribute.Type)">@connectedSystemObjectTypeAttribute.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                            break;
                         }
-                    }
-                    else if (_syncRuleMappingSourceType == "Function")
-                    {
-                        <MudText Class="mt-5">Sorry, functions are no yet supported.</MudText>
-                    }
-                    else if (_syncRuleMappingSourceType == "Expression")
-                    {
-                        <MudText Class="mt-5">Sorry, expressions are no yet supported.</MudText>
+                        case "Function":
+                            <MudText Class="mt-5">Sorry, functions are no yet supported.</MudText>
+                            break;
+                        case "Expression":
+                            <MudText Class="mt-5">Sorry, expressions are no yet supported.</MudText>
+                            break;
                     }
                 }
             </DialogContent>
@@ -432,7 +434,7 @@
         // should never happen, but performing for linting reasons
         if (_syncRule == null)
             return;
-
+        
         var syncRuleDirectionEnum = (SyncRuleDirection)Enum.Parse(typeof(SyncRuleDirection), syncRuleDirection);
         _syncRule.Direction = syncRuleDirectionEnum;
         Console.WriteLine($"HandleSyncRuleDirectionSelection: Assigned SyncRuleDirection: {_syncRule.Direction}");
@@ -610,7 +612,7 @@
         }
         else
         {
-            // add the criteria group to the parent's children, i.e. mak sure the relationships is esablished on both the parent and the new criteria group
+            // add the criteria group to the parent's children, i.e. mak sure the relationships is established on both the parent and the new criteria group
             _syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Add(_syncRuleScopingCriteriaGroup);
         }
 
