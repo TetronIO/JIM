@@ -419,7 +419,7 @@
             return;
 
         // convert to int and assign to SR
-        int connectedSystemIdInt = int.Parse(connectedSystemId);
+        var connectedSystemIdInt = int.Parse(connectedSystemId);
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystemIdInt);
         if (connectedSystem == null)
             return;
