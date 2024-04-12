@@ -803,6 +803,13 @@ public class ConnectedSystemServer
             syncRule.ObjectMatchingRules.Clear();
             syncRule.ProjectToMetaverse = null;
         }
+        
+        // make sure attribute flow rules don't have an order set. that wouldn't be supported.
+        var attributeFlowRulesWithOrders = syncRule.AttributeFlowRules.Where(q => q.Order != null);
+        foreach (var afr in attributeFlowRulesWithOrders)
+            afr.Order = null;
+        
+        
 
         // every crud operation must be tracked via an Activity
         var activity = new Activity

@@ -132,7 +132,7 @@
             <MudButton 
                 StartIcon="@Icons.Material.Filled.Add"
                 Variant="Variant.Filled"
-                OnClick="HandleOpenAddMappingDialog"
+                OnClick="HandleOpenAddMatchingRuleMappingDialog"
                 Color="Color.Default"
                 Class="mt-5"
                 Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)"
@@ -174,8 +174,8 @@
                                     </MudChip>
                                 </MudItem>
                                 <MudItem xs="6" Class="d-flex align-center justify-end">
-                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small" Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))" Disabled="@DisableObjectMappingRuleOrderButton(objectMatchingRule, "up")" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small" Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))" Disabled="@DisableObjectMappingRuleOrderButton(objectMatchingRule, "down")" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small" Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))" Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small" Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))" Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))"></MudIconButton>
                                 </MudItem>
                             </MudGrid>
@@ -446,7 +446,7 @@
         </DialogActions>
     </MudDialog>
     
-    @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules.OrderBy(q => q.Order))
+    @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
     {
         <MudCard>
             <MudCardHeader>
@@ -490,7 +490,7 @@
                             <MudAlert Severity="Severity.Error">Functions are not yet supported in attribute flow rules.</MudAlert>
                         }
 
-                        <!-- more thought needs to be given to how we handle specifying constant values -->
+                        <!-- some thought needs to be given to how we handle specifying constant values -->
                     }
                 }
                 else if (_syncRule.Direction == SyncRuleDirection.Export)
@@ -626,7 +626,7 @@
         _syncRule.ProjectToMetaverse = false;
     }
 
-    private void HandleOpenAddMappingDialog()
+    private void HandleOpenAddMatchingRuleMappingDialog()
     {
         if (_syncRule == null)
             return;
@@ -752,7 +752,7 @@
         }
     }
 
-    private bool DisableObjectMappingRuleOrderButton(SyncRuleMapping objectMatchingRule, string direction)
+    private bool DisableObjectMatchingMappingRuleOrderButton(SyncRuleMapping objectMatchingRule, string direction)
     {
         if (_syncRule == null)
             return true;
@@ -853,8 +853,7 @@
             return;
         
         _attributeFlowMapping = new SyncRuleMapping {
-            Type = SyncRuleMappingType.AttributeFlow,
-            Order = _syncRule.AttributeFlowRules.Count == 0 ? 0 : _syncRule.AttributeFlowRules.Select(q => q.Order).Max() + 1
+            Type = SyncRuleMappingType.AttributeFlow
         };
         _attributeFlowMappingSource = new SyncRuleMappingSource();
         _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);

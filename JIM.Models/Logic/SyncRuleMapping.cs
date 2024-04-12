@@ -31,9 +31,10 @@ namespace JIM.Models.Logic
         /// <summary>
         /// Applies to: Object Matching scenario.
         /// If multiple mappings are defined for a target attribute, then the order in which they appear matters.
-        /// Mappings will be evaluated in order, i.e order 0 item will be evaluated first, then 1, etc.
+        /// Mappings will be evaluated in order, i.e. order 0 item will be evaluated first, then 1, etc.
+        /// Does not apply to attribute flow rules. This wouldn't make sense. There can only be one mapping for each target attribute.
         /// </summary>
-        public int Order { get; set; }
+        public int? Order { get; set; }
 
         /// <summary>
         /// A link to the parent SynchronisationRule for when this is an AttributeFlow type SyncRuleMapping.
@@ -55,7 +56,7 @@ namespace JIM.Models.Logic
         /// Supported scenarios:
         /// - Just one: for mapping a single attribute to the target attribute. i.e. attribute_1 => attribute
         /// - Just one: for using a single function to generate a value for the target attribute, i.e. Trim(attribute) => attribute
-        /// - Just one: for using an expression to generate a value for the target attribute. i.e attribte_1 ?? attribte_2 => attribute
+        /// - Just one: for using an expression to generate a value for the target attribute. i.e attribute_1 ?? attribute_2 => attribute
         /// - Multiple: for using multiple function calls that chain through each other to generate a value for the target attribute.
         /// </summary>
         public List<SyncRuleMappingSource> Sources { get; set; } = new();
