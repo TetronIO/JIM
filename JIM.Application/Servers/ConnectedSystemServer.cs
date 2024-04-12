@@ -809,8 +809,6 @@ public class ConnectedSystemServer
         foreach (var afr in attributeFlowRulesWithOrders)
             afr.Order = null;
         
-        
-
         // every crud operation must be tracked via an Activity
         var activity = new Activity
         {

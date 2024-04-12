@@ -506,6 +506,15 @@ namespace JIM.PostgresData.Repositories
         {
             return await Repository.Database.SyncRules
                 .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
+                .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(afr => afr.TargetMetaverseAttribute)
+                .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(afr => afr.Sources)
+                .ThenInclude(s =>s.ConnectedSystemAttribute)
+                .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(afr => afr.Sources)
+                .ThenInclude(s =>s.MetaverseAttribute)
                 .Include(sr => sr.ConnectedSystem)
                 .Include(sr => sr.ConnectedSystemObjectType)
                 .ThenInclude(csot => csot.Attributes)

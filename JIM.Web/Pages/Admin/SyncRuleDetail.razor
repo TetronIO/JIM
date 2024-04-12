@@ -312,7 +312,6 @@
                     </DialogActions>
                 </MudDialog>
             }
-
         </MudPaper>
 
         @foreach (var rootCriteriaGroup in _syncRule.ObjectScopingCriteriaGroups)
@@ -446,31 +445,23 @@
         </DialogActions>
     </MudDialog>
     
-    @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
-    {
-        <MudCard>
-            <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">The Story Book</MudText>
-                </CardHeaderContent>
-                <CardHeaderActions>
-                    <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Default" />
-                </CardHeaderActions>
-            </MudCardHeader>
-            <MudCardContent>
-
+    <MudStack Row="true">
+        @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
+        {
+            <MudPaper Class="pa-3" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText><br />
                 @if (_syncRule.Direction == SyncRuleDirection.Import)
                 {
                     <MudChip>
                         <AvatarContent>
                             <MudTooltip Text="Metaverse Attribute">
-                                <MudAvatar>MV</MudAvatar>
+                                <MudAvatar Color="Color.Dark">MV</MudAvatar>
                             </MudTooltip>
                         </AvatarContent>
-                        <ChildContent>@attributeFlowRule?.TargetMetaverseAttribute?.Name</ChildContent>
+                        <ChildContent>@attributeFlowRule.TargetMetaverseAttribute?.Name</ChildContent>
                     </MudChip>
-
-                    <MudChip Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudChip>
+                    
+                    <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
 
                     foreach (var source in attributeFlowRule.Sources.OrderBy(q => q.Order))
                     {
@@ -479,7 +470,7 @@
                             <MudChip>
                                 <AvatarContent>
                                     <MudTooltip Text="Connected System Attribute">
-                                        <MudAvatar>CS</MudAvatar>
+                                        <MudAvatar Color="Color.Dark">CS</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
                                 <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
@@ -489,24 +480,47 @@
                         {
                             <MudAlert Severity="Severity.Error">Functions are not yet supported in attribute flow rules.</MudAlert>
                         }
-
+                        
                         <!-- some thought needs to be given to how we handle specifying constant values -->
                     }
                 }
                 else if (_syncRule.Direction == SyncRuleDirection.Export)
                 {
+                    foreach (var source in attributeFlowRule.Sources.OrderBy(q => q.Order))
+                    {
+                        if (source.MetaverseAttribute != null)
+                        {
+                            <MudChip>
+                                <AvatarContent>
+                                    <MudTooltip Text="Metaverse Attribute">
+                                        <MudAvatar Color="Color.Dark">MV</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
+                            </MudChip>
+                        }
+                        else if (source.Function != null)
+                        {
+                            <MudAlert Severity="Severity.Error">Functions are not yet supported in attribute flow rules.</MudAlert>
+                        }
 
+                        <!-- some thought needs to be given to how we handle specifying constant values -->
+                    }
+                    
+                    <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight"></MudIcon></MudChip>
+                    
+                    <MudChip>
+                        <AvatarContent>
+                            <MudTooltip Text="Connected System Attribute">
+                                <MudAvatar Color="Color.Dark">CS</MudAvatar>
+                            </MudTooltip>
+                        </AvatarContent>
+                        <ChildContent>@attributeFlowRule.TargetConnectedSystemAttribute?.Name</ChildContent>
+                    </MudChip>
                 }
-
-                <MudText>This day everything happened.</MudText>
-                <MudText Typo="Typo.body2">The quick, brown fox jumps over a lazy dog.</MudText>
-
-            </MudCardContent>
-            <MudCardActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary">Read More</MudButton>
-            </MudCardActions>
-        </MudCard>
-    }
+            </MudPaper>
+        }
+    </MudStack>
 
     @if (_syncRule.Validate().Count > 0)
     {
