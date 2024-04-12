@@ -1,7 +1,6 @@
-﻿namespace JIM.Models.Exceptions
+﻿namespace JIM.Models.Exceptions;
+
+public class CannotPerformDeltaImportException : Exception
 {
-    public class CannotPerformDeltaImportException : Exception
-    {
-        public CannotPerformDeltaImportException(string message) : base(message) { }
-    }
+    public CannotPerformDeltaImportException(string message) : base(message) { }
 }

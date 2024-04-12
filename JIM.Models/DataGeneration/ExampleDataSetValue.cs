@@ -1,9 +1,8 @@
-﻿namespace JIM.Models.DataGeneration
-{
-    public class ExampleDataSetValue
-    {
-        public int Id { get; set; }
+﻿namespace JIM.Models.DataGeneration;
 
-        public string StringValue { get; set; } = null!;
-    }
+public class ExampleDataSetValue
+{
+    public int Id { get; set; }
+
+    public string StringValue { get; set; } = null!;
 }

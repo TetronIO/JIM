@@ -1,7 +1,6 @@
-﻿namespace JIM.Models.Exceptions
+﻿namespace JIM.Models.Exceptions;
+
+public class MissingExternalIdAttributeException : Exception
 {
-    public class MissingExternalIdAttributeException : Exception
-    {
-        public MissingExternalIdAttributeException(string message) : base(message) { }
-    }
+    public MissingExternalIdAttributeException(string message) : base(message) { }
 }

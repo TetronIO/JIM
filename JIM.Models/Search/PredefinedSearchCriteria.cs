@@ -1,15 +1,13 @@
 ﻿using JIM.Models.Core;
+namespace JIM.Models.Search;
 
-namespace JIM.Models.Search
+public class PredefinedSearchCriteria
 {
-    public class PredefinedSearchCriteria
-    {
-        public int Id { get; set; }
+    public int Id { get; set; }
 
-        public SearchComparisonType ComparisonType { get; set; }
+    public SearchComparisonType ComparisonType { get; set; }
 
-        public string StringValue { get; set; } = null!;
+    public string StringValue { get; set; } = null!;
 
-        public MetaverseAttribute MetaverseAttribute { get; set; } = null!;
-    }
+    public MetaverseAttribute MetaverseAttribute { get; set; } = null!;
 }

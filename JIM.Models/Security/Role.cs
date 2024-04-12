@@ -1,23 +1,21 @@
 ﻿using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
+namespace JIM.Models.Security;
 
-namespace JIM.Models.Security
+[Index(nameof(Name))]
+public class Role
 {
-    [Index(nameof(Name))]
-    public class Role
-    {
-        public int Id { get; set; }
+    public int Id { get; set; }
 
-        public string Name { get; set; } = null!;
+    public string Name { get; set; } = null!;
 
-        public bool BuiltIn { get; set; }
+    public bool BuiltIn { get; set; }
 
-        public DateTime Created { get; set; } = DateTime.UtcNow;
+    public DateTime Created { get; set; } = DateTime.UtcNow;
 
-        public List<MetaverseObject> StaticMembers { get; set; } = new();
+    public List<MetaverseObject> StaticMembers { get; set; } = new();
 
-        // todo: resource scope
-        // todo: permissions
-        // todo: dynamic membership
-    }
+    // todo: resource scope
+    // todo: permissions
+    // todo: dynamic membership
 }

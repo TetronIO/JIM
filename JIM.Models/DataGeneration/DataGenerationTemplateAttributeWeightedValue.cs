@@ -1,9 +1,8 @@
-﻿namespace JIM.Models.DataGeneration
+﻿namespace JIM.Models.DataGeneration;
+
+public class DataGenerationTemplateAttributeWeightedValue
 {
-    public class DataGenerationTemplateAttributeWeightedValue
-    {
-        public int Id { get; set; }
-        public string Value { get; set; } = null!;
-        public float Weight { get; set; }
-    }
+    public int Id { get; set; }
+    public string Value { get; set; } = null!;
+    public float Weight { get; set; }
 }

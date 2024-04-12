@@ -1,7 +1,6 @@
-namespace JIM.Models.Enums
+namespace JIM.Models.Enums;
+
+public enum QuerySortBy
 {
-    public enum QuerySortBy
-    {
-        DateCreated
-    }
+    DateCreated
 }

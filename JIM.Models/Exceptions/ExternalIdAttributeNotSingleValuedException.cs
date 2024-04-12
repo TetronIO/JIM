@@ -1,7 +1,6 @@
-﻿namespace JIM.Models.Exceptions
+﻿namespace JIM.Models.Exceptions;
+
+public class ExternalIdAttributeNotSingleValuedException : Exception
 {
-    public class ExternalIdAttributeNotSingleValuedException : Exception
-    {
-        public ExternalIdAttributeNotSingleValuedException(string message) : base(message) { }
-    }
+    public ExternalIdAttributeNotSingleValuedException(string message) : base(message) { }
 }

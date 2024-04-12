@@ -1,7 +1,6 @@
-﻿namespace JIM.Models.Staging
+﻿namespace JIM.Models.Staging;
+
+public class ConnectorSchema
 {
-    public class ConnectorSchema
-    {
-        public List<ConnectorSchemaObjectType> ObjectTypes { get; set; } = new();
-    }
+    public List<ConnectorSchemaObjectType> ObjectTypes { get; set; } = new();
 }

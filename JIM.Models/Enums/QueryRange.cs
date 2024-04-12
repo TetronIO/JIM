@@ -1,10 +1,9 @@
-namespace JIM.Models.Enums
+namespace JIM.Models.Enums;
+
+public enum QueryRange
 {
-    public enum QueryRange
-    {
-        Forever,
-        LastYear,
-        LastMonth,
-        LastWeek
-    }
+    Forever,
+    LastYear,
+    LastMonth,
+    LastWeek
 }

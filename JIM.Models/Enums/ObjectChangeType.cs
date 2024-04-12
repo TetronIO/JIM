@@ -1,10 +1,9 @@
-namespace JIM.Models.Enums
+namespace JIM.Models.Enums;
+
+public enum ObjectChangeType
 {
-    public enum ObjectChangeType
-    {
-        NotSet,
-        Create,
-        Update,
-        Delete
-    }
+    NotSet,
+    Create,
+    Update,
+    Delete
 }

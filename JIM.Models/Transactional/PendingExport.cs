@@ -1,45 +1,43 @@
 ﻿using JIM.Models.Staging;
+namespace JIM.Models.Transactional;
 
-namespace JIM.Models.Transactional
+public class PendingExport
 {
-    public class PendingExport
-    {
-        // this object will get created when a synchronisation is run against a connector space object
-        // and it's determined a change needs to be made to the corresponding object in the connected system.
-        // the pending export would get processed on an export run, with the change being attempted against
-        // the connected system. changes would be made and where possible, the PendingExport or 
-        // PendingExportAttributeValueChange objects would be deleted, leaving ones remaining only if they had
-        // failed and needed administrator intervention to remediate.
+    // this object will get created when a synchronisation is run against a connector space object
+    // and it's determined a change needs to be made to the corresponding object in the connected system.
+    // the pending export would get processed on an export run, with the change being attempted against
+    // the connected system. changes would be made and where possible, the PendingExport or 
+    // PendingExportAttributeValueChange objects would be deleted, leaving ones remaining only if they had
+    // failed and needed administrator intervention to remediate.
 
-        // confirming imports will be needed to confirm that the export operation was successful.
+    // confirming imports will be needed to confirm that the export operation was successful.
 
-        // expected results for export operations:
-        // - create object: success or fail
-        // - delete object: success or fail
-        // - update attribute: atomic, some can succeed, some can fail
+    // expected results for export operations:
+    // - create object: success or fail
+    // - delete object: success or fail
+    // - update attribute: atomic, some can succeed, some can fail
 
-        public Guid Id { get; set; }
+    public Guid Id { get; set; }
 
-        /// <summary>
-        /// If the change type is create, then it's essential we know what connected system this applies to :)
-        /// </summary>
-        public ConnectedSystem ConnectedSystem { get; set; } = null!;
+    /// <summary>
+    /// If the change type is create, then it's essential we know what connected system this applies to :)
+    /// </summary>
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
-        /// <summary>
-        /// If the change type is delete or update, then we can link an existing connector space object.
-        /// If the change type is create, then there won't be a connector space object yet that we can link.
-        /// </summary>
-        public ConnectedSystemObject? ConnectedSystemObject { get; set; }
+    /// <summary>
+    /// If the change type is delete or update, then we can link an existing connector space object.
+    /// If the change type is create, then there won't be a connector space object yet that we can link.
+    /// </summary>
+    public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
-        public PendingExportChangeType ChangeType { get; set; }
+    public PendingExportChangeType ChangeType { get; set; }
 
-        public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = new();
+    public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = new();
 
-        public PendingExportStatus Status { get; set; } = PendingExportStatus.Pending;
+    public PendingExportStatus Status { get; set; } = PendingExportStatus.Pending;
 
-        /// <summary>
-        /// How many times have we encounted an error whilst trying to export this change?
-        /// </summary>
-        public int? ErrorCount { get; set; }
-    }
+    /// <summary>
+    /// How many times have we encounted an error whilst trying to export this change?
+    /// </summary>
+    public int? ErrorCount { get; set; }
 }

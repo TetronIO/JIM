@@ -1,9 +1,8 @@
-namespace JIM.Models.Enums
+namespace JIM.Models.Enums;
+
+public enum ValueChangeType
 {
-    public enum ValueChangeType
-    {
-        NotSet,
-        Add,
-        Remove
-    }
+    NotSet,
+    Add,
+    Remove
 }

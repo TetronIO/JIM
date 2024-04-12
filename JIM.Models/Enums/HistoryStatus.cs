@@ -1,11 +1,10 @@
-﻿namespace JIM.Models.Enums
+﻿namespace JIM.Models.Enums;
+
+public enum HistoryStatus
 {
-    public enum HistoryStatus
-    {
-        NotSet = 0,
-        InProgress = 1,
-        Complete = 2,
-        CompleteWithError = 3,
-        FailedWithError = 4
-    }
+    NotSet = 0,
+    InProgress = 1,
+    Complete = 2,
+    CompleteWithError = 3,
+    FailedWithError = 4
 }

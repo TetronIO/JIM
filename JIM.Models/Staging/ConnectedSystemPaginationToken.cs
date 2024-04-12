@@ -1,23 +1,22 @@
-﻿namespace JIM.Models.Staging
+﻿namespace JIM.Models.Staging;
+
+public class ConnectedSystemPaginationToken
 {
-    public class ConnectedSystemPaginationToken
+    public string Name { get; set; }
+
+    public string? StringValue { get; set; }
+
+    public byte[]? ByteValue { get; set; }
+
+    public ConnectedSystemPaginationToken(string name, byte[] byteValue)
     {
-        public string Name { get; set; }
+        Name = name;
+        ByteValue = byteValue;
+    }
 
-        public string? StringValue { get; set; }
-
-        public byte[]? ByteValue { get; set; }
-
-        public ConnectedSystemPaginationToken(string name, byte[] byteValue)
-        {
-            Name = name;
-            ByteValue = byteValue;
-        }
-
-        public ConnectedSystemPaginationToken(string name, string stringValue)
-        {
-            Name = name;
-            StringValue = stringValue;
-        }
+    public ConnectedSystemPaginationToken(string name, string stringValue)
+    {
+        Name = name;
+        StringValue = stringValue;
     }
 }

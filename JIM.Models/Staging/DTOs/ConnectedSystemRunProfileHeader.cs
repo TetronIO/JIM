@@ -1,13 +1,12 @@
-﻿namespace JIM.Models.Staging.DTOs
+﻿namespace JIM.Models.Staging.DTOs;
+
+public class ConnectedSystemRunProfileHeader
 {
-    public class ConnectedSystemRunProfileHeader
-    {
-        public int Id { get; set; }
+    public int Id { get; set; }
 
-        public string ConnectedSystemName { get; set; } = null!;
+    public string ConnectedSystemName { get; set; } = null!;
 
-        public string ConnectedSystemRunProfileName { get; set; } = null!;
+    public string ConnectedSystemRunProfileName { get; set; } = null!;
 
-        public override string ToString() => $"{ConnectedSystemName} : {ConnectedSystemRunProfileName}";
-    }
+    public override string ToString() => $"{ConnectedSystemName} : {ConnectedSystemRunProfileName}";
 }
