@@ -4,7 +4,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Logic
 {
     /// <summary>
-    /// Defines how data should flow from JIM to a connected system (or visa versa) for a specific attribute.
+    /// Defines how data should flow from JIM to a connected system (or vice versa) for a specific attribute.
     /// Mappings can be used for either attribute flow, or object matching scenarios. They have slightly different rules:
     /// 
     /// Rules:

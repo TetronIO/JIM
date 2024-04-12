@@ -73,7 +73,7 @@ namespace JIM.Models.Logic
         /// </summary>
         public List<SyncRuleMapping> ObjectMatchingRules { get; set; } = new();
 
-        // back-link for EF
+        // back-link for Entity Framework.
         public List<Activity> Activities { get; set; } = null!;
 
         // TODO: what happens when an object is in scope, then falls out of scope?
