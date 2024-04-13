@@ -44,24 +44,37 @@
                         }
                     </MudSelect>
                 }
-
-                <MudSelect 
-                    T="string"
-                    Label="Direction"
-                    Placeholder="Please select an attribute flow direction..."
-                    Required="true"
-                    ValueChanged="HandleSyncRuleDirectionSelection"
-                    Variant="Variant.Outlined"
-                    Class="mt-5">
-                    @foreach (SyncRuleDirection item in Enum.GetValues(typeof(SyncRuleDirection)))
-                    {
-                        if (item != SyncRuleDirection.NotSet)
+                
+                @if (_syncRule.ConnectedSystem != null)
+                {
+                    <MudSelect 
+                        T="string"
+                        Label="Direction"
+                        Placeholder="Please select an attribute flow direction..."
+                        Required="true"
+                        ValueChanged="HandleSyncRuleDirectionSelection"
+                        Variant="Variant.Outlined"
+                        Class="mt-5">
+                        @foreach (SyncRuleDirection direction in Enum.GetValues(typeof(SyncRuleDirection)))
                         {
-                            <MudSelectItem Value="@item.ToString()">@item</MudSelectItem>
+                            if (direction != SyncRuleDirection.NotSet)
+                            {
+                                // does the connector definition support this direction?
+                                var directionSupported = false;
+                                if (direction == SyncRuleDirection.Export)
+                                {
+                                    directionSupported = _syncRule.ConnectedSystem.ConnectorDefinition.SupportsExport;
+                                }
+                                else if (direction == SyncRuleDirection.Import)
+                                {
+                                    directionSupported = _syncRule.ConnectedSystem.ConnectorDefinition.SupportsDeltaImport || _syncRule.ConnectedSystem.ConnectorDefinition.SupportsFullImport;
+                                }
+                                <MudSelectItem Disabled="!directionSupported" Value="@direction.ToString()">@direction@(directionSupported ? "" : " (not supported by Connector)")</MudSelectItem>
+                            }
                         }
-                    }
-                </MudSelect>
-
+                    </MudSelect>
+                }
+                
                 @if (_syncRule.ConnectedSystem != null && _syncRule.Direction != SyncRuleDirection.NotSet && _metaverseObjectTypes != null && _syncRule.ConnectedSystem is { ObjectTypes: not null })
                 {
                     <MudGrid>
