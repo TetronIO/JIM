@@ -837,5 +837,10 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
+
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject initiatedBy)
+    {
+
+    }
     #endregion
 }

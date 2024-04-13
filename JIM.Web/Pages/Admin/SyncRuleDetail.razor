@@ -547,12 +547,22 @@
         </MudAlert>
     }
 
-    <MudButton Variant="Variant.Filled"
-               Color="Color.Primary"
-               Class="mt-5"
-               OnClick="HandleCreateOrUpdateSyncRuleAsync"
-               Disabled="!_syncRule.IsValid()"
-               DisableElevation="true">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule</MudButton>
+    <MudStack Row="true" Justify="Justify.SpaceBetween">
+        <MudButton 
+            Variant="Variant.Filled"
+            Color="Color.Primary"
+            Class="mt-5"
+            OnClick="HandleCreateOrUpdateSyncRuleAsync"
+            Disabled="!_syncRule.IsValid()"
+            DisableElevation="true">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule</MudButton>
+        <MudButton 
+            Variant="Variant.Filled" 
+            StartIcon="@Icons.Material.Filled.Delete" 
+            OnClick="HandleDeleteSyncRuleAsync"
+            DisableElevation="true"
+            Disabled="@(_syncRule.Id == 0)"
+            Color="Color.Error">Delete Sync Rule</MudButton>
+    </MudStack>
 }
 
 @code {
@@ -949,5 +959,18 @@
     private void HandleAttributeFlowRuleDeleteClick(SyncRuleMapping attributeFlowRule)
     {
         _syncRule?.AttributeFlowRules.Remove(attributeFlowRule);
+    }
+
+    private async Task HandleDeleteSyncRuleAsync()
+    {
+        var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
+        if (confirmationResult.HasValue && confirmationResult.Value)
+        {
+            // attribute the operation to the signed-in user
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            await Jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
+            NavManager.NavigateTo("../");
+            return;
+        }
     }
 }
