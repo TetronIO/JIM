@@ -948,9 +948,6 @@
 
     private void HandleAttributeFlowRuleDeleteClick(SyncRuleMapping attributeFlowRule)
     {
-        if (_syncRule == null)
-            return;
-
-        _syncRule.AttributeFlowRules.Remove(attributeFlowRule);
+        _syncRule?.AttributeFlowRules.Remove(attributeFlowRule);
     }
 }
