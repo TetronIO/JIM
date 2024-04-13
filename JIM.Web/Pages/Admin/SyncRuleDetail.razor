@@ -196,7 +196,6 @@
                     }
                 </MudPaper>
             }
-            
         </MudPaper>
 
         <MudDialog @bind-IsVisible="_addMatchingRuleDialogVisible" Options="_dialogOptions">
@@ -428,7 +427,7 @@
                             Required="true"
                             Class="mt-5"
                             Variant="Variant.Outlined">
-                            @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes)
+                            @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(q => !_syncRule.AttributeFlowRules.Any(afr => afr.TargetMetaverseAttribute != null && afr.TargetMetaverseAttribute.Id == q.Id)))
                             {
                                 <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)" Value="@metaverseAttribute">@metaverseAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
                             }
