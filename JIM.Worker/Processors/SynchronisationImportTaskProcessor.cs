@@ -312,6 +312,9 @@ internal class SynchronisationImportTaskProcessor
                         });
                     }
                     break;
+                case AttributeDataType.NotSet:
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 
@@ -411,7 +414,7 @@ internal class SynchronisationImportTaskProcessor
                     case AttributeDataType.Boolean:
                         // there will be only a single value for a bool. is it the same or different?
                         // if different, remove the old value, add the new one
-                        // observation: removing and adding sva values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
+                        // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                         // todo: consider having the ability to update values instead of replacing.
                         var csAttributeValue = connectedSystemObject.AttributeValues.Single(av => av.Attribute.Name == csoAttributeName);
                         if (csAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
@@ -430,7 +433,7 @@ internal class SynchronisationImportTaskProcessor
             }
         }
 
-        // process new imported attributes (addding attribute values where they were null before)
+        // process new imported attributes (adding attribute values where they were null before)
         var newAttributes = connectedSystemImportObject.Attributes.Where(csio => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.Equals(csio.Name, StringComparison.CurrentCultureIgnoreCase)));
         foreach (var newAttribute in newAttributes)
         {
@@ -468,6 +471,9 @@ internal class SynchronisationImportTaskProcessor
                 case AttributeDataType.Boolean:
                     connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = newAttribute.BoolValue });
                     break;
+                case AttributeDataType.NotSet:
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 
@@ -479,7 +485,7 @@ internal class SynchronisationImportTaskProcessor
     /// <summary>
     /// Enumerate each connected system object with an unresolved reference string value and attempts to convert it to a resolved reference to another connected system object.
     /// </summary>
-    private async Task ResolveReferencesAsync(List<ConnectedSystemObject> connectedSystemObjectsToProcess)
+    private async Task ResolveReferencesAsync(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToProcess)
     {
         // get all csos with attributes that have unresolved reference values
         // see if we can find a cso that has an external id or secondary external id attribute value matching the string value
@@ -539,7 +545,7 @@ internal class SynchronisationImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // todo: make it a per-connected system setting as to whether or not to raise an error, or ignore. sometimes this is desirable.
+                    // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
                     var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == cso);
                     if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
                     {

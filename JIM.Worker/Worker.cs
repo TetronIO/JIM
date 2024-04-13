@@ -238,7 +238,7 @@ public class Worker : BackgroundService
                                 }
                                 else
                                 {
-                                    // we need a little more information on the connected systmem, so retrieve it
+                                    // we need a little more information on the connected system, so retrieve it
                                     var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
                                     if (connectedSystem == null)
                                     {
