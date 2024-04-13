@@ -62,5 +62,6 @@ namespace JIM.Data.Repositories
         public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
         public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
         public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
+        public Task DeleteSyncRuleAsync(SyncRule syncRule);
     }
 }

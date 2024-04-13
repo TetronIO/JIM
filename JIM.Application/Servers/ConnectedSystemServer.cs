@@ -840,7 +840,16 @@ public class ConnectedSystemServer
 
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject initiatedBy)
     {
-
+        // every crud operation must be tracked via an Activity
+        var activity = new Activity
+        {
+            TargetName = syncRule.Name,
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
     #endregion
 }

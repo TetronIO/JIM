@@ -547,6 +547,12 @@ namespace JIM.PostgresData.Repositories
             Repository.Database.Update(syncRule);
             await Repository.Database.SaveChangesAsync();
         }
+        
+        public async Task DeleteSyncRuleAsync(SyncRule syncRule)
+        {
+            Repository.Database.Remove(syncRule);
+            await Repository.Database.SaveChangesAsync();
+        }
         #endregion
     }
 }
