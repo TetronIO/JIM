@@ -449,7 +449,17 @@
         @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
         {
             <MudPaper Class="pa-3" Elevation="0" Outlined="true">
-                <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText><br />
+                
+                <MudStack Row="true" Justify="Justify.SpaceBetween" Wrap="Wrap.NoWrap">
+                    <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText><br/>
+                    <MudIconButton 
+                        Icon="@Icons.Material.Filled.Delete" 
+                        Color="Color.Error" 
+                        Size="Size.Small" 
+                        aria-label="delete" 
+                        OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))"></MudIconButton>
+                </MudStack>
+                
                 @if (_syncRule.Direction == SyncRuleDirection.Import)
                 {
                     <MudChip>
@@ -460,7 +470,7 @@
                         </AvatarContent>
                         <ChildContent>@attributeFlowRule.TargetMetaverseAttribute?.Name</ChildContent>
                     </MudChip>
-                    
+
                     <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
 
                     foreach (var source in attributeFlowRule.Sources.OrderBy(q => q.Order))
@@ -480,7 +490,7 @@
                         {
                             <MudAlert Severity="Severity.Error">Functions are not yet supported in attribute flow rules.</MudAlert>
                         }
-                        
+
                         <!-- some thought needs to be given to how we handle specifying constant values -->
                     }
                 }
@@ -506,9 +516,9 @@
 
                         <!-- some thought needs to be given to how we handle specifying constant values -->
                     }
-                    
+
                     <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight"></MudIcon></MudChip>
-                    
+
                     <MudChip>
                         <AvatarContent>
                             <MudTooltip Text="Connected System Attribute">
@@ -934,5 +944,13 @@
         // re-initialise the attribute flow rule and source, ready for the next use
         _attributeFlowMapping = null;
         _attributeFlowMappingSource = null;
+    }
+
+    private void HandleAttributeFlowRuleDeleteClick(SyncRuleMapping attributeFlowRule)
+    {
+        if (_syncRule == null)
+            return;
+
+        _syncRule.AttributeFlowRules.Remove(attributeFlowRule);
     }
 }
