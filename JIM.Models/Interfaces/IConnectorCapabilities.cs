@@ -7,7 +7,7 @@ public interface IConnectorCapabilities
 {
     /// <summary>
     /// Does the Connector support receiving full imports? i.e. receiving the total representation of all objects in the connected system.
-    /// Most should, to enable reconciliation after exports, though some might just be drop-exports, i.e. for when connectivity to connected systems is not bi-directional.
+    /// Most should, to enable reconciliation after exports, though some might just be drop-exports, i.e. for when connectivity to connected systems is not bidirectional.
     /// </summary>
     public bool SupportsFullImport { get; }
 
@@ -42,13 +42,13 @@ public interface IConnectorCapabilities
 
     /// <summary>
     /// For some systems it makes sense to allow the user to choose the external id attribute, for others it doesn't.
-    /// Use this to control whether or not the user can change the external id. Note, if you set this to false, you will
+    /// Use this to control whether the user can change the external id. Note, if you set this to false, you will
     /// have to use the RecommendedExternalIdAttribute property on a connector so an external id attribute is set.
     /// </summary>
     public bool SupportsUserSelectedExternalId { get; }
 
     /// <summary>
-    /// Controls whether or not the user can change the data type of a connected system attribute. For systems with a defined
+    /// Controls whether the user can change the data type of connected system attribute. For systems with a defined
     /// schema, this probably doesn't make sense to allow, but for systems where the schema is inferred, i.e. in CSVs, then it does.
     /// </summary>
     public bool SupportsUserSelectedAttributeTypes {  get; }
