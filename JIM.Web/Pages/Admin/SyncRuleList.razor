@@ -51,11 +51,11 @@
         <MudTd DataLabel="Direction">
             @if (context.Direction == SyncRuleDirection.Import)
             {
-                <MudChip Icon="@Icons.Material.Filled.KeyboardArrowLeft">Inbound</MudChip>
+                <MudChip Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft">Inbound</MudChip>
             }
             else
             {
-                <MudChip Icon="@Icons.Material.Filled.KeyboardArrowRight">Outbound</MudChip>
+                <MudChip Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight">Outbound</MudChip>
             }
         </MudTd>
         <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
