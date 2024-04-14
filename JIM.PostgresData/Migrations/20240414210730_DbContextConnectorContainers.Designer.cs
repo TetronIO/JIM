@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20240414210730_DbContextConnectorContainers")]
+    partial class DbContextConnectorContainers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -35,7 +37,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ReferenceMetaverseObjectTypesId");
 
-                    b.ToTable("DataGenerationTemplateAttributeMetaverseObjectType", (string)null);
+                    b.ToTable("DataGenerationTemplateAttributeMetaverseObjectType");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.Activity", b =>
@@ -108,7 +110,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SyncRuleId");
 
-                    b.ToTable("Activities", (string)null);
+                    b.ToTable("Activities");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
@@ -144,7 +146,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectId");
 
-                    b.ToTable("ActivityRunProfileExecutionItems", (string)null);
+                    b.ToTable("ActivityRunProfileExecutionItems");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
@@ -175,7 +177,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("Name");
 
-                    b.ToTable("MetaverseAttributes", (string)null);
+                    b.ToTable("MetaverseAttributes");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
@@ -205,7 +207,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("TypeId");
 
-                    b.ToTable("MetaverseObjects", (string)null);
+                    b.ToTable("MetaverseObjects");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectAttributeValue", b =>
@@ -262,7 +264,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("StringValue");
 
-                    b.ToTable("MetaverseObjectAttributeValues", (string)null);
+                    b.ToTable("MetaverseObjectAttributeValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChange", b =>
@@ -292,7 +294,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId");
 
-                    b.ToTable("MetaverseObjectChanges", (string)null);
+                    b.ToTable("MetaverseObjectChanges");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChangeAttribute", b =>
@@ -313,7 +315,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectChangeId");
 
-                    b.ToTable("MetaverseObjectChangeAttributes", (string)null);
+                    b.ToTable("MetaverseObjectChangeAttributes");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChangeAttributeValue", b =>
@@ -355,7 +357,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ReferenceValueId");
 
-                    b.ToTable("MetaverseObjectChangeAttributeValues", (string)null);
+                    b.ToTable("MetaverseObjectChangeAttributeValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectType", b =>
@@ -380,7 +382,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("Name");
 
-                    b.ToTable("MetaverseObjectTypes", (string)null);
+                    b.ToTable("MetaverseObjectTypes");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.ServiceSettings", b =>
@@ -422,7 +424,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SSOUniqueIdentifierMetaverseAttributeId");
 
-                    b.ToTable("ServiceSettings", (string)null);
+                    b.ToTable("ServiceSettings");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationObjectType", b =>
@@ -448,7 +450,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectTypeId");
 
-                    b.ToTable("DataGenerationObjectTypes", (string)null);
+                    b.ToTable("DataGenerationObjectTypes");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplate", b =>
@@ -473,7 +475,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("Name");
 
-                    b.ToTable("DataGenerationTemplates", (string)null);
+                    b.ToTable("DataGenerationTemplates");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", b =>
@@ -545,7 +547,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseAttributeId");
 
-                    b.ToTable("DataGenerationTemplateAttributes", (string)null);
+                    b.ToTable("DataGenerationTemplateAttributes");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttributeDependency", b =>
@@ -570,7 +572,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseAttributeId");
 
-                    b.ToTable("DataGenerationTemplateAttributeDependency", (string)null);
+                    b.ToTable("DataGenerationTemplateAttributeDependency");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttributeWeightedValue", b =>
@@ -595,7 +597,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("DataGenerationTemplateAttributeId");
 
-                    b.ToTable("DataGenerationTemplateAttributeWeightedValue", (string)null);
+                    b.ToTable("DataGenerationTemplateAttributeWeightedValue");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSet", b =>
@@ -622,7 +624,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ExampleDataSets", (string)null);
+                    b.ToTable("ExampleDataSets");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSetInstance", b =>
@@ -648,7 +650,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ExampleDataSetId");
 
-                    b.ToTable("ExampleDataSetInstances", (string)null);
+                    b.ToTable("ExampleDataSetInstances");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSetValue", b =>
@@ -670,7 +672,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ExampleDataSetId");
 
-                    b.ToTable("ExampleDataSetValues", (string)null);
+                    b.ToTable("ExampleDataSetValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Extensibility.Function", b =>
@@ -698,7 +700,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("FunctionLibraryId");
 
-                    b.ToTable("Function", (string)null);
+                    b.ToTable("Function");
                 });
 
             modelBuilder.Entity("JIM.Models.Extensibility.FunctionLibrary", b =>
@@ -725,7 +727,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("FunctionLibrary", (string)null);
+                    b.ToTable("FunctionLibrary");
                 });
 
             modelBuilder.Entity("JIM.Models.Extensibility.FunctionParameter", b =>
@@ -749,7 +751,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("FunctionId");
 
-                    b.ToTable("FunctionParameter", (string)null);
+                    b.ToTable("FunctionParameter");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRule", b =>
@@ -804,7 +806,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectTypeId");
 
-                    b.ToTable("SyncRules", (string)null);
+                    b.ToTable("SyncRules");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMapping", b =>
@@ -851,7 +853,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("TargetMetaverseAttributeId");
 
-                    b.ToTable("SyncRuleMappings", (string)null);
+                    b.ToTable("SyncRuleMappings");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingSource", b =>
@@ -887,7 +889,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SyncRuleMappingId");
 
-                    b.ToTable("SyncRuleMappingSources", (string)null);
+                    b.ToTable("SyncRuleMappingSources");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingSourceParamValue", b =>
@@ -939,7 +941,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SyncRuleMappingSourceId");
 
-                    b.ToTable("SyncRuleMappingSourceParamValues", (string)null);
+                    b.ToTable("SyncRuleMappingSourceParamValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleScopingCriteria", b =>
@@ -980,7 +982,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SyncRuleScopingCriteriaGroupId");
 
-                    b.ToTable("SyncRuleScopingCriteria", (string)null);
+                    b.ToTable("SyncRuleScopingCriteria");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleScopingCriteriaGroup", b =>
@@ -1009,7 +1011,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SyncRuleId");
 
-                    b.ToTable("SyncRuleScopingCriteriaGroups", (string)null);
+                    b.ToTable("SyncRuleScopingCriteriaGroups");
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>
@@ -1046,7 +1048,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("Uri");
 
-                    b.ToTable("PredefinedSearches", (string)null);
+                    b.ToTable("PredefinedSearches");
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearchAttribute", b =>
@@ -1072,7 +1074,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PredefinedSearchId");
 
-                    b.ToTable("PredefinedSearchAttribute", (string)null);
+                    b.ToTable("PredefinedSearchAttribute");
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearchCriteria", b =>
@@ -1102,7 +1104,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PredefinedSearchCriteriaGroupId");
 
-                    b.ToTable("PredefinedSearchCriteria", (string)null);
+                    b.ToTable("PredefinedSearchCriteria");
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearchCriteriaGroup", b =>
@@ -1131,7 +1133,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PredefinedSearchId");
 
-                    b.ToTable("PredefinedSearchCriteriaGroups", (string)null);
+                    b.ToTable("PredefinedSearchCriteriaGroups");
                 });
 
             modelBuilder.Entity("JIM.Models.Security.Role", b =>
@@ -1156,7 +1158,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("Name");
 
-                    b.ToTable("Roles", (string)null);
+                    b.ToTable("Roles");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystem", b =>
@@ -1193,7 +1195,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectorDefinitionId");
 
-                    b.ToTable("ConnectedSystems", (string)null);
+                    b.ToTable("ConnectedSystems");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemContainer", b =>
@@ -1238,7 +1240,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PartitionId");
 
-                    b.ToTable("ConnectedSystemContainers", (string)null);
+                    b.ToTable("ConnectedSystemContainers");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObject", b =>
@@ -1285,7 +1287,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("TypeId");
 
-                    b.ToTable("ConnectedSystemObjects", (string)null);
+                    b.ToTable("ConnectedSystemObjects");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectAttributeValue", b =>
@@ -1332,7 +1334,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ReferenceValueId");
 
-                    b.ToTable("ConnectedSystemObjectAttributeValues", (string)null);
+                    b.ToTable("ConnectedSystemObjectAttributeValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectChange", b =>
@@ -1373,7 +1375,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("DeletedObjectTypeId");
 
-                    b.ToTable("ConnectedSystemObjectChanges", (string)null);
+                    b.ToTable("ConnectedSystemObjectChanges");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectChangeAttribute", b =>
@@ -1394,7 +1396,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemChangeId");
 
-                    b.ToTable("ConnectedSystemObjectChangeAttributes", (string)null);
+                    b.ToTable("ConnectedSystemObjectChangeAttributes");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectChangeAttributeValue", b =>
@@ -1436,7 +1438,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ReferenceValueId");
 
-                    b.ToTable("ConnectedSystemObjectChangeAttributeValues", (string)null);
+                    b.ToTable("ConnectedSystemObjectChangeAttributeValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectType", b =>
@@ -1464,7 +1466,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemId");
 
-                    b.ToTable("ConnectedSystemObjectTypes", (string)null);
+                    b.ToTable("ConnectedSystemObjectTypes");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", b =>
@@ -1510,7 +1512,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectTypeId");
 
-                    b.ToTable("ConnectedSystemAttributes", (string)null);
+                    b.ToTable("ConnectedSystemAttributes");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
@@ -1539,7 +1541,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemId");
 
-                    b.ToTable("ConnectedSystemPartitions", (string)null);
+                    b.ToTable("ConnectedSystemPartitions");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
@@ -1575,7 +1577,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PartitionId");
 
-                    b.ToTable("ConnectedSystemRunProfiles", (string)null);
+                    b.ToTable("ConnectedSystemRunProfiles");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemSettingValue", b =>
@@ -1610,7 +1612,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SettingId");
 
-                    b.ToTable("ConnectedSystemSettingValue", (string)null);
+                    b.ToTable("ConnectedSystemSettingValue");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectorContainer", b =>
@@ -1640,7 +1642,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectorPartitionId");
 
-                    b.ToTable("ConnectorContainers", (string)null);
+                    b.ToTable("ConnectorContainers");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinition", b =>
@@ -1696,7 +1698,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ConnectorDefinitions", (string)null);
+                    b.ToTable("ConnectorDefinitions");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinitionFile", b =>
@@ -1756,7 +1758,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectorDefinitionId");
 
-                    b.ToTable("ConnectorDefinitionFiles", (string)null);
+                    b.ToTable("ConnectorDefinitionFiles");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectorDefinitionSetting", b =>
@@ -1801,7 +1803,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectorDefinitionId");
 
-                    b.ToTable("ConnectorDefinitionSetting", (string)null);
+                    b.ToTable("ConnectorDefinitionSetting");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectorPartition", b =>
@@ -1818,7 +1820,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ConnectorPartition", (string)null);
+                    b.ToTable("ConnectorPartition");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.WorkerTask", b =>
@@ -1855,7 +1857,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("InitiatedById");
 
-                    b.ToTable("WorkerTasks", (string)null);
+                    b.ToTable("WorkerTasks");
 
                     b.HasDiscriminator<string>("Discriminator").HasValue("WorkerTask");
                 });
@@ -1887,7 +1889,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectId");
 
-                    b.ToTable("PendingExports", (string)null);
+                    b.ToTable("PendingExports");
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.PendingExportAttributeValueChange", b =>
@@ -1926,7 +1928,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PendingExportId");
 
-                    b.ToTable("PendingExportAttributeValueChanges", (string)null);
+                    b.ToTable("PendingExportAttributeValueChanges");
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
@@ -1941,7 +1943,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectTypesId");
 
-                    b.ToTable("MetaverseAttributeMetaverseObjectType", (string)null);
+                    b.ToTable("MetaverseAttributeMetaverseObjectType");
                 });
 
             modelBuilder.Entity("MetaverseObjectRole", b =>
@@ -1956,7 +1958,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("StaticMembersId");
 
-                    b.ToTable("MetaverseObjectRole", (string)null);
+                    b.ToTable("MetaverseObjectRole");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.ClearConnectedSystemObjectsWorkerTask", b =>
