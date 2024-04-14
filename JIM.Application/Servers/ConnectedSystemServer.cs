@@ -629,6 +629,11 @@ public class ConnectedSystemServer
         else
             throw new InvalidDataException("AddChangeAttributeValueObject:  Invalid removal attribute type or null attribute value");
     }
+
+    public async Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
+    {
+        return await Application.Repository.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
+    }
     #endregion
 
     #region Connected System Partitions

@@ -8,6 +8,7 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @_connectedSystem?.Name</MudText>
@@ -199,7 +200,58 @@
                 </MudButton>
             </MudAlert>
 
-            @if (_connectedSystem.ObjectTypes != null && _connectedSystem.ObjectTypes.Count > 0)
+            <MudDialog @bind-IsVisible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
+                <TitleContent>
+                    <MudText Typo="Typo.h6">
+                        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Schema Attribute
+                    </MudText>
+                </TitleContent>
+                <DialogContent>
+                    <MudText>Attribute: @_objectTypeAttributeBeingEdited?.Name</MudText>
+
+                    @if (!_objectTypeAttributeBeingEditedIsEditable)
+                    {
+                        <MudAlert Severity="Severity.Error">
+                            This Connected System attribute cannot be edited as it is being referenced by either a synchronisation rule, or has values already populated.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            This Connector supports you changing the data type of a Connected System attribute. This might be because the data type
+                            was detected automatically, and might need adjusting if not right.
+                        </MudAlert>
+                    }
+                    
+                    <MudSelect
+                        T="string"
+                        Label="Please choose a data type"
+                        Required="true"
+                        Variant="Variant.Outlined"
+                        Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+                        @bind-Value="_objectTypeAttributeBeingEditedText">
+                        @foreach (AttributeDataType type in Enum.GetValues(typeof(AttributeDataType)))
+                        {
+                            if (type != AttributeDataType.NotSet)
+                            {
+                                <MudSelectItem Value="@type.ToString()"/>
+                            }
+                        }
+                    </MudSelect>
+
+                </DialogContent>
+                <DialogActions>
+                    <MudButton 
+                        Disabled="!_objectTypeAttributeBeingEditedIsEditable" 
+                        DisableElevation="true" 
+                        Variant="Variant.Filled" 
+                        Color="Color.Primary" 
+                        OnClick="HandleEditAttributeDataTypeButtonClick" 
+                        Class="ma-4">Confirm Change</MudButton>
+                </DialogActions>
+            </MudDialog>
+
+            @if (_connectedSystem.ObjectTypes is { Count: > 0 })
             {
                 if (_connectedSystem.ObjectTypes.Count > 1 || (_connectedSystem.ObjectTypes.Count == 1 && !_connectedSystem.ObjectTypes[0].Selected))
                 {
@@ -341,13 +393,17 @@
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                             @if (_selectedObjectTypeHasClasses)
                             {
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName)">Class</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName!)">Class</MudTableSortLabel></MudTh>
                             }
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)">Type</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
                             @if (_selectedObjectTypeHasDescriptions)
                             {
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description)">Description</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description!)">Description</MudTableSortLabel></MudTh>
+                            }
+                            @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
+                            {
+                                <MudTh></MudTh>
                             }
                         </HeaderContent>
                         <RowTemplate>
@@ -360,13 +416,34 @@
                             <MudTd DataLabel="Name">@context.Name</MudTd>
                             @if (_selectedObjectTypeHasClasses)
                             {
-                                <MudTd DataLabel="Class">@context.ClassName</MudTd>
+                                <MudTd DataLabel="Class">
+                                    @context.ClassName
+                                </MudTd>
                             }
-                            <MudTd DataLabel="Type">@context.Type</MudTd>
-                            <MudTd DataLabel="Plurality" Class="jim-no-wrap">@context.AttributePlurality.ToString().SplitOnCapitalLetters()</MudTd>
+                            <MudTd DataLabel="Type">
+                                @context.Type
+                            </MudTd>
+                            <MudTd DataLabel="Plurality" Class="jim-no-wrap">
+                                @context.AttributePlurality.ToString().SplitOnCapitalLetters()
+                            </MudTd>
                             @if (_selectedObjectTypeHasDescriptions)
                             {
-                                <MudTd DataLabel="Description">@context.Description</MudTd>
+                                <MudTd DataLabel="Description">
+                                    @context.Description
+                                </MudTd>
+                            }
+                            @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
+                            {
+                                <MudTd>
+                                    <MudButton 
+                                        DisableElevation="true" 
+                                        Size="Size.Small" 
+                                        Variant="Variant.Filled"
+                                        OnClick="(() => HandleShowEditAttributeDialogAsync(context))"
+                                        StartIcon="@Icons.Material.Filled.Edit">
+                                        Edit
+                                    </MudButton>
+                                </MudTd>
                             }
                         </RowTemplate>
                         <NoRecordsContent>
@@ -445,15 +522,12 @@
                 @if (_connectedSystem.Partitions is { Count: > 0 })
                 {
                     <MudText Class="mt-5">Select which @_partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
-
-                    @for (var i = 0; i < _connectedSystem.Partitions.Count; i++)
+                    @foreach (var partition in _connectedSystem.Partitions)
                     {
-                        var partition = _connectedSystem.Partitions[i];
-
                         <MudPaper Class="mt-5" Outlined="true">
                             <div class="pa-4">
                                 <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
-                                <MudSwitch @bind-Checked="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
+                                <MudSwitch @bind-Value="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
                             </div>
                             <MudDivider />
 
@@ -469,7 +543,6 @@
                                         <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.ChildContainers">
                                             <Content>
                                                 <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.ChildContainers.Count > 0)" />
-
                                                 @if (context.Included)
                                                 {
                                                     <MudCheckBox T="bool?"
@@ -486,15 +559,13 @@
                                                                  ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
                                                                  title="@(context.Selected ? "Selected" : "")" />
                                                 }
-
                                                 <MudText>@context.Name</MudText>
                                             </Content>
                                         </MudTreeViewItem>
                                     </ItemTemplate>
                                 </MudTreeView>
-
+                                
                             </div>
-
                         </MudPaper>
                     }
 
@@ -593,6 +664,12 @@
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+    private bool _editSchemaAttributeDialogVisible;
+    private ConnectedSystemObjectTypeAttribute? _objectTypeAttributeBeingEdited;
+    private string? _objectTypeAttributeBeingEditedText;
+    private bool _objectTypeAttributeBeingEditedIsEditable;
 
     protected override async Task OnInitializedAsync()
     {
@@ -1031,7 +1108,7 @@
     }
 
     /// <summary>
-    /// Determines whether or not the Save Schema changes button should be disabled or not.
+    /// Determines whether the Save Schema changes button should be disabled or not.
     /// </summary>
     private bool DisableSaveSchemaButton()
     {
@@ -1045,5 +1122,18 @@
         var externalIdsSet = _connectedSystem.ObjectTypes.Where(ot => ot.Selected).All(ot => ot.Attributes.Any(a => a.IsExternalId));
 
         return !objectTypesSelected || !externalIdsSet;
+    }
+
+    private async Task HandleShowEditAttributeDialogAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
+    {
+        // can the connected system attribute be edited? are there any references to it?
+        _objectTypeAttributeBeingEditedIsEditable = !await Jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
+        _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;
+        _editSchemaAttributeDialogVisible = true;
+    }
+    
+    private void HandleEditAttributeDataTypeButtonClick()
+    {
+        _editSchemaAttributeDialogVisible = false;
     }
 }
