@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20240414162313_DbContextSyncRuleMappingSource")]
+    partial class DbContextSyncRuleMappingSource
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -851,7 +853,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("TargetMetaverseAttributeId");
 
-                    b.ToTable("SyncRuleMappings");
+                    b.ToTable("SyncRuleMapping");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingSource", b =>
@@ -939,7 +941,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SyncRuleMappingSourceId");
 
-                    b.ToTable("SyncRuleMappingSourceParamValues");
+                    b.ToTable("SyncRuleMappingSourceParamValue");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleScopingCriteria", b =>
@@ -1009,7 +1011,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("SyncRuleId");
 
-                    b.ToTable("SyncRuleScopingCriteriaGroups");
+                    b.ToTable("SyncRuleScopingCriteriaGroup");
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>

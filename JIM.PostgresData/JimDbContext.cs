@@ -52,7 +52,11 @@ public class JimDbContext : DbContext
     internal DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
     internal DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     internal DbSet<SyncRule> SyncRules { get; set; } = null!;
+    internal DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
     internal DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
+    internal DbSet<SyncRuleMappingSourceParamValue> SyncRuleMappingSourceParamValues { get; set; } = null!;
+    internal DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
+    internal DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
 
     private readonly string _connectionString;
 

@@ -203,12 +203,10 @@
             <MudDialog @bind-IsVisible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
                 <TitleContent>
                     <MudText Typo="Typo.h6">
-                        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Schema Attribute
+                        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Schema Attribute: @_objectTypeAttributeBeingEdited?.Name
                     </MudText>
                 </TitleContent>
                 <DialogContent>
-                    <MudText>Attribute: @_objectTypeAttributeBeingEdited?.Name</MudText>
-
                     @if (!_objectTypeAttributeBeingEditedIsEditable)
                     {
                         <MudAlert Severity="Severity.Error">
@@ -218,7 +216,7 @@
                     else
                     {
                         <MudAlert Severity="Severity.Info">
-                            This Connector supports you changing the data type of a Connected System attribute. This might be because the data type
+                            This Connector supports changing the data type of a Connected System attribute. This might be because the data type
                             was detected automatically, and might need adjusting if not right.
                         </MudAlert>
                     }
@@ -228,6 +226,7 @@
                         Label="Please choose a data type"
                         Required="true"
                         Variant="Variant.Outlined"
+                        Class="mt-5"
                         Disabled="!_objectTypeAttributeBeingEditedIsEditable"
                         @bind-Value="_objectTypeAttributeBeingEditedText">
                         @foreach (AttributeDataType type in Enum.GetValues(typeof(AttributeDataType)))
@@ -611,9 +610,9 @@
                     <MudTh>Actions</MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)">Run Type</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition.Name)">Partition</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition?.Name!)">Partition</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">Page Size</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath)">File Path</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath!)">File Path</MudTableSortLabel></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>
@@ -664,7 +663,7 @@
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
     private List<BreadcrumbItem> _breadcrumbs = null!;
-    
+
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
     private bool _editSchemaAttributeDialogVisible;
     private ConnectedSystemObjectTypeAttribute? _objectTypeAttributeBeingEdited;
@@ -714,7 +713,7 @@
     {
         if (_connectedSystem == null)
             return true;
-        
+
         return !_connectedSystem.SettingValuesValid;
     }
 
@@ -903,7 +902,7 @@
 
         if (classHashset.Count > 0)
             return classHashset.Any(q => q == element.ClassName);
-        
+
         return !attributeSelectedFilter || element.Selected;
     }
 
@@ -1129,11 +1128,22 @@
         // can the connected system attribute be edited? are there any references to it?
         _objectTypeAttributeBeingEditedIsEditable = !await Jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
         _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;
+        _objectTypeAttributeBeingEditedText = connectedSystemObjectTypeAttribute.Type.ToString();
         _editSchemaAttributeDialogVisible = true;
     }
-    
+
     private void HandleEditAttributeDataTypeButtonClick()
     {
+        if (_objectTypeAttributeBeingEdited == null)
+            return;
+
+        if (_objectTypeAttributeBeingEditedText == null)
+            return;
+
+        _objectTypeAttributeBeingEdited.Type = (AttributeDataType)Enum.Parse(typeof(AttributeDataType), _objectTypeAttributeBeingEditedText);
         _editSchemaAttributeDialogVisible = false;
+        
+        // all done, let the user know
+        Snackbar.Add("Attribute data type updated.", Severity.Success);
     }
 }
