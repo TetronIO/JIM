@@ -13,10 +13,16 @@ public class ConnectedSystemSettingValue
 
     public string? StringValue { get; set; }
         
+    /// <summary>
+    /// TODO: Encrypt this!
+    /// </summary>
     public string? StringEncryptedValue { get; set; }
 
     public int? IntValue { get; set; }
         
+    /// <summary>
+    /// TODO: change this to nullable and add to IsValueValid()
+    /// </summary>
     public bool CheckboxValue { get; set; }
 
     public bool IsValueValid()

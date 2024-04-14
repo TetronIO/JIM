@@ -7,7 +7,7 @@ public class ConnectedSystem
 {
     public int Id { get; set; }
 
-    [Required(ErrorMessage = "Please provide a name for the connected system")]
+    [Required(ErrorMessage = "Please provide a name for the Connected System")]
     public string Name { get; set; } = null!;
 
     public string? Description { get; set; }
@@ -31,7 +31,7 @@ public class ConnectedSystem
     /// <summary>
     /// We track whether setting values have been validated by the Connector so that we can prevent the user from navigating to configuration phases that are dependent upon valid setting values.
     /// When a connected system is created, this will be false as there are no values supplied yet.
-    /// When any setting values are changed by the user, this will be toggled to false until the settings are validated
+    /// When any setting values are changed by the user, this will be toggled to false until the settings are validated.
     /// </summary>
     public bool SettingValuesValid { get; set; }
 
@@ -47,13 +47,13 @@ public class ConnectedSystem
     /// </summary>
     public string? PersistedConnectorData { get; set; }
 
-    /// <summary>/home/jay
+    /// <summary>
     /// EF back-link.
     /// </summary>
     public List<Activity>? Activities { get; set; }
 
     public override string ToString()
     {
-        return $"{Name} ({Id})";
+        return $"{nameof(ConnectedSystem)}: {Name} ({Id})";
     }
 }

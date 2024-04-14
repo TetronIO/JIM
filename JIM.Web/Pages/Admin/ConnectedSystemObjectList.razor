@@ -44,18 +44,18 @@
             <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue)">External Id</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue!)">External Id</MudTableSortLabel></MudTh>
             @* TODO: change this so a check is done on whether the connector supports secondary external ids or not so we don't have to do two linq queries *@
             @if (_connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
             {
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue)">Secondary External Id</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue!)">Secondary External Id</MudTableSortLabel></MudTh>
             }
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName)">Display Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName!)">Display Name</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.JoinType)">Join Type</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined)">Date Joined</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined!)">Date Joined</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="External Id">

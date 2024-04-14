@@ -1,4 +1,4 @@
-﻿namespace JIM.Models.Staging;
+﻿namespace JIM.Models.Staging.DTOs;
 
 public class ConnectedSystemObjectHeader
 {
@@ -32,9 +32,5 @@ public class ConnectedSystemObjectHeader
     /// When this Connector Space Object was joined to the Metaverse.
     /// </summary>
     public DateTime? DateJoined { get; set; }
-    #endregion
-
-    #region constructors
-
     #endregion
 }
