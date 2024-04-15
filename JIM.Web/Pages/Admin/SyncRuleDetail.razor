@@ -232,7 +232,7 @@
                                 Required="true"
                                 Class="mt-5"
                                 Variant="Variant.Outlined">
-                                @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                                @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued).OrderBy(a => a.Name))
                                 {
                                     <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name</MudSelectItem>
                                 }
@@ -248,7 +248,7 @@
                                     Required="true"
                                     Class="mt-5"
                                     Variant="Variant.Outlined">
-                                    @foreach (var connectedSystemObjectTypeAttribute in _syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued))
+                                    @foreach (var connectedSystemObjectTypeAttribute in _syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued).OrderBy(a => a.Name))
                                     {
                                         <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != _matchingRuleMapping.TargetMetaverseAttribute.Type)">@connectedSystemObjectTypeAttribute.Name</MudSelectItem>
                                     }

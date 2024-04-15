@@ -27,8 +27,8 @@ namespace JIM.PostgresData.Repositories
         {
             if (includeChildObjects)
                 return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes.OrderBy(a => a.Name)).OrderBy(x => x.Name).ToListAsync();
-            else
-                return await Repository.Database.MetaverseObjectTypes.OrderBy(x => x.Name).ToListAsync();
+                
+            return await Repository.Database.MetaverseObjectTypes.OrderBy(x => x.Name).ToListAsync();
         }
 
         public async Task<List<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
@@ -50,8 +50,8 @@ namespace JIM.PostgresData.Repositories
         {
             if (includeChildObjects)
                 return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(x => x.Id == id);
-            else
-                return await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == id);
+            
+            return await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == id);
         }
 
         public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects)
@@ -179,7 +179,7 @@ namespace JIM.PostgresData.Repositories
             if (page < 1)
                 page = 1;
 
-            // limit page size to avoid increasing latency unecessarily
+            // limit page size to avoid increasing latency unnecessarily
             if (pageSize > 100)
                 pageSize = 100;
 
