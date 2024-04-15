@@ -100,6 +100,9 @@ public class ConnectedSystemServer
         if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
 
+        if (!AreRunProfilesValid(connectedSystem))
+            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
+
         // create the connected system setting value objects from the connected system definition settings
         foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
         {
@@ -137,6 +140,9 @@ public class ConnectedSystemServer
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
+
+        if (!AreRunProfilesValid(connectedSystem))
+            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
 
@@ -699,6 +705,11 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+        // need to get the connected system, so we can validate the run profile
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
+        if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
+            throw new ArgumentException("Run profile is not valid for the Connector!");
+
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
         {
@@ -765,6 +776,46 @@ public class ConnectedSystemServer
     public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfileHeaderAsync(connectedSystemRunProfileId);
+    }
+
+    /// <summary>
+    /// Checks if any run profile types are not supported by the connectors capabilities.
+    /// </summary>
+    private static bool AreRunProfilesValid(ConnectedSystem connectedSystem)
+    {
+        if (connectedSystem == null)
+            return false;
+
+        if (connectedSystem.RunProfiles == null || connectedSystem.RunProfiles.Count == 0)
+            return true;
+
+        foreach (var runProfile in connectedSystem.RunProfiles)
+        {
+            if (!IsRunProfileValid(connectedSystem, runProfile))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if any run profile types are not supported by the connectors capabilities.
+    /// </summary>
+    private static bool IsRunProfileValid(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+    {
+        if (runProfile == null)
+            return false;
+
+        if (runProfile.RunType == ConnectedSystemRunType.FullImport && !connectedSystem.ConnectorDefinition.SupportsFullImport)
+            return false;
+
+        if (runProfile.RunType == ConnectedSystemRunType.DeltaImport && !connectedSystem.ConnectorDefinition.SupportsDeltaImport)
+            return false;
+
+        if (runProfile.RunType == ConnectedSystemRunType.Export && !connectedSystem.ConnectorDefinition.SupportsExport)
+            return false;
+
+        return true;
     }
     #endregion
 
