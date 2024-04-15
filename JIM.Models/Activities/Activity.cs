@@ -1,6 +1,5 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Staging;
-
 namespace JIM.Models.Activities;
 
 /// <summary>
@@ -88,10 +87,10 @@ public class Activity
 
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
-    // - result item with operation type (create/update/delete) and link to mv object
-    // - result item with operation type (create/update/delete) and link to mv object and json snapshot of imported/exported object
+    // - result item with operation type (create/update/delete) and link to the Metaverse Object
+    // - result item with operation type (create/update/delete) and link to the Metaverse Object and json snapshot of imported/exported object
 
-    public List<ActivityRunProfileExecutionItem>? RunProfileExecutionItems { get; set; }
+    public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; set; } = new();
 
     // --------------------------------------------------------
     // object changes (created/update/delete)
