@@ -28,11 +28,12 @@ public class JimDbContext : DbContext
     internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     internal DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
     internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; } = null!;
-    internal DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
     internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; } = null!;
+    internal DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
     internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; } = null!;
     internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; } = null!;
     internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;
+    internal DbSet<DataGenerationTemplateAttributeDependency> DataGenerationTemplateAttributeDependencies { get; set; } = null!;
     internal DbSet<DataGenerationTemplateWorkerTask> DataGenerationTemplateWorkerTasks { get; set; } = null!;
     internal DbSet<ExampleDataSet> ExampleDataSets { get; set; } = null!;
     internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
@@ -51,14 +52,14 @@ public class JimDbContext : DbContext
     internal DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; } = null!;
     internal DbSet<Role> Roles { get; set; } = null!;
     internal DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
-    internal DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
-    internal DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     internal DbSet<SyncRule> SyncRules { get; set; } = null!;
     internal DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
     internal DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
     internal DbSet<SyncRuleMappingSourceParamValue> SyncRuleMappingSourceParamValues { get; set; } = null!;
     internal DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     internal DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
+    internal DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
+    internal DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
     private readonly string _connectionString;
 

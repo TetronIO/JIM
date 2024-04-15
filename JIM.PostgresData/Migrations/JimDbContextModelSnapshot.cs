@@ -570,7 +570,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseAttributeId");
 
-                    b.ToTable("DataGenerationTemplateAttributeDependency");
+                    b.ToTable("DataGenerationTemplateAttributeDependencies");
                 });
 
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttributeWeightedValue", b =>
