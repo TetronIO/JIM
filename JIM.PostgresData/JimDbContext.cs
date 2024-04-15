@@ -34,6 +34,7 @@ public class JimDbContext : DbContext
     internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; } = null!;
     internal DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;
     internal DbSet<DataGenerationTemplateAttributeDependency> DataGenerationTemplateAttributeDependencies { get; set; } = null!;
+    internal DbSet<DataGenerationTemplateAttributeWeightedValue> DataGenerationTemplateAttributeWeightedValues { get; set; } = null!;
     internal DbSet<DataGenerationTemplateWorkerTask> DataGenerationTemplateWorkerTasks { get; set; } = null!;
     internal DbSet<ExampleDataSet> ExampleDataSets { get; set; } = null!;
     internal DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
