@@ -25,7 +25,7 @@ public class ConnectorDefinition : IConnectorCapabilities
     public List<ConnectorDefinitionSetting> Settings { get; set; } = new();
 
     /// <summary>
-    /// Backwards navigation link for EF.
+    /// Backwards navigation link for Entity Framework.
     /// </summary>
     public List<ConnectedSystem>? ConnectedSystems { get; set; }
 

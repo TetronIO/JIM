@@ -160,9 +160,10 @@
                 else
                 {
                     <MudText>
-                        <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this will result in all references to them being removed from within JIM,
-                        i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right
-                        permissions needed to retrieve the schema, and consider a database backup before proceeding.
+                        <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this 
+                        will result in all references to them being removed from within JIM, i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be 
+                        deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right permissions needed to retrieve the schema, and consider 
+                        a database backup before proceeding.
                     </MudText>
                 }
                 <MudButton 
@@ -583,17 +584,54 @@
                     <MudTextField T="string" @bind-Value="_newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
 
                     <!-- would like to make this conditional, but the connector definition needs to state if it's file-based or not. this can be determined for custom connectors, but not built-in as there are no files for those. -->
-                    <MudTextField T="string" @bind-Value="_newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined" Class="mt-3" HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/Users.csv" />
+                    <MudTextField 
+                        T="string" 
+                        @bind-Value="_newRunProfile.FilePath" 
+                        Label="File Path" 
+                        Variant="Variant.Outlined" 
+                        Class="mt-3" 
+                        HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/Users.csv" />
 
-                    <MudSelect T="ConnectedSystemRunType" @bind-Value="_newRunProfile.RunType" Label="Run Type" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="A run profile type is required">
+                    <MudSelect 
+                        T="ConnectedSystemRunType" 
+                        @bind-Value="_newRunProfile.RunType" 
+                        Label="Run Type" 
+                        Variant="Variant.Outlined" 
+                        AnchorOrigin="Origin.BottomCenter" 
+                        Class="mt-5" 
+                        Required="true" 
+                        RequiredError="A run profile type is required">
                         @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
                         {
-                            <MudSelectItem Value="@runType">@runType.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                            var runTypeSupported = true;
+                            if (runType == ConnectedSystemRunType.Export && !_connectedSystem.ConnectorDefinition.SupportsExport)
+                                runTypeSupported = false;
+                            else if (runType == ConnectedSystemRunType.DeltaImport && !_connectedSystem.ConnectorDefinition.SupportsDeltaImport)
+                                runTypeSupported = false;
+                            else if (runType == ConnectedSystemRunType.FullImport && !_connectedSystem.ConnectorDefinition.SupportsFullImport)
+                                runTypeSupported = false;
+                            
+                            <MudSelectItem Value="@runType" Disabled="@(!runTypeSupported)">
+                                @runType.ToString().SplitOnCapitalLetters()
+                                @if (!runTypeSupported)
+                                {
+                                    <span> (not supported by Connector)</span>
+                                }
+                            </MudSelectItem>
                         }
                     </MudSelect>
+                    
                     @if (_connectedSystem.ConnectorDefinition.SupportsPartitions && _connectedSystem.Partitions != null)
                     {
-                        <MudSelect T="ConnectedSystemPartition" @bind-Value="_newRunProfile.Partition" Label="Partition" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="@_connectedSystem.ConnectorDefinition.SupportsPartitions" RequiredError="A run profile partition is required">
+                        <MudSelect 
+                            T="ConnectedSystemPartition" 
+                            @bind-Value="_newRunProfile.Partition" 
+                            Label="Partition" 
+                            Variant="Variant.Outlined" 
+                            Class="mt-5" 
+                            AnchorOrigin="Origin.BottomCenter" 
+                            Required="@_connectedSystem.ConnectorDefinition.SupportsPartitions" 
+                            RequiredError="A run profile partition is required">
                             @foreach (var partition in _connectedSystem.Partitions.Where(p => p.Selected))
                             {
                                 <MudSelectItem Value="@partition" />
