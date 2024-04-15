@@ -1,4 +1,5 @@
 ﻿using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -542,6 +543,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectScopingCriteriaGroups)
             .Include(sr => sr.CreatedBy) // needs basic attributes included to use as a link to the user in the ui
+            .ThenInclude(cb => cb!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))

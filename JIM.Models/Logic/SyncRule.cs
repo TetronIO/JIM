@@ -46,7 +46,7 @@ public class SyncRule: IValidated
     /// <summary>
     /// Should this sync rule also cause an object to be created in the connected system, or just update attributes for existing objects?
     /// This is normally set to true when the connected system is a 'downstream' system that JIM is responsible for managing objects in.
-    /// Though it can be set to false if it's a source system (i.e. HR), or if that system has it's own Joiner processes.
+    /// Though it can be set to false if it's a source system (i.e. HR), or if that system has its own Joiner processes.
     /// </summary>
     public bool? ProvisionToConnectedSystem { get; set; }
 

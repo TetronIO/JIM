@@ -21,9 +21,9 @@
 @if (_syncRule != null)
 {
     <MudPaper Class="pa-4 mt-5" Outlined="true">
+        <MudText Typo="Typo.h5" Class="mb-5">Details</MudText>
         <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
             <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name" Variant="Variant.Outlined" />
-
             @if (_syncRule.Id == 0)
             {
                 @if (_connectedSystemHeaders != null)
@@ -129,6 +129,21 @@
         </MudForm>
         <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
         <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">Synchronisation Rules will not be evaluated when disabled, enabling you to either prepare a rule in advance of it being needed, or to temporarily stop evaluating a sync rule..</MudAlert>
+        
+        @if (_syncRule.Id > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-5">
+                Created: @_syncRule.Created
+                @if (_syncRule.CreatedBy != null)
+                {
+                    <span> - Created By: <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">@_syncRule.CreatedBy.DisplayName</MudLink></span>
+                }
+                @if (_syncRule.LastUpdated.HasValue)
+                {
+                    <span> - Last Updated: @_syncRule.LastUpdated</span>
+                }
+            </MudText>
+        }
     </MudPaper>
 
     @if (_syncRule.Direction == SyncRuleDirection.Import)

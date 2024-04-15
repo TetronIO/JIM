@@ -35,12 +35,12 @@
 
     <MudText Typo="Typo.h5" Class="mt-5">Capabilities</MudText>
     <MudPaper Class="pa-5 mt-5" Outlined="true">
-        <MudCheckBox @bind-Checked="@_connector.SupportsFullImport" Disabled="true">Supports full import?</MudCheckBox>
-        <MudCheckBox @bind-Checked="@_connector.SupportsDeltaImport" Disabled="true">Supports delta import?</MudCheckBox>
-        <MudCheckBox @bind-Checked="@_connector.SupportsExport" Disabled="true">Supports export?</MudCheckBox>
-        <MudCheckBox @bind-Checked="@_connector.SupportsSecondaryExternalId" Disabled="true">Supports secondary external id?</MudCheckBox>
-        <MudCheckBox @bind-Checked="@_connector.SupportsUserSelectedExternalId" Disabled="true">Supports user selected external id?</MudCheckBox>
-        <MudCheckBox @bind-Checked="@_connector.SupportsUserSelectedAttributeTypes" Disabled="true">Supports user selected attribute types?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsFullImport" Disabled="true">Supports full import?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsDeltaImport" Disabled="true">Supports delta import?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsExport" Disabled="true">Supports export?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsSecondaryExternalId" Disabled="true">Supports secondary external id?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedExternalId" Disabled="true">Supports user selected external id?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedAttributeTypes" Disabled="true">Supports user selected attribute types?</MudCheckBox>
     </MudPaper>
 
     <MudTable Items="@_connector.Files" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
