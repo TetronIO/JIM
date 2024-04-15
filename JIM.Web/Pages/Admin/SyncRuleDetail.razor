@@ -429,7 +429,11 @@
                             Variant="Variant.Outlined">
                             @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(q => !_syncRule.AttributeFlowRules.Any(afr => afr.TargetMetaverseAttribute != null && afr.TargetMetaverseAttribute.Id == q.Id)))
                             {
-                                <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)" Value="@metaverseAttribute">@metaverseAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
+                                <MudSelectItem
+                                    Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)"
+                                    Value="@metaverseAttribute">
+                                    @metaverseAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                </MudSelectItem>
                             }
                         </MudSelect>
                     }
@@ -445,7 +449,11 @@
                             Variant="Variant.Outlined">
                             @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType.Attributes)
                             {
-                                <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)" Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@connectedSystemAttribute.Type : @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
+                                <MudSelectItem
+                                    Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
+                                    Value="@connectedSystemAttribute">
+                                    @connectedSystemAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@connectedSystemAttribute.Type : @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                </MudSelectItem>
                             }
                         </MudSelect>
                     }
@@ -453,7 +461,13 @@
             }
         </DialogContent>
         <DialogActions>
-            <MudButton Disabled="DisableAddAttributeFlowMappingButton()" DisableElevation="true" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick" Class="ma-4">Add Attribute Flow</MudButton>
+            <MudButton 
+                Disabled="DisableAddAttributeFlowMappingButton()" 
+                DisableElevation="true" 
+                Variant="Variant.Filled" 
+                Color="Color.Primary" 
+                OnClick="HandleAddAttributeFlowMappingButtonClick" 
+                Class="ma-4">Add Attribute Flow</MudButton>
         </DialogActions>
     </MudDialog>
     
@@ -461,7 +475,6 @@
         @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
         {
             <MudPaper Class="pa-3" Elevation="0" Outlined="true">
-                
                 <MudStack Row="true" Justify="Justify.SpaceBetween" Wrap="Wrap.NoWrap">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span> @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText><br/>
                     <MudIconButton 
