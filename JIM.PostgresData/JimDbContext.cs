@@ -28,6 +28,7 @@ public class JimDbContext : DbContext
     internal DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     internal DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
     internal DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; } = null!;
+    internal DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
     internal DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; } = null!;
     internal DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; } = null!;
     internal DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; } = null!;
