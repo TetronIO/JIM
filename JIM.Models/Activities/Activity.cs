@@ -91,7 +91,7 @@ public class Activity
     // - result item with operation type (create/update/delete) and link to mv object
     // - result item with operation type (create/update/delete) and link to mv object and json snapshot of imported/exported object
 
-    public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; set; } = new();
+    public List<ActivityRunProfileExecutionItem>? RunProfileExecutionItems { get; set; }
 
     // --------------------------------------------------------
     // object changes (created/update/delete)
