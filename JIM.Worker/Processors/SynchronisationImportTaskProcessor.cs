@@ -135,7 +135,7 @@ internal class SynchronisationImportTaskProcessor
             // is this a new, or existing object for the Connected System within JIM?
             // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
 
-            // match the string object type to a name of an object type in the schema..
+            // match the string object type to a name of an object type in the schema…
             var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
             if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
             {
@@ -182,32 +182,28 @@ internal class SynchronisationImportTaskProcessor
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
-        if (externalIdAttribute.Type == AttributeDataType.Text)
+        switch (externalIdAttribute.Type)
         {
-            if (importObjectAttribute.StringValues.Count == 0)
+            case AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0:
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value.");
-
-            return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]);
-        }
-
-        if (externalIdAttribute.Type == AttributeDataType.Number)
-        {
-            if (importObjectAttribute.IntValues.Count == 0)
+            case AttributeDataType.Text:
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]);
+            case AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0:
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value.");
-
-            return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]);
-        }
-
-        if (externalIdAttribute.Type == AttributeDataType.Guid)
-        {
-            if (importObjectAttribute.GuidValues.Count == 0)
+            case AttributeDataType.Number:
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]);
+            case AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0:
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value.");
-
-            return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]);
+            case AttributeDataType.Guid:
+                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]);
+            case AttributeDataType.NotSet:
+            case AttributeDataType.DateTime:
+            case AttributeDataType.Binary:
+            case AttributeDataType.Reference:
+            case AttributeDataType.Boolean:
+            default:
+                throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}");
         }
-
-        // should never happen, but it's worth covering all possible scenarios
-        throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}");
     }
 
     private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
@@ -495,14 +491,14 @@ internal class SynchronisationImportTaskProcessor
         // create a connected system object change for this
 
         // enumerate just the CSOs with unresolved references, for efficiency
-        foreach (var cso in connectedSystemObjectsToProcess.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
+        foreach (var csoToProcess in connectedSystemObjectsToProcess.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
         {
-            var externalIdAttribute = cso.Type.Attributes.Single(a => a.IsExternalId);
-            var secondaryExternalIdAttribute = cso.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
+            var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
+            var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
             var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
 
             // enumerate just the attribute values for this CSO that are for unresolved references
-            foreach (var referenceAttributeValue in cso.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
+            foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
             {
                 // try and find a cso in the database, or in the processing list we've been passed in, that has an identifier mentioned in the UnresolvedReferenceValue property.
                 // to do this:
@@ -528,7 +524,7 @@ internal class SynchronisationImportTaskProcessor
                 //        av.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)));
 
                 // this does work, but might not be optimal:
-                // ideally fix the above query so it works and don't use this, but for now, works is works.
+                // ideally fix the above query, so it works and don't use this, but for now, works is works.
                 referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
 
                 // no match, try and find a matching CSO in the database
@@ -546,7 +542,7 @@ internal class SynchronisationImportTaskProcessor
                 {
                     // reference not found. referenced object probably out of container scope!
                     // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
-                    var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == cso);
+                    var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
                     if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
                     {
                         activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
@@ -554,7 +550,7 @@ internal class SynchronisationImportTaskProcessor
                     }
                     else
                     {
-                        throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}!");
+                        throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem for cso: {csoToProcess.Id}!");
                     }
 
                     Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");

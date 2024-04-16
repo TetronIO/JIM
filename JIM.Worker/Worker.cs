@@ -45,7 +45,7 @@ public class Worker : BackgroundService
     /// <summary>
     /// The worker tasks currently being executed.
     /// </summary>
-    private List<TaskTask> CurrentTasks { get; set; } = new List<TaskTask>();
+    private List<TaskTask> CurrentTasks { get; } = new();
     private readonly object _currentTasksLock = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -123,147 +123,155 @@ public class Worker : BackgroundService
                             newWorkerTask.Activity.Executed = DateTime.UtcNow;
                             await taskJim.Activities.UpdateActivityAsync(newWorkerTask.Activity);
 
-                            if (newWorkerTask is DataGenerationTemplateWorkerTask dataGenTemplateServiceTask)
+                            switch (newWorkerTask)
                             {
-                                Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
-                                var dataGenerationTemplate = await taskJim.DataGeneration.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
-                                if (dataGenerationTemplate == null)
+                                case DataGenerationTemplateWorkerTask dataGenTemplateServiceTask:
                                 {
-                                    Log.Warning($"ExecuteAsync: data generation template {dataGenTemplateServiceTask.TemplateId} not found.");
-                                }
-                                else
-                                {
-                                    try
+                                    Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
+                                    var dataGenerationTemplate = await taskJim.DataGeneration.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
+                                    if (dataGenerationTemplate == null)
                                     {
-                                        await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
-                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
-                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing data generation template: " + dataGenTemplateServiceTask.TemplateId);
-                                    }
-                                    finally
-                                    {
-                                        Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {newWorkerTask.Activity.ExecutionTime}.");
-                                    }
-                                }
-                            }
-                            else if (newWorkerTask is SynchronisationWorkerTask syncWorkerTask)
-                            {
-                                Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: " + syncWorkerTask.ConnectedSystemRunProfileId);
-                                if (newWorkerTask.InitiatedBy == null)
-                                {
-                                    Log.Error("ExecuteAsync: syncWorkerTask.InitiatedBy was null. Cannot execute sync task");
-                                }
-                                else
-                                {
-                                    var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
-                                    if (connectedSystem != null)
-                                    {
-                                        // work out what connector we need to use
-                                        // todo: run through built-in connectors first, then do a lookup for user-supplied connectors
-                                        IConnector connector;
-                                        if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
-                                            connector = new LdapConnector();
-                                        else if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.FileConnectorName)
-                                            connector = new FileConnector();
-                                        else
-                                            throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for worker processing.");
-
-                                        // work out what type of run profile we're being asked to run
-                                        var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncWorkerTask.ConnectedSystemRunProfileId);
-                                        if (runProfile != null)
-                                        {
-                                            try
-                                            {
-                                                switch (runProfile.RunType)
-                                                {
-                                                    // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
-                                                    case ConnectedSystemRunType.FullImport:
-                                                    {
-                                                        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
-                                                        await synchronisationImportTaskProcessor.PerformFullImportAsync();
-                                                        break;
-                                                    }
-                                                    case ConnectedSystemRunType.DeltaImport:
-                                                    case ConnectedSystemRunType.Export:
-                                                    case ConnectedSystemRunType.FullSynchronisation:
-                                                    case ConnectedSystemRunType.DeltaSynchronisation:
-                                                        Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
-                                                        break;
-                                                    default:
-                                                        Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
-                                                        break;
-                                                }
-
-                                                // task completed. determine final status, depending on how the run profile execution went
-                                                if (newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue))
-                                                    await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
-                                                else if (newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue))
-                                                    await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
-                                                else
-                                                    await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view
-                                                // issues with connectors through JIM, rather than an admin having to dig through server logs.
-                                                await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
-                                                Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
-                                            }
-                                            finally
-                                            {
-                                                // record how long the sync run took, whether it was successful, or not.
-                                                Log.Information($"ExecuteAsync: Completed processing of {newWorkerTask.Activity.TargetName} sync run in {newWorkerTask.Activity.ExecutionTime}.");
-                                            }
-                                        }
-                                        else
-                                        {
-                                            Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncWorkerTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncWorkerTask.ConnectedSystemId}.");
-                                        }
+                                        Log.Warning($"ExecuteAsync: data generation template {dataGenTemplateServiceTask.TemplateId} not found.");
                                     }
                                     else
                                     {
-                                        Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncWorkerTask.ConnectedSystemId} but no such connected system found.");
-                                    }
-                                }
-                            }
-                            else if (newWorkerTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
-                            {
-                                Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
-                                if (clearConnectedSystemObjectsTask.InitiatedBy == null)
-                                {
-                                    Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value. Cannot continue processing worker task.");
-                                }
-                                else
-                                {
-                                    // we need a little more information on the connected system, so retrieve it
-                                    var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
-                                    if (connectedSystem == null)
-                                    {
-                                        Log.Warning($"ExecuteAsync: Connected system id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
-                                        return;
+                                        try
+                                        {
+                                            await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing data generation template: " + dataGenTemplateServiceTask.TemplateId);
+                                        }
+                                        finally
+                                        {
+                                            Log.Information($"ExecuteAsync: Completed data generation template ({dataGenTemplateServiceTask.TemplateId}) execution in {newWorkerTask.Activity.ExecutionTime}.");
+                                        }
                                     }
 
-                                    try
+                                    break;
+                                }
+                                case SynchronisationWorkerTask syncWorkerTask:
+                                {
+                                    Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: " + syncWorkerTask.ConnectedSystemRunProfileId);
+                                    if (newWorkerTask.InitiatedBy == null)
                                     {
-                                        // initiate clearing the connected system
-                                        await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                        Log.Error("ExecuteAsync: syncWorkerTask.InitiatedBy was null. Cannot execute sync task");
+                                    }
+                                    else
+                                    {
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
+                                        if (connectedSystem != null)
+                                        {
+                                            // work out what connector we need to use
+                                            // todo: run through built-in connectors first, then do a lookup for user-supplied connectors
+                                            IConnector connector;
+                                            if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
+                                                connector = new LdapConnector();
+                                            else if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.FileConnectorName)
+                                                connector = new FileConnector();
+                                            else
+                                                throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for worker processing.");
 
-                                        // task completed successfully, complete the activity
-                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                            // work out what type of run profile we're being asked to run
+                                            var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncWorkerTask.ConnectedSystemRunProfileId);
+                                            if (runProfile != null)
+                                            {
+                                                try
+                                                {
+                                                    switch (runProfile.RunType)
+                                                    {
+                                                        // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
+                                                        case ConnectedSystemRunType.FullImport:
+                                                        {
+                                                            var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            await synchronisationImportTaskProcessor.PerformFullImportAsync();
+                                                            break;
+                                                        }
+                                                        case ConnectedSystemRunType.DeltaImport:
+                                                        case ConnectedSystemRunType.Export:
+                                                        case ConnectedSystemRunType.FullSynchronisation:
+                                                        case ConnectedSystemRunType.DeltaSynchronisation:
+                                                            Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                            break;
+                                                        default:
+                                                            Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
+                                                            break;
+                                                    }
+
+                                                    // task completed. determine final status, depending on how the run profile execution went
+                                                    if (newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue))
+                                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
+                                                    else if (newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue))
+                                                        await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
+                                                    else
+                                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view
+                                                    // issues with connectors through JIM, rather than an admin having to dig through server logs.
+                                                    await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                                    Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
+                                                }
+                                                finally
+                                                {
+                                                    // record how long the sync run took, whether it was successful, or not.
+                                                    Log.Information($"ExecuteAsync: Completed processing of {newWorkerTask.Activity.TargetName} sync run in {newWorkerTask.Activity.ExecutionTime}.");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncWorkerTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncWorkerTask.ConnectedSystemId}.");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncWorkerTask.ConnectedSystemId} but no such connected system found.");
+                                        }
                                     }
-                                    catch (Exception ex)
+                                    break;
+                                }
+                                case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
+                                {
+                                    Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                    if (clearConnectedSystemObjectsTask.InitiatedBy == null)
                                     {
-                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
-                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
+                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value. Cannot continue processing worker task.");
                                     }
-                                    finally
+                                    else
                                     {
-                                        // record how long the sync run took, whether it was successful, or not.
-                                        Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {newWorkerTask.Activity.ExecutionTime}.");
+                                        // we need a little more information on the connected system, so retrieve it
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                        if (connectedSystem == null)
+                                        {
+                                            Log.Warning($"ExecuteAsync: Connected system id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
+                                            return;
+                                        }
+
+                                        try
+                                        {
+                                            // initiate clearing the connected system
+                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+
+                                            // task completed successfully, complete the activity
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
+                                        }
+                                        finally
+                                        {
+                                            // record how long the sync run took, whether it was successful, or not.
+                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {newWorkerTask.Activity.ExecutionTime}.");
+                                        }
                                     }
+
+                                    break;
                                 }
                             }
                         
