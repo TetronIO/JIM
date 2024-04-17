@@ -1,5 +1,5 @@
 using JIM.Application;
-using JIM.Connectors.File;
+using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Staging;
@@ -70,14 +70,20 @@ public class SynchronisationImportTaskProcessorTests
         mockSetConnectedSystem.As<IQueryable<ConnectedSystem>>().Setup(m => m.ElementType).Returns(connectedSystemData.ElementType);
         mockSetConnectedSystem.As<IQueryable<ConnectedSystem>>().Setup(m => m.GetEnumerator()).Returns(() => connectedSystemData.GetEnumerator());
         mockDbContext.Setup(m => m.ConnectedSystems).Returns(mockSetConnectedSystem.Object);
+
+        // mock up a connector that will return testable data
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            
+        });
         
-        // actual app code for the most part
+        // now execute Jim functionality we want to test...
         var jim = new JimApplication(new PostgresDataRepository(mockDbContext.Object));
-        var fileConnector = new FileConnector(); // change this to a mocked FileConnector that returns test data
         var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null);
         
-        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, fileConnector, connectedSystem, runProfile, initiatedBy, activityData.First(), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, mockFileConnector, connectedSystem, runProfile, initiatedBy, activityData.First(), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
         // confirm the results in the mocked db context

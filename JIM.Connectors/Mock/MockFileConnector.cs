@@ -5,7 +5,7 @@ using Serilog;
 namespace JIM.Connectors.Mock;
 
 /// <summary>
-/// For unit-testing Jim synchronisation functionality. Not for use in a deployed solution.
+/// For unit-testing Jim synchronisation functionality. Not for use in a deployed system.
 /// </summary>
 public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorSchema, IConnectorImportUsingFiles
 {
@@ -35,6 +35,6 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorS
     /// <summary>
     /// Enables a unit-test to mock the objects that would be returned from the connected system by passing it in to the Connector, for it to return back to Jim.
     /// </summary>
-    public List<ConnectedSystemImportObject> TestImportObjects { get; set; }
+    public List<ConnectedSystemImportObject> TestImportObjects { get; set; } = new ();
     #endregion
 }
