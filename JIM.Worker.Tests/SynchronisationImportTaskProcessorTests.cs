@@ -1,5 +1,5 @@
 using JIM.Application;
-using JIM.Connectors.LDAP;
+using JIM.Connectors.File;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Staging;
@@ -73,11 +73,11 @@ public class SynchronisationImportTaskProcessorTests
         
         // actual app code for the most part
         var jim = new JimApplication(new PostgresDataRepository(mockDbContext.Object));
-        var ldapConnector = new LdapConnector();
+        var fileConnector = new FileConnector(); // change this to a mocked FileConnector that returns test data
         var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null);
         
-        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, ldapConnector, connectedSystem, runProfile, initiatedBy, activityData.First(), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, fileConnector, connectedSystem, runProfile, initiatedBy, activityData.First(), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
         // confirm the results in the mocked db context
