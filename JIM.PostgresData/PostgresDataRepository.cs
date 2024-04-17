@@ -1,5 +1,5 @@
-﻿using JIM.Data;
-using JIM.Data.Repositories;
+﻿using JIM.Data.Repositories;
+using JIM.Data;
 using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -20,16 +20,16 @@ public class PostgresDataRepository : IRepository
 
     internal JimDbContext Database { get; }
 
-    public PostgresDataRepository()
+    public PostgresDataRepository(JimDbContext jimDbContext)
     {
         // needed to enable DateTime.UtcNow assignments to work. Without it, the database will
         // throw errors when trying to set dates. This is a .NET/Postgres type mapping issue.
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
-        ConnectedSystems = new ConnectedSystemRepository(this);
-        Database = new JimDbContext();
-        DataGeneration = new DataGenerationRepository(this);
         Activity = new ActivityRepository(this);
+        ConnectedSystems = new ConnectedSystemRepository(this);
+        DataGeneration = new DataGenerationRepository(this);
+        Database = jimDbContext; // the db context is passed in, so we can unit test jim and the data repository by passing in either a mock or the actual db context.
         Metaverse = new MetaverseRepository(this);
         Search = new SearchRepository(this);
         Security = new SecurityRepository(this);

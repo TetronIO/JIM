@@ -109,8 +109,8 @@
         {
             while (true)
             {
-                // get a new JIM instance so we disable EF caching and are able to see changes made to the data by other JIM instances, i.e. JIM.Worker
-                var iterationJim = new JimApplication(new PostgresDataRepository());
+                // get a new JIM instance so we disable Entity Framework caching and are able to see changes made to the data by other JIM instances, i.e. JIM.Worker
+                var iterationJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
 
                 var stateHasChanged = false;
                 Console.WriteLine("JIM.Web: Operations.razor: Polling for worker task headers...");

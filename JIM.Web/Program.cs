@@ -204,7 +204,7 @@ static async Task InitialiseJimApplicationAsync()
 
     while (true)
     {
-        var jimApplication = new JimApplication(new PostgresDataRepository());
+        var jimApplication = new JimApplication(new PostgresDataRepository(new JimDbContext()));
         if (await jimApplication.IsApplicationReadyAsync())
         {
             await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
@@ -235,7 +235,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     }
 
     // there's probably a better way to do this, i.e. getting JimApplication from Services somehow
-    var jim = new JimApplication(new PostgresDataRepository());
+    var jim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
     var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync() ?? 
         throw new Exception("ServiceSettings was null. Cannot continue.");
 

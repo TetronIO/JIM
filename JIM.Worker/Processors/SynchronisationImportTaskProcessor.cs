@@ -9,7 +9,7 @@ using Serilog;
 using System.Diagnostics;
 namespace JIM.Worker.Processors;
 
-internal class SynchronisationImportTaskProcessor
+public class SynchronisationImportTaskProcessor
 {
     private readonly JimApplication _jim;
     private readonly IConnector _connector;
@@ -19,7 +19,7 @@ internal class SynchronisationImportTaskProcessor
     private readonly Models.Activities.Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
-    internal SynchronisationImportTaskProcessor(
+    public SynchronisationImportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
         ConnectedSystem connectedSystem,
@@ -37,7 +37,7 @@ internal class SynchronisationImportTaskProcessor
         _cancellationTokenSource = cancellationTokenSource;
     }
 
-    internal async Task PerformFullImportAsync()
+    public async Task PerformFullImportAsync()
     {
         Log.Verbose("PerformFullImportAsync: Starting");
 

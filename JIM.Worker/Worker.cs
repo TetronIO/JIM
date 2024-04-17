@@ -56,7 +56,7 @@ public class Worker : BackgroundService
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
-        var mainLoopJim = new JimApplication(new PostgresDataRepository());
+        var mainLoopJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
         await mainLoopJim.InitialiseDatabaseAsync();
 
         // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
@@ -113,8 +113,8 @@ public class Worker : BackgroundService
                         var task = Task.Run(async () =>
                         {
                             // create an instance of JIM, specific to the processing of this task.
-                            // we can't use the main-loop instance, due to EF having connection sharing issues.
-                            var taskJim = new JimApplication(new PostgresDataRepository());
+                            // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
+                            var taskJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
                             var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ?? 
