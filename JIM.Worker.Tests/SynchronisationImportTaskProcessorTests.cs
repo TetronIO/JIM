@@ -1,11 +1,14 @@
+using System.Data.Entity.Infrastructure;
 using JIM.Application;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
 using Microsoft.EntityFrameworkCore;
+using MockQueryable.Moq;
 using Moq;
 namespace JIM.Worker.Tests;
 
@@ -48,35 +51,60 @@ public class SynchronisationImportTaskProcessorTests
                 InitiatedBy = initiatedBy,
                 InitiatedByName = "Joe Bloggs"
             }
-        }.AsQueryable();
-        var mockSetActivity = new Mock<DbSet<Activity>>();
-        mockSetActivity.As<IQueryable<Activity>>().Setup(m => m.Provider).Returns(activityData.Provider);
-        mockSetActivity.As<IQueryable<Activity>>().Setup(m => m.Expression).Returns(activityData.Expression);
-        mockSetActivity.As<IQueryable<Activity>>().Setup(m => m.ElementType).Returns(activityData.ElementType);
-        mockSetActivity.As<IQueryable<Activity>>().Setup(m => m.GetEnumerator()).Returns(() => activityData.GetEnumerator());
-        mockDbContext.Setup(m => m.Activities).Returns(mockSetActivity.Object);
+        };
+        var mockDbSetActivity = activityData.AsQueryable().BuildMockDbSet();
+        mockDbContext.Setup(m => m.Activities).Returns(mockDbSetActivity.Object);
         
         // set up the connected system mock
-        var connectedSystemData = new List<ConnectedSystem> 
+        var connectedSystemData = new List<ConnectedSystem>
         {
             new()
             {
-                Id = 1
+                Id = 1,
+                Name = "Dummy System"
             }
-        }.AsQueryable();
-        var mockSetConnectedSystem = new Mock<DbSet<ConnectedSystem>>();
-        mockSetConnectedSystem.As<IQueryable<ConnectedSystem>>().Setup(m => m.Provider).Returns(connectedSystemData.Provider);
-        mockSetConnectedSystem.As<IQueryable<ConnectedSystem>>().Setup(m => m.Expression).Returns(connectedSystemData.Expression);
-        mockSetConnectedSystem.As<IQueryable<ConnectedSystem>>().Setup(m => m.ElementType).Returns(connectedSystemData.ElementType);
-        mockSetConnectedSystem.As<IQueryable<ConnectedSystem>>().Setup(m => m.GetEnumerator()).Returns(() => connectedSystemData.GetEnumerator());
-        mockDbContext.Setup(m => m.ConnectedSystems).Returns(mockSetConnectedSystem.Object);
-
+        };
+        var mockDbSetConnectedSystem = connectedSystemData.AsQueryable().BuildMockDbSet();
+        mockDbContext.Setup(m => m.ConnectedSystems).Returns(mockDbSetConnectedSystem.Object);
+        
         // mock up a connector that will return testable data
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "user",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = "ID",
+                    IntValues = new List<int> { 1 }
+                },
+                new ()
+                {
+                    Name = "DISPLAY_NAME",
+                    StringValues = new List<string> { "Joe Bloggs" }
+                },
+                new ()
+                {
+                    Name = "EMAIL_ADDRESS",
+                    StringValues = new List<string> { "joe.bloggs@phlebas.tetron.io" }
+                },
+                new ()
+                {
+                    Name = "ROLE",
+                    StringValues = new List<string> { "Developer" }
+                }
+            }
         });
+        
+        // todo: schema
+        
+        // environment variables needed by JIM, even though they won't be used
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseHostname, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseName, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseUsername, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabasePassword, "dummy");
         
         // now execute Jim functionality we want to test...
         var jim = new JimApplication(new PostgresDataRepository(mockDbContext.Object));

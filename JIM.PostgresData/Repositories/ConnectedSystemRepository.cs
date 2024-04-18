@@ -137,12 +137,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystem == null)
             return null;
 
-        connectedSystem = await Repository.Database.ConnectedSystems.
-            Include(cs => cs.ConnectorDefinition).
-            Include(cs => cs.SettingValues).
-            ThenInclude(sv => sv.Setting).
-            SingleOrDefaultAsync(x => x.Id == id);
-
         runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         types = await Repository.Database.ConnectedSystemObjectTypes
@@ -165,9 +159,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(p => p.ConnectedSystem.Id == id).ToListAsync();
 
         // collect and merge data
-        if (connectedSystem == null)
-            return null;
-
         connectedSystem.RunProfiles = runProfiles;
         connectedSystem.ObjectTypes = types;
         connectedSystem.Partitions = partitions;
