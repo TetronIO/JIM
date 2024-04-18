@@ -66,6 +66,59 @@ public class SynchronisationImportTaskProcessorTests
         };
         var mockDbSetConnectedSystem = connectedSystemData.AsQueryable().BuildMockDbSet();
         mockDbContext.Setup(m => m.ConnectedSystems).Returns(mockDbSetConnectedSystem.Object);
+
+        // setup up the connected system run profiles mock
+        var connectedSystemRunProfileData = new List<ConnectedSystemRunProfile>
+        {
+            new()
+            {
+                Id = 1,
+                Name = "Dummy Full Import",
+                RunType = ConnectedSystemRunType.FullImport,
+                ConnectedSystemId = 1
+            },
+            new()
+            {
+                Id = 2,
+                Name = "Dummy Delta Import",
+                RunType = ConnectedSystemRunType.DeltaImport,
+                ConnectedSystemId = 1
+            },
+            new()
+            {
+                Id = 3,
+                Name = "Dummy Full Synchronisation",
+                RunType = ConnectedSystemRunType.FullSynchronisation,
+                ConnectedSystemId = 1
+            },
+            new()
+            {
+                Id = 4,
+                Name = "Dummy Delta Synchronisation",
+                RunType = ConnectedSystemRunType.DeltaImport,
+                ConnectedSystemId = 1
+            },
+            new()
+            {
+                Id = 5,
+                Name = "Dummy Export",
+                RunType = ConnectedSystemRunType.Export,
+                ConnectedSystemId = 1
+            }
+        };
+        var mockDbSetConnectedSystemRunProfile = connectedSystemRunProfileData.AsQueryable().BuildMockDbSet();
+        mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(mockDbSetConnectedSystemRunProfile.Object);
+        
+        // setup the connected system object type mock
+        var connectedSystemObjectData = new List<ConnectedSystemObjectType>
+        {
+            new ()
+            {
+                Id = 1,
+                Name = "User",
+                ConnectedSystemId = 1 // todo: ef migration needed for this new attribute
+            }
+        };
         
         // mock up a connector that will return testable data
         var mockFileConnector = new MockFileConnector();

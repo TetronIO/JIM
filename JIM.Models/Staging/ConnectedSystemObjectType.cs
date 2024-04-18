@@ -9,6 +9,7 @@ public class ConnectedSystemObjectType
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
+    public int ConnectedSystemId { get; set; }
 
     public List<ConnectedSystemObjectTypeAttribute> Attributes { get; set; } = new();
 
