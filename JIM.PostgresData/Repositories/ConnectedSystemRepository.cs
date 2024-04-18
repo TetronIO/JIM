@@ -141,7 +141,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         types = await Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes.OrderBy(a => a.Name))
-            .Where(q => q.ConnectedSystem.Id == id).ToListAsync();
+            .Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
         partitions = await Repository.Database.ConnectedSystemPartitions

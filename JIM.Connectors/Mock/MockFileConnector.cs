@@ -23,7 +23,11 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorS
 
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        var result = new ConnectedSystemImportResult
+        {
+            ImportObjects = TestImportObjects
+        };
+        return Task.FromResult(result);
     }
 
     public Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)

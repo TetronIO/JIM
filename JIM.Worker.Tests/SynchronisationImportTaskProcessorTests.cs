@@ -1,4 +1,3 @@
-using System.Data.Entity.Infrastructure;
 using JIM.Application;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
@@ -7,7 +6,6 @@ using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
-using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
 namespace JIM.Worker.Tests;
@@ -109,16 +107,57 @@ public class SynchronisationImportTaskProcessorTests
         var mockDbSetConnectedSystemRunProfile = connectedSystemRunProfileData.AsQueryable().BuildMockDbSet();
         mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(mockDbSetConnectedSystemRunProfile.Object);
         
-        // setup the connected system object type mock
-        var connectedSystemObjectData = new List<ConnectedSystemObjectType>
+        // set up the connected system object type mock
+        var connectedSystemObjectTypeData = new List<ConnectedSystemObjectType>
         {
             new ()
             {
                 Id = 1,
                 Name = "User",
-                ConnectedSystemId = 1 // todo: ef migration needed for this new attribute
+                ConnectedSystemId = 1,
+                Attributes = new List<ConnectedSystemObjectTypeAttribute>
+                {
+                    new()
+                    {
+                        Id = 1,
+                        IsExternalId = true,
+                        Name = "ID",
+                        Type = AttributeDataType.Number
+                    },
+                    new()
+                    {
+                        Id = 2,
+                        Name = "DISPLAY_NAME",
+                        Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = 3,
+                        Name = "EMAIL_ADDRESS",
+                        Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = 4,
+                        Name = "ROLE",
+                        Type = AttributeDataType.Text
+                    }
+                }
             }
         };
+        var mockDbSetConnectedSystemObjectType = connectedSystemObjectTypeData.AsQueryable().BuildMockDbSet();
+        mockDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(mockDbSetConnectedSystemObjectType.Object);
+
+        // ReSharper disable once CollectionNeverUpdated.Local
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
+        mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+        
+        // setup up the Connected System Partitions mock
+        // ReSharper disable once CollectionNeverUpdated.Local
+        var connectedSystemPartitionsData = new List<ConnectedSystemPartition>();
+        var mockDbSetConnectedSystemPartition = connectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
+        mockDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(mockDbSetConnectedSystemPartition.Object);
         
         // mock up a connector that will return testable data
         var mockFileConnector = new MockFileConnector();
@@ -150,8 +189,6 @@ public class SynchronisationImportTaskProcessorTests
                 }
             }
         });
-        
-        // todo: schema
         
         // environment variables needed by JIM, even though they won't be used
         Environment.SetEnvironmentVariable(Constants.Config.DatabaseHostname, "dummy");
