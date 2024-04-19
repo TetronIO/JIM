@@ -9,7 +9,6 @@ using JIM.Worker.Processors;
 using JIM.Worker.Tests.Models;
 using MockQueryable.Moq;
 using Moq;
-using NuGet.Frameworks;
 
 namespace JIM.Worker.Tests;
 
@@ -24,11 +23,8 @@ public class SynchronisationImportTaskProcessorTests
     }
 
     [Test]
-    public async Task FullImportTestAsync()
+    public async Task FullImportBasicTestAsync()
     {
-        // test-specific:
-        var mockDbContext = new Mock<JimDbContext>();
-        
         // set up the initiated-by user Metaverse object
         var initiatedBy = new MetaverseObject {
             Id = Guid.NewGuid()
@@ -54,7 +50,6 @@ public class SynchronisationImportTaskProcessorTests
             }
         };
         var mockDbSetActivity = activityData.AsQueryable().BuildMockDbSet();
-        mockDbContext.Setup(m => m.Activities).Returns(mockDbSetActivity.Object);
         
         // set up the connected systems mock
         var connectedSystemData = new List<ConnectedSystem>
@@ -66,8 +61,7 @@ public class SynchronisationImportTaskProcessorTests
             }
         };
         var mockDbSetConnectedSystem = connectedSystemData.AsQueryable().BuildMockDbSet();
-        mockDbContext.Setup(m => m.ConnectedSystems).Returns(mockDbSetConnectedSystem.Object);
-
+        
         // setup up the connected system run profiles mock
         var connectedSystemRunProfileData = new List<ConnectedSystemRunProfile>
         {
@@ -108,7 +102,6 @@ public class SynchronisationImportTaskProcessorTests
             }
         };
         var mockDbSetConnectedSystemRunProfile = connectedSystemRunProfileData.AsQueryable().BuildMockDbSet();
-        mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(mockDbSetConnectedSystemRunProfile.Object);
         
         // set up the connected system object types mock
         var connectedSystemObjectTypeData = new List<ConnectedSystemObjectType>
@@ -149,20 +142,24 @@ public class SynchronisationImportTaskProcessorTests
             }
         };
         var mockDbSetConnectedSystemObjectType = connectedSystemObjectTypeData.AsQueryable().BuildMockDbSet();
-        mockDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(mockDbSetConnectedSystemObjectType.Object);
-
+        
         // set up the connected system objects mock
         var connectedSystemObjectData = new List<ConnectedSystemObject>();
         var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
-        mockDbSetConnectedSystemObject
-             .Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>()))
-             .Callback((IEnumerable<ConnectedSystemObject> entities) => connectedSystemObjectData.AddRange(entities));
-        mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
         
         // setup up the Connected System Partitions mock
         // ReSharper disable once CollectionNeverUpdated.Local
         var connectedSystemPartitionsData = new List<ConnectedSystemPartition>();
         var mockDbSetConnectedSystemPartition = connectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
+        
+        // mock entity framework calls to use our data sources above
+        var mockDbContext = new Mock<JimDbContext>();
+        mockDbContext.Setup(m => m.Activities).Returns(mockDbSetActivity.Object);
+        mockDbContext.Setup(m => m.ConnectedSystems).Returns(mockDbSetConnectedSystem.Object);
+        mockDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(mockDbSetConnectedSystemObjectType.Object);
+        mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(mockDbSetConnectedSystemRunProfile.Object);
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => connectedSystemObjectData.AddRange(entities));
+        mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
         mockDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(mockDbSetConnectedSystemPartition.Object);
         
         // mock up a connector that will return testable data
@@ -282,11 +279,4 @@ public class SynchronisationImportTaskProcessorTests
                 throw new NotSupportedException($"AttributeDataType of {expectedAttributeDataType} is not currently supported by this test.");
         }
     }
-    
-    /*#region private methods
-    private void SetupInitialImportJim()
-    {
-        InitialImportJim = new JimApplication();
-    }
-    #endregion*/
 }
