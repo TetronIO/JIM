@@ -1,6 +1,6 @@
 ﻿namespace JIM.Worker.Tests.Models;
 
-public enum MockAttributeNames
+public enum MockAttributeName
 {
     ID = 1,
     DISPLAY_NAME = 2,
