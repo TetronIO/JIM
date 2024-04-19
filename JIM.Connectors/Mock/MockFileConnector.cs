@@ -1,13 +1,12 @@
 ﻿using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
-
 namespace JIM.Connectors.Mock;
 
 /// <summary>
 /// For unit-testing Jim synchronisation functionality. Not for use in a deployed system.
 /// </summary>
-public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorSchema, IConnectorImportUsingFiles
+public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorImportUsingFiles
 {
     public string Name => "Mock Connector";
     public string? Description => "Enables unit testing of synchronisation functionality.";
@@ -23,16 +22,13 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorS
 
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken)
     {
+        // normally this method would go and source data from the connected system, but as we're unit-testing, we want to mock that data
+        // so, we just return data that the unit test has passed in by the special test accessor: TestImportObjects.
         var result = new ConnectedSystemImportResult
         {
             ImportObjects = TestImportObjects
         };
         return Task.FromResult(result);
-    }
-
-    public Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
-    {
-        throw new NotImplementedException();
     }
     
     #region unit-test specific

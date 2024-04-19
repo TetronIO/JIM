@@ -1,3 +1,4 @@
+using System.Data.Entity;
 using JIM.Application;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
@@ -6,6 +7,7 @@ using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
+using JIM.Worker.Tests.Models;
 using MockQueryable.Moq;
 using Moq;
 namespace JIM.Worker.Tests;
@@ -21,7 +23,7 @@ public class SynchronisationImportTaskProcessorTests
     }
 
     [Test]
-    public async Task Test1Async()
+    public async Task FullImportTestAsync()
     {
         // test-specific:
         var mockDbContext = new Mock<JimDbContext>();
@@ -53,7 +55,7 @@ public class SynchronisationImportTaskProcessorTests
         var mockDbSetActivity = activityData.AsQueryable().BuildMockDbSet();
         mockDbContext.Setup(m => m.Activities).Returns(mockDbSetActivity.Object);
         
-        // set up the connected system mock
+        // set up the connected systems mock
         var connectedSystemData = new List<ConnectedSystem>
         {
             new()
@@ -107,7 +109,7 @@ public class SynchronisationImportTaskProcessorTests
         var mockDbSetConnectedSystemRunProfile = connectedSystemRunProfileData.AsQueryable().BuildMockDbSet();
         mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(mockDbSetConnectedSystemRunProfile.Object);
         
-        // set up the connected system object type mock
+        // set up the connected system object types mock
         var connectedSystemObjectTypeData = new List<ConnectedSystemObjectType>
         {
             new ()
@@ -119,27 +121,27 @@ public class SynchronisationImportTaskProcessorTests
                 {
                     new()
                     {
-                        Id = 1,
+                        Id = (int)MockAttributeNames.ID,
                         IsExternalId = true,
-                        Name = "ID",
+                        Name = MockAttributeNames.ID.ToString(),
                         Type = AttributeDataType.Number
                     },
                     new()
                     {
-                        Id = 2,
-                        Name = "DISPLAY_NAME",
+                        Id = (int)MockAttributeNames.DISPLAY_NAME,
+                        Name = MockAttributeNames.DISPLAY_NAME.ToString(),
                         Type = AttributeDataType.Text
                     },
                     new()
                     {
-                        Id = 3,
-                        Name = "EMAIL_ADDRESS",
+                        Id = (int)MockAttributeNames.EMAIL_ADDRESS,
+                        Name = MockAttributeNames.EMAIL_ADDRESS.ToString(),
                         Type = AttributeDataType.Text
                     },
                     new()
                     {
-                        Id = 4,
-                        Name = "ROLE",
+                        Id = (int)MockAttributeNames.ROLE,
+                        Name = MockAttributeNames.ROLE.ToString(),
                         Type = AttributeDataType.Text
                     }
                 }
@@ -148,9 +150,12 @@ public class SynchronisationImportTaskProcessorTests
         var mockDbSetConnectedSystemObjectType = connectedSystemObjectTypeData.AsQueryable().BuildMockDbSet();
         mockDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(mockDbSetConnectedSystemObjectType.Object);
 
-        // ReSharper disable once CollectionNeverUpdated.Local
+        // set up the connected system objects mock
         var connectedSystemObjectData = new List<ConnectedSystemObject>();
         var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
+        mockDbSetConnectedSystemObject
+             .Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>()))
+             .Callback((IEnumerable<ConnectedSystemObject> entities) => connectedSystemObjectData.AddRange(entities));
         mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
         
         // setup up the Connected System Partitions mock
@@ -169,22 +174,22 @@ public class SynchronisationImportTaskProcessorTests
             {
                 new ()
                 {
-                    Name = "ID",
+                    Name = MockAttributeNames.ID.ToString(),
                     IntValues = new List<int> { 1 }
                 },
                 new ()
                 {
-                    Name = "DISPLAY_NAME",
+                    Name = MockAttributeNames.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { "Joe Bloggs" }
                 },
                 new ()
                 {
-                    Name = "EMAIL_ADDRESS",
+                    Name = MockAttributeNames.EMAIL_ADDRESS.ToString(),
                     StringValues = new List<string> { "joe.bloggs@phlebas.tetron.io" }
                 },
                 new ()
                 {
-                    Name = "ROLE",
+                    Name = MockAttributeNames.ROLE.ToString(),
                     StringValues = new List<string> { "Developer" }
                 }
             }
@@ -199,12 +204,14 @@ public class SynchronisationImportTaskProcessorTests
         // now execute Jim functionality we want to test...
         var jim = new JimApplication(new PostgresDataRepository(mockDbContext.Object));
         var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(1);
-        Assert.That(connectedSystem, Is.Not.Null);
-        
-        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, mockFileConnector, connectedSystem, runProfile, initiatedBy, activityData.First(), new CancellationTokenSource());
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = activityData.First();
+        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, mockFileConnector, connectedSystem, runProfile, initiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
         // confirm the results in the mocked db context
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(1), "Expected a single Connected System Object to have been persisted.");
         
         Assert.Pass();
     }
