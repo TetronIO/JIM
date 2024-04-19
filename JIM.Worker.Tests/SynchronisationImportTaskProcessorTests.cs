@@ -14,12 +14,14 @@ namespace JIM.Worker.Tests;
 
 public class SynchronisationImportTaskProcessorTests
 {
-     //private JimApplication InitialImportJim { get; set; }
-     // todo: add other Jim instances for scenarios such as ImportWithUpdatesJim, ImportWithDeletesJim, etc.
-    
     [SetUp]
     public void Setup()
     {
+        // environment variables needed by JIM, even though they won't be used
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseHostname, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseName, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseUsername, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabasePassword, "dummy");
     }
 
     [Test]
@@ -41,7 +43,7 @@ public class SynchronisationImportTaskProcessorTests
         {
             new()
             {
-                Id = new Guid(),
+                Id = Guid.NewGuid(),
                 TargetName = "Mock Full Import Execution",
                 Status = ActivityStatus.InProgress,
                 ConnectedSystemRunType = ConnectedSystemRunType.FullImport,
@@ -71,39 +73,11 @@ public class SynchronisationImportTaskProcessorTests
                 Name = "Dummy Full Import",
                 RunType = ConnectedSystemRunType.FullImport,
                 ConnectedSystemId = 1
-            },
-            new()
-            {
-                Id = 2,
-                Name = "Dummy Delta Import",
-                RunType = ConnectedSystemRunType.DeltaImport,
-                ConnectedSystemId = 1
-            },
-            new()
-            {
-                Id = 3,
-                Name = "Dummy Full Synchronisation",
-                RunType = ConnectedSystemRunType.FullSynchronisation,
-                ConnectedSystemId = 1
-            },
-            new()
-            {
-                Id = 4,
-                Name = "Dummy Delta Synchronisation",
-                RunType = ConnectedSystemRunType.DeltaImport,
-                ConnectedSystemId = 1
-            },
-            new()
-            {
-                Id = 5,
-                Name = "Dummy Export",
-                RunType = ConnectedSystemRunType.Export,
-                ConnectedSystemId = 1
             }
         };
         var mockDbSetConnectedSystemRunProfile = connectedSystemRunProfileData.AsQueryable().BuildMockDbSet();
         
-        // set up the connected system object types mock
+        // set up the connected system object types mock. this acts as the persisted schema in JIM
         var connectedSystemObjectTypeData = new List<ConnectedSystemObjectType>
         {
             new ()
@@ -137,6 +111,12 @@ public class SynchronisationImportTaskProcessorTests
                         Id = (int)MockAttributeName.ROLE,
                         Name = MockAttributeName.ROLE.ToString(),
                         Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.MANAGER,
+                        Name = MockAttributeName.MANAGER.ToString(),
+                        Type = AttributeDataType.Reference
                     }
                 }
             }
@@ -158,7 +138,16 @@ public class SynchronisationImportTaskProcessorTests
         mockDbContext.Setup(m => m.ConnectedSystems).Returns(mockDbSetConnectedSystem.Object);
         mockDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(mockDbSetConnectedSystemObjectType.Object);
         mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(mockDbSetConnectedSystemRunProfile.Object);
-        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => connectedSystemObjectData.AddRange(entities));
+        
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+                foreach (var entity in connectedSystemObjects) {
+                    entity.Id = Guid.NewGuid(); // assign the ids here, mocking what the db would do in SaveChanges()
+                }
+                connectedSystemObjectData.AddRange(connectedSystemObjects);
+            });
+        
         mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
         mockDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(mockDbSetConnectedSystemPartition.Object);
         
@@ -178,6 +167,34 @@ public class SynchronisationImportTaskProcessorTests
                 new ()
                 {
                     Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Jane Smith" }
+                },
+                new ()
+                {
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "jane.smith@phlebas.tetron.io" }
+                },
+                new ()
+                {
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { "Manager" }
+                }
+            }
+        });
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "user",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockAttributeName.ID.ToString(),
+                    IntValues = new List<int> { 2 }
+                },
+                new ()
+                {
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { "Joe Bloggs" }
                 },
                 new ()
@@ -189,15 +206,14 @@ public class SynchronisationImportTaskProcessorTests
                 {
                     Name = MockAttributeName.ROLE.ToString(),
                     StringValues = new List<string> { "Developer" }
+                },
+                new ()
+                {
+                    Name = MockAttributeName.MANAGER.ToString(),
+                    ReferenceValues = new List<string> { "1" }
                 }
             }
         });
-        
-        // environment variables needed by JIM, even though they won't be used
-        Environment.SetEnvironmentVariable(Constants.Config.DatabaseHostname, "dummy");
-        Environment.SetEnvironmentVariable(Constants.Config.DatabaseName, "dummy");
-        Environment.SetEnvironmentVariable(Constants.Config.DatabaseUsername, "dummy");
-        Environment.SetEnvironmentVariable(Constants.Config.DatabasePassword, "dummy");
         
         // now execute Jim functionality we want to test...
         var jim = new JimApplication(new PostgresDataRepository(mockDbContext.Object));
@@ -208,15 +224,25 @@ public class SynchronisationImportTaskProcessorTests
         var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, mockFileConnector, connectedSystem, runProfile, initiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results in the mocked db context
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(1), "Expected a single Connected System Object to have been persisted.");
-        var persistedConnectedSystemObject = connectedSystemObjectData[0];
-        var sourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
+        // confirm the results persisted to the mocked db context
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(2), "Expected two Connected System Objects to have been persisted.");
 
-        ValidateAttributesForEquality(persistedConnectedSystemObject, sourceConnectedSystemImportObject, MockAttributeName.ID, AttributeDataType.Number);
-        ValidateAttributesForEquality(persistedConnectedSystemObject, sourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, AttributeDataType.Text);
-        ValidateAttributesForEquality(persistedConnectedSystemObject, sourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, AttributeDataType.Text);
-        ValidateAttributesForEquality(persistedConnectedSystemObject, sourceConnectedSystemImportObject, MockAttributeName.ROLE, AttributeDataType.Text);
+        // validate the first user (who is a manager)
+        var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
+        var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ID, AttributeDataType.Number);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, AttributeDataType.Text);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, AttributeDataType.Text);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ROLE, AttributeDataType.Text);
+
+        // validate the second user (who is a direct-report)
+        var secondPersistedConnectedSystemObject = connectedSystemObjectData[0];
+        var secondSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ID, AttributeDataType.Number);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, AttributeDataType.Text);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, AttributeDataType.Text);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ROLE, AttributeDataType.Text);
+        // todo: validate manager reference
         
         Assert.Pass();
     }
@@ -272,11 +298,19 @@ public class SynchronisationImportTaskProcessorTests
                 foreach (var csioDateTimeValue in csioAttribute.DateTimeValues)
                     Assert.That(csoAttributeValues.Any(q => q.DateTimeValue == csioDateTimeValue));
                 break;
-            case AttributeDataType.NotSet:
             case AttributeDataType.Binary:
+                // this is quite crude, and could be improved
+                // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
+                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.ByteValues.Count));
+                foreach (var csoByteValue in csoAttributeValues)
+                    Assert.That(csioAttribute.ByteValues.Any(q => q == csoByteValue.ByteValue));
+                foreach (var csioByteValue in csioAttribute.ByteValues)
+                    Assert.That(csoAttributeValues.Any(q => q.ByteValue?.Length == csioByteValue.Length));
+                break;
             case AttributeDataType.Reference:
+            case AttributeDataType.NotSet:
             default:
-                throw new NotSupportedException($"AttributeDataType of {expectedAttributeDataType} is not currently supported by this test.");
+                throw new NotSupportedException($"AttributeDataType of {expectedAttributeDataType} is supported by this method.");
         }
     }
 }

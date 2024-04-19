@@ -7,5 +7,6 @@ public enum MockAttributeName
     EMAIL_ADDRESS = 3,
     DEPARTMENT = 4,
     ROLE = 5,
-    JOB_TITLE = 6
+    JOB_TITLE = 6,
+    MANAGER = 7
 }
