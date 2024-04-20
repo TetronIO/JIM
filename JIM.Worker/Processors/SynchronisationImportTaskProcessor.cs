@@ -7,7 +7,6 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
-using CsvHelper;
 
 namespace JIM.Worker.Processors;
 
