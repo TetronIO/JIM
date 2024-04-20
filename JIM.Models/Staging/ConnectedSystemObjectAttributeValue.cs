@@ -47,28 +47,28 @@ public class ConnectedSystemObjectAttributeValue
     public override string ToString()
     {
         if (!string.IsNullOrEmpty(StringValue))
-            return StringValue;
+            return $"{Attribute.Name}: " + StringValue;
 
         if (DateTimeValue.HasValue)
-            return DateTimeValue.Value.ToString(CultureInfo.InvariantCulture);
+            return $"{Attribute.Name}: " + DateTimeValue.Value.ToString(CultureInfo.InvariantCulture);
 
         if (IntValue.HasValue)
-            return IntValue.Value.ToString();
+            return $"{Attribute.Name}: " + IntValue.Value;
 
         if (ByteValue != null)
-            return ByteValue.Length.ToString();
+            return $"{Attribute.Name}: " + ByteValue.Length;
 
         if (GuidValue.HasValue)
-            return GuidValue.Value.ToString();
+            return $"{Attribute.Name}: " + GuidValue.Value;
 
         if (BoolValue.HasValue)
-            return BoolValue.Value.ToString();
+            return $"{Attribute.Name}: " + BoolValue.Value;
 
         if (ReferenceValue != null)
-            return ReferenceValue.Id.ToString();
+            return $"{Attribute.Name} - Resolved: " + ReferenceValue.Id;
 
         if (!string.IsNullOrEmpty(UnresolvedReferenceValue))
-            return UnresolvedReferenceValue;
+            return $"{Attribute.Name} - Unresolved: " + UnresolvedReferenceValue;
 
         return string.Empty;
     }

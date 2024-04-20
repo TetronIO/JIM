@@ -194,7 +194,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (page < 1)
             page = 1;
 
-        // limit page size to avoid increasing latency unecessarily
+        // limit page size to avoid increasing latency unnecessarily
         if (pageSize > 100)
             pageSize = 100;
 
@@ -202,7 +202,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (maxResults > 500)
             maxResults = 500;
 
-        // todo: just get the displayname and unique identifier attribute values
+        // todo: just get the display name and unique identifier attribute values
         var objects = from o in Repository.Database.ConnectedSystemObjects.
                 Where(cso => cso.ConnectedSystem.Id == connectedSystemId)
             select o;
@@ -309,9 +309,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
     {
-        return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
-            x.ConnectedSystem.Id == connectedSystemId &&
-            x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
+        return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(cso =>
+            cso.ConnectedSystem.Id == connectedSystemId &&
+            cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
