@@ -15,9 +15,20 @@ namespace JIM.Worker.Tests;
 
 public class SynchronisationImportTaskProcessorTests
 {
+    // accessors for data that will be used across tests
     private MetaverseObject InitiatedBy { get; set; }
     private List<ConnectedSystem> ConnectedSystemsData { get; set; } 
     private Mock<DbSet<ConnectedSystem>> MockDbSetConnectedSystems { get; set; }
+    private List<ConnectedSystemRunProfile> ConnectedSystemRunProfilesData { get; set; }
+    private Mock<DbSet<ConnectedSystemRunProfile>> MockDbSetConnectedSystemRunProfiles { get; set; }
+    private List<ConnectedSystemObjectType> ConnectedSystemObjectTypesData { get; set; } 
+    private Mock<DbSet<ConnectedSystemObjectType>> MockDbSetConnectedSystemObjectTypes { get; set; }
+    private List<ConnectedSystemPartition> ConnectedSystemPartitionsData { get; set; }
+    private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; }
+    private List<Activity> ActivitiesData { get; set; }
+    private Mock<DbSet<Activity>> MockDbSetActivities { get; set; }
+    private Mock<JimDbContext> MockJimDbContext { get; set; }
+    private JimApplication Jim { get; set; }
     
     [SetUp]
     public void Setup()
@@ -43,34 +54,9 @@ public class SynchronisationImportTaskProcessorTests
             }
         };
         MockDbSetConnectedSystems = ConnectedSystemsData.AsQueryable().BuildMockDbSet();
-    }
-
-    [Test]
-    public async Task FullImportBasicTestAsync()
-    {
-        // set up the run profile
-        var runProfile = new ConnectedSystemRunProfile {
-            Id = 1,
-            RunType = ConnectedSystemRunType.FullImport
-        };
-        
-        // set up the activity mock
-        var activityData = new List<Activity>
-        {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                TargetName = "Mock Full Import Execution",
-                Status = ActivityStatus.InProgress,
-                ConnectedSystemRunType = ConnectedSystemRunType.FullImport,
-                InitiatedBy = InitiatedBy,
-                InitiatedByName = "Joe Bloggs"
-            }
-        };
-        var mockDbSetActivity = activityData.AsQueryable().BuildMockDbSet();
         
         // setup up the connected system run profiles mock
-        var connectedSystemRunProfileData = new List<ConnectedSystemRunProfile>
+        ConnectedSystemRunProfilesData = new List<ConnectedSystemRunProfile>
         {
             new()
             {
@@ -80,10 +66,10 @@ public class SynchronisationImportTaskProcessorTests
                 ConnectedSystemId = 1
             }
         };
-        var mockDbSetConnectedSystemRunProfile = connectedSystemRunProfileData.AsQueryable().BuildMockDbSet();
+        MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.AsQueryable().BuildMockDbSet();
         
         // set up the connected system object types mock. this acts as the persisted schema in JIM
-        var connectedSystemObjectTypeData = new List<ConnectedSystemObjectType>
+        ConnectedSystemObjectTypesData = new List<ConnectedSystemObjectType>
         {
             new ()
             {
@@ -126,24 +112,44 @@ public class SynchronisationImportTaskProcessorTests
                 }
             }
         };
-        var mockDbSetConnectedSystemObjectType = connectedSystemObjectTypeData.AsQueryable().BuildMockDbSet();
-        
-        // set up the connected system objects mock
-        var connectedSystemObjectData = new List<ConnectedSystemObject>();
-        var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
+        MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.AsQueryable().BuildMockDbSet();
         
         // setup up the Connected System Partitions mock
         // ReSharper disable once CollectionNeverUpdated.Local
-        var connectedSystemPartitionsData = new List<ConnectedSystemPartition>();
-        var mockDbSetConnectedSystemPartition = connectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
+        ConnectedSystemPartitionsData = new List<ConnectedSystemPartition>();
+        MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
+        
+        // set up the activity mock
+        ActivitiesData = new List<Activity>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TargetName = "Mock Full Import Execution",
+                Status = ActivityStatus.InProgress,
+                ConnectedSystemRunType = ConnectedSystemRunType.FullImport,
+                InitiatedBy = InitiatedBy,
+                InitiatedByName = "Joe Bloggs"
+            }
+        };
+        MockDbSetActivities = ActivitiesData.AsQueryable().BuildMockDbSet();
         
         // mock entity framework calls to use our data sources above
-        var mockDbContext = new Mock<JimDbContext>();
-        mockDbContext.Setup(m => m.Activities).Returns(mockDbSetActivity.Object);
-        mockDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
-        mockDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(mockDbSetConnectedSystemObjectType.Object);
-        mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(mockDbSetConnectedSystemRunProfile.Object);
-        
+        MockJimDbContext = new Mock<JimDbContext>();
+        MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(MockDbSetConnectedSystemRunProfiles.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+    }
+
+    [Test]
+    public async Task FullImportBasicTestAsync()
+    {
+        // set up the Connected System Objects mock. this is specific to this test
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
         mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
             (IEnumerable<ConnectedSystemObject> entities) => {
                 var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
@@ -152,9 +158,7 @@ public class SynchronisationImportTaskProcessorTests
                 }
                 connectedSystemObjectData.AddRange(connectedSystemObjects);
             });
-        
-        mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
-        mockDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(mockDbSetConnectedSystemPartition.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
         
         // mock up a connector that will return testable data
         var mockFileConnector = new MockFileConnector();
@@ -221,12 +225,12 @@ public class SynchronisationImportTaskProcessorTests
         });
         
         // now execute Jim functionality we want to test...
-        var jim = new JimApplication(new PostgresDataRepository(mockDbContext.Object));
-        var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
-        var activity = activityData.First();
-        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
         // confirm the results persisted to the mocked db context
