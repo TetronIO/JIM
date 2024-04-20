@@ -236,8 +236,8 @@ public class SynchronisationImportTaskProcessorTests
         ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ROLE, AttributeDataType.Text);
 
         // validate the second user (who is a direct-report)
-        var secondPersistedConnectedSystemObject = connectedSystemObjectData[0];
-        var secondSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
+        var secondPersistedConnectedSystemObject = connectedSystemObjectData[1];
+        var secondSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[1];
         ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ID, AttributeDataType.Number);
         ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, AttributeDataType.Text);
         ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, AttributeDataType.Text);
@@ -247,8 +247,9 @@ public class SynchronisationImportTaskProcessorTests
         var managerAttribute = secondPersistedConnectedSystemObject.AttributeValues.SingleOrDefault(q=>q.Attribute.Name == MockAttributeName.MANAGER.ToString());
         Assert.That(managerAttribute, Is.Not.Null, "Expected the MANAGER attribute to not be null.");
         Assert.That(managerAttribute.ReferenceValue, Is.Not.Null, "Expected the MANAGER reference value not to be null.");
-        Assert.That(managerAttribute.ReferenceValueId.HasValue, "Expected the MANAGER reference valid id not to be null");
-        Assert.That(managerAttribute.ReferenceValueId.Value, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference valid id to be the same as the first object id.");
+        // can't test this, EF code that sets these values is being overriden as part of testing
+        //Assert.That(managerAttribute.ReferenceValueId.HasValue, "Expected the MANAGER reference value id not to be null"); 
+        //Assert.That(managerAttribute.ReferenceValueId.Value, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference valid id to be the same as the first object id.");
         Assert.That(managerAttribute.ReferenceValue.Id, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference object id to match the id of the first object.");
         
         Assert.Pass();

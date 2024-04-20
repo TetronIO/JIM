@@ -7,6 +7,8 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
+using CsvHelper;
+
 namespace JIM.Worker.Processors;
 
 public class SynchronisationImportTaskProcessor
@@ -525,8 +527,68 @@ public class SynchronisationImportTaskProcessor
 
                 // this does work, but might not be optimal:
                 // ideally fix the above query, so it works and don't use this, but for now, works is works.
-                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
 
+                if (externalIdAttributeToUse.IsExternalId)
+                {
+                    switch (externalIdAttribute.Type)
+                    {
+                        case AttributeDataType.Text:
+                            referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
+                            break;
+                        case AttributeDataType.Number:
+                            if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intUnresolvedReferenceValue))
+                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);    
+                            else
+                                throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
+                            break;
+                        case AttributeDataType.Guid:
+                            if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
+                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);    
+                            else
+                                throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
+                            break;
+                        case AttributeDataType.DateTime:
+                        case AttributeDataType.Binary:
+                        case AttributeDataType.Reference:
+                        case AttributeDataType.Boolean:
+                        case AttributeDataType.NotSet:
+                        default:
+                            throw new ArgumentOutOfRangeException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} cannot be used for external ids.");
+                    }
+                } 
+                else if (externalIdAttributeToUse.IsSecondaryExternalId)
+                {
+                    switch (externalIdAttribute.Type)
+                    {
+                        case AttributeDataType.Text:
+                            referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
+                            break;
+                        case AttributeDataType.Number:
+                            if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intUnresolvedReferenceValue))
+                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);    
+                            else
+                                throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
+                            break;
+                        case AttributeDataType.Guid:
+                            if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
+                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);    
+                            else
+                                throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
+                            break;
+                        case AttributeDataType.DateTime:
+                        case AttributeDataType.Binary:
+                        case AttributeDataType.Reference:
+                        case AttributeDataType.Boolean:
+                        case AttributeDataType.NotSet:
+                        default:
+                            throw new ArgumentOutOfRangeException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} cannot be used for secondary external ids.");
+                    }    
+                }
+                else
+                {
+                    throw new InvalidDataException("externalIdAttributeToUse wasn't external or secondary external id");
+                }
+                
                 // no match, try and find a matching CSO in the database
                 referencedConnectedSystemObject ??= await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttributeToUse.Id, referenceAttributeValue.UnresolvedReferenceValue);
 
