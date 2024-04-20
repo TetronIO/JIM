@@ -102,6 +102,7 @@ public class SynchronisationImportTaskProcessor
         await ResolveReferencesAsync(connectedSystemObjectsBeingProcessed);
 
         // now persist all CSOs and create change objects within the activity tree
+        // todo: work out why we are calling this for objects being updated!
         await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsBeingProcessed, _activity);
 
         // update the activity with the results from all pages.
@@ -330,7 +331,7 @@ public class SynchronisationImportTaskProcessor
     private static void UpdateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
         // process known attributes (potential updates)
-        // need to work with the fact that we have individual objects for multi-valued attribute values
+        // need to work with the fact that we have individual objects for multivalued attribute values
         // get a list of distinct attributes
         var csoAttributeNames = connectedSystemObject.AttributeValues.Select(q => q.Attribute.Name).Distinct();
         foreach (var csoAttributeName in csoAttributeNames)
