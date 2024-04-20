@@ -242,7 +242,14 @@ public class SynchronisationImportTaskProcessorTests
         ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, AttributeDataType.Text);
         ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, AttributeDataType.Text);
         ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ROLE, AttributeDataType.Text);
-        // todo: validate manager reference
+        
+        // validate manager reference
+        var managerAttribute = secondPersistedConnectedSystemObject.AttributeValues.SingleOrDefault(q=>q.Attribute.Name == MockAttributeName.MANAGER.ToString());
+        Assert.That(managerAttribute, Is.Not.Null, "Expected the MANAGER attribute to not be null.");
+        Assert.That(managerAttribute.ReferenceValue, Is.Not.Null, "Expected the MANAGER reference value not to be null.");
+        Assert.That(managerAttribute.ReferenceValueId.HasValue, "Expected the MANAGER reference valid id not to be null");
+        Assert.That(managerAttribute.ReferenceValueId.Value, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference valid id to be the same as the first object id.");
+        Assert.That(managerAttribute.ReferenceValue.Id, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference object id to match the id of the first object.");
         
         Assert.Pass();
     }
