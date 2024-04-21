@@ -270,84 +270,94 @@ public class SynchronisationImportTaskProcessorTests
         // set up the Connected System Objects mock. this is specific to this test
         // these objects represent our initiate state, what the imported objects will be compared to, and if successful, be updated
         var connectedSystemObjectType = ConnectedSystemObjectTypesData.First();
-        var connectedSystemObjectData = new List<ConnectedSystemObject>
-        {
-            new ()
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = 1,
-                ConnectedSystem = ConnectedSystemsData.First(),
-                Type = connectedSystemObjectType,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        IntValue = 1,
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ID.ToString())
-                    },
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        StringValue = "Jane Smith",
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.DISPLAY_NAME.ToString())
-                    },
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        StringValue = "Manager",
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ROLE.ToString())
-                    },
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        StringValue = "jane.smith@phlebas.tetron.io",
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.EMAIL_ADDRESS.ToString())
-                    }
-                }
-            },
-        };
-        connectedSystemObjectData.Add(new ConnectedSystemObject
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var cso1 = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
-            Type = connectedSystemObjectType,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            Type = connectedSystemObjectType
+        };
+        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
             {
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    IntValue = 2,
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ID.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    StringValue = "Joe Bloggs",
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.DISPLAY_NAME.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    StringValue = "Developer",
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ROLE.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    StringValue = "joe.bloggs@phlebas.tetron.io",
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.EMAIL_ADDRESS.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    ReferenceValueId = connectedSystemObjectData.First().Id,
-                    ReferenceValue = connectedSystemObjectData.First(),
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.MANAGER.ToString())
-                }
+                Id = Guid.NewGuid(),
+                IntValue = 1,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ID.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Jane Smith",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Manager",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ROLE.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "jane.smith@phlebas.tetron.io",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                ConnectedSystemObject = cso1
             }
-        });
+        };
+        connectedSystemObjectData.Add(cso1);
+        
+        var cso2 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            ConnectedSystem = ConnectedSystemsData.First(),
+            Type = connectedSystemObjectType
+        };
+        cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                IntValue = 2,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ID.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Joe Bloggs",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Developer",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ROLE.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "joe.bloggs@phlebas.tetron.io",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ReferenceValueId = connectedSystemObjectData.First().Id,
+                ReferenceValue = connectedSystemObjectData.First(),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.MANAGER.ToString()),
+                ConnectedSystemObject = cso2
+            }
+        };
+        connectedSystemObjectData.Add(cso2);
 
         var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
         mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
@@ -453,84 +463,94 @@ public class SynchronisationImportTaskProcessorTests
         // set up the Connected System Objects mock. this is specific to this test
         // these objects represent our initiate state, what the imported objects will be compared to, and if successful, be updated
         var connectedSystemObjectType = ConnectedSystemObjectTypesData.First();
-        var connectedSystemObjectData = new List<ConnectedSystemObject>
-        {
-            new ()
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = 1,
-                ConnectedSystem = ConnectedSystemsData.First(),
-                Type = connectedSystemObjectType,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        IntValue = 1,
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ID.ToString())
-                    },
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        StringValue = "Jane Smith",
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.DISPLAY_NAME.ToString())
-                    },
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        StringValue = "Manager",
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ROLE.ToString())
-                    },
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        StringValue = "jane.smith@phlebas.tetron.io",
-                        Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.EMAIL_ADDRESS.ToString())
-                    }
-                }
-            },
-        };
-        connectedSystemObjectData.Add(new ConnectedSystemObject
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var cso1 = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
-            Type = connectedSystemObjectType,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            Type = connectedSystemObjectType
+        };
+        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
             {
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    IntValue = 2,
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ID.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    StringValue = "Joe Bloggs",
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.DISPLAY_NAME.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    StringValue = "Developer",
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.ROLE.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    StringValue = "joe.bloggs@phlebas.tetron.io",
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.EMAIL_ADDRESS.ToString())
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    ReferenceValueId = connectedSystemObjectData.First().Id,
-                    ReferenceValue = connectedSystemObjectData.First(),
-                    Attribute = connectedSystemObjectType.Attributes.Single(q=>q.Name == MockAttributeName.MANAGER.ToString())
-                }
+                Id = Guid.NewGuid(),
+                IntValue = 1,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ID.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Jane Smith",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Manager",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ROLE.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "jane.smith@phlebas.tetron.io",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                ConnectedSystemObject = cso1
             }
-        });
+        };
+        connectedSystemObjectData.Add(cso1);
+
+        var cso2 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            ConnectedSystem = ConnectedSystemsData.First(),
+            Type = connectedSystemObjectType
+        };
+        cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                IntValue = 2,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ID.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Joe Bloggs",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Developer",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ROLE.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "joe.bloggs@phlebas.tetron.io",
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ReferenceValueId = connectedSystemObjectData.First().Id,
+                ReferenceValue = connectedSystemObjectData.First(),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.MANAGER.ToString()),
+                ConnectedSystemObject = cso2
+            }
+        };
+        connectedSystemObjectData.Add(cso2);
 
         var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
         mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
@@ -548,7 +568,7 @@ public class SynchronisationImportTaskProcessorTests
         {
             ChangeType = ObjectChangeType.Create,
             ObjectType = "User",
-            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
                 new ()
                 {

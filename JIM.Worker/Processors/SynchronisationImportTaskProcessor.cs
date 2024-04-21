@@ -46,7 +46,8 @@ public class SynchronisationImportTaskProcessor
             throw new InvalidDataException("PerformFullImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
-        var connectedSystemObjectsBeingProcessed = new List<ConnectedSystemObject>();
+        var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
+        var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
             
         switch (_connector)
         {
@@ -73,7 +74,7 @@ public class SynchronisationImportTaskProcessor
                     }
 
                     // process the results from this page
-                    await ProcessImportObjectsAsync(result, connectedSystemObjectsBeingProcessed);
+                    await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
                     // todo: process deletes - what wasn't imported? how do we do this when paging is being used?
                     // make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
@@ -90,7 +91,7 @@ public class SynchronisationImportTaskProcessor
                 var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
 
                 // process the results from this page
-                await ProcessImportObjectsAsync(result, connectedSystemObjectsBeingProcessed);
+                await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
                 break;
             }
             default:
@@ -99,18 +100,21 @@ public class SynchronisationImportTaskProcessor
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other connected system objects
-        await ResolveReferencesAsync(connectedSystemObjectsBeingProcessed);
+        await ResolveReferencesAsync(connectedSystemObjectsToBeCreated);
 
-        // now persist all CSOs and create change objects within the activity tree
-        // todo: work out why we are calling this for objects being updated!
-        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsBeingProcessed, _activity);
+        // now persist all CSOs which will also create the required change objects within the activity tree.
+        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
+        await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
 
         // update the activity with the results from all pages.
         // this will also persist the ActivityRunProfileExecutionItem and ConnectedSystemObjectChanges for each CSO.
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
-    private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, List<ConnectedSystemObject> connectedSystemObjectsBeingProcessed)
+    private async Task ProcessImportObjectsAsync(
+        ConnectedSystemImportResult connectedSystemImportResult, 
+        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated,
+        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
@@ -155,6 +159,10 @@ public class SynchronisationImportTaskProcessor
             {
                 activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
                 connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
+                
+                // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
+                if (connectedSystemObject != null)
+                    connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
             }
             else
             {
@@ -162,11 +170,8 @@ public class SynchronisationImportTaskProcessor
                 activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                 activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                 UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, activityRunProfileExecutionItem);
+                connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
             }
-
-            // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
-            if (connectedSystemObject != null)
-                connectedSystemObjectsBeingProcessed.Add(connectedSystemObject);
         }
     }
 
@@ -249,7 +254,8 @@ public class SynchronisationImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
-                            StringValue = importObjectAttributeStringValue
+                            StringValue = importObjectAttributeStringValue,
+                            ConnectedSystemObject = connectedSystemObject
                         });
                     }
                     break;
@@ -259,7 +265,8 @@ public class SynchronisationImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
-                            IntValue = importObjectAttributeIntValue
+                            IntValue = importObjectAttributeIntValue,
+                            ConnectedSystemObject = connectedSystemObject
                         });
                     }
                     break;
@@ -269,7 +276,8 @@ public class SynchronisationImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
-                            ByteValue = importObjectAttributeByteValue
+                            ByteValue = importObjectAttributeByteValue,
+                            ConnectedSystemObject = connectedSystemObject
                         });
                     }
                     break;
@@ -279,7 +287,8 @@ public class SynchronisationImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
-                            GuidValue = importObjectAttributeGuidValue
+                            GuidValue = importObjectAttributeGuidValue,
+                            ConnectedSystemObject = connectedSystemObject
                         });
                     }
                     break;
@@ -289,7 +298,8 @@ public class SynchronisationImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
-                            DateTimeValue = importObjectAttributeDateTimeValue
+                            DateTimeValue = importObjectAttributeDateTimeValue,
+                            ConnectedSystemObject = connectedSystemObject
                         });
                     }
                     break;
@@ -297,7 +307,8 @@ public class SynchronisationImportTaskProcessor
                     connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                     {
                         Attribute = csAttribute,
-                        BoolValue = importObjectAttribute.BoolValue
+                        BoolValue = importObjectAttribute.BoolValue,
+                        ConnectedSystemObject = connectedSystemObject
                     });
                     break;
                 case AttributeDataType.Reference:
@@ -306,7 +317,8 @@ public class SynchronisationImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
-                            UnresolvedReferenceValue = importObjectAttributeReferenceValue
+                            UnresolvedReferenceValue = importObjectAttributeReferenceValue,
+                            ConnectedSystemObject = connectedSystemObject
                         });
                     }
                     break;

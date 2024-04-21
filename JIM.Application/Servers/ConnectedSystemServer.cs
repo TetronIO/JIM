@@ -464,7 +464,7 @@ public class ConnectedSystemServer
     {
         // persist the cso first, so there's something to reference when persisting attribute values later
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
-
+        
         // add a change object to the run profile execution item, so the change is logged.
         // it will be persisted higher up the calling stack as part of the activity.
         AddConnectedSystemObjectChange(connectedSystemObject, activityRunProfileExecutionItem);
@@ -475,18 +475,37 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
     {
-        // bulk persist csos
+        // bulk persist csos creates
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
-
+        
         // add a change object to the relevant activity run profile execution item for each cso.
         // they will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
             var activityRunProfileExecutionItem = activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
-                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! Should have been created further up the stack.");
+                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created further up the stack.");
 
             AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem);
         }
+    }
+    
+    /// <summary>
+    /// Bulk persists ConnectedSystemObject changes and creates a corresponding change object for it as part of the activity.
+    /// </summary>
+    public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
+    {
+        // add a change object to the relevant activity run profile execution item for each cso.
+        // they will be persisted further up the call stack, when the activity gets persisted.
+        foreach (var cso in connectedSystemObjects)
+        {
+            var activityRunProfileExecutionItem = activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created further up the stack.");
+            
+            ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
+        }
+        
+        // bulk persist csos updates
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
     }
 
     private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
@@ -502,12 +521,12 @@ public class ConnectedSystemServer
             ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
         };
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
-
+        
         foreach (var attributeValue in connectedSystemObject.AttributeValues)
             AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
     }
 
-    public async Task UpdateConnectedSystemObjectAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    private static void ProcessConnectedSystemObjectAttributeValueChanges(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
         if (connectedSystemObject == null)
             throw new ArgumentNullException(nameof(connectedSystemObject));
@@ -519,14 +538,13 @@ public class ConnectedSystemServer
             throw new ArgumentException($"One or more AttributeValue {nameof(ConnectedSystemObjectAttributeValue)} objects do not have a ConnectedSystemObject property set.", nameof(connectedSystemObject));
 
         // check if there's any work to do. we need something in the pending attribute value additions, or removals to continue
-        if ((connectedSystemObject.PendingAttributeValueAdditions == null || connectedSystemObject.PendingAttributeValueAdditions.Count == 0) &&
-            (connectedSystemObject.PendingAttributeValueRemovals == null || connectedSystemObject.PendingAttributeValueRemovals.Count == 0))
+        if (connectedSystemObject.PendingAttributeValueAdditions.Count == 0 && connectedSystemObject.PendingAttributeValueRemovals.Count == 0)
         {
             Log.Verbose($"UpdateConnectedSystemObjectAttributeValuesAsync: No work to do. No pending attribute value changes for CSO: {connectedSystemObject.Id}");
             return;
         }
 
-        // create a change object we can add attribute changes to
+        // create a change object we can track attribute changes with
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
@@ -535,7 +553,7 @@ public class ConnectedSystemServer
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
         };
 
-        // the change object will be persisted by the activity run profile execution item further up the stack
+        // the change object will be persisted with the activity run profile execution item further up the stack.
         // we just need to associate the change with the detail item.
         // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
@@ -544,34 +562,28 @@ public class ConnectedSystemServer
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
         // persist new attribute values from addition list and create change object
-        if (connectedSystemObject.PendingAttributeValueAdditions != null)
+        foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
         {
-            foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
-            {
-                connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
-                    
-                // trigger auditing of this change
-                AddChangeAttributeValueObject(change, pendingAttributeValueAddition, ValueChangeType.Add);
-            }
+            connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
+                
+            // trigger auditing of this change
+            AddChangeAttributeValueObject(change, pendingAttributeValueAddition, ValueChangeType.Add);
         }
 
         // delete attribute values to be removed and create change
-        if (connectedSystemObject.PendingAttributeValueRemovals != null)
+        foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
         {
-            foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
-            {
-                // this will cause a cascade delete of the attribute value object
-                connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
+            // this will cause a cascade delete of the attribute value object
+            connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
 
-                // trigger auditing of this change
-                AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
-            }
+            // trigger auditing of this change
+            AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
         }
-
-        // don't persist the activity run profile exection, let that be done further up the stack in bulk for efficiency.
+        
+        // don't persist the activity run profile execution, let that be done further up the stack in bulk for efficiency.
 
         // update the cso, which will create/delete the attribute value objects
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
+        //await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
 
         // we can now reset the pending attribute value lists
         connectedSystemObject.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();

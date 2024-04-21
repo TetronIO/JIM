@@ -18,9 +18,9 @@ public class ConnectedSystemObject
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Backlink for EF navigation. Do not use.
+    /// Backlink for Entity Framework navigation. Do not use.
     /// </summary>
-    public ICollection<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; } = new List<ActivityRunProfileExecutionItem>();
+    public List<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; } = new();
 
     /// <summary>
     /// The attribute that uniquely identifies this object in the connected system.
@@ -31,8 +31,8 @@ public class ConnectedSystemObject
     public int ExternalIdAttributeId { get; set; }
 
     /// <summary>
-    /// The attribute that may also identify the object in an connected system.
-    /// Whether or not this exists depends if the connected system supports secondary external ids or not. 
+    /// The attribute that may also identify the object in a connected system.
+    /// Whether this exists depends on if the connected system supports secondary external ids or not. 
     /// For instance, an LDAP system will use the DN for references to other objects, even though this is not a good identifier as it's not immutable.
     /// </summary>
     public int? SecondaryExternalIdAttributeId { get; set; }
@@ -62,7 +62,7 @@ public class ConnectedSystemObject
     public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;
 
     /// <summary>
-    /// Only for use by JIM.Service to determine what attribute values need adding and and recording.
+    /// Only for use by JIM.Service to determine what attribute values need adding and recording.
     /// </summary>
     [NotMapped]
     public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueAdditions { get; set; } = new();
