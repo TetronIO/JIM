@@ -48,6 +48,9 @@ public class SynchronisationImportTaskProcessor
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
+        
+        // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions.
+        var externalIdsImported = new List<ConnectedSystemObjectAttributeValue>();
             
         switch (_connector)
         {
@@ -62,6 +65,19 @@ public class SynchronisationImportTaskProcessor
                     // perform the import for this page
                     var result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
 
+                    // add the external ids from this page's results to our external id collection
+                    foreach (var importedObject in result.ImportObjects)
+                    {
+                        // find the object type for the imported object in our schema
+                        var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
+                        
+                        // what is the external id attribute for this object type in our schema?
+                        var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
+                        // todo: change external id so it's at the connected system level, not object type
+                        //externalIdsImported.Add(importedObject.Attributes.Single(q=>q.Name == externalIdAttributeName));
+                    }
+                    
+                    
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
 
@@ -88,9 +104,8 @@ public class SynchronisationImportTaskProcessor
             }
             case IConnectorImportUsingFiles fileBasedImportConnector:
             {
+                // file based connectors return all the results from the connected system in one go. no paging.
                 var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
-
-                // process the results from this page
                 await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
                 break;
             }
@@ -177,7 +192,7 @@ public class SynchronisationImportTaskProcessor
 
     private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
     {
-        // todo: add support for multiple external id attributes, i.e. compound primary keys
+        // todo: consider support for multiple external id attributes, i.e. compound primary keys
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
 
         // find the matching import object attribute
@@ -528,7 +543,7 @@ public class SynchronisationImportTaskProcessor
                     continue;
 
                 // try and find the referenced object by the external id amongst the processing list of CSOs first
-                ConnectedSystemObject? referencedConnectedSystemObject = null;
+                ConnectedSystemObject? referencedConnectedSystemObject;
 
                 // couldn't get this to match anything. no idea why
                 //referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso =>
@@ -610,7 +625,6 @@ public class SynchronisationImportTaskProcessor
                     Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
                     referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
                     referenceAttributeValue.UnresolvedReferenceValue = null;
-                    //csosWithUpdates.Add(cso);
                 }
                 else
                 {
