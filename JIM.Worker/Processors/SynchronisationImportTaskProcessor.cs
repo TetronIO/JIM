@@ -50,7 +50,8 @@ public class SynchronisationImportTaskProcessor
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
         
         // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions.
-        var externalIdsImported = new List<ConnectedSystemImportObjectAttribute>();
+        //var externalIdsImported = new List<ConnectedSystemImportObjectAttribute>();
+        var externalIdsImported = new Dictionary<ConnectedSystemObjectType, ConnectedSystemImportObjectAttribute>();
         var totalObjectsImported = 0;
             
         switch (_connector)
@@ -67,7 +68,7 @@ public class SynchronisationImportTaskProcessor
                     var result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
                     totalObjectsImported += result.ImportObjects.Count;
                     
-                    // add the external ids from this page's results to our external id collection for later deletion calculation
+                    // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                     AddExternalIdsToCollection(result, externalIdsImported);
                     
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
@@ -107,13 +108,11 @@ public class SynchronisationImportTaskProcessor
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
         }
         
-        // have any objects been deleted in the connected system?
+        // process deletions
         // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0)
-        {
-            
-        }
+            await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
@@ -127,15 +126,115 @@ public class SynchronisationImportTaskProcessor
         // this will also persist the ActivityRunProfileExecutionItem and ConnectedSystemObjectChanges for each CSO.
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
-    
-    // todo: write method to calculate deletions and create change objects in activity tree
 
-    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, List<ConnectedSystemImportObjectAttribute> externalIdsImported)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(Dictionary<ConnectedSystemObjectType, ConnectedSystemImportObjectAttribute> externalIdsImported, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
         
-        // add the external ids from all the results to our external id collection
+        // have any objects been deleted in the connected system since our last import?
+        // get the connected system object type list for the ones the user has selected to manage
+        foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
+        {
+            // what's the external id attribute for this object type?
+            var objectTypeExternalIdAttribute = selectedObjectType.Attributes.Single(q => q.IsExternalId);
+            switch (objectTypeExternalIdAttribute.Type)
+            {
+                case AttributeDataType.Number:
+                {
+                    // get the int connected system object external ids for this object type
+                    var connectedSystemObjectExternalIdsOfTypeInt = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, selectedObjectType.Id);
+
+                    // get the int import object external ids for this object type
+                    var connectedSystemIntExternalIdValues = externalIdsImported
+                        .Where(q => q.Key.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.Value.IntValues);
+
+                    // create a collection with the connected system objects no longer in the connected system
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeInt.Except(connectedSystemIntExternalIdValues);
+
+                    // obsolete the connected system objects no longer in the connected system
+                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
+                    break;
+                }
+                case AttributeDataType.Text:
+                {
+                    // get the string connected system object external ids for this object type
+                    var connectedSystemObjectExternalIdsOfTypeString = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, selectedObjectType.Id);
+
+                    // get the string import object external ids for this object type
+                    var connectedSystemStringExternalIdValues = externalIdsImported
+                        .Where(q => q.Key.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.Value.StringValues);
+
+                    // create a collection with the connected system objects no longer in the connected system
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
+                    
+                    // obsolete the connected system objects no longer in the connected system
+                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
+                    break;
+                }
+                case AttributeDataType.Guid:
+                {
+                    // get the guid connected system object external ids for this object type
+                    var connectedSystemObjectExternalIdsOfTypeGuid = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, selectedObjectType.Id);
+
+                    // get the guid import object external ids for this object type
+                    var connectedSystemGuidExternalIdValues = externalIdsImported
+                        .Where(q => q.Key.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.Value.GuidValues);
+
+                    // create a collection with the connected system objects no longer in the connected system
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeGuid.Except(connectedSystemGuidExternalIdValues);
+                    
+                    // obsolete the connected system objects no longer in the connected system
+                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
+                    break;
+                }
+                case AttributeDataType.NotSet:
+                case AttributeDataType.DateTime:
+                case AttributeDataType.Binary:
+                case AttributeDataType.Reference:
+                case AttributeDataType.Boolean:
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+    }
+
+    private async Task ObsoleteConnectedSystemObjectAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
+        // find the cso
+        ConnectedSystemObject? cso = null;
+        if (connectedSystemObjectExternalId is int intId)
+            cso = await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, intId);    
+        else if (connectedSystemObjectExternalId is string stringId)
+            cso = await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, stringId);
+        else if (connectedSystemObjectExternalId is Guid guidId)
+            cso = await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, guidId);
+
+        if (cso == null)
+        {
+            Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{connectedSystemObjectExternalId}' not found. No work to do.");
+            return;
+        }
+
+        // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+
+        // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
+        connectedSystemObjectsToBeUpdated.Add(cso);
+    }
+    
+    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, IDictionary<ConnectedSystemObjectType, ConnectedSystemImportObjectAttribute> externalIdsImported)
+    {
+        if (_connectedSystem.ObjectTypes == null)
+            return;
+        
+        // add the external ids from the results to our external id collection
         foreach (var importedObject in result.ImportObjects)
         {
             // find the object type for the imported object in our schema
@@ -143,7 +242,7 @@ public class SynchronisationImportTaskProcessor
                         
             // what is the external id attribute for this object type in our schema?
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
-            externalIdsImported.Add(importedObject.Attributes.Single(q=>q.Name.Equals(externalIdAttributeName, StringComparison.InvariantCultureIgnoreCase)));
+            externalIdsImported.Add(connectedSystemObjectType, importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.InvariantCultureIgnoreCase)));
         }
     }
 

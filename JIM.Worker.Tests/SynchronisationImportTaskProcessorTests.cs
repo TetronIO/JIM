@@ -77,6 +77,7 @@ public class SynchronisationImportTaskProcessorTests
                 Id = 1,
                 Name = "User",
                 ConnectedSystemId = 1,
+                Selected = true,
                 Attributes = new List<ConnectedSystemObjectTypeAttribute>
                 {
                     new()

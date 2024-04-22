@@ -1,4 +1,5 @@
-﻿using JIM.Data.Repositories;
+﻿using System.Security.Cryptography;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
@@ -373,32 +374,35 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var command = $"DELETE FROM \"PendingExports\" WHERE \"ConnectedSystemId\" = {connectedSystemId}";
         Repository.Database.Database.ExecuteSqlRaw(command);
     }
-
-    public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId)
+    
+    public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
             av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+            av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
             av.Attribute.Type == AttributeDataType.Text &&
             av.Attribute.IsExternalId && 
             av.StringValue != null).Select(q => q.StringValue).ToListAsync())!;
     }
     
-    public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId)
+    public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
-        return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+        return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
             av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+            av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
             av.Attribute.Type == AttributeDataType.Number &&
             av.Attribute.IsExternalId && 
-            av.IntValue.HasValue).Select(q => q.IntValue!.Value).ToListAsync());
+            av.IntValue.HasValue).Select(q => q.IntValue!.Value).ToListAsync();
     }
     
-    public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId)
+    public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
-        return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+        return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
             av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+            av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
             av.Attribute.Type == AttributeDataType.Guid &&
             av.Attribute.IsExternalId && 
-            av.GuidValue.HasValue).Select(q => q.GuidValue!.Value).ToListAsync());
+            av.GuidValue.HasValue).Select(q => q.GuidValue!.Value).ToListAsync();
     }
     #endregion
 
