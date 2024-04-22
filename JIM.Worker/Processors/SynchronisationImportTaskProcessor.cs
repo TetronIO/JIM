@@ -50,7 +50,8 @@ public class SynchronisationImportTaskProcessor
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
         
         // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions.
-        var externalIdsImported = new List<ConnectedSystemObjectAttributeValue>();
+        var externalIdsImported = new List<ConnectedSystemImportObjectAttribute>();
+        var totalObjectsImported = 0;
             
         switch (_connector)
         {
@@ -64,19 +65,10 @@ public class SynchronisationImportTaskProcessor
                 {
                     // perform the import for this page
                     var result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
-
-                    // add the external ids from this page's results to our external id collection
-                    foreach (var importedObject in result.ImportObjects)
-                    {
-                        // find the object type for the imported object in our schema
-                        var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
-                        
-                        // what is the external id attribute for this object type in our schema?
-                        var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
-                        // todo: change external id so it's at the connected system level, not object type
-                        //externalIdsImported.Add(importedObject.Attributes.Single(q=>q.Name == externalIdAttributeName));
-                    }
+                    totalObjectsImported += result.ImportObjects.Count;
                     
+                    // add the external ids from this page's results to our external id collection for later deletion calculation
+                    AddExternalIdsToCollection(result, externalIdsImported);
                     
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
@@ -92,9 +84,6 @@ public class SynchronisationImportTaskProcessor
                     // process the results from this page
                     await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
-                    // todo: process deletes - what wasn't imported? how do we do this when paging is being used?
-                    // make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
-
                     if (initialPage)
                         initialPage = false;
                 }
@@ -106,15 +95,28 @@ public class SynchronisationImportTaskProcessor
             {
                 // file based connectors return all the results from the connected system in one go. no paging.
                 var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+                totalObjectsImported = result.ImportObjects.Count;
+                
+                // add the external ids from the results to our external id collection for later deletion calculation
+                AddExternalIdsToCollection(result, externalIdsImported);
+                
                 await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
                 break;
             }
             default:
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
         }
+        
+        // have any objects been deleted in the connected system?
+        // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
+        // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
+        if (totalObjectsImported > 0)
+        {
+            
+        }
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
-        // i.e. attempt to convert unresolved reference strings into hard links to other connected system objects
+        // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
         await ResolveReferencesAsync(connectedSystemObjectsToBeCreated);
 
         // now persist all CSOs which will also create the required change objects within the activity tree.
@@ -124,6 +126,25 @@ public class SynchronisationImportTaskProcessor
         // update the activity with the results from all pages.
         // this will also persist the ActivityRunProfileExecutionItem and ConnectedSystemObjectChanges for each CSO.
         await _jim.Activities.UpdateActivityAsync(_activity);
+    }
+    
+    // todo: write method to calculate deletions and create change objects in activity tree
+
+    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, List<ConnectedSystemImportObjectAttribute> externalIdsImported)
+    {
+        if (_connectedSystem.ObjectTypes == null)
+            return;
+        
+        // add the external ids from all the results to our external id collection
+        foreach (var importedObject in result.ImportObjects)
+        {
+            // find the object type for the imported object in our schema
+            var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
+                        
+            // what is the external id attribute for this object type in our schema?
+            var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
+            externalIdsImported.Add(importedObject.Attributes.Single(q=>q.Name.Equals(externalIdAttributeName, StringComparison.InvariantCultureIgnoreCase)));
+        }
     }
 
     private async Task ProcessImportObjectsAsync(

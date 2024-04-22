@@ -373,6 +373,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var command = $"DELETE FROM \"PendingExports\" WHERE \"ConnectedSystemId\" = {connectedSystemId}";
         Repository.Database.Database.ExecuteSqlRaw(command);
     }
+
+    public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId)
+    {
+        return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+            av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+            av.Attribute.Type == AttributeDataType.Text &&
+            av.Attribute.IsExternalId && 
+            av.StringValue != null).Select(q => q.StringValue).ToListAsync())!;
+    }
+    
+    public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId)
+    {
+        return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+            av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+            av.Attribute.Type == AttributeDataType.Number &&
+            av.Attribute.IsExternalId && 
+            av.IntValue.HasValue).Select(q => q.IntValue!.Value).ToListAsync());
+    }
+    
+    public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId)
+    {
+        return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+            av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+            av.Attribute.Type == AttributeDataType.Guid &&
+            av.Attribute.IsExternalId && 
+            av.GuidValue.HasValue).Select(q => q.GuidValue!.Value).ToListAsync());
+    }
     #endregion
 
     #region Connected System Object Types

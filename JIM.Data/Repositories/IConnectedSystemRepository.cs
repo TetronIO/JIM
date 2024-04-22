@@ -8,31 +8,34 @@ namespace JIM.Data.Repositories;
 
 public interface IConnectedSystemRepository
 {
-    public Task<SyncRule?> GetSyncRuleAsync(int id);
-    public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, int maxResults, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
-    public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
-    public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
-    public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
-    public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
-    public Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId);
-    public Task<int> GetConnectedSystemObjectCountAsync();
-    public int GetConnectedSystemCount();
-    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
-    public Task<IList<SyncRule>> GetSyncRulesAsync();
-    public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
-    public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
-    public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
-    public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
-    public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
-    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
-    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
-    public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
-    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
-    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
-    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
-    public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
-    public Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id);
     public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
+    public Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id);
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
+    public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
+    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
+    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
+    public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
+    public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
+    public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
+    public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
+    public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
+    public Task<IList<SyncRule>> GetSyncRulesAsync();
+    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
+    public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
+    public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
+    public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
+    public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
+    public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, int maxResults, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
+    public Task<SyncRule?> GetSyncRuleAsync(int id);
+    public Task<int> GetConnectedSystemObjectCountAsync();
+    public Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId);
+    public int GetConnectedSystemCount();
+    public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId);
+    public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId);
+    public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId);
 
 
     public Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);

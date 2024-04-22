@@ -14,7 +14,7 @@ public class ConnectedSystemObjectType
     public List<ConnectedSystemObjectTypeAttribute> Attributes { get; set; } = new();
 
     /// <summary>
-    /// Whether an administrator has selected this object type to be synchronised by JIM.
+    /// Whether an administrator has selected this object type to be managed by JIM.
     /// </summary>
     public bool Selected { get; set; }
 }
