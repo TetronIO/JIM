@@ -7,6 +7,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
+using JIM.Worker.Models;
 
 namespace JIM.Worker.Processors;
 
@@ -17,7 +18,7 @@ public class SynchronisationImportTaskProcessor
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly MetaverseObject _initiatedBy;
-    private readonly Models.Activities.Activity _activity;
+    private readonly JIM.Models.Activities.Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     public SynchronisationImportTaskProcessor(
@@ -26,7 +27,7 @@ public class SynchronisationImportTaskProcessor
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         MetaverseObject initiatedBy,
-        Models.Activities.Activity activity,
+        JIM.Models.Activities.Activity activity,
         CancellationTokenSource cancellationTokenSource)
     {
         _jim = jimApplication;
@@ -50,8 +51,7 @@ public class SynchronisationImportTaskProcessor
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
         
         // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions.
-        //var externalIdsImported = new List<ConnectedSystemImportObjectAttribute>();
-        var externalIdsImported = new Dictionary<ConnectedSystemObjectType, ConnectedSystemImportObjectAttribute>();
+        var externalIdsImported = new List<ExternalIdPair>();
         var totalObjectsImported = 0;
             
         switch (_connector)
@@ -127,7 +127,7 @@ public class SynchronisationImportTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(Dictionary<ConnectedSystemObjectType, ConnectedSystemImportObjectAttribute> externalIdsImported, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(List<ExternalIdPair> externalIdsImported, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -147,8 +147,8 @@ public class SynchronisationImportTaskProcessor
 
                     // get the int import object external ids for this object type
                     var connectedSystemIntExternalIdValues = externalIdsImported
-                        .Where(q => q.Key.Id == selectedObjectType.Id)
-                        .SelectMany(externalId => externalId.Value.IntValues);
+                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.IntValues);
 
                     // create a collection with the connected system objects no longer in the connected system
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeInt.Except(connectedSystemIntExternalIdValues);
@@ -165,8 +165,8 @@ public class SynchronisationImportTaskProcessor
 
                     // get the string import object external ids for this object type
                     var connectedSystemStringExternalIdValues = externalIdsImported
-                        .Where(q => q.Key.Id == selectedObjectType.Id)
-                        .SelectMany(externalId => externalId.Value.StringValues);
+                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
                     // create a collection with the connected system objects no longer in the connected system
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
@@ -183,8 +183,8 @@ public class SynchronisationImportTaskProcessor
 
                     // get the guid import object external ids for this object type
                     var connectedSystemGuidExternalIdValues = externalIdsImported
-                        .Where(q => q.Key.Id == selectedObjectType.Id)
-                        .SelectMany(externalId => externalId.Value.GuidValues);
+                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.GuidValues);
 
                     // create a collection with the connected system objects no longer in the connected system
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeGuid.Except(connectedSystemGuidExternalIdValues);
@@ -229,7 +229,7 @@ public class SynchronisationImportTaskProcessor
         connectedSystemObjectsToBeUpdated.Add(cso);
     }
     
-    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, IDictionary<ConnectedSystemObjectType, ConnectedSystemImportObjectAttribute> externalIdsImported)
+    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, List<ExternalIdPair> externalIdsImported)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -242,7 +242,11 @@ public class SynchronisationImportTaskProcessor
                         
             // what is the external id attribute for this object type in our schema?
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
-            externalIdsImported.Add(connectedSystemObjectType, importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.InvariantCultureIgnoreCase)));
+            externalIdsImported.Add(new ExternalIdPair
+            {
+                ConnectedSystemObjectType = connectedSystemObjectType,
+                ConnectedSystemImportObjectAttribute = importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.InvariantCultureIgnoreCase))
+            });
         }
     }
 
