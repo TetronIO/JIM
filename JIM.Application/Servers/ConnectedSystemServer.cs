@@ -525,8 +525,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
     {
-        // add a change object to the relevant activity run profile execution item for each cso.
-        // they will be persisted further up the call stack, when the activity gets persisted.
+        // add a change object to the relevant activity run profile execution item for each cso to be updated.
+        // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
             var activityRunProfileExecutionItem = activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 

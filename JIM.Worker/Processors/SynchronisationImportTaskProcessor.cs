@@ -127,7 +127,7 @@ public class SynchronisationImportTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(List<ExternalIdPair> externalIdsImported, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -221,7 +221,12 @@ public class SynchronisationImportTaskProcessor
             Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{connectedSystemObjectExternalId}' not found. No work to do.");
             return;
         }
-
+        
+        // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
+        var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
+        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
+        activityRunProfileExecutionItem.ConnectedSystemObject = cso;
+        
         // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
 
