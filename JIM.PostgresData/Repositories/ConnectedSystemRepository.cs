@@ -387,6 +387,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     
     public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
+        // this is quite a weird way of querying, but it's done, so we can unit-test import synchronisation.
+        // if we could mock JimDbContext.ConnectedSystemObjectAttributeValues from the mocked ConnectedSystemObject DbSet, then we could
+        // use the more traditional (efficient?) query commented out below.
+        return await Repository.Database.ConnectedSystemObjects.Where(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.Type.Id == connectedSystemObjectTypeId)
+            .SelectMany(q => 
+                q.AttributeValues.Where(av => 
+                        av.Attribute.Type == AttributeDataType.Number &&
+                        av.Attribute.IsExternalId)
+                    .Select(av => av.IntValue.Value)).ToListAsync();
+        
         return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
             av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
             av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
