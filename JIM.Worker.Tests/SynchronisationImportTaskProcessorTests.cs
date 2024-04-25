@@ -619,6 +619,13 @@ public class SynchronisationImportTaskProcessorTests
         Assert.Pass();
     }
     
+    // todo: additional tests needed:
+    // - test updating multiple attributes at once
+    // - test updating each attribute data type (incl. references)
+    // - test updating each attribute type by removing its value
+    // - test deleting a referenced object
+    // - test creating multiple objects at once, with references between them and how the import order affects matters, or not
+    
     private static void ValidateAttributesForEquality(ConnectedSystemObject connectedSystemObject, ConnectedSystemImportObject connectedSystemImportObject, MockAttributeName attributeName, AttributeDataType expectedAttributeDataType)
     {
         Assert.That(connectedSystemObject, Is.Not.Null);

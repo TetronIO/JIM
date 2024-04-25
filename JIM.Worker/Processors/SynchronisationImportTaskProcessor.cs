@@ -493,12 +493,12 @@ public class SynchronisationImportTaskProcessor
         foreach (var csoAttributeName in csoAttributeNames)
         {
             // is there a matching attribute in the import object?
-            var importedAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name != null && q.Name.Equals(csoAttributeName, StringComparison.OrdinalIgnoreCase));
+            var importedAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name.Equals(csoAttributeName, StringComparison.OrdinalIgnoreCase));
             if (importedAttribute != null)
             {
                 // work out what data type this attribute is and get the matching imported object attribute
                 var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase));
-                var importedObjectAttributeList = connectedSystemImportObject.Attributes.Where(a => a.Name != null && a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase)).ToList();
+                var importedObjectAttributeList = connectedSystemImportObject.Attributes.Where(a => a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase)).ToList();
                 var importedObjectAttribute = importedObjectAttributeList[0];
 
                 // process attribute additions and removals...
