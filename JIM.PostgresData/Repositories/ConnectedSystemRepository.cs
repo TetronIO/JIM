@@ -199,10 +199,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
-        if (maxResults > 500)
-            maxResults = 500;
-
         // todo: just get the display name and unique identifier attribute values
         var objects = from o in Repository.Database.ConnectedSystemObjects.
                 Where(cso => cso.ConnectedSystem.Id == connectedSystemId)
@@ -377,6 +373,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
+        // this is quite a weird way of querying. it's like this so that we can unit-test import synchronisation.
+        // if we could mock JimDbContext.ConnectedSystemObjectAttributeValues from the mocked ConnectedSystemObject DbSet, then we could
+        // use the more traditional (efficient?) query commented out below.
         return (await Repository.Database.ConnectedSystemObjects.Where(cso =>
                 cso.ConnectedSystemId == connectedSystemId &&
                 cso.Type.Id == connectedSystemObjectTypeId)
@@ -387,19 +386,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.StringValue != null)
                     .Select(av => av.StringValue)).ToListAsync())!;
             
-        return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
-            av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
-            av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
-            av.Attribute.Type == AttributeDataType.Text &&
-            av.Attribute.IsExternalId && 
-            av.StringValue != null).Select(q => q.StringValue).ToListAsync())!;
+        // return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+        //     av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+        //     av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
+        //     av.Attribute.Type == AttributeDataType.Text &&
+        //     av.Attribute.IsExternalId && 
+        //     av.StringValue != null).Select(q => q.StringValue).ToListAsync())!;
     }
     
     public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
-        // this is quite a weird way of querying. it's like this so that we can unit-test import synchronisation.
-        // if we could mock JimDbContext.ConnectedSystemObjectAttributeValues from the mocked ConnectedSystemObject DbSet, then we could
-        // use the more traditional (efficient?) query commented out below.
+
         return await Repository.Database.ConnectedSystemObjects.Where(cso =>
                 cso.ConnectedSystemId == connectedSystemId &&
                 cso.Type.Id == connectedSystemObjectTypeId)
@@ -410,12 +407,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.IntValue.HasValue)
                     .Select(av => av.IntValue!.Value)).ToListAsync();
         
-        return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
-            av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
-            av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
-            av.Attribute.Type == AttributeDataType.Number &&
-            av.Attribute.IsExternalId && 
-            av.IntValue.HasValue).Select(q => q.IntValue!.Value).ToListAsync();
+        // return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+        //     av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+        //     av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
+        //     av.Attribute.Type == AttributeDataType.Number &&
+        //     av.Attribute.IsExternalId && 
+        //     av.IntValue.HasValue).Select(q => q.IntValue!.Value).ToListAsync();
     }
     
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -430,12 +427,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.GuidValue.HasValue)
                     .Select(av => av.GuidValue!.Value)).ToListAsync();
         
-        return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
-            av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
-            av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
-            av.Attribute.Type == AttributeDataType.Guid &&
-            av.Attribute.IsExternalId && 
-            av.GuidValue.HasValue).Select(q => q.GuidValue!.Value).ToListAsync();
+        // return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
+        //     av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
+        //     av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
+        //     av.Attribute.Type == AttributeDataType.Guid &&
+        //     av.Attribute.IsExternalId && 
+        //     av.GuidValue.HasValue).Select(q => q.GuidValue!.Value).ToListAsync();
     }
     #endregion
 
@@ -547,11 +544,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)
     {
-        await using var db = new JimDbContext();
-        return await db.ConnectedSystemRunProfiles.Select(rph => new ConnectedSystemRunProfileHeader
+        return await Repository.Database.ConnectedSystemRunProfiles.Select(rph => new ConnectedSystemRunProfileHeader
         {
             Id = rph.Id,
-            ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == rph.ConnectedSystemId).Name,
+            ConnectedSystemName = Repository.Database.ConnectedSystems.Single(cs => cs.Id == rph.ConnectedSystemId).Name,
             ConnectedSystemRunProfileName = rph.Name
         }).SingleOrDefaultAsync(q => q.Id == connectedSystemRunProfileId);
     }
