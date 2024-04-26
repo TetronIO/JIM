@@ -8,5 +8,9 @@ public enum MockAttributeName
     DEPARTMENT = 4,
     ROLE = 5,
     JOB_TITLE = 6,
-    MANAGER = 7
+    MANAGER = 7,
+    /// <summary>
+    /// Intended to be multi-valued.
+    /// </summary>
+    QUALIFICATIONS = 8
 }

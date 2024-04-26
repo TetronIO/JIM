@@ -18,8 +18,8 @@ public class ConnectedSystemObjectTypeAttribute
     public string? ClassName { get; set; }
 
     public AttributeDataType Type { get; set; }
-        
-    public AttributePlurality AttributePlurality { get; set; }
+
+    public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
     /// <summary>
     /// The Connected System Object Type this attribute belongs to.

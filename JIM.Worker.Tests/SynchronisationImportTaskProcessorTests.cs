@@ -15,7 +15,7 @@ namespace JIM.Worker.Tests;
 
 public class SynchronisationImportTaskProcessorTests
 {
-    // accessors for data that will be used across tests
+    #region accessors
     private MetaverseObject InitiatedBy { get; set; }
     private List<ConnectedSystem> ConnectedSystemsData { get; set; } 
     private Mock<DbSet<ConnectedSystem>> MockDbSetConnectedSystems { get; set; }
@@ -30,6 +30,7 @@ public class SynchronisationImportTaskProcessorTests
     private Mock<DbSet<Activity>> MockDbSetActivities { get; set; }
     private Mock<JimDbContext> MockJimDbContext { get; set; }
     private JimApplication Jim { get; set; }
+    #endregion
     
     [SetUp]
     public void Setup()
@@ -110,6 +111,13 @@ public class SynchronisationImportTaskProcessorTests
                         Id = (int)MockAttributeName.MANAGER,
                         Name = MockAttributeName.MANAGER.ToString(),
                         Type = AttributeDataType.Reference
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.QUALIFICATIONS,
+                        Name = MockAttributeName.QUALIFICATIONS.ToString(),
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.MultiValued
                     }
                 }
             }
@@ -188,6 +196,11 @@ public class SynchronisationImportTaskProcessorTests
                 {
                     Name = MockAttributeName.ROLE.ToString(),
                     StringValues = new List<string> { "Manager" }
+                },
+                new ()
+                {
+                    Name = MockAttributeName.QUALIFICATIONS.ToString(),
+                    StringValues = new List<string> { "C-MNGT-101", "C-MNGT-102", "C-MNGT-103" }
                 }
             }
         });
@@ -221,6 +234,11 @@ public class SynchronisationImportTaskProcessorTests
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
                     ReferenceValues = new List<string> { "1" }
+                },
+                new ()
+                {
+                    Name = MockAttributeName.QUALIFICATIONS.ToString(),
+                    StringValues = new List<string> { "C-CDEV-101" }
                 }
             }
         });
@@ -240,24 +258,26 @@ public class SynchronisationImportTaskProcessorTests
         // validate the first user (who is a manager)
         var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
         var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
-        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ID, AttributeDataType.Number);
-        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, AttributeDataType.Text);
-        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, AttributeDataType.Text);
-        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ROLE, AttributeDataType.Text);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ID);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ROLE);
+        ValidateAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.QUALIFICATIONS);
 
         // validate the second user (who is a direct-report)
         var secondPersistedConnectedSystemObject = connectedSystemObjectData[1];
         var secondSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[1];
-        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ID, AttributeDataType.Number);
-        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, AttributeDataType.Text);
-        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, AttributeDataType.Text);
-        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ROLE, AttributeDataType.Text);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ID);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ROLE);
+        ValidateAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.QUALIFICATIONS);
         
-        // validate manager reference
+        // validate second user manager reference
         var managerAttribute = secondPersistedConnectedSystemObject.AttributeValues.SingleOrDefault(q=>q.Attribute.Name == MockAttributeName.MANAGER.ToString());
         Assert.That(managerAttribute, Is.Not.Null, "Expected the MANAGER attribute to not be null.");
         Assert.That(managerAttribute.ReferenceValue, Is.Not.Null, "Expected the MANAGER reference value not to be null.");
-        // can't test this, EF code that sets these values is being overriden as part of testing
+        // can't test this, Entity Framework code that sets these values is being overriden as part of testing.
         //Assert.That(managerAttribute.ReferenceValueId.HasValue, "Expected the MANAGER reference value id not to be null"); 
         //Assert.That(managerAttribute.ReferenceValueId.Value, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference valid id to be the same as the first object id.");
         Assert.That(managerAttribute.ReferenceValue.Id, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference object id to match the id of the first object.");
@@ -620,13 +640,18 @@ public class SynchronisationImportTaskProcessorTests
     }
     
     // todo: additional tests needed:
-    // - test updating multiple attributes at once
+    // - test updating multi-valued, not just single-valued attributes
+    // - test using string and guid data type external id attributes
     // - test updating each attribute data type (incl. references)
     // - test updating each attribute type by removing its value
     // - test deleting a referenced object
     // - test creating multiple objects at once, with references between them and how the import order affects matters, or not
     
-    private static void ValidateAttributesForEquality(ConnectedSystemObject connectedSystemObject, ConnectedSystemImportObject connectedSystemImportObject, MockAttributeName attributeName, AttributeDataType expectedAttributeDataType)
+    #region private methods
+    private void ValidateAttributesForEquality(
+        ConnectedSystemObject connectedSystemObject, 
+        ConnectedSystemImportObject connectedSystemImportObject, 
+        MockAttributeName attributeName)
     {
         Assert.That(connectedSystemObject, Is.Not.Null);
         Assert.That(connectedSystemObject.AttributeValues, Is.Not.Null);
@@ -638,15 +663,22 @@ public class SynchronisationImportTaskProcessorTests
 
         var csioAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name == attributeName.ToString());
         Assert.That(csioAttribute, Is.Not.Null);
+        
+        // look up the attribute in the ConnectedSystemObjectTypesData list and validate that the Connected System Object that has been built, is compliant with the schema.
+        var schemaObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals(connectedSystemImportObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
+        var schemaAttribute = schemaObjectType.Attributes.Single(q => q.Name.Equals(attributeName.ToString(), StringComparison.InvariantCultureIgnoreCase));
 
-        switch (expectedAttributeDataType)
+        // make sure schema attributes that are single valued, only have a single value
+        if (schemaAttribute.AttributePlurality == AttributePlurality.SingleValued)
+            Assert.That(csoAttributeValues, Has.Count.LessThanOrEqualTo(1), $"Single-valued attributes can only have 0 or 1 value. There are {csoAttributeValues.Count}.");
+        
+        switch (schemaAttribute.Type)
         {
             case AttributeDataType.Boolean:
-                Assert.That(csoAttributeValues, Has.Count.EqualTo(1)); // booleans are single-valued by nature. you can't have multiple bool attribute values: you'd have no way to differentiate them
                 Assert.That(csoAttributeValues[0].BoolValue, Is.EqualTo(csioAttribute.BoolValue));
                 break;
             case AttributeDataType.Guid:
-                // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
+                // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same)
                 Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.GuidValues.Count));
                 foreach (var csoGuidValue in csoAttributeValues)
                     Assert.That(csioAttribute.GuidValues.Any(q => q == csoGuidValue.GuidValue));
@@ -662,7 +694,7 @@ public class SynchronisationImportTaskProcessorTests
                     Assert.That(csoAttributeValues.Any(q => q.IntValue == csioIntValue));
                 break;
             case AttributeDataType.Text:
-                // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
+                // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same).
                 Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.StringValues.Count));
                 foreach (var csoStringValue in csoAttributeValues)
                     Assert.That(csioAttribute.StringValues.Any(q => q == csoStringValue.StringValue));
@@ -670,7 +702,7 @@ public class SynchronisationImportTaskProcessorTests
                     Assert.That(csoAttributeValues.Any(q => q.StringValue == csioStringValue));
                 break;
             case AttributeDataType.DateTime:
-                // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
+                // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same).
                 Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.DateTimeValues.Count));
                 foreach (var csoDateTimeValue in csoAttributeValues)
                     Assert.That(csioAttribute.DateTimeValues.Any(q => q == csoDateTimeValue.DateTimeValue));
@@ -678,8 +710,8 @@ public class SynchronisationImportTaskProcessorTests
                     Assert.That(csoAttributeValues.Any(q => q.DateTimeValue == csioDateTimeValue));
                 break;
             case AttributeDataType.Binary:
-                // this is quite crude, and could be improved
-                // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
+                // this is quite crude, and could be improved.
+                // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same).
                 Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.ByteValues.Count));
                 foreach (var csoByteValue in csoAttributeValues)
                     Assert.That(csioAttribute.ByteValues.Any(q => q == csoByteValue.ByteValue));
@@ -689,7 +721,8 @@ public class SynchronisationImportTaskProcessorTests
             case AttributeDataType.Reference:
             case AttributeDataType.NotSet:
             default:
-                throw new NotSupportedException($"AttributeDataType of {expectedAttributeDataType} is supported by this method.");
+                throw new NotSupportedException($"AttributeDataType of {schemaAttribute.Type} is supported by this method.");
         }
     }
+    #endregion
 }
