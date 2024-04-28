@@ -118,7 +118,25 @@ public class SynchronisationImportTaskProcessorTests
                         Name = MockAttributeName.QUALIFICATIONS.ToString(),
                         Type = AttributeDataType.Text,
                         AttributePlurality = AttributePlurality.MultiValued
-                    }
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.HR_ID,
+                        Name = MockAttributeName.HR_ID.ToString(),
+                        Type = AttributeDataType.Guid
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.START_DATE,
+                        Name = MockAttributeName.START_DATE.ToString(),
+                        Type = AttributeDataType.DateTime
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.PROFILE_PICTURE_BYTES,
+                        Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                        Type = AttributeDataType.Binary
+                    },
                 }
             }
         };
@@ -292,9 +310,10 @@ public class SynchronisationImportTaskProcessorTests
         // these objects represent our initiate state, what the imported objects will be compared to, and if successful, be updated
         var connectedSystemObjectType = ConnectedSystemObjectTypesData.First();
         var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var cso1Id = Guid.Parse("86E8DDA1-217B-46B2-93F8-55BAEFD0F12A");
         var cso1 = new ConnectedSystemObject
         {
-            Id = Guid.NewGuid(),
+            Id = cso1Id,
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = connectedSystemObjectType
@@ -327,6 +346,27 @@ public class SynchronisationImportTaskProcessorTests
                 Id = Guid.NewGuid(),
                 StringValue = "jane.smith@phlebas.tetron.io",
                 Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                DateTimeValue = DateTime.Parse("1-jan-2000"),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.START_DATE.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = Guid.Parse("04CF471F-269C-42E3-9DAE-B558DC54A12E"),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ByteValue = Convert.FromHexString(TestConstants.IMAGE_1_HEX),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.PROFILE_PICTURE_BYTES.ToString()),
                 ConnectedSystemObject = cso1
             }
         };
@@ -391,8 +431,14 @@ public class SynchronisationImportTaskProcessorTests
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object); 
         
         // mock up a connector that will return updates for our existing connected system objects above.
-        // changes: Jane Smith is now Jane Smith-Watson
+        // changes:
+        // DISPLAY_NAME is different
+        // HR_ID is different
+        // PROFILE_PICTURE_BYTES is different
         var mockFileConnector = new MockFileConnector();
+        var newDisplayNameValue = "Jane Smith-Watson";
+        var newHrIdValue = new Guid("ED70F4CF-9C6D-4D6C-8AEB-96E7C440CA11");
+        var newProfilePictureValue = Convert.FromHexString(TestConstants.IMAGE_2_HEX);
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
@@ -408,7 +454,7 @@ public class SynchronisationImportTaskProcessorTests
                 new ()
                 {
                     Name = MockAttributeName.DISPLAY_NAME.ToString(),
-                    StringValues = new List<string> { "Jane Smith-Watson" },
+                    StringValues = new List<string> { newDisplayNameValue },
                     Type = AttributeDataType.Text
                 },
                 new ()
@@ -422,6 +468,18 @@ public class SynchronisationImportTaskProcessorTests
                     Name = MockAttributeName.ROLE.ToString(),
                     StringValues = new List<string> { "Manager" },
                     Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { newHrIdValue },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                    ByteValues = new List<byte[]> { newProfilePictureValue },
+                    Type = AttributeDataType.Binary
                 }
             }
         });
@@ -475,6 +533,24 @@ public class SynchronisationImportTaskProcessorTests
         
         // confirm the results persisted to the mocked db context
         Assert.That(connectedSystemObjectData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {connectedSystemObjectData.Count}.");
+        
+        // get the Connected System Object for the user we changed some attribute values for in the mocked connector
+        var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, cso1Id);
+        Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
+
+        var displayNameAttribute = cso1ToValidate.GetAttributeValue(MockAttributeName.DISPLAY_NAME.ToString());
+        Assert.That(displayNameAttribute, Is.Not.Null);
+        Assert.That(displayNameAttribute.StringValue, Is.EqualTo(newDisplayNameValue));
+        
+        var hrIdAttribute = cso1ToValidate.GetAttributeValue(MockAttributeName.HR_ID.ToString());
+        Assert.That(hrIdAttribute, Is.Not.Null);
+        Assert.That(hrIdAttribute.GuidValue.HasValue);
+        Assert.That(hrIdAttribute.GuidValue.Value, Is.EqualTo(newHrIdValue));
+        
+        var profilePictureAttribute = cso1ToValidate.GetAttributeValue(MockAttributeName.PROFILE_PICTURE_BYTES.ToString());
+        Assert.That(profilePictureAttribute, Is.Not.Null);
+        Assert.That(profilePictureAttribute.ByteValue, Is.EqualTo(newProfilePictureValue));
+        
         Assert.Pass();
     }
     

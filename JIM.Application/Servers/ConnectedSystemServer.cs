@@ -668,6 +668,8 @@ public class ConnectedSystemServer
             attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));
         else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Boolean && connectedSystemObjectAttributeValue.BoolValue != null)
             attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)connectedSystemObjectAttributeValue.BoolValue));
+        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.DateTime && connectedSystemObjectAttributeValue.DateTimeValue.HasValue)
+            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.DateTimeValue.Value));
         else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Binary && connectedSystemObjectAttributeValue.ByteValue != null)
             attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
         else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.ReferenceValue != null)

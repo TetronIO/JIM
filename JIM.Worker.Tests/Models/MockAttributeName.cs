@@ -2,15 +2,13 @@
 
 public enum MockAttributeName
 {
-    ID = 1,
-    DISPLAY_NAME = 2,
-    EMAIL_ADDRESS = 3,
-    DEPARTMENT = 4,
-    ROLE = 5,
-    JOB_TITLE = 6,
-    MANAGER = 7,
-    /// <summary>
-    /// Intended to be multi-valued.
-    /// </summary>
-    QUALIFICATIONS = 8
+    ID = 1, // int
+    DISPLAY_NAME = 2, // string
+    EMAIL_ADDRESS = 3, // string
+    ROLE = 4, // string
+    MANAGER = 5, // reference
+    QUALIFICATIONS = 6, // text, multivalued
+    START_DATE = 7, // datetime
+    HR_ID = 8, // guid
+    PROFILE_PICTURE_BYTES = 9 // binary
 }
