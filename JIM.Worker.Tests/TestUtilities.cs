@@ -1,5 +1,7 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using JIM.Worker.Tests.Models;
 
 namespace JIM.Worker.Tests;
@@ -92,5 +94,147 @@ public static class TestUtilities
                 throw new NotSupportedException(
                     $"AttributeDataType of {schemaAttribute.Type} is supported by this method.");
         }
+    }
+
+    public static void SetEnvironmentVariables()
+    {
+        // environment variables needed by JIM, even though they won't be used
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseHostname, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseName, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabaseUsername, "dummy");
+        Environment.SetEnvironmentVariable(Constants.Config.DatabasePassword, "dummy");
+    }
+
+    public static MetaverseObject GetInitiatedBy()
+    {
+        return new MetaverseObject {
+            Id = Guid.Parse("25441317-D01C-47DE-BA69-47EEEFD09DC4")
+        };
+    }
+
+    public static List<ConnectedSystem> GetConnectedSystemData()
+    {
+        return new List<ConnectedSystem>
+        {
+            new()
+            {
+                Id = 1,
+                Name = "Dummy System"
+            }
+        };
+    }
+
+    public static List<ConnectedSystemRunProfile> GetConnectedSystemRunProfileData()
+    {
+        return new List<ConnectedSystemRunProfile>
+        {
+            new()
+            {
+                Id = 1,
+                Name = "Dummy Full Import",
+                RunType = ConnectedSystemRunType.FullImport,
+                ConnectedSystemId = 1
+            }
+        };
+    }
+
+    public static List<ConnectedSystemObjectType> GetConnectedSystemObjectTypeData()
+    {
+        return new List<ConnectedSystemObjectType>
+        {
+            new ()
+            {
+                Id = 1,
+                Name = "User",
+                ConnectedSystemId = 1,
+                Selected = true,
+                Attributes = new List<ConnectedSystemObjectTypeAttribute>
+                {
+                    new()
+                    {
+                        // mimicking a system identifier for the object in a connected system.
+                        // this is intended to be unique for each object in the connected system.
+                        // we use the term "External ID" for this in Jim.
+                        Id = (int)MockAttributeName.HR_ID,
+                        Name = MockAttributeName.HR_ID.ToString(),
+                        Type = AttributeDataType.Guid
+                    },
+                    new()
+                    {
+                        // mimicking the organisational unique and immutable identifier for a person in the organisation.
+                        // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee ids.
+                        // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
+                        Id = (int)MockAttributeName.EMPLOYEE_ID,
+                        Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                        Type = AttributeDataType.Number,
+                        IsExternalId = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.START_DATE,
+                        Name = MockAttributeName.START_DATE.ToString(),
+                        Type = AttributeDataType.DateTime
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.DISPLAY_NAME,
+                        Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                        Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.EMAIL_ADDRESS,
+                        Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                        Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.ROLE,
+                        Name = MockAttributeName.ROLE.ToString(),
+                        Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.MANAGER,
+                        Name = MockAttributeName.MANAGER.ToString(),
+                        Type = AttributeDataType.Reference
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.QUALIFICATIONS,
+                        Name = MockAttributeName.QUALIFICATIONS.ToString(),
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.MultiValued
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.PROFILE_PICTURE_BYTES,
+                        Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                        Type = AttributeDataType.Binary
+                    },
+                }
+            }
+        };
+    }
+
+    public static List<ConnectedSystemPartition> GetConnectedSystemPartitionData()
+    {
+        return new List<ConnectedSystemPartition>();
+    }
+
+    public static List<Activity> GetActivityData(ConnectedSystemRunType connectedSystemRunType)
+    {
+        return new List<Activity>
+        {
+            new ()
+            {
+                Id = Guid.NewGuid(),
+                TargetName = $"Mock {connectedSystemRunType.ToString().SplitOnCapitalLetters()} Execution",
+                Status = ActivityStatus.InProgress,
+                ConnectedSystemRunType = connectedSystemRunType,
+                InitiatedBy = GetInitiatedBy(),
+                InitiatedByName = "Joe Bloggs"
+            }
+        };
     }
 }

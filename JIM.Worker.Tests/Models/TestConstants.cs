@@ -3,14 +3,16 @@
 internal static class TestConstants
 {
     // some standard attribute values to make correlation across tests a little easier.
-
+    internal static Guid CS_OBJECT_1_ID = new ("BE371070-8E5A-433E-9D7A-CDB861C56510");
     internal static Guid CS_OBJECT_1_HR_ID => new ("86E8DDA1-217B-46B2-93F8-55BAEFD0F12A");
-
     internal static DateTime CS_OBJECT_1_START_DATE => DateTime.Parse("01-JAN-2010");
+    internal static string CS_OBJECT_1_DISPLAY_NAME => "Jane Smith";
     
+    
+    internal static Guid CS_OBJECT_2_ID = new ("21952DE7-9196-4FAD-8CC1-146B790C5611");
     internal static Guid CS_OBJECT_2_HR_ID => new ("EC9BC716-ABA9-4D49-AA1C-FA15F75E17CF");
-    
     internal static DateTime CS_OBJECT_2_START_DATE => DateTime.Parse("10-JUL-2022");
+    internal static string CS_OBJECT_2_DISPLAY_NAME => "Joe Bloggs";
     
     /// <summary>
     /// A small image of a user in hex string format.

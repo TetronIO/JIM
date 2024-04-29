@@ -35,131 +35,27 @@ public class ImportCreateObjectTests
     [SetUp]
     public void Setup()
     {
-        // environment variables needed by JIM, even though they won't be used
-        Environment.SetEnvironmentVariable(Constants.Config.DatabaseHostname, "dummy");
-        Environment.SetEnvironmentVariable(Constants.Config.DatabaseName, "dummy");
-        Environment.SetEnvironmentVariable(Constants.Config.DatabaseUsername, "dummy");
-        Environment.SetEnvironmentVariable(Constants.Config.DatabasePassword, "dummy");
-        
-        // set up the initiated-by user Metaverse object
-        InitiatedBy = new MetaverseObject {
-            Id = Guid.NewGuid()
-        };
+        TestUtilities.SetEnvironmentVariables();
+        InitiatedBy = TestUtilities.GetInitiatedBy();
         
         // set up the connected systems mock
-        ConnectedSystemsData = new List<ConnectedSystem>
-        {
-            new()
-            {
-                Id = 1,
-                Name = "Dummy System"
-            }
-        };
+        ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.AsQueryable().BuildMockDbSet();
         
         // setup up the connected system run profiles mock
-        ConnectedSystemRunProfilesData = new List<ConnectedSystemRunProfile>
-        {
-            new()
-            {
-                Id = 1,
-                Name = "Dummy Full Import",
-                RunType = ConnectedSystemRunType.FullImport,
-                ConnectedSystemId = 1
-            }
-        };
+        ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.AsQueryable().BuildMockDbSet();
         
-        // set up the connected system object types mock. this acts as the persisted schema in JIM.
-        ConnectedSystemObjectTypesData = new List<ConnectedSystemObjectType>
-        {
-            new ()
-            {
-                Id = 1,
-                Name = "User",
-                ConnectedSystemId = 1,
-                Selected = true,
-                Attributes = new List<ConnectedSystemObjectTypeAttribute>
-                {
-                    new()
-                    {
-                        Id = (int)MockAttributeName.ID,
-                        IsExternalId = true,
-                        Name = MockAttributeName.ID.ToString(),
-                        Type = AttributeDataType.Number
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.DISPLAY_NAME,
-                        Name = MockAttributeName.DISPLAY_NAME.ToString(),
-                        Type = AttributeDataType.Text
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.EMAIL_ADDRESS,
-                        Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
-                        Type = AttributeDataType.Text
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.ROLE,
-                        Name = MockAttributeName.ROLE.ToString(),
-                        Type = AttributeDataType.Text
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.MANAGER,
-                        Name = MockAttributeName.MANAGER.ToString(),
-                        Type = AttributeDataType.Reference
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.QUALIFICATIONS,
-                        Name = MockAttributeName.QUALIFICATIONS.ToString(),
-                        Type = AttributeDataType.Text,
-                        AttributePlurality = AttributePlurality.MultiValued
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.HR_ID,
-                        Name = MockAttributeName.HR_ID.ToString(),
-                        Type = AttributeDataType.Guid
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.START_DATE,
-                        Name = MockAttributeName.START_DATE.ToString(),
-                        Type = AttributeDataType.DateTime
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.PROFILE_PICTURE_BYTES,
-                        Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
-                        Type = AttributeDataType.Binary
-                    },
-                }
-            }
-        };
+        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.AsQueryable().BuildMockDbSet();
         
         // setup up the Connected System Partitions mock
-        // ReSharper disable once CollectionNeverUpdated.Local
-        ConnectedSystemPartitionsData = new List<ConnectedSystemPartition>();
+        ConnectedSystemPartitionsData = TestUtilities.GetConnectedSystemPartitionData();
         MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
         
         // set up the activity mock
-        ActivitiesData = new List<Activity>
-        {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                TargetName = "Mock Full Import Execution",
-                Status = ActivityStatus.InProgress,
-                ConnectedSystemRunType = ConnectedSystemRunType.FullImport,
-                InitiatedBy = InitiatedBy,
-                InitiatedByName = "Joe Bloggs"
-            }
-        };
+        ActivitiesData = TestUtilities.GetActivityData(ConnectedSystemRunType.FullImport);
         MockDbSetActivities = ActivitiesData.AsQueryable().BuildMockDbSet();
         
         // mock entity framework calls to use our data sources above
@@ -169,6 +65,8 @@ public class ImportCreateObjectTests
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(MockDbSetConnectedSystemRunProfiles.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
+        
+        // instantiate Jim using the mocked db context
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
     }
     
@@ -196,15 +94,27 @@ public class ImportCreateObjectTests
             {
                 new ()
                 {
+                    // guid
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID }
+                },
+                new ()
+                {
                     // int
-                    Name = MockAttributeName.ID.ToString(),
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 }
+                },
+                new ()
+                {
+                    // datetime
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE }
                 },
                 new ()
                 {
                     // string
                     Name = MockAttributeName.DISPLAY_NAME.ToString(),
-                    StringValues = new List<string> { "Jane Smith" }
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME }
                 },
                 new ()
                 {
@@ -223,18 +133,6 @@ public class ImportCreateObjectTests
                     // mva string
                     Name = MockAttributeName.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-MNGT-101", "C-MNGT-102", "C-MNGT-103" }
-                },
-                new ()
-                {
-                    // datetime
-                    Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE }
-                },
-                new ()
-                {
-                    // guid
-                    Name = MockAttributeName.HR_ID.ToString(),
-                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID }
                 }
             }
         });
@@ -246,15 +144,27 @@ public class ImportCreateObjectTests
             {
                 new ()
                 {
+                    // guid
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_2_HR_ID }
+                },
+                new ()
+                {
                     // int
-                    Name = MockAttributeName.ID.ToString(),
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 2 }
+                },
+                new ()
+                {
+                    // datetime
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE }
                 },
                 new ()
                 {
                     // string
                     Name = MockAttributeName.DISPLAY_NAME.ToString(),
-                    StringValues = new List<string> { "Joe Bloggs" }
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_2_DISPLAY_NAME }
                 },
                 new ()
                 {
@@ -279,18 +189,6 @@ public class ImportCreateObjectTests
                     // mva string
                     Name = MockAttributeName.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-CDEV-101" }
-                },
-                new ()
-                {
-                    // datetime
-                    Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE }
-                },
-                new ()
-                {
-                    // guid
-                    Name = MockAttributeName.HR_ID.ToString(),
-                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_2_HR_ID }
                 }
             }
         });
@@ -310,16 +208,21 @@ public class ImportCreateObjectTests
         // validate the first user (who is a manager)
         var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
         var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ID, ConnectedSystemObjectTypesData);
+        
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.HR_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.START_DATE, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ROLE, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.QUALIFICATIONS, ConnectedSystemObjectTypesData);
-
+        
         // validate the second user (who is a direct-report)
         var secondPersistedConnectedSystemObject = connectedSystemObjectData[1];
         var secondSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[1];
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.HR_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.START_DATE, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.DISPLAY_NAME, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ROLE, ConnectedSystemObjectTypesData);

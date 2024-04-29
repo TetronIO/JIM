@@ -2,7 +2,7 @@
 
 public enum MockAttributeName
 {
-    ID = 1, // int
+    EMPLOYEE_ID = 1, // int
     DISPLAY_NAME = 2, // string
     EMAIL_ADDRESS = 3, // string
     ROLE = 4, // string
