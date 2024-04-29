@@ -11,7 +11,7 @@ using JIM.Worker.Models;
 
 namespace JIM.Worker.Processors;
 
-public class SynchronisationImportTaskProcessor
+public class SyncImportTaskProcessor
 {
     private readonly JimApplication _jim;
     private readonly IConnector _connector;
@@ -21,7 +21,7 @@ public class SynchronisationImportTaskProcessor
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
-    public SynchronisationImportTaskProcessor(
+    public SyncImportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
         ConnectedSystem connectedSystem,

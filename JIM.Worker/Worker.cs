@@ -186,7 +186,7 @@ public class Worker : BackgroundService
                                                         // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
-                                                            var synchronisationImportTaskProcessor = new SynchronisationImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
                                                             await synchronisationImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
