@@ -178,13 +178,12 @@ public class ImportCreateObjectTests
         // set up the Connected System Objects mock. this is specific to this test
         var connectedSystemObjectData = new List<ConnectedSystemObject>();
         var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
-        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
-            (IEnumerable<ConnectedSystemObject> entities) => {
-                var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
-                foreach (var entity in connectedSystemObjects)
-                    entity.Id = Guid.NewGuid(); // assign the ids here, mocking what the db would do in SaveChanges()
-                connectedSystemObjectData.AddRange(connectedSystemObjects);
-            });
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid(); // assign the ids here, mocking what the db would do in SaveChanges()
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
         
         // mock up a connector that will return testable data
@@ -197,28 +196,45 @@ public class ImportCreateObjectTests
             {
                 new ()
                 {
+                    // int
                     Name = MockAttributeName.ID.ToString(),
                     IntValues = new List<int> { 1 }
                 },
                 new ()
                 {
+                    // string
                     Name = MockAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { "Jane Smith" }
                 },
                 new ()
                 {
+                    // string
                     Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
                     StringValues = new List<string> { "jane.smith@phlebas.tetron.io" }
                 },
                 new ()
                 {
+                    // string
                     Name = MockAttributeName.ROLE.ToString(),
                     StringValues = new List<string> { "Manager" }
                 },
                 new ()
                 {
+                    // mva string
                     Name = MockAttributeName.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-MNGT-101", "C-MNGT-102", "C-MNGT-103" }
+                },
+                new ()
+                {
+                    // datetime
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE }
+                },
+                new ()
+                {
+                    // guid
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID }
                 }
             }
         });
@@ -230,33 +246,51 @@ public class ImportCreateObjectTests
             {
                 new ()
                 {
+                    // int
                     Name = MockAttributeName.ID.ToString(),
                     IntValues = new List<int> { 2 }
                 },
                 new ()
                 {
+                    // string
                     Name = MockAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { "Joe Bloggs" }
                 },
                 new ()
                 {
+                    // string
                     Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
                     StringValues = new List<string> { "joe.bloggs@phlebas.tetron.io" }
                 },
                 new ()
                 {
+                    // string
                     Name = MockAttributeName.ROLE.ToString(),
                     StringValues = new List<string> { "Developer" }
                 },
                 new ()
                 {
+                    // reference
                     Name = MockAttributeName.MANAGER.ToString(),
                     ReferenceValues = new List<string> { "1" }
                 },
                 new ()
                 {
+                    // mva string
                     Name = MockAttributeName.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-CDEV-101" }
+                },
+                new ()
+                {
+                    // datetime
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE }
+                },
+                new ()
+                {
+                    // guid
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_2_HR_ID }
                 }
             }
         });
