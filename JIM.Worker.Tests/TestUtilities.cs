@@ -214,13 +214,6 @@ public static class TestUtilities
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.QUALIFICATIONS,
-                        Name = MockAttributeName.QUALIFICATIONS.ToString(),
-                        Type = AttributeDataType.Text,
-                        AttributePlurality = AttributePlurality.MultiValued
-                    },
-                    new()
-                    {
                         Id = (int)MockAttributeName.CONTRACTED_WEEKLY_HOURS,
                         Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
                         Type = AttributeDataType.Number
