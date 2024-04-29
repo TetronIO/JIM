@@ -706,6 +706,33 @@ public class ImportUpdateObjectTests
         Assert.Pass();
     }
     
+    
+    // sva:
+    // todo: datetime change
+    // todo: reference change
+    // todo: boolean change
+    
+    // todo: int remove
+    // todo: datetime remove
+    // todo: text remove
+    // todo: guid remove
+    // todo: reference remove
+    // todo: boolean remove
+    
+    // todo: int add from null
+    // todo: datetime add from null
+    // todo: text add from null
+    // todo: guid add from null
+    // todo: boolean add from null
+    // todo: reference add from null
+    
+    // mva:
+    // todo: add int
+    // todo: add datetime
+    // todo: add text
+    // todo: add guid
+    // todo: add reference
+    
     #region private methods
     private void InitialiseConnectedSystemObjectsData()
     {
