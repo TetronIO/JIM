@@ -80,6 +80,162 @@ public class ImportUpdateObjectTests
     }
     
     [Test]
+    public async Task FullImportUpdateIntSvaTestAsync()
+    {
+        InitialiseConnectedSystemObjectsData();
+        
+        // mock up a connector that will return updates for our existing connected system objects above.
+        // changes: CONTRACTED_WEEKLY_HOURS has a populated, but different value
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "User",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    Type = AttributeDataType.DateTime
+                },
+                new ()
+                {
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "jane.smith@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { "Manager" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                    ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
+                    Type = AttributeDataType.Binary
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 32 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Number
+                }
+            }
+        });
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "User",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 2 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_2_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    Type = AttributeDataType.DateTime
+                },
+                new ()
+                {
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_2_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "joe.bloggs@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { "Developer" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.MANAGER.ToString(),
+                    ReferenceValues = new List<string> { "1" },
+                    Type = AttributeDataType.Reference
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Number
+                }
+            }
+        });
+        
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        
+        // confirm the results persisted to the mocked db context
+        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+        
+        // get the Connected System Object for the user we changed some attribute values for in the mocked connector
+        var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
+        Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
+
+        var hoursAttribute = cso1ToValidate.GetAttributeValue(MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString());
+        Assert.That(hoursAttribute, Is.Not.Null);
+        Assert.That(hoursAttribute.IntValue, Is.EqualTo(32));
+        
+        Assert.Pass();
+    }
+    
+    [Test]
     public async Task FullImportUpdateTextSvaTestAsync()
     {
         InitialiseConnectedSystemObjectsData();
@@ -135,6 +291,18 @@ public class ImportUpdateObjectTests
                     Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
                     ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
                     Type = AttributeDataType.Binary
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Number
                 }
             }
         });
@@ -185,6 +353,18 @@ public class ImportUpdateObjectTests
                     Name = MockAttributeName.MANAGER.ToString(),
                     ReferenceValues = new List<string> { "1" },
                     Type = AttributeDataType.Reference
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Number
                 }
             }
         });
@@ -218,8 +398,7 @@ public class ImportUpdateObjectTests
         InitialiseConnectedSystemObjectsData();
         
         // mock up a connector that will return updates for our existing connected system objects above.
-        // changes: HR_ID has a populated, but different value
-        var newHrIdValue = new Guid("ED70F4CF-9C6D-4D6C-8AEB-96E7C440CA11");
+        // changes: LOCATION_ID has a populated, but different value
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
@@ -236,7 +415,7 @@ public class ImportUpdateObjectTests
                 new ()
                 {
                     Name = MockAttributeName.HR_ID.ToString(),
-                    GuidValues = new List<Guid> { newHrIdValue },
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
@@ -268,6 +447,18 @@ public class ImportUpdateObjectTests
                     Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
                     ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
                     Type = AttributeDataType.Binary
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_2_ID },
+                    Type = AttributeDataType.Number
                 }
             }
         });
@@ -318,6 +509,18 @@ public class ImportUpdateObjectTests
                     Name = MockAttributeName.MANAGER.ToString(),
                     ReferenceValues = new List<string> { "1" },
                     Type = AttributeDataType.Reference
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Number
                 }
             }
         });
@@ -338,10 +541,10 @@ public class ImportUpdateObjectTests
         var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var hrIdAttribute = cso1ToValidate.GetAttributeValue(MockAttributeName.HR_ID.ToString());
-        Assert.That(hrIdAttribute, Is.Not.Null);
-        Assert.That(hrIdAttribute.GuidValue.HasValue);
-        Assert.That(hrIdAttribute.GuidValue.Value, Is.EqualTo(newHrIdValue));
+        var locationIdAttribute = cso1ToValidate.GetAttributeValue(MockAttributeName.LOCATION_ID.ToString());
+        Assert.That(locationIdAttribute, Is.Not.Null);
+        Assert.That(locationIdAttribute.GuidValue.HasValue);
+        Assert.That(locationIdAttribute.GuidValue.Value, Is.EqualTo(TestConstants.LOCATION_2_ID));
         
         Assert.Pass();
     }
@@ -402,6 +605,18 @@ public class ImportUpdateObjectTests
                     Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
                     ByteValues = new List<byte[]> { newProfilePictureValue },
                     Type = AttributeDataType.Binary
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Number
                 }
             }
         });
@@ -452,6 +667,18 @@ public class ImportUpdateObjectTests
                     Name = MockAttributeName.MANAGER.ToString(),
                     ReferenceValues = new List<string> { "1" },
                     Type = AttributeDataType.Reference
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Number
                 }
             }
         });
@@ -543,6 +770,20 @@ public class ImportUpdateObjectTests
                 ByteValue = Convert.FromHexString(TestConstants.IMAGE_1_HEX),
                 Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.PROFILE_PICTURE_BYTES.ToString()),
                 ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                IntValue = 40,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = TestConstants.LOCATION_1_ID,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.LOCATION_ID.ToString()),
+                ConnectedSystemObject = cso1
             }
         };
         ConnectedSystemObjectsData.Add(cso1);
@@ -604,6 +845,20 @@ public class ImportUpdateObjectTests
                 ReferenceValueId = ConnectedSystemObjectsData.First().Id,
                 ReferenceValue = ConnectedSystemObjectsData.First(),
                 Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.MANAGER.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                IntValue = 40,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString()),
+                ConnectedSystemObject = cso2
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = TestConstants.LOCATION_1_ID,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.LOCATION_ID.ToString()),
                 ConnectedSystemObject = cso2
             }
         };

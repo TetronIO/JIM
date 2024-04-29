@@ -10,5 +10,7 @@ public enum MockAttributeName
     QUALIFICATIONS = 6, // text, multivalued
     START_DATE = 7, // datetime
     HR_ID = 8, // guid
-    PROFILE_PICTURE_BYTES = 9 // binary
+    PROFILE_PICTURE_BYTES = 9, // binary
+    CONTRACTED_WEEKLY_HOURS = 10, // int
+    LOCATION_ID = 11 // guid
 }

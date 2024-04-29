@@ -212,6 +212,25 @@ public static class TestUtilities
                         Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
                         Type = AttributeDataType.Binary
                     },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.QUALIFICATIONS,
+                        Name = MockAttributeName.QUALIFICATIONS.ToString(),
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.MultiValued
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CONTRACTED_WEEKLY_HOURS,
+                        Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                        Type = AttributeDataType.Number
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.LOCATION_ID,
+                        Name = MockAttributeName.LOCATION_ID.ToString(),
+                        Type = AttributeDataType.Guid
+                    }
                 }
             }
         };

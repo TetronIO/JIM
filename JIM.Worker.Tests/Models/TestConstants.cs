@@ -13,6 +13,9 @@ internal static class TestConstants
     internal static Guid CS_OBJECT_2_HR_ID => new ("EC9BC716-ABA9-4D49-AA1C-FA15F75E17CF");
     internal static DateTime CS_OBJECT_2_START_DATE => DateTime.Parse("10-JUL-2022");
     internal static string CS_OBJECT_2_DISPLAY_NAME => "Joe Bloggs";
+
+    internal static Guid LOCATION_1_ID => Guid.Parse("764C3F10-7B2D-4C1C-9012-EB41E5176267");
+    internal static Guid LOCATION_2_ID => Guid.Parse("4C5D2DEA-EE4C-4D88-9A67-BEA0365E1B37");
     
     /// <summary>
     /// A small image of a user in hex string format.
