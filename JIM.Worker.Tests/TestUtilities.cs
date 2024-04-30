@@ -223,6 +223,18 @@ public static class TestUtilities
                         Id = (int)MockAttributeName.LOCATION_ID,
                         Name = MockAttributeName.LOCATION_ID.ToString(),
                         Type = AttributeDataType.Guid
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.END_DATE,
+                        Name = MockAttributeName.END_DATE.ToString(),
+                        Type = AttributeDataType.DateTime
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.LEAVER,
+                        Name = MockAttributeName.LEAVER.ToString(),
+                        Type = AttributeDataType.Boolean
                     }
                 }
             }

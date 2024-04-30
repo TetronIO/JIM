@@ -12,5 +12,7 @@ public enum MockAttributeName
     HR_ID = 8, // guid
     PROFILE_PICTURE_BYTES = 9, // binary
     CONTRACTED_WEEKLY_HOURS = 10, // int
-    LOCATION_ID = 11 // guid
+    LOCATION_ID = 11, // guid,
+    END_DATE = 12, // datetime,
+    LEAVER = 13 // boolean
 }
