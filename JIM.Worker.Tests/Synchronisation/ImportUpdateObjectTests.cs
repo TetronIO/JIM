@@ -1227,7 +1227,7 @@ public class ImportUpdateObjectTests
                 new()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "3" },
+                    ReferenceValues = new List<string> { "3" }, // employee id (external id) of cso 3
                     Type = AttributeDataType.Reference
                 },
                 new()
@@ -1258,6 +1258,7 @@ public class ImportUpdateObjectTests
         });
         
         // add a new user that will be the new manager for cso2
+        // it will also have a MANAGER reference to cso1, so the new hierarchy will be cso2 => cso3 => cso1
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
@@ -1303,7 +1304,7 @@ public class ImportUpdateObjectTests
                 new()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { "1" }, // employee id (external id) of cso 1
                     Type = AttributeDataType.Reference
                 },
                 new()
@@ -1342,15 +1343,21 @@ public class ImportUpdateObjectTests
         // get the new manager
         var cso3 = await Jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(1, (int)MockAttributeName.EMPLOYEE_ID, 3);
         Assert.That(cso3, Is.Not.EqualTo(null), "Expected to be able to retrieve the new manager (cso3).");
+        var cso3ManagerAttribute = cso3.GetAttributeValue(MockAttributeName.MANAGER.ToString());
+        Assert.That(cso3ManagerAttribute, Is.Not.Null);
+        Assert.That(cso3ManagerAttribute.ReferenceValue, Is.Not.Null);
+        Assert.That(cso3ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo(null));
+        Assert.That(cso3ManagerAttribute.ReferenceValue.Id, Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
         
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
-        var cso2ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
-        Assert.That(cso2ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
+        var cso2 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
+        Assert.That(cso2, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var managerAttribute = cso2ToValidate.GetAttributeValue(MockAttributeName.MANAGER.ToString());
-        Assert.That(managerAttribute, Is.Not.Null);
-        Assert.That(managerAttribute.ReferenceValue, Is.Not.Null);
-        Assert.That(managerAttribute.ReferenceValue.Id, Is.EqualTo(cso3.Id));
+        var cso2ManagerAttribute = cso2.GetAttributeValue(MockAttributeName.MANAGER.ToString());
+        Assert.That(cso2ManagerAttribute, Is.Not.Null);
+        Assert.That(cso2ManagerAttribute.ReferenceValue, Is.Not.Null);
+        Assert.That(cso2ManagerAttribute.ReferenceValue.Id, Is.EqualTo(cso3.Id));
+        Assert.That(cso2ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo(null));
         
         Assert.Pass();
     }

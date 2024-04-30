@@ -98,6 +98,7 @@ public class SyncImportTaskProcessor
                 var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
                 totalObjectsImported = result.ImportObjects.Count;
                 
+                // todo: simplify externalIdsImported. objects are too complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
                 
@@ -116,7 +117,7 @@ public class SyncImportTaskProcessor
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
-        await ResolveReferencesAsync(connectedSystemObjectsToBeCreated);
+        await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
         // now persist all CSOs which will also create the required change objects within the activity tree.
         await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
@@ -639,7 +640,7 @@ public class SyncImportTaskProcessor
     /// <summary>
     /// Enumerate each connected system object with an unresolved reference string value and attempts to convert it to a resolved reference to another connected system object.
     /// </summary>
-    private async Task ResolveReferencesAsync(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToProcess)
+    private async Task ResolveReferencesAsync(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         // get all csos with attributes that have unresolved reference values
         // see if we can find a cso that has an external id or secondary external id attribute value matching the string value
@@ -649,7 +650,7 @@ public class SyncImportTaskProcessor
         // create a connected system object change for this
 
         // enumerate just the CSOs with unresolved references, for efficiency
-        foreach (var csoToProcess in connectedSystemObjectsToProcess.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
+        foreach (var csoToProcess in connectedSystemObjectsToBeCreated.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
         {
             var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
             var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
@@ -671,7 +672,7 @@ public class SyncImportTaskProcessor
                 if (string.IsNullOrEmpty(referenceAttributeValue.UnresolvedReferenceValue))
                     continue;
 
-                // try and find the referenced object by the external id amongst the processing list of CSOs first
+                // try and find the referenced object by the external id amongst the two processing lists of CSOs first
                 ConnectedSystemObject? referencedConnectedSystemObject;
 
                 // couldn't get this to match anything. no idea why
@@ -689,17 +690,21 @@ public class SyncImportTaskProcessor
                     switch (externalIdAttribute.Type)
                     {
                         case AttributeDataType.Text:
-                            referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
+                            referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue?.StringValue != null && cso.ExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)) ??
+                                                              connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue?.StringValue != null && cso.ExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase));
                             break;
                         case AttributeDataType.Number:
                             if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intUnresolvedReferenceValue))
-                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);    
+                                referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue) ??
+                                                                  connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);
                             else
-                                throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
+                                throw new InvalidDataException(
+                                    $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
                             break;
                         case AttributeDataType.Guid:
                             if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
-                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);    
+                                referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ??
+                                                                  connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);
                             else
                                 throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
                             break;
@@ -717,17 +722,20 @@ public class SyncImportTaskProcessor
                     switch (externalIdAttribute.Type)
                     {
                         case AttributeDataType.Text:
-                            referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
+                            referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue) ??
+                                                              connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
                             break;
                         case AttributeDataType.Number:
                             if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intUnresolvedReferenceValue))
-                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);    
+                                referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue) ??
+                                                                  connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);
                             else
                                 throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
                             break;
                         case AttributeDataType.Guid:
                             if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
-                                referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);    
+                                referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ?? 
+                                                                  connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);
                             else
                                 throw new InvalidDataException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
                             break;
