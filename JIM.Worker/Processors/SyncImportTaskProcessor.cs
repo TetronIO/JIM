@@ -631,10 +631,6 @@ public class SyncImportTaskProcessor
                     throw new ArgumentOutOfRangeException();
             }
         }
-
-        // persist the attribute value changes
-        // todo: move to calling method
-        //await _jim.ConnectedSystems.UpdateConnectedSystemObjectAttributeValuesAsync(connectedSystemObject, activityRunProfileExecutionItem);
     }
 
     /// <summary>

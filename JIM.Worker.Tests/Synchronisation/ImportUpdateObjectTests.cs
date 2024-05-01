@@ -1389,6 +1389,8 @@ public class ImportUpdateObjectTests
     {
         ConnectedSystemObjectsData.Clear();
         
+        // todo: set externalidattributeid properties!!
+        
         // set the start-state for the tests; create the Connected System Objects we'll alter in the tests
         var connectedSystemObjectType = ConnectedSystemObjectTypesData.First();
         var cso1 = new ConnectedSystemObject
