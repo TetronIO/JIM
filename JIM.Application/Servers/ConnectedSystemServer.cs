@@ -416,22 +416,6 @@ public class ConnectedSystemServer
     #endregion
 
     #region Connected System Objects
-
-    /*public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId)
-    {
-        return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId);
-    }
-    
-    public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId)
-    {
-        return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId);
-    }
-    
-    public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId)
-    {
-        return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(connectedSystemId);
-    }*/
-    
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, connectedSystemObjectTypeId);
@@ -509,7 +493,7 @@ public class ConnectedSystemServer
         // bulk persist csos creates
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
         
-        // add a change object to the relevant activity run profile execution item for each cso.
+        // add a Change Object to the relevant Activity Run Profile Execution Item for each cso.
         // they will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
@@ -613,9 +597,6 @@ public class ConnectedSystemServer
         
         // don't persist the activity run profile execution, let that be done further up the stack in bulk for efficiency.
 
-        // update the cso, which will create/delete the attribute value objects
-        //await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
-
         // we can now reset the pending attribute value lists
         connectedSystemObject.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
         connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
@@ -660,25 +641,36 @@ public class ConnectedSystemServer
             connectedSystemObjectChange.AttributeChanges.Add(attributeChange);
         }
 
-        if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Text && connectedSystemObjectAttributeValue.StringValue != null)
-            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.StringValue));
-        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Number && connectedSystemObjectAttributeValue.IntValue != null)
-            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (int)connectedSystemObjectAttributeValue.IntValue));
-        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Guid && connectedSystemObjectAttributeValue.GuidValue != null)
-            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));
-        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Boolean && connectedSystemObjectAttributeValue.BoolValue != null)
-            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)connectedSystemObjectAttributeValue.BoolValue));
-        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.DateTime && connectedSystemObjectAttributeValue.DateTimeValue.HasValue)
-            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.DateTimeValue.Value));
-        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Binary && connectedSystemObjectAttributeValue.ByteValue != null)
-            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
-        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.ReferenceValue != null)
-            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
-        else if (connectedSystemObjectAttributeValue.Attribute.Type == AttributeDataType.Reference && connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null)
-            // we do not log changes for unresolved references. only resolved references get change tracked.
-            Log.Verbose("AddChangeAttributeValueObject: Unresolved reference value being skipped: " + connectedSystemObjectAttributeValue.UnresolvedReferenceValue);
-        else
-            throw new InvalidDataException("AddChangeAttributeValueObject:  Invalid removal attribute type or null attribute value");
+        switch (connectedSystemObjectAttributeValue.Attribute.Type)
+        {
+            case AttributeDataType.Text when connectedSystemObjectAttributeValue.StringValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.StringValue));
+                break;
+            case AttributeDataType.Number when connectedSystemObjectAttributeValue.IntValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (int)connectedSystemObjectAttributeValue.IntValue));
+                break;
+            case AttributeDataType.Guid when connectedSystemObjectAttributeValue.GuidValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));
+                break;
+            case AttributeDataType.Boolean when connectedSystemObjectAttributeValue.BoolValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)connectedSystemObjectAttributeValue.BoolValue));
+                break;
+            case AttributeDataType.DateTime when connectedSystemObjectAttributeValue.DateTimeValue.HasValue:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.DateTimeValue.Value));
+                break;
+            case AttributeDataType.Binary when connectedSystemObjectAttributeValue.ByteValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
+                break;
+            case AttributeDataType.Reference when connectedSystemObjectAttributeValue.ReferenceValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
+                break;
+            case AttributeDataType.Reference when connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null:
+                // we do not log changes for unresolved references. only resolved references get change tracked.
+                break;
+            case AttributeDataType.NotSet:
+            default:
+                throw new InvalidDataException("AddChangeAttributeValueObject:  Invalid removal attribute type or null attribute value");
+        }
     }
 
     public async Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)

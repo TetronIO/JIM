@@ -64,6 +64,9 @@ public class ConnectedSystemObjectAttributeValue
         if (BoolValue.HasValue)
             return $"{Attribute.Name}: " + BoolValue.Value;
 
+        if (ReferenceValue != null && !string.IsNullOrEmpty(UnresolvedReferenceValue))
+            return $"{Attribute.Name} - Resolved: {ReferenceValue.Id}. Unresolved: {UnresolvedReferenceValue}";
+        
         if (ReferenceValue != null)
             return $"{Attribute.Name} - Resolved: " + ReferenceValue.Id;
 

@@ -128,7 +128,7 @@ public class SyncImportTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -206,7 +206,7 @@ public class SyncImportTaskProcessor
         }
     }
 
-    private async Task ObsoleteConnectedSystemObjectAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ObsoleteConnectedSystemObjectAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         // find the cso
         ConnectedSystemObject? cso = null;
@@ -235,7 +235,7 @@ public class SyncImportTaskProcessor
         connectedSystemObjectsToBeUpdated.Add(cso);
     }
     
-    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, List<ExternalIdPair> externalIdsImported)
+    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, ICollection<ExternalIdPair> externalIdsImported)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -256,10 +256,7 @@ public class SyncImportTaskProcessor
         }
     }
 
-    private async Task ProcessImportObjectsAsync(
-        ConnectedSystemImportResult connectedSystemImportResult, 
-        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated,
-        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
@@ -550,9 +547,14 @@ public class SyncImportTaskProcessor
                         break;
 
                     case AttributeDataType.Reference:
-                        // todo: handle references...
-                        // probably: update UnresolvedReferences, then let the sync processor resolve the reference updates later in processing.
-                        var x = 1;
+                        // find unresolved reference values on the cso that aren't on the imported object and remove them first
+                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)));
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingUnresolvedReferenceValues.Any(msav => msav.Id == av.Id)));
+
+                        // find imported unresolved reference values that aren't on the cso and add them
+                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.InvariantCultureIgnoreCase)));
+                        foreach (var newUnresolvedReferenceValue in newUnresolvedReferenceValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, UnresolvedReferenceValue = newUnresolvedReferenceValue });
                         break;
 
                     case AttributeDataType.Guid:
@@ -578,6 +580,9 @@ public class SyncImportTaskProcessor
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
                         }
                         break;
+                    case AttributeDataType.NotSet:
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
             }
             else
@@ -644,6 +649,8 @@ public class SyncImportTaskProcessor
         // remove the unresolved reference value
         // update the cso
         // create a connected system object change for this
+        
+        // todo: expand to support connectedSystemObjectsToBeUpdated. needs to use pendingadds/removal properties so change objects can be created automatically.
 
         // enumerate just the CSOs with unresolved references, for efficiency
         foreach (var csoToProcess in connectedSystemObjectsToBeCreated.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
@@ -754,10 +761,9 @@ public class SyncImportTaskProcessor
 
                 if (referencedConnectedSystemObject != null)
                 {
-                    // referenced cso found!
+                    // referenced cso found! set the ReferenceValue property, and leave the UnresolvedReferenceValue in place, as we'll use that for looking for updates to existing references on import.
                     Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
                     referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
-                    referenceAttributeValue.UnresolvedReferenceValue = null;
                 }
                 else
                 {

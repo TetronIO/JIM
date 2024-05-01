@@ -70,11 +70,7 @@
             <RowTemplate>
                 <MudTd DataLabel="Type">@context.Attribute.Type</MudTd>
                 <MudTd DataLabel="Value">
-                    @if (context.UnresolvedReferenceValue != null)
-                    {
-                        <Text>Unresolved reference: <span Style="@($"color:{Colors.Grey.Darken2};")">@context.ToString()</span></Text>
-                    }
-                    else if (context.ReferenceValue != null)
+                    @if (context.ReferenceValue != null)
                     {
                         <MudChip Color="Color.Default" Size="Size.Small">@context.ReferenceValue.Type.Name</MudChip>
                         <text> </text>
@@ -84,6 +80,10 @@
                         {
                             <span class="mud-text-secondary"> (@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</span>
                         }
+                    }
+                    else if (context.UnresolvedReferenceValue != null)
+                    {
+                        <Text>Unresolved reference: <span Style="@($"color:{Colors.Grey.Darken2};")">@context.ToString()</span></Text>
                     }
                     else
                     {

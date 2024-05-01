@@ -1346,7 +1346,7 @@ public class ImportUpdateObjectTests
         var cso3ManagerAttribute = cso3.GetAttributeValue(MockAttributeName.MANAGER.ToString());
         Assert.That(cso3ManagerAttribute, Is.Not.Null);
         Assert.That(cso3ManagerAttribute.ReferenceValue, Is.Not.Null);
-        Assert.That(cso3ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo(null));
+        Assert.That(!string.IsNullOrEmpty(cso3ManagerAttribute.UnresolvedReferenceValue), "Expected the MANAGER UnresolvedReferenceValue to also be populated.");
         Assert.That(cso3ManagerAttribute.ReferenceValue.Id, Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
         
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
@@ -1357,7 +1357,7 @@ public class ImportUpdateObjectTests
         Assert.That(cso2ManagerAttribute, Is.Not.Null);
         Assert.That(cso2ManagerAttribute.ReferenceValue, Is.Not.Null);
         Assert.That(cso2ManagerAttribute.ReferenceValue.Id, Is.EqualTo(cso3.Id));
-        Assert.That(cso2ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo(null));
+        Assert.That(!string.IsNullOrEmpty(cso2ManagerAttribute.UnresolvedReferenceValue), "Expected the MANAGER UnresolvedReferenceValue to also be populated.");
         
         Assert.Pass();
     }
