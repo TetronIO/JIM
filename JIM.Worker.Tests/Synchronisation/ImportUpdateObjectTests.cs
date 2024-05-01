@@ -1398,7 +1398,8 @@ public class ImportUpdateObjectTests
             Id = TestConstants.CS_OBJECT_1_ID,
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
-            Type = connectedSystemObjectType
+            Type = connectedSystemObjectType,
+            ExternalIdAttributeId = (int)MockAttributeName.EMPLOYEE_ID
         };
         cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -1480,7 +1481,8 @@ public class ImportUpdateObjectTests
             Id = TestConstants.CS_OBJECT_2_ID,
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
-            Type = connectedSystemObjectType
+            Type = connectedSystemObjectType,
+            ExternalIdAttributeId = (int)MockAttributeName.EMPLOYEE_ID
         };
         cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
