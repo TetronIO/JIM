@@ -8,7 +8,6 @@ internal static class TestConstants
     internal static DateTime CS_OBJECT_1_START_DATE => DateTime.Parse("01-JAN-2010");
     internal static string CS_OBJECT_1_DISPLAY_NAME => "Jane Smith";
     
-    
     internal static Guid CS_OBJECT_2_ID = new ("21952DE7-9196-4FAD-8CC1-146B790C5611");
     internal static Guid CS_OBJECT_2_HR_ID => new ("EC9BC716-ABA9-4D49-AA1C-FA15F75E17CF");
     internal static DateTime CS_OBJECT_2_START_DATE => DateTime.Parse("10-JUL-2022");
