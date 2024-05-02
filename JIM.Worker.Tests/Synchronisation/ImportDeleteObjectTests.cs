@@ -229,4 +229,6 @@ public class ImportDeleteObjectTests
         Assert.That(obsoleteUser.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete), "Expected our second user to have been marked as Obsolete after dropping off the full import.");
         Assert.Pass();
     }
+    
+    // todo: test activity/run profile execution item/change object creation
 }
