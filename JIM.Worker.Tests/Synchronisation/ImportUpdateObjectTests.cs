@@ -1251,7 +1251,7 @@ public class ImportUpdateObjectTests
                 new()
                 {
                     Name = MockAttributeName.LEAVER.ToString(),
-                    BoolValue = true,
+                    BoolValue = false,
                     Type = AttributeDataType.Boolean
                 }
             }
