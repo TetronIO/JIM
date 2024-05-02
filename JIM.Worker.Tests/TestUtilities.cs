@@ -235,6 +235,24 @@ public static class TestUtilities
                         Id = (int)MockAttributeName.LEAVER,
                         Name = MockAttributeName.LEAVER.ToString(),
                         Type = AttributeDataType.Boolean
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.COURSE_COUNT,
+                        Name = MockAttributeName.COURSE_COUNT.ToString(),
+                        Type = AttributeDataType.Number
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.COURSE_END_DATE,
+                        Name = MockAttributeName.COURSE_END_DATE.ToString(),
+                        Type = AttributeDataType.DateTime
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_NAME,
+                        Name = MockAttributeName.CURRENT_COURSE_NAME.ToString(),
+                        Type = AttributeDataType.Text
                     }
                 }
             }

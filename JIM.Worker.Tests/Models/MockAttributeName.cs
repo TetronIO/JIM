@@ -14,5 +14,8 @@ public enum MockAttributeName
     CONTRACTED_WEEKLY_HOURS = 10, // int
     LOCATION_ID = 11, // guid,
     END_DATE = 12, // datetime,
-    LEAVER = 13 // boolean
+    LEAVER = 13, // boolean
+    COURSE_COUNT = 14, // int
+    COURSE_END_DATE = 15, // datetime
+    CURRENT_COURSE_NAME = 16 // string
 }
