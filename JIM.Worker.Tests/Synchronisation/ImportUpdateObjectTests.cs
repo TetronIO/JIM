@@ -2742,9 +2742,6 @@ public class ImportUpdateObjectTests
     }
     
     // todo: test activity/run profile execution item/change object creation
-
-    // sva:
-    // todo: reference add from null
     
     // mva:
     // todo: add int
