@@ -487,6 +487,10 @@ public class SyncImportTaskProcessor
         // process known attributes (potential updates)
         // need to work with the fact that we have individual objects for multivalued attribute values
         // get a list of distinct attributes
+        
+        // todo: we shouldn't be using cso attribute names as the authoritative attribute list. we need to get them from the object type!
+        // we might be missing some attributes off the cso, i.e. for when attributes are set on import for the first time.
+        
         var csoAttributeNames = connectedSystemObject.AttributeValues.Select(q => q.Attribute.Name).Distinct();
         foreach (var csoAttributeName in csoAttributeNames)
         {

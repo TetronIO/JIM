@@ -2679,7 +2679,7 @@ public class ImportUpdateObjectTests
                 new()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "3" }, // employee id (external id) of cso 3
+                    ReferenceValues = new List<string> { "1" },
                     Type = AttributeDataType.Reference
                 },
                 new()
@@ -2739,6 +2739,7 @@ public class ImportUpdateObjectTests
         Assert.That(!string.IsNullOrEmpty(cso2ManagerAttribute.UnresolvedReferenceValue), "Expected the MANAGER UnresolvedReferenceValue to also be populated.");
         Assert.That(cso2ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo("1"), "Expected the UnresolvedReference to be '1'");
 
+        // assert that our new reference is present and correct.
         var cso2CurrentCourseTutorAttribute = cso2.GetAttributeValue(MockAttributeName.CURRENT_COURSE_TUTOR.ToString());
         Assert.That(cso2CurrentCourseTutorAttribute, Is.Not.Null, "Expected to be able to get the CURRENT_COURSE_TUTOR attribute on CSO2.");
         Assert.That(cso2CurrentCourseTutorAttribute.ReferenceValue, Is.Not.Null);
