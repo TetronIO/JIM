@@ -571,13 +571,20 @@ public class SyncImportTaskProcessor
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                         // todo: consider having the ability to update values instead of replacing.
-                        var csAttributeValue = connectedSystemObject.AttributeValues.Single(av => av.Attribute.Name == csoAttributeName);
-                        if (csAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
+                        var csAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
+                        if (csAttributeValue == null)
                         {
+                            // set initial value
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
+                        }
+                        else if (csAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
+                        {
+                            // update existing value by removing and adding
                             connectedSystemObject.PendingAttributeValueRemovals.Add(csAttributeValue);
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
                         }
                         break;
+                    
                     case AttributeDataType.NotSet:
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -588,50 +595,6 @@ public class SyncImportTaskProcessor
                 // no values were imported for this attribute. delete all the cso attribute values for this attribute
                 var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Name == csoAttributeName);
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
-            }
-        }
-
-        // process new imported attributes (adding attribute values where they were null before)
-        var newAttributes = connectedSystemImportObject.Attributes.Where(csio => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.Equals(csio.Name, StringComparison.CurrentCultureIgnoreCase)));
-        foreach (var newAttribute in newAttributes)
-        {
-            // work out what data type this attribute is
-            var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(newAttribute.Name, StringComparison.CurrentCultureIgnoreCase));
-
-            switch (csoAttribute.Type)
-            {
-                case AttributeDataType.Text:
-                    foreach (var newStringValue in newAttribute.StringValues)
-                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
-                    break;
-                case AttributeDataType.Number:
-                    foreach (var newIntValue in newAttribute.IntValues)
-                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, IntValue = newIntValue });
-                    break;
-                case AttributeDataType.DateTime:
-                    foreach (var newDateTimeValue in newAttribute.DateTimeValues)
-                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
-                    break;
-                case AttributeDataType.Binary:
-                    foreach (var newByteArrayValue in newAttribute.ByteValues)
-                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, ByteValue = newByteArrayValue });
-                    break;
-                case AttributeDataType.Reference:
-                    // todo: handle references...
-                    // what will we get back? full references for objects either in, or potentially out of OU selection scope?
-                    // reconcile this against selected OUs. what kind of response and information do we want to pass back to sync admins in this scenario? 
-                    var x = 1;
-                    break;
-                case AttributeDataType.Guid:
-                    foreach (var newGuidValue in newAttribute.GuidValues)
-                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, GuidValue = newGuidValue });
-                    break;
-                case AttributeDataType.Boolean:
-                    connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = newAttribute.BoolValue });
-                    break;
-                case AttributeDataType.NotSet:
-                default:
-                    throw new ArgumentOutOfRangeException();
             }
         }
     }

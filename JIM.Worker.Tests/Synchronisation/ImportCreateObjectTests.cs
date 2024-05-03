@@ -23,7 +23,6 @@ public class ImportCreateObjectTests
     private Mock<DbSet<ConnectedSystemRunProfile>> MockDbSetConnectedSystemRunProfiles { get; set; }
     private List<ConnectedSystemObjectType> ConnectedSystemObjectTypesData { get; set; } 
     private Mock<DbSet<ConnectedSystemObjectType>> MockDbSetConnectedSystemObjectTypes { get; set; }
-    // ReSharper disable once CollectionNeverUpdated.Local
     private List<ConnectedSystemPartition> ConnectedSystemPartitionsData { get; set; }
     private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; }
     private List<Activity> ActivitiesData { get; set; }
@@ -133,6 +132,12 @@ public class ImportCreateObjectTests
                     // mva string
                     Name = MockAttributeName.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-MNGT-101", "C-MNGT-102", "C-MNGT-103" }
+                },
+                new ()
+                {
+                    // boolean string
+                    Name = MockAttributeName.LEAVER.ToString(),
+                    BoolValue = false
                 }
             }
         });
@@ -189,6 +194,12 @@ public class ImportCreateObjectTests
                     // mva string
                     Name = MockAttributeName.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-CDEV-101" }
+                },
+                new ()
+                {
+                    // boolean string
+                    Name = MockAttributeName.LEAVER.ToString(),
+                    BoolValue = false
                 }
             }
         });
@@ -216,6 +227,7 @@ public class ImportCreateObjectTests
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.ROLE, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.QUALIFICATIONS, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.LEAVER, ConnectedSystemObjectTypesData);
         
         // validate the second user (who is a direct-report)
         var secondPersistedConnectedSystemObject = connectedSystemObjectData[1];
@@ -227,6 +239,7 @@ public class ImportCreateObjectTests
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.ROLE, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.QUALIFICATIONS, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockAttributeName.LEAVER, ConnectedSystemObjectTypesData);
         
         // validate second user manager reference
         var managerAttribute = secondPersistedConnectedSystemObject.AttributeValues.SingleOrDefault(q=>q.Attribute.Name == MockAttributeName.MANAGER.ToString());
