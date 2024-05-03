@@ -2235,7 +2235,7 @@ public class ImportUpdateObjectTests
         Assert.Pass();
     }
     
-        [Test]
+    [Test]
     public async Task FullImportUpdateTextAddSvaTestAsync()
     {
         InitialiseConnectedSystemObjectsData();
@@ -2342,11 +2342,408 @@ public class ImportUpdateObjectTests
         Assert.Pass();
     }
     
+    [Test]
+    public async Task FullImportUpdateGuidAddSvaTestAsync()
+    {
+        InitialiseConnectedSystemObjectsData();
+        
+        // mock up a connector that will return updates for our existing connected system objects above.
+        // changes: CURRENT_COURSE_ID gets a value for the first time.
+        var currentCourseId = Guid.NewGuid();
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "User",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    Type = AttributeDataType.DateTime
+                },
+                new ()
+                {
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "jane.smith@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { "Manager" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                    ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
+                    Type = AttributeDataType.Binary
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LEAVER.ToString(),
+                    BoolValue = false,
+                    Type = AttributeDataType.Boolean
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CURRENT_COURSE_ID.ToString(),
+                    GuidValues = new List<Guid> { currentCourseId },
+                    Type = AttributeDataType.Guid
+                },
+            }
+        });
+        
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        
+        // confirm the results persisted to the mocked db context
+        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+        
+        // get the Connected System Object for the user we changed some attribute values for in the mocked connector
+        var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
+        Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
+
+        var currentCourseIdAttribute = cso1.GetAttributeValue(MockAttributeName.CURRENT_COURSE_ID.ToString());
+        Assert.That(currentCourseIdAttribute, Is.Not.Null);
+        Assert.That(currentCourseIdAttribute.GuidValue.HasValue);
+        Assert.That(currentCourseIdAttribute.GuidValue.Value, Is.EqualTo(currentCourseId));
+        
+        Assert.Pass();
+    }
+    
+    [Test]
+    public async Task FullImportUpdateBooleanAddSvaTestAsync()
+    {
+        InitialiseConnectedSystemObjectsData();
+        
+        // mock up a connector that will return updates for our existing connected system objects above.
+        // changes: CURRENT_COURSE_ACTIVE has a value set for the first time.
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "User",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    Type = AttributeDataType.DateTime
+                },
+                new ()
+                {
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "jane.smith@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { "Manager" },
+                    Type = AttributeDataType.Text
+                },
+                new ()
+                {
+                    Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                    ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
+                    Type = AttributeDataType.Binary
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockAttributeName.LEAVER.ToString(),
+                    BoolValue = false,
+                    Type = AttributeDataType.Boolean
+                },
+                new ()
+                {
+                    Name = MockAttributeName.CURRENT_COURSE_ACTIVE.ToString(),
+                    BoolValue = true,
+                    Type = AttributeDataType.Boolean
+                }
+            }
+        });
+        
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        
+        // confirm the results persisted to the mocked db context
+        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+        
+        // get the Connected System Object for the user we changed some attribute values for in the mocked connector
+        var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
+        Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the second CSO to validate.");
+
+        var currentCourseActiveAttribute = cso1.GetAttributeValue(MockAttributeName.CURRENT_COURSE_ACTIVE.ToString());
+        Assert.That(currentCourseActiveAttribute, Is.Not.Null);
+        Assert.That(currentCourseActiveAttribute.BoolValue.HasValue);
+        Assert.That(currentCourseActiveAttribute.BoolValue.Value, Is.EqualTo(true));
+        
+        Assert.Pass();
+    }
+        [Test]
+    public async Task FullImportUpdateReferenceAddSvaTestAsync()
+    {
+        InitialiseConnectedSystemObjectsData();
+
+        // mock up a connector that will return updates for our existing connected system objects above.
+        // changes: CURRENT_COURSE_TUTOR has a value set for the first time.
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "User",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new()
+                {
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    Type = AttributeDataType.DateTime
+                },
+                new()
+                {
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "jane.smith@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { "Manager" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                    ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
+                    Type = AttributeDataType.Binary
+                },
+                new()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockAttributeName.LEAVER.ToString(),
+                    BoolValue = false,
+                    Type = AttributeDataType.Boolean
+                }
+            }
+        });
+        
+        // update our second user so their current course tutor references our first user.
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "User",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new()
+                {
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 2 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_2_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    Type = AttributeDataType.DateTime
+                },
+                new()
+                {
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_2_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "joe.bloggs@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { "Developer" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockAttributeName.MANAGER.ToString(),
+                    ReferenceValues = new List<string> { "3" }, // employee id (external id) of cso 3
+                    Type = AttributeDataType.Reference
+                },
+                new()
+                {
+                    Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockAttributeName.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockAttributeName.END_DATE.ToString(),
+                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_END_DATE_1 },
+                    Type = AttributeDataType.DateTime
+                },
+                new()
+                {
+                    Name = MockAttributeName.LEAVER.ToString(),
+                    BoolValue = false,
+                    Type = AttributeDataType.Boolean
+                },
+                new()
+                {
+                    Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
+                    ReferenceValues = new List<string> { "1" }, // employee id (external id) of cso 1
+                    Type = AttributeDataType.Reference
+                },
+            }
+        });
+        
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        
+        // confirm the results persisted to the mocked db context
+        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+        
+        // get the Connected System Object for the user we changed some attribute values for in the mocked connector
+        var cso2 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
+        Assert.That(cso2, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
+
+        var cso2CurrentCourseTutorAttribute = cso2.GetAttributeValue(MockAttributeName.CURRENT_COURSE_TUTOR.ToString());
+        Assert.That(cso2CurrentCourseTutorAttribute, Is.Not.Null, "Expected to be able to get the CURRENT_COURSE_TUTOR attribute on CSO2.");
+        Assert.That(cso2CurrentCourseTutorAttribute.ReferenceValue, Is.Not.Null);
+        Assert.That(cso2CurrentCourseTutorAttribute.ReferenceValue.Id, Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
+        Assert.That(!string.IsNullOrEmpty(cso2CurrentCourseTutorAttribute.UnresolvedReferenceValue), "Expected the CURRENT_COURSE_TUTOR UnresolvedReferenceValue to also be populated.");
+        Assert.That(cso2CurrentCourseTutorAttribute.UnresolvedReferenceValue, Is.EqualTo("1"), "Expected the UnresolvedReference to be '1'");
+        
+        Assert.Pass();
+    }
+    
     // todo: test activity/run profile execution item/change object creation
 
     // sva:
-    // todo: guid add from null
-    // todo: boolean add from null
     // todo: reference add from null
     
     // mva:

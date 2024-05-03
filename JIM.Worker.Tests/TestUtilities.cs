@@ -253,6 +253,24 @@ public static class TestUtilities
                         Id = (int)MockAttributeName.CURRENT_COURSE_NAME,
                         Name = MockAttributeName.CURRENT_COURSE_NAME.ToString(),
                         Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_ID,
+                        Name = MockAttributeName.CURRENT_COURSE_ID.ToString(),
+                        Type = AttributeDataType.Guid
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_ACTIVE,
+                        Name = MockAttributeName.CURRENT_COURSE_ACTIVE.ToString(),
+                        Type = AttributeDataType.Boolean
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_TUTOR,
+                        Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
+                        Type = AttributeDataType.Reference
                     }
                 }
             }

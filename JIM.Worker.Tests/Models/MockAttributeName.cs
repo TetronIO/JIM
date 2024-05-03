@@ -17,5 +17,8 @@ public enum MockAttributeName
     LEAVER = 13, // boolean
     COURSE_COUNT = 14, // int
     COURSE_END_DATE = 15, // datetime
-    CURRENT_COURSE_NAME = 16 // string
+    CURRENT_COURSE_NAME = 16, // string
+    CURRENT_COURSE_ID = 17, // guid
+    CURRENT_COURSE_ACTIVE = 18, // boolean
+    CURRENT_COURSE_TUTOR = 19 // reference
 }
