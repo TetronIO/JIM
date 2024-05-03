@@ -2729,7 +2729,15 @@ public class ImportUpdateObjectTests
         
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso2 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
-        Assert.That(cso2, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
+        Assert.That(cso2, Is.Not.EqualTo(null), "Expected to be able to retrieve the second CSO to validate.");
+        
+        // not core to this test, but we've had failings for this before, so increasing coverage.
+        var cso2ManagerAttribute = cso2.GetAttributeValue(MockAttributeName.MANAGER.ToString());
+        Assert.That(cso2ManagerAttribute, Is.Not.Null, "Expected to be able to get the MANAGER attribute on CSO2.");
+        Assert.That(cso2ManagerAttribute.ReferenceValue, Is.Not.Null);
+        Assert.That(cso2ManagerAttribute.ReferenceValue.Id, Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
+        Assert.That(!string.IsNullOrEmpty(cso2ManagerAttribute.UnresolvedReferenceValue), "Expected the MANAGER UnresolvedReferenceValue to also be populated.");
+        Assert.That(cso2ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo("1"), "Expected the UnresolvedReference to be '1'");
 
         var cso2CurrentCourseTutorAttribute = cso2.GetAttributeValue(MockAttributeName.CURRENT_COURSE_TUTOR.ToString());
         Assert.That(cso2CurrentCourseTutorAttribute, Is.Not.Null, "Expected to be able to get the CURRENT_COURSE_TUTOR attribute on CSO2.");
