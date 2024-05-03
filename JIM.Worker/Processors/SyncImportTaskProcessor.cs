@@ -311,7 +311,7 @@ public class SyncImportTaskProcessor
                 // existing connected system object - update from import object if necessary
                 activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                 activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, activityRunProfileExecutionItem);
+                UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
                 connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
             }
         }
@@ -482,17 +482,11 @@ public class SyncImportTaskProcessor
         return connectedSystemObject;
     }
 
-    private static void UpdateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    private static void UpdateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
         // process known attributes (potential updates)
         // need to work with the fact that we have individual objects for multivalued attribute values
-        // get a list of distinct attributes
-        
-        // todo: we shouldn't be using cso attribute names as the authoritative attribute list. we need to get them from the object type!
-        // we might be missing some attributes off the cso, i.e. for when attributes are set on import for the first time.
-        
-        var csoAttributeNames = connectedSystemObject.AttributeValues.Select(q => q.Attribute.Name).Distinct();
-        foreach (var csoAttributeName in csoAttributeNames)
+        foreach (var csoAttributeName in connectedSystemObjectType.Attributes.Select(a => a.Name))
         {
             // is there a matching attribute in the import object?
             var importedAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name.Equals(csoAttributeName, StringComparison.OrdinalIgnoreCase));
