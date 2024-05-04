@@ -20,5 +20,10 @@ public enum MockAttributeName
     CURRENT_COURSE_NAME = 16, // string
     CURRENT_COURSE_ID = 17, // guid
     CURRENT_COURSE_ACTIVE = 18, // boolean
-    CURRENT_COURSE_TUTOR = 19 // reference
+    CURRENT_COURSE_TUTOR = 19, // reference
+    PROXY_ADDRESSES = 20, // mva string
+    COMPLETED_COURSE_IDS = 21, // mva int
+    PREVIOUS_LOCATION_IDS = 22, // mva guids
+    CERTIFICATES = 23, // mva byte
+    MEMBER = 24 // mva reference
 }
