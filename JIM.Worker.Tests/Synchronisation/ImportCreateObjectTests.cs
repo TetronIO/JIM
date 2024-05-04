@@ -107,7 +107,7 @@ public class ImportCreateObjectTests
                 {
                     // datetime
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE }
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE
                 },
                 new ()
                 {
@@ -163,7 +163,7 @@ public class ImportCreateObjectTests
                 {
                     // datetime
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE }
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE
                 },
                 new ()
                 {

@@ -304,9 +304,7 @@ internal class LdapConnectorImport
                         break;
 
                     case AttributeDataType.DateTime:
-                        var dateTimeValues = LdapConnectorUtilities.GetEntryAttributeDateTimeValues(searchResult, attributeName);
-                        if (dateTimeValues is { Count: > 0 })
-                            importObjectAttribute.DateTimeValues.AddRange(dateTimeValues);
+                        importObjectAttribute.DateTimeValue = LdapConnectorUtilities.GetEntryAttributeDateTimeValue(searchResult, attributeName);
                         break;
 
                     case AttributeDataType.Guid:

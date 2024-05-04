@@ -72,12 +72,7 @@ public static class TestUtilities
                     Assert.That(csoAttributeValues.Any(q => q.StringValue == csioStringValue));
                 break;
             case AttributeDataType.DateTime:
-                // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same).
-                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.DateTimeValues.Count));
-                foreach (var csoDateTimeValue in csoAttributeValues)
-                    Assert.That(csioAttribute.DateTimeValues.Any(q => q == csoDateTimeValue.DateTimeValue));
-                foreach (var csioDateTimeValue in csioAttribute.DateTimeValues)
-                    Assert.That(csoAttributeValues.Any(q => q.DateTimeValue == csioDateTimeValue));
+                Assert.That(csoAttributeValues[0].DateTimeValue, Is.EqualTo(csioAttribute.DateTimeValue));
                 break;
             case AttributeDataType.Binary:
                 // this is quite crude, and could be improved.

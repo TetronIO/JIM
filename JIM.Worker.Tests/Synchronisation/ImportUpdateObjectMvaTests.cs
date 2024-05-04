@@ -108,7 +108,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -176,7 +176,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -277,7 +277,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -345,7 +345,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -445,7 +445,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -513,7 +513,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -615,7 +615,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -683,7 +683,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -783,7 +783,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -851,7 +851,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -893,7 +893,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.END_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_END_DATE_2 },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_2,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -958,7 +958,7 @@ public class ImportUpdateObjectMvaTests
                 new()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1028,7 +1028,7 @@ public class ImportUpdateObjectMvaTests
                 new()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1070,7 +1070,7 @@ public class ImportUpdateObjectMvaTests
                 new()
                 {
                     Name = MockAttributeName.END_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_END_DATE_1 },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1105,7 +1105,7 @@ public class ImportUpdateObjectMvaTests
                 new()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_3_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_3_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1216,7 +1216,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1309,7 +1309,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1402,7 +1402,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1495,7 +1495,7 @@ public class ImportUpdateObjectMvaTests
                 new ()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_1_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new ()
@@ -1683,7 +1683,7 @@ public class ImportUpdateObjectMvaTests
                 new()
                 {
                     Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_START_DATE },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
                     Type = AttributeDataType.DateTime
                 },
                 new()
@@ -1719,7 +1719,7 @@ public class ImportUpdateObjectMvaTests
                 new()
                 {
                     Name = MockAttributeName.END_DATE.ToString(),
-                    DateTimeValues = new List<DateTime> { TestConstants.CS_OBJECT_2_END_DATE_1 },
+                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
                     Type = AttributeDataType.DateTime
                 },
                 new()

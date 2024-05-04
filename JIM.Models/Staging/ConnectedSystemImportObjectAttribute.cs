@@ -17,11 +17,17 @@ public class ConnectedSystemImportObjectAttribute
 
     public List<int> IntValues { get; set; } = new();
 
-    public List<DateTime> DateTimeValues { get; set; } = new();
+    /// <summary>
+    /// DateTimes are in practice, single-valued. Who needs multiple DateTime values?
+    /// </summary>
+    public DateTime? DateTimeValue { get; set; }
 
     public List<Guid> GuidValues { get; set; } = new();
 
     public List<byte[]> ByteValues { get; set; } = new();
 
+    /// <summary>
+    /// Booleans are inherently single-valued in nature. You can't distinguish multiple values.
+    /// </summary>
     public bool? BoolValue { get; set; }   
 }

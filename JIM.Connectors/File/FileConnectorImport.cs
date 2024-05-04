@@ -106,7 +106,7 @@ internal class FileConnectorImport
                 }
                 else if (attribute.Type == AttributeDataType.DateTime)
                 {
-                    importObjectAttribute.DateTimeValues.Add(_reader.CsvReader.GetField<DateTime>(attribute.Name));
+                    importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
                 }
                 else if (attribute.Type == AttributeDataType.Boolean)
                 {

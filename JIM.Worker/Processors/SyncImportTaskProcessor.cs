@@ -435,15 +435,12 @@ public class SyncImportTaskProcessor
                     }
                     break;
                 case AttributeDataType.DateTime:
-                    foreach (var importObjectAttributeDateTimeValue in importObjectAttribute.DateTimeValues)
+                    connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                     {
-                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-                        {
-                            Attribute = csAttribute,
-                            DateTimeValue = importObjectAttributeDateTimeValue,
-                            ConnectedSystemObject = connectedSystemObject
-                        });
-                    }
+                        Attribute = csAttribute,
+                        DateTimeValue = importObjectAttribute.DateTimeValue,
+                        ConnectedSystemObject = connectedSystemObject
+                    });
                     break;
                 case AttributeDataType.Boolean:
                     connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
@@ -523,14 +520,18 @@ public class SyncImportTaskProcessor
                         break;
 
                     case AttributeDataType.DateTime:
-                        // find values on the cso of type DateTime that aren't on the imported object and remove them first
-                        var missingDateTimeAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && !importedObjectAttribute.DateTimeValues.Any(i => i.Equals(av.DateTimeValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingDateTimeAttributeValues.Any(msav => msav.Id == av.Id)));
-
-                        // find imported values of type DateTime that aren't on the cso and add them
-                        var newDateTimeValues = importedObjectAttribute.DateTimeValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.DateTimeValue != null && av.DateTimeValue.Equals(sv)));
-                        foreach (var newDateTimeValue in newDateTimeValues)
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = newDateTimeValue });
+                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
+                        if (existingCsoDateTimeAttributeValue == null)
+                        {
+                            // set initial value
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
+                        }
+                        else if (existingCsoDateTimeAttributeValue.DateTimeValue != importedObjectAttribute.DateTimeValue)
+                        {
+                            // update existing value by removing and adding
+                            connectedSystemObject.PendingAttributeValueRemovals.Add(existingCsoDateTimeAttributeValue);
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
+                        }
                         break;
 
                     case AttributeDataType.Binary:
@@ -571,16 +572,16 @@ public class SyncImportTaskProcessor
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                         // todo: consider having the ability to update values instead of replacing.
-                        var csAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
-                        if (csAttributeValue == null)
+                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
+                        if (csoBooleanAttributeValue == null)
                         {
                             // set initial value
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
                         }
-                        else if (csAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
+                        else if (csoBooleanAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
                         {
                             // update existing value by removing and adding
-                            connectedSystemObject.PendingAttributeValueRemovals.Add(csAttributeValue);
+                            connectedSystemObject.PendingAttributeValueRemovals.Add(csoBooleanAttributeValue);
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
                         }
                         break;

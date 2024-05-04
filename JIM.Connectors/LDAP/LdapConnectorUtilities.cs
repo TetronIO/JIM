@@ -46,13 +46,13 @@ internal static class LdapConnectorUtilities
         return new Guid((byte[])entry.Attributes[attributeName][0]);
     }
 
-    internal static List<DateTime>? GetEntryAttributeDateTimeValues(SearchResultEntry entry, string attributeName)
+    
+    internal static DateTime? GetEntryAttributeDateTimeValue(SearchResultEntry entry, string attributeName)
     {
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count == 0) return null;
-        return (from DateTime value in entry.Attributes[attributeName].GetValues(typeof(DateTime))
-            select value).ToList();
+        if (entry.Attributes[attributeName].Count != 1) return null;
+        return (DateTime)entry.Attributes[attributeName][0];
     }
 
     internal static List<string>? GetEntryAttributeStringValues(SearchResultEntry entry, string attributeName)
