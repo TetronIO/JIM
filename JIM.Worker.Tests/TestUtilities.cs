@@ -152,7 +152,8 @@ public static class TestUtilities
                         // we use the term "External ID" for this in Jim.
                         Id = (int)MockAttributeName.HR_ID,
                         Name = MockAttributeName.HR_ID.ToString(),
-                        Type = AttributeDataType.Guid
+                        Type = AttributeDataType.Guid,
+                        IsExternalId = true
                     },
                     new()
                     {
@@ -161,14 +162,7 @@ public static class TestUtilities
                         // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
                         Id = (int)MockAttributeName.EMPLOYEE_ID,
                         Name = MockAttributeName.EMPLOYEE_ID.ToString(),
-                        Type = AttributeDataType.Number,
-                        IsExternalId = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.START_DATE,
-                        Name = MockAttributeName.START_DATE.ToString(),
-                        Type = AttributeDataType.DateTime
+                        Type = AttributeDataType.Number
                     },
                     new()
                     {
@@ -181,6 +175,12 @@ public static class TestUtilities
                         Id = (int)MockAttributeName.EMAIL_ADDRESS,
                         Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
                         Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.START_DATE,
+                        Name = MockAttributeName.START_DATE.ToString(),
+                        Type = AttributeDataType.DateTime
                     },
                     new()
                     {
@@ -266,6 +266,67 @@ public static class TestUtilities
                         Id = (int)MockAttributeName.CURRENT_COURSE_TUTOR,
                         Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
                         Type = AttributeDataType.Reference
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.PROXY_ADDRESSES,
+                        Name = MockAttributeName.PROXY_ADDRESSES.ToString(),
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.MultiValued
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.COMPLETED_COURSE_IDS,
+                        Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
+                        Type = AttributeDataType.Number,
+                        AttributePlurality = AttributePlurality.MultiValued
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.PREVIOUS_LOCATION_IDS,
+                        Name = MockAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
+                        Type = AttributeDataType.Guid,
+                        AttributePlurality = AttributePlurality.MultiValued
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CERTIFICATES,
+                        Name = MockAttributeName.CERTIFICATES.ToString(),
+                        Type = AttributeDataType.Binary,
+                        AttributePlurality = AttributePlurality.MultiValued
+                    }
+                }
+            },
+            new ()
+            {
+                Id = 1,
+                Name = "Group",
+                ConnectedSystemId = 1,
+                Selected = true,
+                Attributes = new List<ConnectedSystemObjectTypeAttribute>
+                {
+                    new()
+                    {
+                        // mimicking a system identifier for the object in a connected system.
+                        // this is intended to be unique for each object in the connected system.
+                        // we use the term "External ID" for this in Jim.
+                        Id = (int)MockAttributeName.GROUP_UID,
+                        Name = MockAttributeName.GROUP_UID.ToString(),
+                        Type = AttributeDataType.Guid,
+                        IsExternalId = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.DISPLAY_NAME,
+                        Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                        Type = AttributeDataType.Text
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.MEMBER,
+                        Name = MockAttributeName.MEMBER.ToString(),
+                        Type = AttributeDataType.Reference,
+                        AttributePlurality = AttributePlurality.MultiValued
                     }
                 }
             }

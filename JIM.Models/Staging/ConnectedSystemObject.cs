@@ -228,5 +228,10 @@ public class ConnectedSystemObject
         var attributeValue = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase));
         return attributeValue ?? null;
     }
+    
+    public List<ConnectedSystemObjectAttributeValue> GetAttributeValues(string attributeName)
+    {
+        return AttributeValues.Where(q => q.Attribute.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase)).ToList();
+    }
     #endregion
 }

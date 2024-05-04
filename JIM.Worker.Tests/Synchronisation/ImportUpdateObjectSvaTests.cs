@@ -200,7 +200,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
                     Type = AttributeDataType.Reference
                 },
                 new ()
@@ -369,7 +369,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
                     Type = AttributeDataType.Reference
                 },
                 new ()
@@ -537,7 +537,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
                     Type = AttributeDataType.Reference
                 },
                 new ()
@@ -707,7 +707,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
                     Type = AttributeDataType.Reference
                 },
                 new ()
@@ -875,7 +875,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
                     Type = AttributeDataType.Reference
                 },
                 new ()
@@ -1050,7 +1050,7 @@ public class ImportUpdateObjectSvaTests
                 new ()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
                     Type = AttributeDataType.Reference
                 },
                 new ()
@@ -1227,7 +1227,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "3" }, // employee id (external id) of cso 3
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_3_HR_ID.ToString() }, // HR_ID (external id) of cso 3
                     Type = AttributeDataType.Reference
                 },
                 new()
@@ -1304,7 +1304,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" }, // employee id (external id) of cso 1
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() }, // HR_ID (external id) of cso 1
                     Type = AttributeDataType.Reference
                 },
                 new()
@@ -2680,7 +2680,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" },
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
                     Type = AttributeDataType.Reference
                 },
                 new()
@@ -2710,7 +2710,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
-                    ReferenceValues = new List<string> { "1" }, // employee id (external id) of cso 1
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() }, // HR_ID (external id) of cso 1
                     Type = AttributeDataType.Reference
                 },
             }
@@ -2738,7 +2738,7 @@ public class ImportUpdateObjectSvaTests
         Assert.That(cso2ManagerAttribute.ReferenceValue, Is.Not.Null);
         Assert.That(cso2ManagerAttribute.ReferenceValue.Id, Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
         Assert.That(!string.IsNullOrEmpty(cso2ManagerAttribute.UnresolvedReferenceValue), "Expected the MANAGER UnresolvedReferenceValue to also be populated.");
-        Assert.That(cso2ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo("1"), "Expected the UnresolvedReference to be '1'");
+        Assert.That(cso2ManagerAttribute.UnresolvedReferenceValue, Is.EqualTo(TestConstants.CS_OBJECT_1_HR_ID.ToString()), "Expected the MANAGER UnresolvedReference to be the HR_ID of the first CSO.");
 
         // assert that our new reference is present and correct.
         var cso2CurrentCourseTutorAttribute = cso2.GetAttributeValue(MockAttributeName.CURRENT_COURSE_TUTOR.ToString());
@@ -2746,19 +2746,12 @@ public class ImportUpdateObjectSvaTests
         Assert.That(cso2CurrentCourseTutorAttribute.ReferenceValue, Is.Not.Null);
         Assert.That(cso2CurrentCourseTutorAttribute.ReferenceValue.Id, Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
         Assert.That(!string.IsNullOrEmpty(cso2CurrentCourseTutorAttribute.UnresolvedReferenceValue), "Expected the CURRENT_COURSE_TUTOR UnresolvedReferenceValue to also be populated.");
-        Assert.That(cso2CurrentCourseTutorAttribute.UnresolvedReferenceValue, Is.EqualTo("1"), "Expected the UnresolvedReference to be '1'");
+        Assert.That(cso2CurrentCourseTutorAttribute.UnresolvedReferenceValue, Is.EqualTo(TestConstants.CS_OBJECT_1_HR_ID.ToString()), "Expected the CURRENT_COURSE_TUTOR UnresolvedReference to be the HR_ID of the first CSO.");
         
         Assert.Pass();
     }
     
     // todo: test activity/run profile execution item/change object creation
-    
-    // mva:
-    // todo: add/remove int
-    // todo: add/remove datetime
-    // todo: add/remove text
-    // todo: add/remove guid
-    // todo: add/remove reference
     
     #region private methods
     private void InitialiseConnectedSystemObjectsData()
@@ -2773,7 +2766,7 @@ public class ImportUpdateObjectSvaTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = connectedSystemObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.EMPLOYEE_ID
+            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
         };
         cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -2856,7 +2849,7 @@ public class ImportUpdateObjectSvaTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = connectedSystemObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.EMPLOYEE_ID
+            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
         };
         cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -2907,7 +2900,7 @@ public class ImportUpdateObjectSvaTests
                 Id = Guid.NewGuid(),
                 ReferenceValueId = ConnectedSystemObjectsData.First().Id,
                 ReferenceValue = ConnectedSystemObjectsData.First(),
-                UnresolvedReferenceValue = "1",
+                UnresolvedReferenceValue = TestConstants.CS_OBJECT_1_HR_ID.ToString(),
                 Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.MANAGER.ToString()),
                 ConnectedSystemObject = cso2
             },
