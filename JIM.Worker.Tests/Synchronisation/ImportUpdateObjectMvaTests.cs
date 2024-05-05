@@ -116,7 +116,7 @@ public class ImportUpdateObjectMvaTests
                     Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
                     IntValues = new List<int> { 1,2,3,4,5 },
                     Type = AttributeDataType.Number
-                },
+                }
             }
         });
         
@@ -473,13 +473,63 @@ public class ImportUpdateObjectMvaTests
         Assert.Pass();
     }
     
+    // todo: create a test for when the object ids are not system-unique, but object-type unique, we have two types and two objects with the same external id value
+    // and reference one of them in a group. i.e. overlapping external id values, but differentiated by object type. Expecting this to fail.
+    // i.e.
+    // group1.externalid = 1
+    // group1.member.unresolvedreference = 1
+    // user1.externalid = 1
+    // will the group member resolve to the group, or the user? it could be either. how do we know what object type is being referenced?
+    // not an issue whilst all ids in use on objects and in references are system-unique.
+    
     [Test]
     public async Task FullImportRemoveIntMvaTestAsync()
     {
         InitialiseConnectedSystemObjectsData();
         
         // mock up a connector that will return updates for our existing connected system objects above.
-        // changes: CONTRACTED_WEEKLY_HOURS has been removed.
+        // changes: MEMBER has values removed.
+        
+        // add COMPLETED_COURSE_IDS to our CSO first
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("User", StringComparison.InvariantCultureIgnoreCase));
+        var cso1ToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
+        cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            IntValue = 1,
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            ConnectedSystemObject = cso1ToSetup
+        });
+        cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            IntValue = 2,
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            ConnectedSystemObject = cso1ToSetup
+        });
+        cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            IntValue = 3,
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            ConnectedSystemObject = cso1ToSetup
+        });
+        cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            IntValue = 4,
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            ConnectedSystemObject = cso1ToSetup
+        });
+        cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            IntValue = 5,
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            ConnectedSystemObject = cso1ToSetup
+        });
+        
+        // now build the import object, lacking some of the COMPLETED_COURSE_IDS
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
@@ -489,21 +539,15 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
-                    IntValues = new List<int> { 1 },
-                    Type = AttributeDataType.Number
-                },
-                new ()
-                {
                     Name = MockAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.START_DATE.ToString(),
-                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
-                    Type = AttributeDataType.DateTime
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
                 },
                 new ()
                 {
@@ -513,33 +557,9 @@ public class ImportUpdateObjectMvaTests
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
-                    StringValues = new List<string> { "jane.smith@phlebas.tetron.io" },
-                    Type = AttributeDataType.Text
-                },
-                new ()
-                {
-                    Name = MockAttributeName.ROLE.ToString(),
-                    StringValues = new List<string> { "Manager" },
-                    Type = AttributeDataType.Text
-                },
-                new ()
-                {
-                    Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
-                    ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
-                    Type = AttributeDataType.Binary
-                },
-                new ()
-                {
-                    Name = MockAttributeName.LOCATION_ID.ToString(),
-                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
-                    Type = AttributeDataType.Guid
-                },
-                new ()
-                {
-                    Name = MockAttributeName.LEAVER.ToString(),
-                    BoolValue = false,
-                    Type = AttributeDataType.Boolean
+                    Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
+                    IntValues = new List<int> { 1,2,3 },
+                    Type = AttributeDataType.Number
                 }
             }
         });
@@ -554,14 +574,24 @@ public class ImportUpdateObjectMvaTests
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
         // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(4), $"Expected four Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
         
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var hoursAttribute = cso1.GetAttributeValue(MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString());
-        Assert.That(hoursAttribute, Is.Null);
+        var completedCourseIdsAttributes = cso1.GetAttributeValues(MockAttributeName.COMPLETED_COURSE_IDS.ToString());
+        Assert.That(completedCourseIdsAttributes, Is.Not.Null);
+        Assert.That(completedCourseIdsAttributes.Count, Is.EqualTo(3));
+        
+        Assert.That(completedCourseIdsAttributes[0].IntValue.HasValue);
+        Assert.That(completedCourseIdsAttributes[0].IntValue.Value, Is.EqualTo(1));
+        
+        Assert.That(completedCourseIdsAttributes[1].IntValue.HasValue);
+        Assert.That(completedCourseIdsAttributes[1].IntValue.Value, Is.EqualTo(2));
+        
+        Assert.That(completedCourseIdsAttributes[2].IntValue.HasValue);
+        Assert.That(completedCourseIdsAttributes[2].IntValue.Value, Is.EqualTo(3));
         
         Assert.Pass();
     }
