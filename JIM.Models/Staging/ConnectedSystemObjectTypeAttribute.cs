@@ -40,4 +40,9 @@ public class ConnectedSystemObjectTypeAttribute
     /// Indicates if this attribute is used as a secondary identifier by the connected system, i.e. how a DN is used as such in an LDAP system.
     /// </summary>
     public bool IsSecondaryExternalId { get; set; }
+
+    public override string ToString()
+    {
+        return Name;
+    }
 }

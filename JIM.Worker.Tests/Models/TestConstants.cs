@@ -8,6 +8,7 @@ internal static class TestConstants
     internal static DateTime CS_OBJECT_1_START_DATE => DateTime.Parse("01-JAN-2010");
     internal static string CS_OBJECT_1_DISPLAY_NAME => "Jane Smith";
     
+    
     internal static Guid CS_OBJECT_2_ID = new ("21952DE7-9196-4FAD-8CC1-146B790C5611");
     internal static Guid CS_OBJECT_2_HR_ID => new ("EC9BC716-ABA9-4D49-AA1C-FA15F75E17CF");
     internal static DateTime CS_OBJECT_2_START_DATE => DateTime.Parse("10-JUL-2022");
@@ -15,12 +16,19 @@ internal static class TestConstants
     internal static DateTime CS_OBJECT_2_END_DATE_1 => DateTime.Parse("1-NOV-2040");
     internal static DateTime CS_OBJECT_2_END_DATE_2 => DateTime.Parse("1-DEC-2040");
     
+    
     internal static Guid CS_OBJECT_3_ID = new ("E09120AB-12DA-4017-A343-BE2BCE313634");
     internal static Guid CS_OBJECT_3_HR_ID => new ("64EAE461-6F28-4C6A-BD4D-8E31C889318A");
     internal static DateTime CS_OBJECT_3_START_DATE => DateTime.Parse("30-APR-2024");
     internal static string CS_OBJECT_3_DISPLAY_NAME => "Kannan Álǫf";
     internal static string CS_OBJECT_3_EMAIL => "kannan.alof@phlebas.tetron.io";
+    
+    
+    internal static Guid CS_OBJECT_4_ID = new ("46265D8B-4AC1-4313-B3C3-30203C5824DF");
+    internal static string CS_OBJECT_4_DISPLAY_NAME => "Phlebas Users";
+    internal static Guid CS_OBJECT_4_GROUP_UID => new("8E65DF97-B333-4300-B2CD-C4F524EA1D21");
 
+    
     internal static Guid LOCATION_1_ID => Guid.Parse("764C3F10-7B2D-4C1C-9012-EB41E5176267");
     internal static Guid LOCATION_2_ID => Guid.Parse("4C5D2DEA-EE4C-4D88-9A67-BEA0365E1B37");
     

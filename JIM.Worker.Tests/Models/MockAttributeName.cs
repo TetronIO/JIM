@@ -26,5 +26,5 @@ public enum MockAttributeName
     PREVIOUS_LOCATION_IDS = 22, // mva guids
     CERTIFICATES = 23, // mva byte
     GROUP_UID = 24, // sva guid
-    MEMBER = 24 // mva reference
+    MEMBER = 25 // mva reference
 }

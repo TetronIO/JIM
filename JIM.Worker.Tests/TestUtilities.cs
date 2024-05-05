@@ -153,7 +153,8 @@ public static class TestUtilities
                         Id = (int)MockAttributeName.HR_ID,
                         Name = MockAttributeName.HR_ID.ToString(),
                         Type = AttributeDataType.Guid,
-                        IsExternalId = true
+                        IsExternalId = true,
+                        Selected = true
                     },
                     new()
                     {
@@ -162,138 +163,160 @@ public static class TestUtilities
                         // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
                         Id = (int)MockAttributeName.EMPLOYEE_ID,
                         Name = MockAttributeName.EMPLOYEE_ID.ToString(),
-                        Type = AttributeDataType.Number
+                        Type = AttributeDataType.Number,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.DISPLAY_NAME,
                         Name = MockAttributeName.DISPLAY_NAME.ToString(),
-                        Type = AttributeDataType.Text
+                        Type = AttributeDataType.Text,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.EMAIL_ADDRESS,
                         Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
-                        Type = AttributeDataType.Text
+                        Type = AttributeDataType.Text,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.START_DATE,
                         Name = MockAttributeName.START_DATE.ToString(),
-                        Type = AttributeDataType.DateTime
+                        Type = AttributeDataType.DateTime,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.ROLE,
                         Name = MockAttributeName.ROLE.ToString(),
-                        Type = AttributeDataType.Text
+                        Type = AttributeDataType.Text,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.MANAGER,
                         Name = MockAttributeName.MANAGER.ToString(),
-                        Type = AttributeDataType.Reference
+                        Type = AttributeDataType.Reference,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.QUALIFICATIONS,
                         Name = MockAttributeName.QUALIFICATIONS.ToString(),
                         Type = AttributeDataType.Text,
-                        AttributePlurality = AttributePlurality.MultiValued
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.PROFILE_PICTURE_BYTES,
                         Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
-                        Type = AttributeDataType.Binary
+                        Type = AttributeDataType.Binary,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.CONTRACTED_WEEKLY_HOURS,
                         Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
-                        Type = AttributeDataType.Number
+                        Type = AttributeDataType.Number,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.LOCATION_ID,
                         Name = MockAttributeName.LOCATION_ID.ToString(),
-                        Type = AttributeDataType.Guid
+                        Type = AttributeDataType.Guid,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.END_DATE,
                         Name = MockAttributeName.END_DATE.ToString(),
-                        Type = AttributeDataType.DateTime
+                        Type = AttributeDataType.DateTime,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.LEAVER,
                         Name = MockAttributeName.LEAVER.ToString(),
-                        Type = AttributeDataType.Boolean
+                        Type = AttributeDataType.Boolean,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.COURSE_COUNT,
                         Name = MockAttributeName.COURSE_COUNT.ToString(),
-                        Type = AttributeDataType.Number
+                        Type = AttributeDataType.Number,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.COURSE_END_DATE,
                         Name = MockAttributeName.COURSE_END_DATE.ToString(),
-                        Type = AttributeDataType.DateTime
+                        Type = AttributeDataType.DateTime,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.CURRENT_COURSE_NAME,
                         Name = MockAttributeName.CURRENT_COURSE_NAME.ToString(),
-                        Type = AttributeDataType.Text
+                        Type = AttributeDataType.Text,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.CURRENT_COURSE_ID,
                         Name = MockAttributeName.CURRENT_COURSE_ID.ToString(),
-                        Type = AttributeDataType.Guid
+                        Type = AttributeDataType.Guid,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.CURRENT_COURSE_ACTIVE,
                         Name = MockAttributeName.CURRENT_COURSE_ACTIVE.ToString(),
-                        Type = AttributeDataType.Boolean
+                        Type = AttributeDataType.Boolean,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.CURRENT_COURSE_TUTOR,
                         Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
-                        Type = AttributeDataType.Reference
+                        Type = AttributeDataType.Reference,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.PROXY_ADDRESSES,
                         Name = MockAttributeName.PROXY_ADDRESSES.ToString(),
                         Type = AttributeDataType.Text,
-                        AttributePlurality = AttributePlurality.MultiValued
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.COMPLETED_COURSE_IDS,
                         Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
                         Type = AttributeDataType.Number,
-                        AttributePlurality = AttributePlurality.MultiValued
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.PREVIOUS_LOCATION_IDS,
                         Name = MockAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
                         Type = AttributeDataType.Guid,
-                        AttributePlurality = AttributePlurality.MultiValued
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.CERTIFICATES,
                         Name = MockAttributeName.CERTIFICATES.ToString(),
                         Type = AttributeDataType.Binary,
-                        AttributePlurality = AttributePlurality.MultiValued
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
                     }
                 }
             },
@@ -313,20 +336,23 @@ public static class TestUtilities
                         Id = (int)MockAttributeName.GROUP_UID,
                         Name = MockAttributeName.GROUP_UID.ToString(),
                         Type = AttributeDataType.Guid,
-                        IsExternalId = true
+                        IsExternalId = true,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.DISPLAY_NAME,
                         Name = MockAttributeName.DISPLAY_NAME.ToString(),
-                        Type = AttributeDataType.Text
+                        Type = AttributeDataType.Text,
+                        Selected = true
                     },
                     new()
                     {
                         Id = (int)MockAttributeName.MEMBER,
                         Name = MockAttributeName.MEMBER.ToString(),
                         Type = AttributeDataType.Reference,
-                        AttributePlurality = AttributePlurality.MultiValued
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
                     }
                 }
             }
