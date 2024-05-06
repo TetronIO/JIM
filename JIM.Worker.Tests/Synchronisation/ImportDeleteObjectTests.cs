@@ -23,7 +23,6 @@ public class ImportDeleteObjectTests
     private Mock<DbSet<ConnectedSystemRunProfile>> MockDbSetConnectedSystemRunProfiles { get; set; }
     private List<ConnectedSystemObjectType> ConnectedSystemObjectTypesData { get; set; } 
     private Mock<DbSet<ConnectedSystemObjectType>> MockDbSetConnectedSystemObjectTypes { get; set; }
-    // ReSharper disable once CollectionNeverUpdated.Local
     private List<ConnectedSystemPartition> ConnectedSystemPartitionsData { get; set; }
     private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; }
     private List<Activity> ActivitiesData { get; set; }
