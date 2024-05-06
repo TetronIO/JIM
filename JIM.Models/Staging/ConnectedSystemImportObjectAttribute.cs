@@ -29,5 +29,10 @@ public class ConnectedSystemImportObjectAttribute
     /// <summary>
     /// Booleans are inherently single-valued in nature. You can't distinguish multiple values.
     /// </summary>
-    public bool? BoolValue { get; set; }   
+    public bool? BoolValue { get; set; }
+
+    public override string ToString()
+    {
+        return Name;
+    }
 }

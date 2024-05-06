@@ -82,10 +82,18 @@ public class ImportDeleteObjectTests
             Id = Guid.NewGuid(),
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
-            Type = connectedSystemObjectType
+            Type = connectedSystemObjectType,
+            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
         };
         cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = TestConstants.CS_OBJECT_1_HR_ID,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                ConnectedSystemObject = cso1
+            },
             new()
             {
                 Id = Guid.NewGuid(),
@@ -117,15 +125,24 @@ public class ImportDeleteObjectTests
         };
         connectedSystemObjectData.Add(cso1);
 
+        // this one will be deleted as it won't be imported.
         var cso2 = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
-            Type = connectedSystemObjectType
+            Type = connectedSystemObjectType,
+            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
         };
         cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = TestConstants.CS_OBJECT_2_HR_ID,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                ConnectedSystemObject = cso2
+            },
             new()
             {
                 Id = Guid.NewGuid(),
@@ -185,6 +202,12 @@ public class ImportDeleteObjectTests
             {
                 new ()
                 {
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
                     Name = MockAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
@@ -209,7 +232,7 @@ public class ImportDeleteObjectTests
                 }
             }
         });
-        // Joe Bloggs is not present in the import results. The CSO should be marked for obsolescence.
+        // Joe Bloggs (cso2) is not present in the import results. The CSO should be marked for obsolescence.
         
         // now execute Jim functionality we want to test...
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
@@ -224,7 +247,7 @@ public class ImportDeleteObjectTests
         Assert.That(connectedSystemObjectData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {connectedSystemObjectData.Count}.");
         
         // inspect the user we expect to be marked for obsolescence
-        var obsoleteUser = connectedSystemObjectData.SingleOrDefault(q => q.AttributeValues.Any(a => a.Attribute.Name == MockAttributeName.EMPLOYEE_ID.ToString() && a.IntValue == 2));
+        var obsoleteUser = connectedSystemObjectData.SingleOrDefault(q => q.AttributeValues.Any(a => a.Attribute.Name == MockAttributeName.HR_ID.ToString() && a.GuidValue == TestConstants.CS_OBJECT_2_HR_ID));
         Assert.That(obsoleteUser, Is.Not.Null, "Expected to find our second user amongst the Connected System Objects.");
         Assert.That(obsoleteUser.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete), "Expected our second user to have been marked as Obsolete after dropping off the full import.");
         Assert.Pass();

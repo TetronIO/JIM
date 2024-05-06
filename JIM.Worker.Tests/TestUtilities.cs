@@ -322,7 +322,7 @@ public static class TestUtilities
             },
             new ()
             {
-                Id = 1,
+                Id = 2,
                 Name = "Group",
                 ConnectedSystemId = 1,
                 Selected = true,

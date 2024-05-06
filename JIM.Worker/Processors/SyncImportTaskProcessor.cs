@@ -152,10 +152,10 @@ public class SyncImportTaskProcessor
                         .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.IntValues);
 
-                    // create a collection with the connected system objects no longer in the connected system
+                    // create a collection with the connected system objects no longer in the connected system for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeInt.Except(connectedSystemIntExternalIdValues);
 
-                    // obsolete the connected system objects no longer in the connected system
+                    // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
                     break;
@@ -170,10 +170,10 @@ public class SyncImportTaskProcessor
                         .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
-                    // create a collection with the connected system objects no longer in the connected system
+                    // create a collection with the connected system objects no longer in the connected system for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
                     
-                    // obsolete the connected system objects no longer in the connected system
+                    // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
                     break;
@@ -188,10 +188,10 @@ public class SyncImportTaskProcessor
                         .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.GuidValues);
 
-                    // create a collection with the connected system objects no longer in the connected system
+                    // create a collection with the connected system objects no longer in the connected system for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeGuid.Except(connectedSystemGuidExternalIdValues);
                     
-                    // obsolete the connected system objects no longer in the connected system
+                    // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
                     break;

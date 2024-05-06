@@ -17,4 +17,9 @@ public class ConnectedSystemObjectType
     /// Whether an administrator has selected this object type to be managed by JIM.
     /// </summary>
     public bool Selected { get; set; }
+
+    public override string ToString()
+    {
+        return Name;
+    }
 }

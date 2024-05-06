@@ -187,7 +187,7 @@ public class ImportCreateObjectTests
                 {
                     // reference
                     Name = MockAttributeName.MANAGER.ToString(),
-                    ReferenceValues = new List<string> { "1" }
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() }
                 },
                 new ()
                 {
