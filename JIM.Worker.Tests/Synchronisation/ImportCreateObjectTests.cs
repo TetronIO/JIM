@@ -255,4 +255,6 @@ public class ImportCreateObjectTests
     }
     
     // todo: test activity/run profile execution item/change object creation
+    // todo: test object error handling and logging scenario(s)
+    // todo: test connectivity error handling and logging scenario(s)
 }

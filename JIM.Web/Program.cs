@@ -39,8 +39,7 @@ try
     await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
-    builder.Services.AddTransient<IRepository, PostgresDataRepository>();
-    builder.Services.AddTransient<JimApplication>();
+    builder.Services.AddTransient<JimApplication>(x => new JimApplication(new PostgresDataRepository(new JimDbContext())));
 
     // setup OpenID Connect (OIDC) authentication
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
@@ -56,7 +55,7 @@ try
         .AddOpenIdConnect(options =>
         {
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-            options.UseTokenLifetime = true; // use the idps token lifetime as our session lifetime
+            options.UseTokenLifetime = true; // use the IDPs token lifetime as our session lifetime
             options.Authority = authority;
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
@@ -74,7 +73,7 @@ try
     builder.Services.AddAuthorization(options =>
     {
         // require all users to be authenticated with our IdP
-        // eventually this will probably have to change so we can make some pages anonymous for things like load-balance health monitors
+        // eventually this will probably have to change, so we can make some pages anonymous for things like load-balance health monitors
         options.FallbackPolicy = options.DefaultPolicy;
     });
 

@@ -1037,13 +1037,6 @@ public class ImportUpdateObjectMvaTests
     
     // todo: test activity/run profile execution item/change object creation
     
-    // mva:
-    // todo: add/remove int
-    // todo: add/remove datetime
-    // todo: add/remove text
-    // todo: add/remove guid
-    // todo: add/remove reference
-    
     #region private methods
     private void InitialiseConnectedSystemObjectsData()
     {

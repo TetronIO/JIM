@@ -1,5 +1,4 @@
 using JIM.Application;
-using JIM.Data;
 using JIM.PostgresData;
 using Serilog;
 using Serilog.Events;
@@ -37,8 +36,7 @@ try
     // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
-    builder.Services.AddScoped<IRepository, PostgresDataRepository>();
-    builder.Services.AddScoped<JimApplication>();
+    builder.Services.AddTransient<JimApplication>(x => new JimApplication(new PostgresDataRepository(new JimDbContext())));
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);    
 
     // now setup logging with the web framework
