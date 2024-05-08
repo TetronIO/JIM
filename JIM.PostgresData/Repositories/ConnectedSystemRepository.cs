@@ -385,13 +385,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.Attribute.IsExternalId &&
                         av.StringValue != null)
                     .Select(av => av.StringValue)).ToListAsync())!;
-            
-        // return (await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
-        //     av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
-        //     av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
-        //     av.Attribute.Type == AttributeDataType.Text &&
-        //     av.Attribute.IsExternalId && 
-        //     av.StringValue != null).Select(q => q.StringValue).ToListAsync())!;
     }
     
     public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -406,13 +399,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.Attribute.IsExternalId &&
                         av.IntValue.HasValue)
                     .Select(av => av.IntValue!.Value)).ToListAsync();
-        
-        // return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
-        //     av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
-        //     av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
-        //     av.Attribute.Type == AttributeDataType.Number &&
-        //     av.Attribute.IsExternalId && 
-        //     av.IntValue.HasValue).Select(q => q.IntValue!.Value).ToListAsync();
     }
     
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -426,13 +412,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.Attribute.IsExternalId &&
                         av.GuidValue.HasValue)
                     .Select(av => av.GuidValue!.Value)).ToListAsync();
-        
-        // return await Repository.Database.ConnectedSystemObjectAttributeValues.Where(av =>
-        //     av.ConnectedSystemObject.ConnectedSystem.Id == connectedSystemId &&
-        //     av.ConnectedSystemObject.Type.Id == connectedSystemObjectTypeId &&
-        //     av.Attribute.Type == AttributeDataType.Guid &&
-        //     av.Attribute.IsExternalId && 
-        //     av.GuidValue.HasValue).Select(q => q.GuidValue!.Value).ToListAsync();
     }
     #endregion
 
