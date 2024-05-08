@@ -30,7 +30,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorSettings members
-    // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
+    // using member variables for the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private const string SettingExampleFilePath = "Example File Path";
     private const string SettingObjectTypeColumn = "Object Type Column";
     private const string SettingObjectType = "Object Type";
@@ -66,18 +66,16 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         // test that we can access the file
         var filePathSettingValue = settingValues.Single(q => q.Setting.Name == SettingExampleFilePath);
-        if (!string.IsNullOrEmpty(filePathSettingValue.StringValue))
+        if (!string.IsNullOrEmpty(filePathSettingValue.StringValue) && System.IO.File.Exists(filePathSettingValue.StringValue))
+            return response;
+        
+        // wasn't given a file path, or the path couldn't be accessed, or no file found at the path location. error!
+        var connectivityTestResult = new ConnectorSettingValueValidationResult
         {
-            if (!System.IO.File.Exists(filePathSettingValue.StringValue))
-            {
-                var connectivityTestResult = new ConnectorSettingValueValidationResult
-                {
-                    IsValid = false,
-                    ErrorMessage = $"File either doesn't exist, or it couldn't be accessed. Does '{filePathSettingValue.StringValue}' map to a Docker Volume in the docker-compose.yml file?"
-                };
-                response.Add(connectivityTestResult);
-            }
-        }
+            IsValid = false,
+            ErrorMessage = $"File path not provided, the path couldn't be accessed, or the file doesn't exist. Does '{filePathSettingValue.StringValue}' map to a Docker Volume in the docker-compose.yml file?"
+        };
+        response.Add(connectivityTestResult);
 
         return response;
     }
@@ -107,14 +105,18 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var schema = new ConnectorSchema();
 
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(settingValues, logger);
-        if (objectTypeInfo.Specifier == FileConnectorObjectTypeSpecifier.PredefinedObjectType && !string.IsNullOrEmpty(objectTypeInfo.PredefinedObjectType))
+        switch (objectTypeInfo.Specifier)
         {
-            var schemaObjectType = new ConnectorSchemaObjectType(objectTypeInfo.PredefinedObjectType);
-            schema.ObjectTypes.Add(schemaObjectType);
-        }
-        else if (objectTypeInfo.Specifier == FileConnectorObjectTypeSpecifier.ColumnBasedObjectType)
-        {
-            throw new NotSupportedException("Column-based object types are not yet supported");
+            case FileConnectorObjectTypeSpecifier.PredefinedObjectType when !string.IsNullOrEmpty(objectTypeInfo.PredefinedObjectType):
+            {
+                var schemaObjectType = new ConnectorSchemaObjectType(objectTypeInfo.PredefinedObjectType);
+                schema.ObjectTypes.Add(schemaObjectType);
+                break;
+            }
+            case FileConnectorObjectTypeSpecifier.ColumnBasedObjectType:
+                throw new NotSupportedException("Column-based object types are not yet supported");
+            default:
+                throw new ArgumentOutOfRangeException();
         }
 
         // now determine the attributes from the file headers.
@@ -122,10 +124,10 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // later, the user can refine the per-object type attribute lists.
         foreach (var schemaObjectType in schema.ObjectTypes)
         {
-            for (var i = 0; i < columnNames.Length; i++)
+            foreach (var columnName in columnNames)
             {
                 // has this attribute already been added? if it has, this indicates it's a multivalued attribute
-                var existingSchemaAttribute = schemaObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(columnNames[i], StringComparison.OrdinalIgnoreCase));
+                var existingSchemaAttribute = schemaObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
                 if (existingSchemaAttribute != null)
                 {
                     if (existingSchemaAttribute.AttributePlurality != AttributePlurality.MultiValued)
@@ -135,12 +137,12 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 }
 
                 // initially set the attributes with just a name. we'll work out their data types next.
-                schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnNames[i], AttributeDataType.NotSet, AttributePlurality.SingleValued));
+                schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnName, AttributeDataType.NotSet, AttributePlurality.SingleValued));
             }
         }
 
         // read some rows and infer the data type of the fields
-        var maxRowsToInspect = 50;
+        const int maxRowsToInspect = 50;
         var rowsInspected = 0;
         while (await reader.CsvReader.ReadAsync())
         {
@@ -196,19 +198,19 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
         var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, logger, cancellationToken);
             
-        if (runProfile.RunType == ConnectedSystemRunType.FullImport)
+        switch (runProfile.RunType)
         {
-            logger.Debug("ImportAsync: Full Import requested");
-            return await import.GetFullImportObjectsAsync();
-        }
-        else if (runProfile.RunType == ConnectedSystemRunType.DeltaImport)
-        {
-            logger.Debug("ImportAsync: Delta Import requested");
-            throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");
-        }
-        else
-        {
-            throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}");
+            case ConnectedSystemRunType.FullImport:
+                logger.Debug("ImportAsync: Full Import requested");
+                return await import.GetFullImportObjectsAsync();
+            case ConnectedSystemRunType.DeltaImport:
+                logger.Debug("ImportAsync: Delta Import requested");
+                throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");
+            case ConnectedSystemRunType.FullSynchronisation:
+            case ConnectedSystemRunType.DeltaSynchronisation:
+            case ConnectedSystemRunType.Export:
+            default:
+                throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}");
         }
     }
     #endregion
@@ -217,9 +219,9 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// <summary>
     /// Helper to simplify opening a file for reading. Takes care of file location and culture specifics.
     /// </summary>
-    private FileConnectorReader GetCsvReader(string filePath, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    private static FileConnectorReader GetCsvReader(string filePath, IReadOnlyCollection<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
-        logger.Verbose("GetCSvReader: Called.");
+        logger.Verbose("GetCsvReader: Called.");
 
         // default culture info is invariant culture. hoping this is fine for most data.
         var cultureInfo = CultureInfo.InvariantCulture;
@@ -233,8 +235,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (delimiter == null || string.IsNullOrEmpty(delimiter.StringValue))
             throw new InvalidSettingValuesException($"Missing setting value for {SettingDelimiter}.");
 
-        var config = new CsvConfiguration(CultureInfo.CurrentCulture) { Delimiter = delimiter.StringValue };
-        logger.Debug($"GetCSvReader: Attempting to read '{filePath}'.");
+        var config = new CsvConfiguration(cultureInfo) { Delimiter = delimiter.StringValue };
+        logger.Debug($"GetCsvReader: Attempting to read '{filePath}'.");
         var reader = new StreamReader(filePath);
         var csv = new CsvReader(reader, config);
         return new FileConnectorReader(reader, csv);
@@ -243,7 +245,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// <summary>
     /// Helper to make it easy to work out what type of object a row is representing.
     /// </summary>
-    private FileConnectorObjectTypeInfo GetFileConnectorObjectTypeInfo(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    private static FileConnectorObjectTypeInfo GetFileConnectorObjectTypeInfo(IReadOnlyCollection<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         logger.Verbose("GetFileConnectorObjectTypeInfo: Called.");
         var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectTypeColumn);

@@ -292,10 +292,13 @@ public class SyncImportTaskProcessor
                 activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                 continue;
             }
+            
+            // precautionary pre-processing...
+            RemoveNullImportObjectAttributes(importObject);
 
             // see if we already have a matching connected system object for this imported object within JIM
             var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
-
+            
             // is new - new cso required
             // is existing - apply any changes to the cso from the import object
             if (connectedSystemObject == null)
@@ -316,6 +319,51 @@ public class SyncImportTaskProcessor
                 connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
             }
         }
+    }
+
+    /// <summary>
+    /// It's possible the Connector has supplied some attributes with null values. These shouldn't be passed to JIM,
+    /// so as a precaution let's ensure we have only populated attributes.
+    /// </summary>
+    private static void RemoveNullImportObjectAttributes(ConnectedSystemImportObject connectedSystemImportObject)
+    {
+        var nullConnectedSystemImportObjectAttributes = new List<ConnectedSystemImportObjectAttribute>();
+        foreach (var attribute in connectedSystemImportObject.Attributes)
+        {
+            var noGuids = false;
+            var noIntegers = false;
+            var noStrings = false;
+            var noBytes = false;
+            var noReferences = false;
+            
+            // first remove any null attribute values. this might mean we'll be left with no values at all
+            attribute.GuidValues.RemoveAll(q => q.Equals(null));
+            attribute.IntValues.RemoveAll(q => q.Equals(null));
+            attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
+            attribute.ByteValues.RemoveAll(q => q.Equals(null));
+            attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
+            
+            // now work out if we're left with any values at all
+            if (attribute.GuidValues.Count == 0)
+                noGuids = true;
+            if (attribute.IntValues.Count == 0)
+                noIntegers = true;
+            if (attribute.StringValues.Count == 0)
+                noStrings = true;
+            var noBool = !attribute.BoolValue.HasValue;
+            var noDateTime = !attribute.DateTimeValue.HasValue;
+            if (attribute.ByteValues.Count == 0)
+                noBytes = true;
+            if (attribute.ReferenceValues.Count == 0)
+                noReferences = true;
+
+            // if all types of values are empty, we'll add this attribute to a list for removal
+            if (noGuids && noIntegers && noStrings && noBool && noDateTime && noBytes && noReferences)
+                nullConnectedSystemImportObjectAttributes.Add(attribute);
+        }
+
+        foreach (var nullAttribute in nullConnectedSystemImportObjectAttributes)
+            connectedSystemImportObject.Attributes.Remove(nullAttribute);
     }
 
     private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)

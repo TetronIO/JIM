@@ -254,6 +254,118 @@ public class ImportCreateObjectTests
         Assert.Pass();
     }
     
+    /// <summary>
+    /// Test whether null import object attribute values are removed by JIM on import.
+    /// This is where JIM has a degree of opinion and doesn't allow empty strings/references to be imported and instead removes them,
+    /// so they are imported as attribute deletes.
+    /// </summary>
+    [Test]
+    public async Task FullImportCreateWithNullAttributesTestAsync()
+    {
+        // set up the Connected System Objects mock. this is specific to this test
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid(); // assign the ids here, mocking what the db would do in SaveChanges()
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+        
+        // mock up a connector that will return testable data
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "user",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    // guid
+                    Name = MockAttributeName.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID }
+                },
+                new ()
+                {
+                    // int
+                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 }
+                },
+                new ()
+                {
+                    // datetime
+                    Name = MockAttributeName.START_DATE.ToString(),
+                    DateTimeValue = null
+                },
+                new ()
+                {
+                    // string
+                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME }
+                },
+                new ()
+                {
+                    // string
+                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { string.Empty }
+                },
+                new ()
+                {
+                    // string
+                    Name = MockAttributeName.ROLE.ToString(),
+                    StringValues = new List<string> { null! }
+                },
+                new ()
+                {
+                    // mva string
+                    Name = MockAttributeName.QUALIFICATIONS.ToString(),
+                    StringValues = new List<string> { "C-MNGT-101", "C-MNGT-102", null!, string.Empty }
+                },
+                new ()
+                {
+                    // boolean
+                    Name = MockAttributeName.LEAVER.ToString(),
+                    BoolValue = null
+                }
+            }
+        });
+        
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        
+        // confirm the results persisted to the mocked db context
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(1), "Expected one Connected System Object to have been persisted.");
+
+        // validate the user
+        var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
+        var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
+        
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.HR_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
+   
+        // there should be no EMAIL_ADDRESS attribute on the persisted object as it had an empty string on the imported object.
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockAttributeName.EMAIL_ADDRESS.ToString()), Is.EqualTo(0), $"Didn't expect a {MockAttributeName.EMAIL_ADDRESS} attribute.");
+        
+        // there should be no ROLE attribute on the persisted object as it had a null string on the imported object.
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockAttributeName.ROLE.ToString()), Is.EqualTo(0), $"Didn't expect a {MockAttributeName.ROLE} attribute.");
+        
+        // there should only be three QUALIFICATIONS attributes as two were null or empty on the imported object.
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockAttributeName.QUALIFICATIONS.ToString()), Is.EqualTo(2), $"Expected only two {MockAttributeName.QUALIFICATIONS} attributes.");
+        
+        // there should be no LEAVER attribute on the persisted object as it had a null value on the imported object.
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockAttributeName.LEAVER.ToString()), Is.EqualTo(0), $"Didn't expect a {MockAttributeName.LEAVER} attribute.");
+        
+        Assert.Pass();
+    }
+    
     // todo: test activity/run profile execution item/change object creation
     // todo: test object error handling and logging scenario(s)
     // todo: test connectivity error handling and logging scenario(s)

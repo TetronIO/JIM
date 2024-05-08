@@ -69,7 +69,7 @@
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">@context.Created</MudTd>
             <MudTd DataLabel="Status">@context.Status</MudTd>
-            <MudTd DataLabel="Join Type">@(Utilities.SplitOnCapitalLetters(context.JoinType.ToString()))</MudTd>
+            <MudTd DataLabel="Join Type">@context.JoinType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Date Joined">@(context.DateJoined != null ? context.DateJoined : "-")</MudTd>
         </RowTemplate>
         <NoRecordsContent>

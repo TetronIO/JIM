@@ -669,7 +669,7 @@ public class ConnectedSystemServer
                 break;
             case AttributeDataType.NotSet:
             default:
-                throw new InvalidDataException("AddChangeAttributeValueObject:  Invalid removal attribute type or null attribute value");
+                throw new InvalidDataException($"AddChangeAttributeValueObject:  Invalid removal attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' or null attribute value.");
         }
     }
 
