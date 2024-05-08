@@ -132,17 +132,19 @@
         
         @if (_syncRule.Id > 0)
         {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-5">
-                Created: @_syncRule.Created
-                @if (_syncRule.CreatedBy != null)
-                {
-                    <span> - Created By: <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">@_syncRule.CreatedBy.DisplayName</MudLink></span>
-                }
-                @if (_syncRule.LastUpdated.HasValue)
-                {
+            <div class="mt-5">
+                <MudText Class="mud-text-secondary">
+                    Created: @_syncRule.Created
+                    @if (_syncRule.CreatedBy != null)
+                    {
+                    <span> - By: <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">@_syncRule.CreatedBy.DisplayName</MudLink></span>
+                    }
+                    @if (_syncRule.LastUpdated.HasValue)
+                    {
                     <span> - Last Updated: @_syncRule.LastUpdated</span>
-                }
-            </MudText>
+                    }
+                </MudText>    
+            </div>
         }
     </MudPaper>
 
@@ -249,7 +251,9 @@
                                 Variant="Variant.Outlined">
                                 @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued).OrderBy(a => a.Name))
                                 {
-                                    <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name</MudSelectItem>
+                                    <MudSelectItem Value="@metaverseAttribute">
+                                        @metaverseAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                    </MudSelectItem>
                                 }
                             </MudSelect>
 
@@ -265,7 +269,9 @@
                                     Variant="Variant.Outlined">
                                     @foreach (var connectedSystemObjectTypeAttribute in _syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued).OrderBy(a => a.Name))
                                     {
-                                        <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != _matchingRuleMapping.TargetMetaverseAttribute.Type)">@connectedSystemObjectTypeAttribute.Name</MudSelectItem>
+                                        <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != _matchingRuleMapping.TargetMetaverseAttribute.Type)">
+                                            @connectedSystemObjectTypeAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@connectedSystemObjectTypeAttribute.Type : @connectedSystemObjectTypeAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                        </MudSelectItem>
                                     }
                                 </MudSelect>
                             }
