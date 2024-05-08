@@ -46,6 +46,9 @@ public class ConnectedSystemObjectAttributeValue
 
     public override string ToString()
     {
+        if (Attribute == null)
+            return Id.ToString();
+        
         if (!string.IsNullOrEmpty(StringValue))
             return $"{Attribute.Name}: " + StringValue;
 
