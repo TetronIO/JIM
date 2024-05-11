@@ -328,11 +328,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjects.CountAsync(q => q.ConnectedSystemId == connectedSystemId);
     }
 
-    public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId)
-    {
-        return await Repository.Database.ConnectedSystemObjects.Where(x => x.ConnectedSystem.Id == connectedSystemObjectTypeId).CountAsync();
-    }
-
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
         Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);
