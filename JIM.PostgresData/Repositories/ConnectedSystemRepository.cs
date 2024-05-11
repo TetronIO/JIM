@@ -322,6 +322,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync();
     }
+    
+    public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjects.CountAsync(q => q.ConnectedSystemId == connectedSystemId);
+    }
 
     public async Task<int> GetConnectedSystemObjectOfTypeCountAsync(int connectedSystemObjectTypeId)
     {

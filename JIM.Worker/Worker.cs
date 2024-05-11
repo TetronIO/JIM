@@ -186,13 +186,16 @@ public class Worker : BackgroundService
                                                         // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
-                                                            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
-                                                            await synchronisationImportTaskProcessor.PerformFullImportAsync();
+                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            await syncImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaImport:
                                                         case ConnectedSystemRunType.Export:
                                                         case ConnectedSystemRunType.FullSynchronisation:
+                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+                                                            break;
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
                                                             Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
                                                             break;
