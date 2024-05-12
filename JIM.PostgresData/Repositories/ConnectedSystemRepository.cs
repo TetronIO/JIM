@@ -6,6 +6,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
@@ -181,11 +182,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #endregion
 
     #region Connected System Objects
+    /// <summary>
+    /// Retrieves a page's worth of Connected System Object Headers for a specific system, with sort and range properties.
+    /// This has a max page size of 100 objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="page">Which page to return results for, i.e. 1-n.</param>
+    /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
+    /// <param name="querySortBy">What attribute to sort the results by.</param>
+    /// <param name="queryRange">What time-range of results to restrict the query to. Tightly scoping the amount improves response times.</param>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
     public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
         int connectedSystemId,
         int page,
         int pageSize,
-        int maxResults,
         QuerySortBy querySortBy = QuerySortBy.DateCreated,
         QueryRange queryRange = QueryRange.Forever)
     {
@@ -272,6 +282,71 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
+    }
+    
+    /// <summary>
+    /// Retrieves a page's worth of Connected System Objects for a specific system.
+    /// This has a max page size of 500 objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="page">Which page to return results for, i.e. 1-n.</param>
+    /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
+        int connectedSystemId,
+        int page,
+        int pageSize,
+        bool returnAttributes = false)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 500)
+            pageSize = 500;
+
+        // start building the query for all the CSOs for a particular system.
+        var query = Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues);
+        
+        // for optimum performance, do not include attributes
+        // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema
+        // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
+        if (returnAttributes)
+            query.ThenInclude(av => av.Attribute);
+
+        // add the Connected System filter
+        var objects = from cso in query.Where(q => q.ConnectedSystem.Id == connectedSystemId)
+            select cso;
+        
+        // now just add a page's worth of results filter to the query and project to a list we can return.
+        var grossCount = objects.Count();
+        var offset = (page - 1) * pageSize;
+        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
+        var pagedObjects = objects.Skip(offset).Take(itemsToGet);
+        var results = await pagedObjects.ToListAsync();
+
+        // now with all the ids we know how many total results there are and so can populate paging info
+        var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let callers try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages) 
+            return pagedResultSet;
+            
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
 
     }
 
@@ -322,10 +397,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync();
     }
-    
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>s
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
     {
-        return await Repository.Database.ConnectedSystemObjects.CountAsync(q => q.ConnectedSystemId == connectedSystemId);
+        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => cso.ConnectedSystemId == connectedSystemId);
     }
 
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
@@ -529,6 +608,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             ConnectedSystemName = Repository.Database.ConnectedSystems.Single(cs => cs.Id == rph.ConnectedSystemId).Name,
             ConnectedSystemRunProfileName = rph.Name
         }).SingleOrDefaultAsync(q => q.Id == connectedSystemRunProfileId);
+    }
+    #endregion
+    
+    #region Pending Exports
+    /// <summary>
+    /// Retrieves all the Pending Exports for a given Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public async Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+    {
+        // does not include PendingExport.AttributeValueChanges.Attributes.
+        // it's expected that the schema is retrieved separately by the caller.
+        // this is to keep the latency as low as possible for this method.
+        
+        return await Repository.Database.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
+    }
+
+    /// <summary>
+    /// Retrieves the count of how many Pending Export objects there are for a particular Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public async Task<int> GetPendingExportsCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.PendingExports.CountAsync(pe => pe.ConnectedSystemId == connectedSystemId);
     }
     #endregion
 

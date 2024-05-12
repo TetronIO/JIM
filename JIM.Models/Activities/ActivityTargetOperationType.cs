@@ -9,11 +9,11 @@ public enum ActivityTargetOperationType
     Clear = 4,
     Execute = 5,
     /// <summary>
-    /// Relates to Connected Systems
+    /// Relates to Connected Systems.
     /// </summary>
     ImportHierarchy = 6,
     /// <summary>
-    /// Relates to Connected Systems
+    /// Relates to Connected Systems.
     /// </summary>
     ImportSchema = 7
 }

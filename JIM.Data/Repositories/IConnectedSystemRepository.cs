@@ -3,6 +3,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 namespace JIM.Data.Repositories;
 
@@ -19,6 +20,17 @@ public interface IConnectedSystemRepository
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
+    /// <summary>
+    /// Retrieves all the Pending Exports for a given Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Retrieves the count of how many Pending Export objects there are for a particular Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public Task<int> GetPendingExportsCountAsync(int connectedSystemId);
     public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
@@ -28,9 +40,15 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
-    public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, int maxResults, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
+    public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, bool returnAttributes = false);
     public Task<SyncRule?> GetSyncRuleAsync(int id);
     public Task<int> GetConnectedSystemObjectCountAsync();
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>s
+    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId);
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);

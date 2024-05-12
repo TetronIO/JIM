@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Activities;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace JIM.Models.Activities;
 
 /// <summary>
 /// Not persisted.

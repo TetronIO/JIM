@@ -38,20 +38,48 @@ public class SyncFullSyncTaskProcessor
     {
         Log.Verbose("PerformFullSyncAsync: Starting");
         
-        // exports: todo
+        // what needs to happen:
+        // - confirm pending exports
+        // - establish new joins to existing Metaverse Objects
+        // - project CSO to the MV if there are no join matches and if a Sync Rule for this CS has Projection enabled.
+        // - work out if we CAN update any Metaverse Objects (where there's attribute flow) and whether we SHOULD (where there's attribute flow priority).
+        // - update the Metaverse Objects accordingly.
+        // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
         
-        // imports: confirm pending exports
-        // imports: establish new joins to existing Metaverse Objects
-        // imports: project CSO to the MV if there are no join matches and if a Sync Rule for this CS has Projection enabled.
-        // imports: work out if we CAN update any Metaverse Objects (where there's attribute flow) and whether we SHOULD (where there's attribute flow priority).
-        // imports: update the Metaverse Objects accordingly.
-        // imports: work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
+        // how many objects are we processing? that's CSO count + Pending Export Object count.
+        var totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+        var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
+        var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
+        
+        // todo: update the Activity with progress info.
         
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable time-frame
         // and to update the Activity as we go, allowing the UI to be updated and users kept informed.
-        
+
+        const int pageSize = 200;
+        var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
+        for (var i = 0; i < totalCsoPages; i++)
+        {
+            var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
+            foreach (var connectedSystemObject in csoPagedResult.Results)
+            {
+                // what kind of result do we want? we want to see:
+                // - mvo joins (list)
+                // - mvo projections (list)
+                // - cso deletions (list)
+                // - mvo deletions (list)
+                // - mvo updates (list)
+                // - mvo objects not updated (count)
+                
+                // how do we want to record this info?
+                // - as properties on the activity?
+                // - dynamically generated from run profile execution items (if possible?)
+            }
+        }
         
 
+        
+        
         await ProcessPendingExportsAsync();
         await ProcessObsoleteConnectedSystemObjectsAsync();
         await ProcessMetaverseObjectChangesAsync();

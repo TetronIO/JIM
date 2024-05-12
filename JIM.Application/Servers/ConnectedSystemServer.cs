@@ -8,8 +8,10 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Serilog;
+
 namespace JIM.Application.Servers;
 
 public class ConnectedSystemServer
@@ -436,13 +438,14 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
     }
 
-    public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page = 1, int pageSize = 20, int maxResults = 500)
+    public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page = 1, int pageSize = 20)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId,
-            page,
-            pageSize,
-            maxResults);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(connectedSystemId, page, pageSize);
+    }
+    
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page = 1, int pageSize = 20)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize);
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
@@ -468,6 +471,15 @@ public class ConnectedSystemServer
     public async Task<int> GetConnectedSystemObjectCountAsync()
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync();
+    }
+    
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>s
+    public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
     }
 
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
@@ -848,6 +860,26 @@ public class ConnectedSystemServer
             return false;
 
         return true;
+    }
+    #endregion
+    
+    #region Pending Exports
+    /// <summary>
+    /// Retrieves all the Pending Exports for a given Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public async Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+    }
+    
+    /// <summary>
+    /// Retrieves the count of how many Pending Export objects there are for a particular Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public async Task<int> GetPendingExportsCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
     }
     #endregion
 

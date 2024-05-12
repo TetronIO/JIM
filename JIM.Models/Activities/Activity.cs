@@ -4,24 +4,27 @@ namespace JIM.Models.Activities;
 
 /// <summary>
 /// Enables all activities being performed in JIM, whether user or system initiated to be tracked and logged.
-/// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being run or about
-/// to be run, then the relevant page can filter for those activities, and the same for say metaverse object updates to see when a
-/// group membership was updated, or a user created, or sync rules changed, etc.
+/// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being
+/// run or about to be run, then the relevant page can filter for those activities, and the same for say metaverse
+/// object updates to see when a group membership was updated, or a user created, or sync rules changed, etc.
 /// </summary>
 public class Activity
 {
     public Guid Id { get; set; }
 
     /// <summary>
-    /// If this activity was created by another, i.e. a workflow in response to a user action, then it'll be referenced here.
+    /// If this activity was created by another, i.e. a workflow in response to a user action, then it'll be
+    /// referenced here.
     /// </summary>
     public Guid? ParentActivityId { get; set; }
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
     
     /// <summary>
-    /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to get to a task for the activity will have an Executed time
-    /// noticeably later than the created time for the Activity. This enables you to see what the overall, user-experienced activity completion time is, and the actual system execution time.
+    /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to
+    /// get to a task for the activity will have an Executed time.
+    /// noticeably later than the created time for the Activity. This enables you to see what the overall,
+    /// user-experienced activity completion time is, and the actual system execution time.
     /// </summary>
     public DateTime Executed {  get; set; }
 
@@ -60,9 +63,9 @@ public class Activity
     /// </summary>
     public string? TargetName { get; set; }
 
-    // ----------------------------------------------------------------------------------------------------------------
+    // -----------------------------------------------------------------------------------------------------------------
     // context specific properties
-    // ----------------------------------------------------------------------------------------------------------------
+    // -----------------------------------------------------------------------------------------------------------------
 
     public int? DataGenerationTemplateId { get; set; }
 
@@ -72,7 +75,7 @@ public class Activity
 
     public Guid? MetaverseObjectId {  get; set; }
 
-    // --------------------------------------------------------
+    // -----------------------------------------------------------------------------------------------------------------
     // run profile execution related...
 
     /// <summary>
@@ -88,17 +91,18 @@ public class Activity
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
     // - result item with operation type (create/update/delete) and link to the Metaverse Object
-    // - result item with operation type (create/update/delete) and link to the Metaverse Object and json snapshot of imported/exported object
+    // - result item with operation type (create/update/delete) and link to the Metaverse Object and json snapshot
+    //   of imported/exported object
 
     public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; set; } = new();
 
-    // --------------------------------------------------------
+    // -----------------------------------------------------------------------------------------------------------------
     // object changes (created/update/delete)
     // this would apply to all object types, i.e. metaverse object, sync rules, connected systems, etc.
     // todo:
     // - json blob that contains object changes (might regret this later, but it seems quicker to get going this way)
-    // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the audit log be 
-    //   able to see sensitive attribute values? 
+    // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the
+    //   audit log be able to see sensitive attribute values? 
 
     public ActivityRunProfileExecutionItem AddRunProfileExecutionItem()
     {
