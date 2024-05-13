@@ -117,18 +117,18 @@ public class ActivityServer
     /// <summary>
     /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
     /// </summary>
-    public async Task<PagedResultSet<Activity>> GetActivitiesAsync(int page = 1, int pageSize = 20, int maxResults = 500, QuerySortBy querySortBy = QuerySortBy.DateCreated)
+    public async Task<PagedResultSet<Activity>> GetActivitiesAsync(int page = 1, int pageSize = 20, QuerySortBy querySortBy = QuerySortBy.DateCreated)
     {
-        return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, maxResults, querySortBy);
+        return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, querySortBy);
     }
 
     #region synchronisation related
     /// <summary>
     /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
     /// </summary>
-    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page = 1, int pageSize = 20, int maxResults = 500)
+    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page = 1, int pageSize = 20)
     {
-        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(activityId, page, pageSize, maxResults);
+        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(activityId, page, pageSize);
     }
 
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)

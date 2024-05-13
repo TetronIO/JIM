@@ -5,6 +5,7 @@ namespace JIM.Models.Activities;
 /// <summary>
 /// Not persisted.
 /// </summary>
+[NotMapped]
 public class ActivityRunProfileExecutionStats
 {
     public Guid ActivityId { get; set; }

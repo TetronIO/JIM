@@ -68,9 +68,10 @@ public enum ConnectedSystemImportObjectError
 
 public enum ConnectedSystemRunType
 {
-    FullImport = 0,
-    DeltaImport = 1,
-    FullSynchronisation = 2,
-    DeltaSynchronisation = 3,
-    Export = 4
+    NotSet = 0,
+    FullImport = 1,
+    DeltaImport = 2,
+    FullSynchronisation = 3,
+    DeltaSynchronisation = 4,
+    Export = 5
 }

@@ -36,7 +36,8 @@ public class ActivityRunProfileExecutionItem
     // - individual error items with detailed error info and json snapshot of exported/imported object
 
     /// <summary>
-    /// If settings allow during run execution, a JSON representation of the data imported, or exported can be accessed here for investigative purposes in the event of an error.
+    /// If settings allow during run execution, a JSON representation of the data imported, or exported can be accessed
+    /// here for investigative purposes in the event of an error.
     /// </summary>
     public string? DataSnapshot { get; set; }
 
@@ -49,8 +50,11 @@ public class ActivityRunProfileExecutionItem
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {
         // try and get an external id for the target object
-        // one should exist for updates and deletes, but isn't guaranteed for creates if the connected system is responsible for generating it and a confirming import hasn't been completed.
-        return ConnectedSystemObject != null ? ConnectedSystemObject.ExternalIdAttributeValue : ConnectedSystemObjectChange?.DeletedObjectExternalIdAttributeValue;
+        // one should exist for updates and deletes, but isn't guaranteed for creates if the connected system is
+        // responsible for generating it and a confirming import hasn't been completed.
+        return ConnectedSystemObject != null ? 
+            ConnectedSystemObject.ExternalIdAttributeValue : 
+            ConnectedSystemObjectChange?.DeletedObjectExternalIdAttributeValue;
     }
 
     public int? GetConnectedSystemId()

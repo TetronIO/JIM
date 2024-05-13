@@ -49,7 +49,7 @@ public class Activity
     /// </summary>
     public TimeSpan? TotalActivityTime { get; set; }
 
-    public ActivityStatus Status { get; set; }
+    public ActivityStatus Status { get; set; } = ActivityStatus.NotSet;
 
     public ActivityTargetType TargetType  { get; set; }
 
@@ -79,14 +79,14 @@ public class Activity
     // run profile execution related...
 
     /// <summary>
-    /// The run-profile that was created, updated, deleted or executed..
+    /// The run-profile that was created, updated, deleted or executed.
     /// </summary>
     public int? ConnectedSystemRunProfileId { get; set; }
 
     /// <summary>
     /// If the run profile has been deleted, the type of sync run this was can be accessed here still.
     /// </summary>
-    public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
+    public ConnectedSystemRunType? ConnectedSystemRunType { get; set; } = Staging.ConnectedSystemRunType.NotSet;
 
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
@@ -94,7 +94,7 @@ public class Activity
     // - result item with operation type (create/update/delete) and link to the Metaverse Object and json snapshot
     //   of imported/exported object
 
-    public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; set; } = new();
+    public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; init; } = new();
 
     // -----------------------------------------------------------------------------------------------------------------
     // object changes (created/update/delete)

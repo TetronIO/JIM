@@ -40,7 +40,6 @@ public class ActivityRepository : IActivityRepository
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page, 
         int pageSize, 
-        int maxResults,
         QuerySortBy querySortBy = QuerySortBy.DateCreated)
     {
         // todo: include referenced properties
@@ -54,10 +53,6 @@ public class ActivityRepository : IActivityRepository
         // limit page size to avoid increasing latency unnecessarily
         if (pageSize > 100)
             pageSize = 100;
-
-        // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
-        if (maxResults > 500)
-            maxResults = 500;
 
         var objects = from o in Repository.Database.Activities
                 .Include(a => a.InitiatedBy)
@@ -117,7 +112,7 @@ public class ActivityRepository : IActivityRepository
     }
 
     #region synchronisation related
-    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize, int maxResults)
+    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -128,10 +123,6 @@ public class ActivityRepository : IActivityRepository
         // limit page size to avoid increasing latency unnecessarily
         if (pageSize > 100)
             pageSize = 100;
-
-        // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
-        if (maxResults > 500)
-            maxResults = 500;
 
         var objects = from o in Repository.Database.ActivityRunProfileExecutionItems
                 .Include(a => a.ConnectedSystemObject)
