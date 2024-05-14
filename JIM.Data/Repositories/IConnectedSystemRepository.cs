@@ -31,7 +31,12 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId);
-    public Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id);
+    /// <summary>
+    /// Retrieves all the Connected System Object Types for a given Connected System.
+    /// Includes Attributes.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
+    public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
     public Task<IList<SyncRule>> GetSyncRulesAsync();

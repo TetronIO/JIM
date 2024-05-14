@@ -411,9 +411,14 @@ public class ConnectedSystemServer
     #endregion
 
     #region Connected System Object Types
-    public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
+    /// <summary>
+    /// Retrieves all the Connected System Object Types for a given Connected System.
+    /// Includes Attributes.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
+    public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
     {
-        return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(id);
+        return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
     }
     #endregion
 
@@ -443,9 +448,17 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(connectedSystemId, page, pageSize);
     }
     
-    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page = 1, int pageSize = 20)
+    /// <summary>
+    /// Retrieves a page's worth of Connected System Objects for a specific system.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="page">Which page to return results for, i.e. 1-n.</param>
+    /// <param name="pageSize">How many Connected System Objects to return in this page of result. By default it's 100.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page = 1, int pageSize = 100, bool returnAttributes = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, returnAttributes);
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)

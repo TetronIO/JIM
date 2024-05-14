@@ -32,18 +32,18 @@ namespace JIM.Api.Controllers
             return await _application.ConnectedSystems.GetConnectedSystemAsync(csid);
         }
 
-        [HttpGet("/synchronisation/connected_systems/{csid}/object_types")]
-        public async Task<IEnumerable<ConnectedSystemObjectType>?> GetConnectedSystemObjectTypesAsync(int csid)
+        [HttpGet("/synchronisation/connected_systems/{connectedSystemId}/object_types")]
+        public async Task<IEnumerable<ConnectedSystemObjectType>?> GetConnectedSystemObjectTypesAsync(int connectedSystemId)
         {
-            _logger.LogTrace($"Someone requested object types for connected system: {csid}");
-            return await _application.ConnectedSystems.GetObjectTypesAsync(csid);
+            _logger.LogTrace($"Someone requested object types for connected system: {connectedSystemId}");
+            return await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
         }
 
-        [HttpGet("/synchronisation/connected_systems/{csid}/objects/{id}")]
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int csid, Guid id)
+        [HttpGet("/synchronisation/connected_systems/{connectedSystemId}/objects/{id}")]
+        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
-            _logger.LogTrace($"Someone requested an object ({id}) connected system: {csid}");
-            return await _application.ConnectedSystems.GetConnectedSystemObjectAsync(csid, id);
+            _logger.LogTrace($"Someone requested an object ({id}) connected system: {connectedSystemId}");
+            return await _application.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
         }
 
         [HttpGet("/synchronisation/sync_rules")]

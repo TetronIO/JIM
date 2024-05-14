@@ -15,6 +15,7 @@ public class SyncFullSyncTaskProcessor
     private readonly MetaverseObject _initiatedBy;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
+    private List<ConnectedSystemObjectType>? _objectTypes;
     
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
@@ -53,6 +54,9 @@ public class SyncFullSyncTaskProcessor
         
         // todo: update the Activity with progress info.
         
+        // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
+        _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable time-frame
         // and to update the Activity as we go, allowing the UI to be updated and users kept informed.
 
@@ -63,6 +67,13 @@ public class SyncFullSyncTaskProcessor
             var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
             foreach (var connectedSystemObject in csoPagedResult.Results)
             {
+                // check for cancellation request, and stop work if cancelled.
+                if (_cancellationTokenSource.IsCancellationRequested)
+                {
+                    Log.Information("PerformFullSyncAsync: O1 Cancellation requested. Stopping.");
+                    return;
+                }
+                
                 // what kind of result do we want? we want to see:
                 // - mvo joins (list)
                 // - mvo projections (list)
@@ -71,41 +82,57 @@ public class SyncFullSyncTaskProcessor
                 // - mvo updates (list)
                 // - mvo objects not updated (count)
                 
-                // how do we want to record this info?
-                // - as properties on the activity?
-                // - dynamically generated from run profile execution items (if possible?)
+                // todo: record changes to MV objects and other Connected Systems via Pending Export objects on the Activity Run Profile Execution.
+                // todo: work out how a preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
+                
+                await ProcessConnectedSystemObjectAsync(connectedSystemObject);
             }
         }
-        
+    }
 
+    private async Task ProcessConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    {
+        Log.Verbose($"ProcessConnectedSystemObjectAsync: Performing a full sync on Connected System Object: {connectedSystemObject}.");
         
-        
-        await ProcessPendingExportsAsync();
-        await ProcessObsoleteConnectedSystemObjectsAsync();
-        await ProcessMetaverseObjectChangesAsync();
-
+        await ProcessPendingExportAsync(connectedSystemObject);
+        await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject);
+        await ProcessMetaverseObjectChangesAsync(connectedSystemObject);
     }
 
     /// <summary>
-    /// See if any Pending Export Objects can be deleted as they're no longer required. This can happen when the 
+    /// See if a Pending Export Object for a Connected System Object can be invalidated and deleted.
+    /// This would occur when the Pending Export changes are visible on the Connected System Object after a confirming import.
     /// </summary>
-    private async Task ProcessPendingExportsAsync()
+    private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject)
     {
         // todo: all of it! skipping for now.
     }
 
     /// <summary>
-    /// Enumerate CSOs marked as Obsolete and delete them, applying any joined Metaverse Object changes as necessary.
+    /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
+    /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessObsoleteConnectedSystemObjectsAsync()
+    private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
+            return;
+
+        // todo: the rest of it!
     }
 
     /// <summary>
-    /// Enumerate CSOs not marked as Obsolete and determine if Metaverse Objects need creating, or updating as a result
-    /// of Sync Rules and any existing relationships to Metaverse Objects.
+    /// Checks if the not-Obsolete CSO is joined to a Metaverse Object and updates it per any sync rules,
+    /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any sync rules.
+    /// Changes to Metaverse Objects can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessMetaverseObjectChangesAsync()
+    private async Task ProcessMetaverseObjectChangesAsync(ConnectedSystemObject connectedSystemObject)
     {
+        if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
+        {
+            Log.Warning($"ProcessMetaverseObjectChangesAsync: {connectedSystemObject} is Obsoleted. This method shouldn't have been called.");
+            return;
+        }
+        
+        // todo: the rest!
     }
 }

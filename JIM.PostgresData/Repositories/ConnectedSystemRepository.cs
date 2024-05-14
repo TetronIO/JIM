@@ -283,7 +283,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         pagedResultSet.Results.Clear();
         return pagedResultSet;
     }
-    
+
     /// <summary>
     /// Retrieves a page's worth of Connected System Objects for a specific system.
     /// This has a max page size of 500 objects.
@@ -291,6 +291,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
     public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId,
@@ -495,9 +496,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #endregion
 
     #region Connected System Object Types
-    public async Task<IList<ConnectedSystemObjectType>?> GetObjectTypesAsync(int id)
+    /// <summary>
+    /// Retrieves all the Connected System Object Types for a given Connected System.
+    /// Includes Attributes.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
+    public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
     {
-        return await Repository.Database.ConnectedSystemObjectTypes.Where(x => x.ConnectedSystem.Id == id).OrderBy(x => x.Name).ToListAsync();
+        return await Repository.Database.ConnectedSystemObjectTypes
+            .Include(q => q.Attributes)
+            .Where(x => x.ConnectedSystem.Id == connectedSystemId).OrderBy(x => x.Name)
+            .ToListAsync();
     }
 
     /// <summary>
