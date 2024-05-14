@@ -28,6 +28,9 @@ public class Activity
     /// </summary>
     public DateTime Executed {  get; set; }
 
+    /// <summary>
+    /// A link to the Metaverse Object for a user if this activity was initiated by a person.
+    /// </summary>
     public MetaverseObject? InitiatedBy { get; set; }
 
     public string? InitiatedByName { get; set; }
@@ -45,7 +48,7 @@ public class Activity
     public TimeSpan? ExecutionTime { get; set; }
 
     /// <summary>
-    /// When the 
+    /// How long did this activity take to complete from start to finish?
     /// </summary>
     public TimeSpan? TotalActivityTime { get; set; }
 
@@ -94,6 +97,9 @@ public class Activity
     // - result item with operation type (create/update/delete) and link to the Metaverse Object and json snapshot
     //   of imported/exported object
 
+     /// <summary>
+    /// If the activity TargetType is ConnectedSystemRunProfile, then these items will provide information on the objects affected by a sync run.
+    /// </summary>
     public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; init; } = new();
 
     // -----------------------------------------------------------------------------------------------------------------

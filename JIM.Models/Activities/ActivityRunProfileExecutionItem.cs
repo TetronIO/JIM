@@ -19,16 +19,22 @@ public class ActivityRunProfileExecutionItem
     public ObjectChangeType ObjectChangeType { get; set; }
 
     /// <summary>
-    /// What CSO does this sync operation item relate to?
+    /// If this was an import operation, what CSO does this sync operation item relate to?
     /// Note: If the change was a delete, then there will be no CSO to reference.
     /// </summary>
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
     /// <summary>
-    /// What changes, if any were made to the connected system object in question?
+    /// If this was an import operation, what changes, if any were made to the Connected System Object in question?
     /// This needs populating for update and delete scenarios.
     /// </summary>
     public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
+
+    /// <summary>
+    /// If this is a full/delta synchronisation operation, what changes, if any were made to a joined Metaverse Object?
+    /// This needs populating for update and delete scenarios.
+    /// </summary>
+    public MetaverseObjectChange? MetaverseObjectChange { get; set; }
 
     // errors:
     // two-tiers of error logging, depending on system settings:
