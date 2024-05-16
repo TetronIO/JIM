@@ -1,4 +1,5 @@
-﻿using JIM.Models.Enums;
+﻿using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Activities;

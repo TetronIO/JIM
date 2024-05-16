@@ -53,6 +53,11 @@ public class Activity
     public TimeSpan? TotalActivityTime { get; set; }
 
     public ActivityStatus Status { get; set; } = ActivityStatus.NotSet;
+    
+    /// <summary>
+    /// Enables the user to be kept abrest of what is going on as part of this Activity.
+    /// </summary>
+    public string? Message { get; set; }
 
     public ActivityTargetType TargetType  { get; set; }
 
@@ -65,6 +70,16 @@ public class Activity
     /// Note: Not all objects will have to support a name, so it's optional.
     /// </summary>
     public string? TargetName { get; set; }
+    
+    /// <summary>
+    /// Used to calculate a progress bar.
+    /// </summary>
+    public int ObjectsToProcess { get; set; }
+    
+    /// <summary>
+    /// Used to calculate a progress bar.
+    /// </summary>
+    public int ObjectsProcessed { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // context specific properties

@@ -104,6 +104,15 @@ public class ActivityServer
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
+    /// <summary>
+    /// Updates the message on an Activity.
+    /// </summary>
+    public async Task UpdateActivityMessageAsync(Activity activity, string message)
+    {
+        activity.Message = message;
+        await UpdateActivityAsync(activity);
+    }
+
     public async Task DeleteActivityAsync(Activity activity)
     {
         await Application.Repository.Activity.DeleteActivityAsync(activity);

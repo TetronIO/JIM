@@ -46,13 +46,13 @@ public class SyncFullSyncTaskProcessor
         // - work out if we CAN update any Metaverse Objects (where there's attribute flow) and whether we SHOULD (where there's attribute flow priority).
         // - update the Metaverse Objects accordingly.
         // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
+
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing...");
         
         // how many objects are we processing? that's CSO count + Pending Export Object count.
         var totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
         var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
         var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
-        
-        // todo: update the Activity with progress info.
         
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
@@ -62,6 +62,7 @@ public class SyncFullSyncTaskProcessor
 
         const int pageSize = 200;
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects...");
         for (var i = 0; i < totalCsoPages; i++)
         {
             var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
@@ -84,6 +85,8 @@ public class SyncFullSyncTaskProcessor
                 
                 // todo: record changes to MV objects and other Connected Systems via Pending Export objects on the Activity Run Profile Execution.
                 // todo: work out how a preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
+                // thinking about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
+                // so the same code stack can be used.
                 
                 await ProcessConnectedSystemObjectAsync(connectedSystemObject);
             }
@@ -106,6 +109,7 @@ public class SyncFullSyncTaskProcessor
     private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject)
     {
         // todo: all of it! skipping for now.
+        Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
     }
 
     /// <summary>
@@ -116,8 +120,17 @@ public class SyncFullSyncTaskProcessor
     {
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
             return;
+        
+        Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Executing for: {connectedSystemObject}.");
 
-        // todo: the rest of it!
+        // - if not joined, delete the cso
+        // - if joined:
+        //   - if the metaverse object should be deleted (determined by mv object deletion rules):
+        //     - should any other connected system objects be deleted?
+        //   - if the metaverse object shouldn't be deleted:
+        //     - should any cso-contributed mvo attributes be removed?
+        
+        //if (connectedSystemObject.JoinType == )
     }
 
     /// <summary>
@@ -127,6 +140,7 @@ public class SyncFullSyncTaskProcessor
     /// </summary>
     private async Task ProcessMetaverseObjectChangesAsync(ConnectedSystemObject connectedSystemObject)
     {
+        Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
         {
             Log.Warning($"ProcessMetaverseObjectChangesAsync: {connectedSystemObject} is Obsoleted. This method shouldn't have been called.");
