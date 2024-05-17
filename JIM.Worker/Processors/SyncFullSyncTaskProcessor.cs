@@ -163,7 +163,8 @@ public class SyncFullSyncTaskProcessor
         }
         else
         {
-            // joiner, determine Metaverse and onward CSO impact.
+            // todo: joiner, determine Metaverse and onward CSO impact.
+            throw new NotImplementedException("Deleting joined CSOs is not yet supported.");
         }
     }
 
@@ -176,10 +177,7 @@ public class SyncFullSyncTaskProcessor
     {
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
-        {
-            Log.Warning($"ProcessMetaverseObjectChangesAsync: {connectedSystemObject} is Obsoleted. This method shouldn't have been called.");
             return;
-        }
         
         // todo: the rest!
     }
