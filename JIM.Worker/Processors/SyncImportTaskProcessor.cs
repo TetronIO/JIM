@@ -267,55 +267,68 @@ public class SyncImportTaskProcessor
         {
             // this will store the detail for the import object that will persist in the history for the run
             var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
-
-            // validate the results.
-            // are any of the attribute values duplicated? stop processing if so
-            var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.InvariantCultureIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
-            if (duplicateAttributeNames is { Count: > 0 })
-            {
-                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
-                activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
-
-                // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
-                continue;
-            }
-
-            // is this a new, or existing object for the Connected System within JIM?
-            // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
-
-            // match the string object type to a name of an object type in the schema…
-            var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
-            if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
-            {
-                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
-                activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
-                continue;
-            }
             
-            // precautionary pre-processing...
-            RemoveNullImportObjectAttributes(importObject);
-
-            // see if we already have a matching connected system object for this imported object within JIM
-            var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
-            
-            // is new - new cso required
-            // is existing - apply any changes to the cso from the import object
-            if (connectedSystemObject == null)
+            try
             {
-                activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
-                connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
+                // validate the results.
+                // are any of the attribute values duplicated? stop processing if so
+                var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.InvariantCultureIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
+                if (duplicateAttributeNames is { Count: > 0 })
+                {
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
+                    activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
+
+                    // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                    continue;
+                }
+
+                // is this a new, or existing object for the Connected System within JIM?
+                // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
+
+                // match the string object type to a name of an object type in the schema…
+                var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+                if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
+                {
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
+                    activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                    continue;
+                }
                 
-                // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
-                if (connectedSystemObject != null)
-                    connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+                // precautionary pre-processing...
+                RemoveNullImportObjectAttributes(importObject);
+
+                // see if we already have a matching connected system object for this imported object within JIM
+                var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
+                
+                // is new - new cso required
+                // is existing - apply any changes to the cso from the import object
+                if (connectedSystemObject == null)
+                {
+                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
+                    connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
+                    
+                    // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
+                    if (connectedSystemObject != null)
+                        connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+                }
+                else
+                {
+                    // existing connected system object - update from import object if necessary
+                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
+                    activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                    UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
+                    connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+                }
             }
-            else
+            catch (Exception e)
             {
-                // existing connected system object - update from import object if necessary
-                activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
-                activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
-                connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+                // log the unhandled exception to the run profile execution item, so admins can see the error via a client.
+                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+                activityRunProfileExecutionItem.ErrorMessage = e.Message;
+                activityRunProfileExecutionItem.ErrorStackTrace = e.StackTrace;
+            
+                // still perform system logging.
+                Log.Error(e, $"ProcessImportObjectsAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing import object {importObject}.");
             }
         }
     }
