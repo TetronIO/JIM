@@ -25,7 +25,7 @@ public class ConnectedSystemObjectChange
 
     /// <summary>
     /// What Connected System Object does this change relate to?
-    /// Will be null if the operation was DELETE.
+    /// Will be null if the change type was DELETE.
     /// </summary>
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 

@@ -159,9 +159,7 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.MetaverseObject == null)
         {
             // not a joiner, delete the CSO.
-            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
-            
-            // todo: change and item updates
+            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
         }
         else
         {

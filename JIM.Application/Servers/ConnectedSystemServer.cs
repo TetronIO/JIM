@@ -423,9 +423,30 @@ public class ConnectedSystemServer
     #endregion
 
     #region Connected System Objects
-    public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    /// <summary>
+    /// Deletes a Connected System Object, and it's attribute values from a Connected System.
+    /// Also prepares a Connected System Object Change for persistence with the activityRunProfileExecutionItem by the caller.  
+    /// </summary>
+    public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
+        
+        // create a change object for this deletion
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+            ConnectedSystemObject = connectedSystemObject,
+            ChangeType = ObjectChangeType.Delete,
+            ChangeTime = DateTime.UtcNow,
+            DeletedObjectType = connectedSystemObject.Type,
+            DeletedObjectExternalIdAttributeValue = connectedSystemObject.ExternalIdAttributeValue,
+            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+        };
+
+        // the change object will be persisted with the activity run profile execution item further up the stack.
+        // we just need to associate the change with the execution item.
+        // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
+        activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
     }
     
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -500,18 +521,21 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
     }
 
+    /// <summary>
+    /// Creates a single Connected System Object and appends a Change Object to the Activity Run Profile Execution Item.
+    /// </summary>
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
-        // persist the cso first, so there's something to reference when persisting attribute values later
+        // persist the cso first.
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
         
         // add a change object to the run profile execution item, so the change is logged.
-        // it will be persisted higher up the calling stack as part of the activity.
+        // it will be persisted higher up the calling stack as part of the Activity and its Activity Run Profile Execution Items.
         AddConnectedSystemObjectChange(connectedSystemObject, activityRunProfileExecutionItem);
     }
 
     /// <summary>
-    /// Bulk persists ConnectedSystemObjects and creates a corresponding change object for it as part of the activity.
+    /// Bulk persists Connected System Objects and appends a Change Object to the Activity Run Profile Execution Item.
     /// </summary>
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
     {
@@ -530,7 +554,7 @@ public class ConnectedSystemServer
     }
     
     /// <summary>
-    /// Bulk persists ConnectedSystemObject changes and creates a corresponding change object for it as part of the activity.
+    /// Bulk persists Connected System Object updates and appends a Change Object to the Activity Run Profile Execution Item for each one.
     /// </summary>
     public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
     {
@@ -548,6 +572,9 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
     }
 
+    /// <summary>
+    /// Adds a Change Object to a Run Profile Execution Item for a CSO that's being created.
+    /// </summary>
     private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
         // now populate the Connected System Object Change Object with the cso attribute values.
@@ -567,6 +594,9 @@ public class ConnectedSystemServer
             AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
     }
 
+    /// <summary>
+    /// Adds a Change object to a Un Profile Execution Item for a CSO that's being updated.
+    /// </summary>
     private static void ProcessConnectedSystemObjectAttributeValueChanges(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
         if (connectedSystemObject == null)
@@ -622,8 +652,6 @@ public class ConnectedSystemServer
             AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
         }
         
-        // don't persist the activity run profile execution, let that be done further up the stack in bulk for efficiency.
-
         // we can now reset the pending attribute value lists
         connectedSystemObject.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
         connectedSystemObject.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();

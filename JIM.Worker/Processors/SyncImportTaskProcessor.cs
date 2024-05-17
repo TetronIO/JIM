@@ -54,6 +54,7 @@ public class SyncImportTaskProcessor
         var externalIdsImported = new List<ExternalIdPair>();
         var totalObjectsImported = 0;
             
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Performing import");
         switch (_connector)
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
@@ -113,13 +114,18 @@ public class SyncImportTaskProcessor
         // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0)
+        {
+            await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
             await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
+        }
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
         await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
-        // now persist all CSOs which will also create the required change objects within the activity tree.
+        // now persist all CSOs which will also create the required Change Objects within the Activity.
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Persisting changes");
         await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
         await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
 
