@@ -46,7 +46,7 @@ public class ConnectedSystemObjectChange
     public List<ConnectedSystemObjectChangeAttribute> AttributeChanges { get; set; } = new();
 
     /// <summary>
-    /// If the objectr was deleted, the object type will be copied here to make it possible to identify what type of object was deleted.
+    /// If the object was deleted, the object type will be copied here to make it possible to identify what type of object was deleted.
     /// </summary>
     public ConnectedSystemObjectType? DeletedObjectType { get; set; }
 

@@ -8,5 +8,6 @@ public enum ActivityRunProfileExecutionItemErrorType
     MissingExternalIdAttributeValue,
     UnexpectedAttribute,
     UnresolvedReference,
-    UnsupportedExternalIdAttributeType
+    UnsupportedExternalIdAttributeType,
+    UnhandledError,
 }

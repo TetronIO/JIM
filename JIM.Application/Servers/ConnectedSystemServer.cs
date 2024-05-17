@@ -423,6 +423,11 @@ public class ConnectedSystemServer
     #endregion
 
     #region Connected System Objects
+    public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    {
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
+    }
+    
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, connectedSystemObjectTypeId);
@@ -545,13 +550,14 @@ public class ConnectedSystemServer
 
     private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
-        // now populate the connect system object change object with the cso attribute values
-        // create a change object we can add attribute changes to
+        // now populate the Connected System Object Change Object with the cso attribute values.
+        // create a change object we can add attribute changes to.
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Create,
+            ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
         };
@@ -585,6 +591,7 @@ public class ConnectedSystemServer
             ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Update,
+            ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
         };
 

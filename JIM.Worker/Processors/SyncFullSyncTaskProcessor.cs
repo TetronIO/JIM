@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -13,7 +14,7 @@ public class SyncFullSyncTaskProcessor
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly MetaverseObject _initiatedBy;
-    private readonly JIM.Models.Activities.Activity _activity;
+    private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private List<ConnectedSystemObjectType>? _objectTypes;
     
@@ -23,7 +24,7 @@ public class SyncFullSyncTaskProcessor
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         MetaverseObject initiatedBy,
-        JIM.Models.Activities.Activity activity,
+        Activity activity,
         CancellationTokenSource cancellationTokenSource)
     {
         _jim = jimApplication;
@@ -47,12 +48,16 @@ public class SyncFullSyncTaskProcessor
         // - update the Metaverse Objects accordingly.
         // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing...");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing");
         
         // how many objects are we processing? that's CSO count + Pending Export Object count.
+        // update the activity with this info so a progress bar can be shown.
         var totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
         var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
         var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
+        _activity.ObjectsToProcess = totalObjectsToProcess;
+        _activity.ObjectsProcessed = 0;
+        await _jim.Activities.UpdateActivityAsync(_activity);
         
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
@@ -62,7 +67,7 @@ public class SyncFullSyncTaskProcessor
 
         const int pageSize = 200;
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects...");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
         for (var i = 0; i < totalCsoPages; i++)
         {
             var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
@@ -89,6 +94,9 @@ public class SyncFullSyncTaskProcessor
                 // so the same code stack can be used.
                 
                 await ProcessConnectedSystemObjectAsync(connectedSystemObject);
+                
+                _activity.ObjectsProcessed++;
+                await _jim.Activities.UpdateActivityAsync(_activity);
             }
         }
     }
@@ -97,16 +105,34 @@ public class SyncFullSyncTaskProcessor
     {
         Log.Verbose($"ProcessConnectedSystemObjectAsync: Performing a full sync on Connected System Object: {connectedSystemObject}.");
         
-        await ProcessPendingExportAsync(connectedSystemObject);
-        await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject);
-        await ProcessMetaverseObjectChangesAsync(connectedSystemObject);
+        // we'll track all results to MVO and CSOs, both good and bad using an Activity Run Profile Execution Item. 
+        var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+
+        // catch any per-object errors and log with the Run Profile Execution Item.
+        try
+        {
+            await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
+            await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+            await ProcessMetaverseObjectChangesAsync(connectedSystemObject, runProfileExecutionItem);
+        }
+        catch (Exception e)
+        {
+            // log the unhandled exception to the run profile execution item, so admins can see the error via a client.
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+            runProfileExecutionItem.ErrorMessage = e.Message;
+            runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+            
+            // still perform system logging.
+            Log.Error(e, $"ProcessConnectedSystemObjectAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing {connectedSystemObject}.");
+        }
     }
 
     /// <summary>
     /// See if a Pending Export Object for a Connected System Object can be invalidated and deleted.
     /// This would occur when the Pending Export changes are visible on the Connected System Object after a confirming import.
     /// </summary>
-    private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject)
+    private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         // todo: all of it! skipping for now.
         Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
@@ -116,7 +142,7 @@ public class SyncFullSyncTaskProcessor
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
             return;
@@ -129,8 +155,18 @@ public class SyncFullSyncTaskProcessor
         //     - should any other connected system objects be deleted?
         //   - if the metaverse object shouldn't be deleted:
         //     - should any cso-contributed mvo attributes be removed?
-        
-        //if (connectedSystemObject.JoinType == )
+
+        if (connectedSystemObject.MetaverseObject == null)
+        {
+            // not a joiner, delete the CSO.
+            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
+            
+            // todo: change and item updates
+        }
+        else
+        {
+            // joiner, determine Metaverse and onward CSO impact.
+        }
     }
 
     /// <summary>
@@ -138,7 +174,7 @@ public class SyncFullSyncTaskProcessor
     /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any sync rules.
     /// Changes to Metaverse Objects can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessMetaverseObjectChangesAsync(ConnectedSystemObject connectedSystemObject)
+    private async Task ProcessMetaverseObjectChangesAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)

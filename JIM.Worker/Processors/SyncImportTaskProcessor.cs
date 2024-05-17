@@ -7,7 +7,6 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
-using CsvHelper;
 using JIM.Worker.Models;
 
 namespace JIM.Worker.Processors;
@@ -226,7 +225,7 @@ public class SyncImportTaskProcessor
         
         // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
-        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
+        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         
         // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.

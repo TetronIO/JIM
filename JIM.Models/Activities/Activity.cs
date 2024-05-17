@@ -127,11 +127,22 @@ public class Activity
 
     public ActivityRunProfileExecutionItem AddRunProfileExecutionItem()
     {
+        var activityRunProfileExecutionItem = PrepareRunProfileExecutionItem();
+        RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
+        return activityRunProfileExecutionItem;
+    }
+    
+    /// <summary>
+    /// Prepares a Run Profile Execution Item that relates to the Activity, but has not yet been added to it.
+    /// This enables items to be prepared, but a decision on whether to persist it or not can come later at the
+    /// callers' discretion.
+    /// </summary>
+    public ActivityRunProfileExecutionItem PrepareRunProfileExecutionItem()
+    {
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem {
             Activity = this,
             ActivityId = Id
         };
-        RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
         return activityRunProfileExecutionItem;
     }
 }

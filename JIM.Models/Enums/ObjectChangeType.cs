@@ -5,5 +5,6 @@ public enum ObjectChangeType
     NotSet,
     Create,
     Update,
+    Obsolete,
     Delete
 }

@@ -4,6 +4,9 @@ using JIM.Models.Staging;
 
 namespace JIM.Models.Activities;
 
+/// <summary>
+/// Tracks changed made to CSOs and MVOs as a result of a Sync Run Profile being executed.
+/// </summary>
 public class ActivityRunProfileExecutionItem
 {
     public Guid Id { get; set; }
@@ -32,8 +35,8 @@ public class ActivityRunProfileExecutionItem
     public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
 
     /// <summary>
-    /// If this is a full/delta synchronisation operation, what changes, if any were made to a joined Metaverse Object?
-    /// This needs populating for update and delete scenarios.
+    /// If this is a full/delta sync run profile execution, what changes, if any were made to a joined Metaverse Object?
+    /// This needs populating for project, join, update and delete scenarios.
     /// </summary>
     public MetaverseObjectChange? MetaverseObjectChange { get; set; }
 

@@ -1,5 +1,4 @@
-﻿using System.Security.Cryptography;
-using JIM.Data.Repositories;
+﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
@@ -182,6 +181,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #endregion
 
     #region Connected System Objects
+    public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    {
+        Repository.Database.ConnectedSystemObjects.Remove(connectedSystemObject);
+        await Repository.Database.SaveChangesAsync();
+    }
+    
     /// <summary>
     /// Retrieves a page's worth of Connected System Object Headers for a specific system, with sort and range properties.
     /// This has a max page size of 100 objects.

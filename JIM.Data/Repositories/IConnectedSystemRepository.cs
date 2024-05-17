@@ -79,6 +79,7 @@ public interface IConnectedSystemRepository
     public Task UpdateSyncRuleAsync(SyncRule syncRule);
 
 
+    public Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
     public Task DeleteAllConnectedSystemObjectsAsync(int connectedSystemId, bool deleteAllConnectedSystemObjectChangeObjects);
     public void DeleteAllPendingExportObjects(int connectedSystemId);
     public Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
