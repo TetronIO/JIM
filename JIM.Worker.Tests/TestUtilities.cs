@@ -364,7 +364,7 @@ public static class TestUtilities
         return new List<ConnectedSystemPartition>();
     }
 
-    public static List<Activity> GetActivityData(ConnectedSystemRunType connectedSystemRunType)
+    public static List<Activity> GetActivityData(ConnectedSystemRunType connectedSystemRunType, int runProfileId)
     {
         return new List<Activity>
         {
@@ -373,6 +373,7 @@ public static class TestUtilities
                 Id = Guid.NewGuid(),
                 TargetName = $"Mock {connectedSystemRunType.ToString().SplitOnCapitalLetters()} Execution",
                 Status = ActivityStatus.InProgress,
+                ConnectedSystemRunProfileId = runProfileId,
                 ConnectedSystemRunType = connectedSystemRunType,
                 InitiatedBy = GetInitiatedBy(),
                 InitiatedByName = "Joe Bloggs"

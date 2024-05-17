@@ -54,7 +54,8 @@ public class ImportCreateObjectTests
         MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
         
         // set up the activity mock
-        ActivitiesData = TestUtilities.GetActivityData(ConnectedSystemRunType.FullImport);
+        var fullImportRunProfile = ConnectedSystemRunProfilesData[0];
+        ActivitiesData = TestUtilities.GetActivityData(fullImportRunProfile.RunType, fullImportRunProfile.Id);
         MockDbSetActivities = ActivitiesData.AsQueryable().BuildMockDbSet();
         
         // mock entity framework calls to use our data sources above
@@ -219,7 +220,6 @@ public class ImportCreateObjectTests
         // validate the first user (who is a manager)
         var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
         var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
-        
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.HR_ID, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockAttributeName.START_DATE, ConnectedSystemObjectTypesData);
@@ -246,9 +246,6 @@ public class ImportCreateObjectTests
         Assert.That(managerAttribute, Is.Not.Null, "Expected the MANAGER attribute to not be null.");
         Assert.That(managerAttribute.ReferenceValue, Is.Not.Null, "Expected the MANAGER reference value not to be null.");
         Assert.That(!string.IsNullOrEmpty(managerAttribute.UnresolvedReferenceValue), "Expected the MANAGER UnresolvedReferenceValue to also be populated.");
-        // can't test this, Entity Framework code that sets these values is being overriden as part of testing.
-        //Assert.That(managerAttribute.ReferenceValueId.HasValue, "Expected the MANAGER reference value id not to be null"); 
-        //Assert.That(managerAttribute.ReferenceValueId.Value, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference valid id to be the same as the first object id.");
         Assert.That(managerAttribute.ReferenceValue.Id, Is.EqualTo(firstPersistedConnectedSystemObject.Id), "Expected the MANAGER reference object id to match the id of the first object.");
         
         Assert.Pass();

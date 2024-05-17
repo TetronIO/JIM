@@ -2,9 +2,10 @@
 
 public enum ActivityTargetType
 {
-    DataGenerationTemplate = 0,
-    ConnectedSystem = 1,
-    ConnectedSystemRunProfile = 2,
-    SyncRule = 3,    
-    MetaverseObject = 4
+    NotSet = 0,
+    DataGenerationTemplate = 1,
+    ConnectedSystem = 2,
+    ConnectedSystemRunProfile = 3,
+    SyncRule = 4,
+    MetaverseObject = 5
 }

@@ -55,11 +55,11 @@ public class Activity
     public ActivityStatus Status { get; set; } = ActivityStatus.NotSet;
     
     /// <summary>
-    /// Enables the user to be kept abrest of what is going on as part of this Activity.
+    /// Enables the user to be kept abreast of what is going on as part of this Activity.
     /// </summary>
     public string? Message { get; set; }
 
-    public ActivityTargetType TargetType  { get; set; }
+    public ActivityTargetType TargetType { get; init; } = ActivityTargetType.NotSet;
 
     public ActivityTargetOperationType TargetOperationType { get; set; }
 

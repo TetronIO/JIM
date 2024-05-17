@@ -54,7 +54,8 @@ public class ImportDeleteObjectTests
         MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
         
         // set up the activity mock
-        ActivitiesData = TestUtilities.GetActivityData(ConnectedSystemRunType.FullImport);
+        var fullImportRunProfile = ConnectedSystemRunProfilesData[0];
+        ActivitiesData = TestUtilities.GetActivityData(fullImportRunProfile.RunType, fullImportRunProfile.Id);
         MockDbSetActivities = ActivitiesData.AsQueryable().BuildMockDbSet();
         
         // mock entity framework calls to use our data sources above
