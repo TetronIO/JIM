@@ -39,7 +39,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
-    public Task<IList<SyncRule>> GetSyncRulesAsync();
+    public Task<List<SyncRule>> GetSyncRulesAsync();
+    /// <summary>
+    /// Retrieves all the sync rules for a given Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
+    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules);
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();

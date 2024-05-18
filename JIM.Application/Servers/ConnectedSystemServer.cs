@@ -932,9 +932,19 @@ public class ConnectedSystemServer
     #endregion
 
     #region Sync Rules
-    public async Task<IList<SyncRule>> GetSyncRulesAsync()
+    public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
+    }
+
+    /// <summary>
+    /// Retrieves all the sync rules for a given Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
+    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
+    {
+        return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules);
     }
 
     public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()

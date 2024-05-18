@@ -2,6 +2,7 @@ using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using Serilog;
 
@@ -17,6 +18,8 @@ public class SyncFullSyncTaskProcessor
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private List<ConnectedSystemObjectType>? _objectTypes;
+    private List<SyncRule>? _syncRules;
+    private bool _haveSyncRules;
     
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
@@ -58,6 +61,10 @@ public class SyncFullSyncTaskProcessor
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityAsync(_activity);
+        
+        // get all the active sync rules for this system
+        _syncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+        _haveSyncRules = _syncRules is { Count: > 0 };
         
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
@@ -107,13 +114,15 @@ public class SyncFullSyncTaskProcessor
         
         // we'll track all results to MVO and CSOs, both good and bad using an Activity Run Profile Execution Item. 
         var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-
-        // catch any per-object errors and log with the Run Profile Execution Item.
+        
         try
         {
             await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
             await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
-            await ProcessMetaverseObjectChangesAsync(connectedSystemObject, runProfileExecutionItem);
+            
+            // look for Metaverse Object updates. requires we have sync rules.
+            if (_haveSyncRules)
+                await ProcessMetaverseObjectChangesAsync(connectedSystemObject, runProfileExecutionItem);
         }
         catch (Exception e)
         {
@@ -178,7 +187,28 @@ public class SyncFullSyncTaskProcessor
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
+        if (_syncRules == null || _syncRules.Count == 0)
+            return;
         
-        // todo: the rest!
+        // do we need to join, or project the CSO to the Metaverse?
+        if (connectedSystemObject.MetaverseObject == null)
+        {
+            // CSO is not joined to a Metaverse Object.
+            // inspect sync rules to determine if we have any join or projection requirements.
+            // join takes priority.
+
+            // enumerate all sync rules that have matching rules. first to match wins. 
+            // for more deterministic results, admins should make sure a user is only in scope of a single matching
+            // sync rule at any one time, that way the single sync rule matching rule priority order is law.
+            foreach (var matchingSyncRule in _syncRules.Where(sr => sr.ObjectMatchingRules.Count > 0))
+            {
+                
+            }
+        }
+        else
+        {
+            // CSO is already joined to a Metaverse Object
+            // inspect sync rules for any necessary attribute flow updates.
+        }
     }
 }

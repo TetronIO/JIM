@@ -14,7 +14,7 @@ public class SyncRule: IValidated
         
     public string Name { get; set; } = null!;
         
-    public DateTime Created { get; set; } = DateTime.UtcNow;
+    public DateTime Created { get; } = DateTime.UtcNow;
 
     public MetaverseObject? CreatedBy { get; set; }
         
@@ -80,7 +80,7 @@ public class SyncRule: IValidated
 
     /// <summary>
     /// Contains all the logic that determines which Metaverse objects should be exported to the Connected System.
-    /// No rules means that all objects of the Metaverse Object Type will be in scope of an outbound sync rule.
+    /// No rules mean that all objects of the Metaverse Object Type will be in scope of an outbound sync rule.
     /// </summary>
     public List<SyncRuleScopingCriteriaGroup> ObjectScopingCriteriaGroups { get; set; } = new();
 

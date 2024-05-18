@@ -652,9 +652,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #endregion
 
     #region Sync Rules
-    public async Task<IList<SyncRule>> GetSyncRulesAsync()
+    public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
         return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
+    }
+    
+    /// <summary>
+    /// Retrieves all the sync rules for a given Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
+    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
+    {
+        if (includeDisabledSyncRules)
+            return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystem.Id == connectedSystemId).ToListAsync();
+        
+        return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystem.Id == connectedSystemId && sr.Enabled).ToListAsync();
     }
 
     public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
