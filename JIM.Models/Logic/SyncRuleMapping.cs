@@ -36,12 +36,12 @@ public class SyncRuleMapping
     public int? Order { get; set; }
 
     /// <summary>
-    /// A link to the parent SynchronisationRule for when this is an AttributeFlow type SyncRuleMapping.
+    /// A backlink to the parent SynchronisationRule for when this is an AttributeFlow type SyncRuleMapping.
     /// </summary>
     public SyncRule? AttributeFlowSynchronisationRule { get; set; }
 
     /// <summary>
-    /// A link to the parent SynchronisationRule for when this is an ObjectMatching type SyncRuleMapping.
+    /// A backlink to the parent SynchronisationRule for when this is an ObjectMatching type SyncRuleMapping.
     /// </summary>
     public SyncRule? ObjectMatchingSynchronisationRule { get; set; }
 
@@ -55,14 +55,14 @@ public class SyncRuleMapping
     /// Supported scenarios:
     /// - Just one: for mapping a single attribute to the target attribute. i.e. attribute_1 => attribute
     /// - Just one: for using a single function to generate a value for the target attribute, i.e. Trim(attribute) => attribute
-    /// - Just one: for using an expression to generate a value for the target attribute. i.e attribute_1 ?? attribute_2 => attribute
+    /// - Just one: for using an expression to generate a value for the target attribute. i.e. attribute_1 ?? attribute_2 => attribute
     /// - Multiple: for using multiple function calls that chain through each other to generate a value for the target attribute.
     /// </summary>
-    public List<SyncRuleMappingSource> Sources { get; set; } = new();
+    public List<SyncRuleMappingSource> Sources { get; } = new();
 
     /// <summary>
     /// For an import rule, this is where the imported attribute value ends up being assigned to.
-    /// Also where Object Matching Rules map to. i.e. a connected system attribute might be a direct, or transform comparison to the Metaverse attribute.
+    /// Also, where Object Matching Rules map to. i.e. a Connected System Attribute (source) might be a direct, or transform comparison to the Metaverse Object (target) attribute.
     /// </summary>
     public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
 

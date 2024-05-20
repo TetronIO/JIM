@@ -1,7 +1,10 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
+using JIM.Models.Logic;
 using JIM.Models.Search;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 namespace JIM.Data.Repositories;
 
@@ -36,7 +39,6 @@ public interface IMetaverseRepository
         int metaverseObjectTypeId,
         int page,
         int pageSize,
-        int maxResults,
         QuerySortBy querySortBy = QuerySortBy.DateCreated,
         QueryRange queryRange = QueryRange.Forever);
 
@@ -44,9 +46,23 @@ public interface IMetaverseRepository
         PredefinedSearch predefinedSearch,
         int page,
         int pageSize,
-        int maxResults,
         QuerySortBy querySortBy = QuerySortBy.DateCreated,
         QueryRange queryRange = QueryRange.Forever);
+
+    /// <summary>
+    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
+    /// This is to help the process of joining a CSO to an MVO.
+    /// </summary>
+    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
+    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
+    /// <param name="syncRuleMapping">The Sync Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
+    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
+    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified. This is not yet supported.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the sync rule mapping source connected system attribute is null.</exception>
+    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the sync rule mapping. These are not yet supported.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
+    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the sync rule mapping criteria.</exception>
+    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, SyncRuleMapping syncRuleMapping);
     #endregion
 
     #region attributes
@@ -57,6 +73,5 @@ public interface IMetaverseRepository
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id);
 
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);
-        
     #endregion
 }

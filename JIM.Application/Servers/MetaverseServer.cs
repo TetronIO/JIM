@@ -1,6 +1,9 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Exceptions;
+using JIM.Models.Logic;
 using JIM.Models.Search;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 namespace JIM.Application.Servers;
 
@@ -97,30 +100,35 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectOfTypeCountAsync(metaverseObjectType.Id);
     }
 
-    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
-        MetaverseObjectType metaverseObjectType,
-        int page = 1,
-        int pageSize = 20,
-        int maxResults = 500)
+    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(MetaverseObjectType metaverseObjectType, int page = 1, int pageSize = 20)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(
-            metaverseObjectType.Id,
-            page,
-            pageSize,
-            maxResults);
+        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(metaverseObjectType.Id, page, pageSize);
     }
 
-    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
-        PredefinedSearch predefinedSearch,
-        int page = 1,
-        int pageSize = 20,
-        int maxResults = 500)
+    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(PredefinedSearch predefinedSearch, int page = 1, int pageSize = 20)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(
-            predefinedSearch,
-            page,
-            pageSize,
-            maxResults);
+        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(predefinedSearch, page, pageSize);
+    }
+    
+    /// <summary>
+    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
+    /// This is to help the process of joining a CSO to an MVO.
+    /// </summary>
+    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
+    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
+    /// <param name="syncRuleMapping">The Sync Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
+    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
+    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified. This is not yet supported.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the sync rule mapping source connected system attribute is null.</exception>
+    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the sync rule mapping. These are not yet supported.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
+    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the sync rule mapping criteria.</exception>
+    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, SyncRuleMapping syncRuleMapping)
+    {
+        if (syncRuleMapping.Sources == null || syncRuleMapping.Sources.Count == 0)
+            throw new ArgumentOutOfRangeException($"{nameof(syncRuleMapping)}.Sources is null or empty. Cannot continue.");
+        
+        return await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, syncRuleMapping);
     }
     #endregion
 }

@@ -47,5 +47,5 @@ public class PredefinedSearch
     /// <summary>
     /// The criteria used to filter the results, i.e. the search query.
     /// </summary>
-    public List<PredefinedSearchCriteriaGroup> CriteriaGroups { get; set; } = new();
+    public List<PredefinedSearchCriteriaGroup> CriteriaGroups { get; } = new();
 }

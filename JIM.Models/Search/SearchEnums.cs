@@ -1,8 +1,17 @@
 ﻿namespace JIM.Models.Search;
 
+/// <summary>
+/// Determines what type of logic a CriteriaGroup should apply to it's members. 
+/// </summary>
 public enum SearchGroupType
 {
+    /// <summary>
+    /// All criteria in a group must be true.
+    /// </summary>
     All = 0,
+    /// <summary>
+    /// Any criteria in the group can be true, i.e. at least one must be true.
+    /// </summary>
     Any = 1
 }
 

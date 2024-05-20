@@ -68,11 +68,13 @@ public class SyncRule: IValidated
     public List<SyncRuleMapping> AttributeFlowRules { get; set; } = new();
 
     /// <summary>
-    /// Contains all the logic that determines how connected system objects should match a counterpart in the metaverse for inbound sync rules.
+    /// Contains all the logic that determines how Connected System Objects should match a counterpart in the Metaverse for inbound sync rules.
     /// </summary>
-    public List<SyncRuleMapping> ObjectMatchingRules { get; set; } = new();
-
-    // back-link for Entity Framework.
+    public List<SyncRuleMapping> ObjectMatchingRules { get; } = new();
+    
+    /// <summary>
+    /// Backlink for Entity Framework purposes to all Activities for this SyncRule.
+    /// </summary>
     public List<Activity> Activities { get; set; } = null!;
 
     // TODO: what happens when an object is in scope, then falls out of scope?

@@ -1,5 +1,7 @@
 ﻿using JIM.Models.Security;
 using System.ComponentModel.DataAnnotations.Schema;
+using JIM.Models.Staging;
+
 namespace JIM.Models.Core;
 
 public class MetaverseObject
@@ -20,6 +22,11 @@ public class MetaverseObject
     public MetaverseObjectStatus Status { get; set; }
 
     public List<MetaverseObjectChange> Changes { get; set; }
+    
+    /// <summary>
+    /// Navigation link to any joined Connected System Objects.
+    /// </summary>
+    public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
 
     [NotMapped]
     public string? DisplayName 

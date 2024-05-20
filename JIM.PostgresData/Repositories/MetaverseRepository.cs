@@ -2,7 +2,10 @@
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
+using JIM.Models.Logic;
 using JIM.Models.Search;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
@@ -64,7 +67,6 @@ public class MetaverseRepository : IMetaverseRepository
     #endregion
 
     #region metaverse attributes
-
     public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
     {
         return await Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToListAsync();
@@ -168,7 +170,6 @@ public class MetaverseRepository : IMetaverseRepository
         int metaverseObjectTypeId,
         int page = 1,
         int pageSize = 20,
-        int maxResults = 500,
         QuerySortBy querySortBy = QuerySortBy.DateCreated,
         QueryRange queryRange = QueryRange.Forever)
     {
@@ -181,10 +182,6 @@ public class MetaverseRepository : IMetaverseRepository
         // limit page size to avoid increasing latency unnecessarily
         if (pageSize > 100)
             pageSize = 100;
-
-        // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
-        if (maxResults > 500)
-            maxResults = 500;
 
         var objects = from o in Repository.Database.MetaverseObjects.
                 Include(mo => mo.AttributeValues).
@@ -251,7 +248,6 @@ public class MetaverseRepository : IMetaverseRepository
         PredefinedSearch predefinedSearch,
         int page,
         int pageSize,
-        int maxResults,
         QuerySortBy querySortBy = QuerySortBy.DateCreated,
         QueryRange queryRange = QueryRange.Forever)
     {
@@ -261,21 +257,18 @@ public class MetaverseRepository : IMetaverseRepository
         if (page < 1)
             page = 1;
 
-        // limit page size to avoid increasing latency unecessarily
+        // limit page size to avoid increasing latency unnecessarily
         if (pageSize > 100)
             pageSize = 100;
 
-        // limit how big the id query is to avoid unnecessary charges and to keep latency within an acceptable range
-        if (maxResults > 500)
-            maxResults = 500;
-
+        // construct the base query. This much is true, regardless of the search properties.
         var objects = from o in Repository.Database.MetaverseObjects.
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.Attribute).
                 Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id)
             select o;
 
-        // is there criteria to use?
+        // is there criteria to use in the predefined search criteria groups?
         foreach (var group in predefinedSearch.CriteriaGroups)
         {
             foreach (var criteria in group.Criteria)
@@ -386,9 +379,99 @@ public class MetaverseRepository : IMetaverseRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
-
     }
 
+    /// <summary>
+    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
+    /// This is to help the process of joining a CSO to an MVO.
+    /// </summary>
+    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
+    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
+    /// <param name="syncRuleMapping">The Sync Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
+    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
+    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified. This is not yet supported.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the sync rule mapping source connected system attribute is null.</exception>
+    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the sync rule mapping. These are not yet supported.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
+    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the sync rule mapping criteria.</exception>
+    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, SyncRuleMapping syncRuleMapping)
+    {
+        if (syncRuleMapping.Sources.Count > 1)
+            throw new NotImplementedException("Sync Rule Mappings with more than one Source at not yet supported (i.e. functions).");
+
+        // at this point in development, we expect and can process a single source.
+        var source = syncRuleMapping.Sources[0];
+        if (source.ConnectedSystemAttribute == null)
+            throw new ArgumentNullException("syncRuleMapping.Sources[0].ConnectedSystemAttribute");
+        
+        // get the source attribute value(s)
+        var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Id == source.ConnectedSystemAttribute.Id);
+        
+        // try and find a match for any of the source attribute values.
+        // this enables an MVA such as 'CN' to be used as a matching attribute.
+        foreach (var csoAttributeValue in csoAttributeValues)
+        {
+            // construct the base query. This much is true, regardless of the sync rule mapping properties.
+            var metaVerseObjects = from o in Repository.Database.MetaverseObjects.
+                    Include(mo => mo.AttributeValues).
+                    ThenInclude(av => av.Attribute).
+                    Where(q => q.Type.Id == metaverseObjectType.Id)
+                    select o;
+            
+            // work out what type of attribute it is
+            switch (source.ConnectedSystemAttribute.Type)
+            {
+                case AttributeDataType.Text:
+                    metaVerseObjects = metaVerseObjects.Where(q => 
+                        q.AttributeValues.Any(av => 
+                            syncRuleMapping.TargetMetaverseAttribute != null && 
+                            av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
+                            av.StringValue == csoAttributeValue.StringValue));
+                    break;
+                case AttributeDataType.Number:
+                    metaVerseObjects = metaVerseObjects.Where(q => 
+                        q.AttributeValues.Any(av => 
+                            syncRuleMapping.TargetMetaverseAttribute != null && 
+                            av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
+                            av.IntValue == csoAttributeValue.IntValue));
+                    break;
+                case AttributeDataType.DateTime:
+                    throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
+                case AttributeDataType.Binary:
+                    throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
+                case AttributeDataType.Reference:
+                    throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
+                case AttributeDataType.Guid:
+                    metaVerseObjects = metaVerseObjects.Where(q => 
+                        q.AttributeValues.Any(av => 
+                            syncRuleMapping.TargetMetaverseAttribute != null && 
+                            av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
+                            av.GuidValue == csoAttributeValue.GuidValue));
+                    break;
+                case AttributeDataType.Boolean:
+                    throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
+                case AttributeDataType.NotSet:
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+            
+            // execute the search. did we find an MVO?
+            var result = await metaVerseObjects.ToListAsync();
+            switch (result.Count)
+            {
+                case 1:
+                    return result[0];
+                case > 1:
+                    throw new MultipleMatchesException(
+                        "Multiple Metaverse Objects were found to match the source attribute.",
+                        result.Select(q => q.Id).ToList());
+            }
+        }
+        
+        // no match
+        return null;
+    }
+    
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         var list = new List<MetaverseObjectAttributeValue>();

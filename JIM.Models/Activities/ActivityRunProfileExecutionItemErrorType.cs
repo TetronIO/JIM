@@ -4,6 +4,7 @@ public enum ActivityRunProfileExecutionItemErrorType
 {
     NotSet,
     CouldNotMatchObjectType,
+    CouldNotJoinDueToExistingJoin,
     DuplicateImportedAttributes,
     MissingExternalIdAttributeValue,
     UnexpectedAttribute,
