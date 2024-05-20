@@ -120,7 +120,7 @@ public class SyncFullSyncTaskProcessor
             await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
             await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
             
-            // look for Metaverse Object updates. requires we have sync rules.
+            // look for Metaverse Object updates. requires that we have sync rules.
             if (_haveSyncRules)
                 await ProcessMetaverseObjectChangesAsync(connectedSystemObject, runProfileExecutionItem);
         }
@@ -187,58 +187,90 @@ public class SyncFullSyncTaskProcessor
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
+        
         if (_syncRules == null || _syncRules.Count == 0)
             return;
         
         // do we need to join, or project the CSO to the Metaverse?
         if (connectedSystemObject.MetaverseObject == null)
         {
-            // CSO is not joined to a Metaverse Object.
-            // inspect sync rules to determine if we have any join or projection requirements.
-            // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
-
-            // enumerate all sync rules that have matching rules. first to match wins. 
-            // for more deterministic results, admins should make sure an object only matches to a single sync rule
-            // at any given moment to ensure the single sync rule matching rule priority order is law.
-            foreach (var matchingSyncRule in _syncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
-            {
-                // object matching rules are ordered. respect the ordering. 
-                foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
-                {
-                    // use this rule to see if we have a matching MVO to join with.
-                    var mvo = await _jim.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, matchingSyncRule.MetaverseObjectType, matchingRule);
-                    if (mvo != null)
-                    {
-                        // mvo must not already be joined to a connected system object in this connected system. joins are 1:1.
-                        var existingCsoJoins = mvo.ConnectedSystemObjects
-                            .Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
-
-                        if (existingCsoJoins.Count > 1)
-                            throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
-                        
-                        if (existingCsoJoins.Count == 1)
-                        {
-                            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
-                            runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO {existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your Object Matching Rules for uniqueness.";
-                            return;
-                        }
-                        
-                        // establish join!
-                        connectedSystemObject.MetaverseObject = mvo;
-                        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
-                        break;
-                    }
-                }
-                
-                // have we joined yet?
-                if (connectedSystemObject.MetaverseObject != null)
-                    break;
-            }
+            await AttemptJoinAsync(connectedSystemObject, runProfileExecutionItem);
+            
+            // stop processing if the join process caused an error.
+            if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                return;
         }
-        else
+        
+        // are we joined yet?
+        if (connectedSystemObject.MetaverseObject == null)
         {
-            // CSO is already joined to a Metaverse Object
-            // inspect sync rules for any necessary attribute flow updates.
+            // nope, see if we have been instructed to project the CSO to the Metaverse.
+            await AttemptToProjectAsync(connectedSystemObject, runProfileExecutionItem);
+        }
+        
+        
+        // inspect sync rules for any necessary attribute flow updates.
+    }
+
+    private async Task AttemptJoinAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    {
+        if (_syncRules == null)
+            return;
+        
+        // CSO is not joined to a Metaverse Object.
+        // inspect sync rules to determine if we have any join or projection requirements.
+        // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
+
+        // enumerate all sync rules that have matching rules. first to match wins. 
+        // for more deterministic results, admins should make sure an object only matches to a single sync rule
+        // at any given moment to ensure the single sync rule matching rule priority order is law.
+        foreach (var matchingSyncRule in _syncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+        {
+            // object matching rules are ordered. respect the ordering. 
+            foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
+            {
+                // use this rule to see if we have a matching MVO to join with.
+                var mvo = await _jim.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, matchingSyncRule.MetaverseObjectType, matchingRule);
+                if (mvo != null)
+                {
+                    // mvo must not already be joined to a connected system object in this connected system. joins are 1:1.
+                    var existingCsoJoins = mvo.ConnectedSystemObjects
+                        .Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
+
+                    if (existingCsoJoins.Count > 1)
+                        throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is really not good!");
+                    
+                    if (existingCsoJoins.Count == 1)
+                    {
+                        runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
+                        runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO {existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your Object Matching Rules for uniqueness.";
+                        return;
+                    }
+                    
+                    // establish join!
+                    connectedSystemObject.MetaverseObject = mvo;
+                    connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
+                    return;
+                }
+            }
+            
+            // have we joined yet?
+            if (connectedSystemObject.MetaverseObject != null)
+                return;
+        }
+    }
+
+    private async Task AttemptToProjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    {
+        if (_syncRules == null)
+            return;
+
+        foreach (var projectionSyncRule in _syncRules.Where(sr =>
+                     sr.ProjectToMetaverse.HasValue && 
+                     sr.ProjectToMetaverse.Value &&
+                     sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+        {
+            
         }
     }
 }

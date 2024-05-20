@@ -9,24 +9,24 @@ public class MetaverseObject
     #region accessors
     public Guid Id { get; set; }
 
-    public DateTime Created { get; set; }
+    public DateTime Created { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastUpdated { get; set; }
 
     public MetaverseObjectType Type { get; set; } = null!;
 
-    public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
+    public List<MetaverseObjectAttributeValue> AttributeValues { get; set; } = new();
 
     public List<Role> Roles { get; set; } = null!;
 
-    public MetaverseObjectStatus Status { get; set; }
+    public MetaverseObjectStatus Status { get; set; } = MetaverseObjectStatus.Normal;
 
-    public List<MetaverseObjectChange> Changes { get; set; }
-    
+    public List<MetaverseObjectChange> Changes { get; set; } = new();
+
     /// <summary>
     /// Navigation link to any joined Connected System Objects.
     /// </summary>
-    public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
+    public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = new ();
 
     [NotMapped]
     public string? DisplayName 
@@ -46,16 +46,6 @@ public class MetaverseObject
     }
     #endregion
 
-    #region constructors
-    public MetaverseObject()
-    {
-        Created = DateTime.UtcNow;
-        Status = MetaverseObjectStatus.Normal;
-        AttributeValues = new List<MetaverseObjectAttributeValue>();
-        Changes = new List<MetaverseObjectChange>();
-    }
-    #endregion
-
     #region public methods
     public MetaverseObjectAttributeValue? GetAttributeValue(string name)
     {
@@ -65,6 +55,11 @@ public class MetaverseObject
     public bool HasAttributeValue(string name)
     {
         return AttributeValues.Any(q => q.Attribute.Name == name);
+    }
+
+    public override string ToString()
+    {
+        return $"{DisplayName} ({Id})";
     }
     #endregion
 }
