@@ -9,20 +9,20 @@ public class MetaverseObject
     #region accessors
     public Guid Id { get; set; }
 
-    public DateTime Created { get; set; }
+    public DateTime Created { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastUpdated { get; set; }
 
     public MetaverseObjectType Type { get; set; } = null!;
 
-    public List<MetaverseObjectAttributeValue> AttributeValues { get; set; }
+    public List<MetaverseObjectAttributeValue> AttributeValues { get; set; } = new();
 
     public List<Role> Roles { get; set; } = null!;
 
-    public MetaverseObjectStatus Status { get; set; }
+    public MetaverseObjectStatus Status { get; set; } = MetaverseObjectStatus.Normal;
 
-    public List<MetaverseObjectChange> Changes { get; set; }
-    
+    public List<MetaverseObjectChange> Changes { get; set; } = new();
+
     /// <summary>
     /// Navigation link to any joined Connected System Objects.
     /// </summary>
@@ -43,16 +43,6 @@ public class MetaverseObject
 
             return null;
         } 
-    }
-    #endregion
-
-    #region constructors
-    public MetaverseObject()
-    {
-        Created = DateTime.UtcNow;
-        Status = MetaverseObjectStatus.Normal;
-        AttributeValues = new List<MetaverseObjectAttributeValue>();
-        Changes = new List<MetaverseObjectChange>();
     }
     #endregion
 

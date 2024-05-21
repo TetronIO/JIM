@@ -187,6 +187,7 @@ public class SyncFullSyncTaskProcessor
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
+        
         if (_syncRules == null || _syncRules.Count == 0)
             return;
         
@@ -196,49 +197,170 @@ public class SyncFullSyncTaskProcessor
             // CSO is not joined to a Metaverse Object.
             // inspect sync rules to determine if we have any join or projection requirements.
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
+            var wasJoinSuccessful = await AttemptJoinAsync(connectedSystemObject, runProfileExecutionItem);
+            
+            // did we encounter an error whilst attempting a join? stop processing the CSO if so.
+            if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                return;
 
-            // enumerate all sync rules that have matching rules. first to match wins. 
-            // for more deterministic results, admins should make sure an object only matches to a single sync rule
-            // at any given moment to ensure the single sync rule matching rule priority order is law.
-            foreach (var matchingSyncRule in _syncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+            if (!wasJoinSuccessful)
             {
-                // object matching rules are ordered. respect the ordering. 
-                foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
-                {
-                    // use this rule to see if we have a matching MVO to join with.
-                    var mvo = await _jim.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, matchingSyncRule.MetaverseObjectType, matchingRule);
-                    if (mvo != null)
-                    {
-                        // mvo must not already be joined to a connected system object in this connected system. joins are 1:1.
-                        var existingCsoJoins = mvo.ConnectedSystemObjects
-                            .Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
-
-                        if (existingCsoJoins.Count > 1)
-                            throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
-                        
-                        if (existingCsoJoins.Count == 1)
-                        {
-                            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
-                            runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO {existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your Object Matching Rules for uniqueness.";
-                            return;
-                        }
-                        
-                        // establish join!
-                        connectedSystemObject.MetaverseObject = mvo;
-                        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
-                        break;
-                    }
-                }
-                
-                // have we joined yet?
-                if (connectedSystemObject.MetaverseObject != null)
-                    break;
+                // try and project the CSO to the Metaverse
+                // this may cause onward sync operations, so may take time.
+                await AttemptProjectionAsync(connectedSystemObject, runProfileExecutionItem);
             }
         }
         else
         {
             // CSO is already joined to a Metaverse Object
             // inspect sync rules for any necessary attribute flow updates.
+        }
+    }
+
+    /// <summary>
+    /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Sync Rules for this system and object type.
+    /// </summary>
+    /// <param name="connectedSystemObject">The Connected System Object to try and find a matching Metaverse Object for.</param>
+    /// <param name="runProfileExecutionItem">The Run Profile Execution Item we're tracking changes/errors against for the CSO.</param>
+    /// <returns>True if a join was established, otherwise False.</returns>
+    /// <exception cref="InvalidDataException">Will be thrown if an unsupported join state is found preventing processing.</exception>
+    private async Task<bool> AttemptJoinAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    {
+        if (_syncRules == null)
+            return false;
+        
+        // enumerate all sync rules that have matching rules. first to match wins. 
+        // for more deterministic results, admins should make sure an object only matches to a single sync rule
+        // at any given moment to ensure the single sync rule matching rule priority order is law.
+        foreach (var matchingSyncRule in _syncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+        {
+            // object matching rules are ordered. respect the ordering. 
+            foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
+            {
+                // use this rule to see if we have a matching MVO to join with.
+                var mvo = await _jim.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, matchingSyncRule.MetaverseObjectType, matchingRule);
+                if (mvo == null) 
+                    continue;
+                
+                // mvo must not already be joined to a connected system object in this connected system. joins are 1:1.
+                var existingCsoJoins = mvo.ConnectedSystemObjects
+                    .Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
+
+                if (existingCsoJoins.Count > 1)
+                    throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
+                    
+                if (existingCsoJoins.Count == 1)
+                {
+                    runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
+                    runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO {existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your Object Matching Rules for uniqueness.";
+                    return false;
+                }
+                    
+                // establish join! then return as first rule to match, wins.
+                connectedSystemObject.MetaverseObject = mvo;
+                connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
+                return true;
+            }
+            
+            // have we joined yet? stop enumerating if so.
+            if (connectedSystemObject.MetaverseObject != null)
+                return true;
+        }
+
+        // no join could be established.
+        return false;
+    }
+
+    private async Task AttemptProjectionAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    {
+        if (_syncRules == null)
+            return;
+        
+        // see if there are any sync rules for this object type where projection is enabled.
+        // note: first to project wins, so it probably makes sense to just have a single sync rule for each object type
+        // with projection enabled to keep things easy to understand.
+        var projectionSyncRule = _syncRules.FirstOrDefault(sr =>
+            sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
+            sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id);
+
+        if (projectionSyncRule != null)
+        {
+            // create the MVO using type and attribute flow from this Sync Rule.
+            var mvo = new MetaverseObject();
+            mvo.ConnectedSystemObjects.Add(connectedSystemObject);
+            mvo.Type = projectionSyncRule.MetaverseObjectType;
+
+            foreach (var mapping in projectionSyncRule.AttributeFlowRules.OrderBy(q => q.Order))
+            {
+                if (mapping.TargetMetaverseAttribute == null)
+                    throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
+
+                var mvoAttributeValue = new MetaverseObjectAttributeValue
+                {
+                    MetaverseObject = mvo,
+                    Attribute = mapping.TargetMetaverseAttribute
+                };
+
+                foreach (var source in mapping.Sources.OrderBy(q => q.Order))
+                {
+                    if (source.ConnectedSystemAttribute != null)
+                    {
+                        // CSOs and MVOs have slightly different ways of representing multiple-values due to how
+                        // they need to be used/populated in their respective scenarios.
+                        // CSOs store all values under a single attribute value object.
+                        // MVOs store each value under their own attribute value object.
+                        // so we need to handle MVAs differently when populating the MVO attribute value.
+
+                        if (source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued)
+                        {
+                            var csoAttributeValue = connectedSystemObject.GetAttributeValue(source.ConnectedSystemAttribute.Name);
+                            if (csoAttributeValue != null)
+                            {
+                                mvoAttributeValue.ContributedBySystem = _connectedSystem;
+                                mvoAttributeValue.StringValue = csoAttributeValue.StringValue;
+                                mvoAttributeValue.BoolValue = csoAttributeValue.BoolValue;
+                                mvoAttributeValue.ByteValue = csoAttributeValue.ByteValue;
+                                mvoAttributeValue.GuidValue = csoAttributeValue.GuidValue;
+                                mvoAttributeValue.IntValue = csoAttributeValue.IntValue;
+                                mvoAttributeValue.DateTimeValue = csoAttributeValue.DateTimeValue;
+                                
+                                // reference values need translating from a CS reference, to an MV one.
+                                // TODO: think about dependency graph here. All referenced objects need to exist in the Metaverse first. How will we ensure all CSOs exist? Do we need to resolve references later?
+                                //csoAttributeValue.ReferenceValue
+                            }
+                            else
+                            {
+                                Log.Verbose($"AttemptProjectionAsync: Skipping CSO attribute {source.ConnectedSystemAttribute.Name} as it has no value.");
+                            }
+                        }
+                        else
+                        {
+                            
+                        }
+                        
+                        
+                        
+                    }
+                    else if (source.Function != null)
+                    {
+                        throw new NotImplementedException("Functions have not been implemented yet.");
+                    }
+                    else if (source.MetaverseAttribute != null)
+                    {
+                        throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. This operation is focused on import flow, so Connected System to Metaverse Object.");
+                    }
+                    else
+                    {
+                        throw new InvalidDataException("Expected ConnectedSystemAttribute or Function to be populated in a SyncRuleMappingSource object.");
+                    }
+                }
+            }
+            
+            // associate the MVO with the CSO.
+            connectedSystemObject.MetaverseObject = mvo;
+            
+            // persist the mvo
+            await _jim.Metaverse.CreateMetaverseObjectAsync(mvo);
         }
     }
 }
