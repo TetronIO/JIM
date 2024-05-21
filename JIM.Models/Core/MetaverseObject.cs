@@ -26,7 +26,7 @@ public class MetaverseObject
     /// <summary>
     /// Navigation link to any joined Connected System Objects.
     /// </summary>
-    public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; }
+    public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = new ();
 
     [NotMapped]
     public string? DisplayName 
@@ -55,6 +55,11 @@ public class MetaverseObject
     public bool HasAttributeValue(string name)
     {
         return AttributeValues.Any(q => q.Attribute.Name == name);
+    }
+
+    public override string ToString()
+    {
+        return $"{DisplayName} ({Id})";
     }
     #endregion
 }
