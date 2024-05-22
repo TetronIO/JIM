@@ -296,26 +296,20 @@ public class SyncFullSyncTaskProcessor
             connectedSystemObject.MetaverseObject = mvo;
             
             // now build the MVO attributes from the CSO.
-            await UpdateMetaverseObjectAsync(mvo, connectedSystemObject, projectionSyncRule, runProfileExecutionItem);
+            AssignMetaverseObjectAttributeValues(mvo, connectedSystemObject, projectionSyncRule, runProfileExecutionItem);
             
             // persist the mvo
             await _jim.Metaverse.CreateMetaverseObjectAsync(mvo);
         }
     }
 
-    private async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject, ConnectedSystemObject connectedSystemObject, SyncRule syncRule, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private void AssignMetaverseObjectAttributeValues(MetaverseObject metaverseObject, ConnectedSystemObject connectedSystemObject, SyncRule syncRule, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         foreach (var mapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
         {
             if (mapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
-
-            var mvoAttributeValue = new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = metaverseObject,
-                Attribute = mapping.TargetMetaverseAttribute
-            };
-
+            
             foreach (var source in mapping.Sources.OrderBy(q => q.Order))
             {
                 if (source.ConnectedSystemAttribute != null)
@@ -330,27 +324,16 @@ public class SyncFullSyncTaskProcessor
                     {
                         var csoAttributeValue = connectedSystemObject.GetAttributeValue(source.ConnectedSystemAttribute.Name);
                         if (csoAttributeValue != null)
-                        {
-                            mvoAttributeValue.ContributedBySystem = _connectedSystem;
-                            mvoAttributeValue.StringValue = csoAttributeValue.StringValue;
-                            mvoAttributeValue.BoolValue = csoAttributeValue.BoolValue;
-                            mvoAttributeValue.ByteValue = csoAttributeValue.ByteValue;
-                            mvoAttributeValue.GuidValue = csoAttributeValue.GuidValue;
-                            mvoAttributeValue.IntValue = csoAttributeValue.IntValue;
-                            mvoAttributeValue.DateTimeValue = csoAttributeValue.DateTimeValue;
-                            
-                            // reference values need translating from a CS reference, to an MV one.
-                            // TODO: think about dependency graph here. All referenced objects need to exist in the Metaverse first. How will we ensure all CSOs exist? Do we need to resolve references later?
-                            //csoAttributeValue.ReferenceValue
-                        }
+                            SetMetaverseObjectAttributeValue(metaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
                         else
-                        {
-                            Log.Verbose($"AttemptProjectionAsync: Skipping CSO attribute {source.ConnectedSystemAttribute.Name} as it has no value.");
-                        }
+                            Log.Verbose($"AttemptProjectionAsync: Skipping CSO SVA {source.ConnectedSystemAttribute.Name} as it has no value.");
                     }
                     else
                     {
                         // multi-valued attribute
+                        var csoAttributeValues = connectedSystemObject.GetAttributeValues(source.ConnectedSystemAttribute.Name);
+                        foreach (var csoAttributeValue in csoAttributeValues)
+                            SetMetaverseObjectAttributeValue(metaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
                     }
                 }
                 else if (source.Function != null)
@@ -367,5 +350,33 @@ public class SyncFullSyncTaskProcessor
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Builds a Metaverse Object Attribute Value using values from a Connected System Object Attribute Value and assigns it to a Metaverse Object.
+    /// </summary>
+    /// <param name="metaverseObject">The Metaverse Object to add the Attribute Value to.</param>
+    /// <param name="metaverseAttribute">The Metaverse Attribute the Attribute Value will be for.</param>
+    /// <param name="connectedSystemObjectAttributeValue">The source for the values on the Metaverse Object Attribute Value.</param>
+    private void SetMetaverseObjectAttributeValue(MetaverseObject metaverseObject, MetaverseAttribute metaverseAttribute, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue)
+    {
+        var mvoAttributeValue = new MetaverseObjectAttributeValue
+        {
+            MetaverseObject = metaverseObject,
+            Attribute = metaverseAttribute,
+            ContributedBySystem = _connectedSystem,
+            StringValue = connectedSystemObjectAttributeValue.StringValue,
+            BoolValue = connectedSystemObjectAttributeValue.BoolValue,
+            ByteValue = connectedSystemObjectAttributeValue.ByteValue,
+            GuidValue = connectedSystemObjectAttributeValue.GuidValue,
+            IntValue = connectedSystemObjectAttributeValue.IntValue,
+            DateTimeValue = connectedSystemObjectAttributeValue.DateTimeValue
+        };
+
+        // reference values need translating from a CS reference, to an MV one.
+        // TODO: think about dependency graph here. All referenced objects need to exist in the Metaverse first. How will we ensure all CSOs exist? Do we need to resolve references later?
+        //csoAttributeValue.ReferenceValue
+        
+        metaverseObject.AttributeValues.Add(mvoAttributeValue);
     }
 }

@@ -125,12 +125,11 @@ public class SyncImportTaskProcessor
         await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Persisting changes");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Commiting changes");
         await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
         await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
 
-        // update the activity with the results from all pages.
-        // this will also persist the ActivityRunProfileExecutionItem and ConnectedSystemObjectChanges for each CSO.
+        // final Activity update now that references have been resolved, CSOs have been persisted and IDs generated, etc.
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
@@ -212,6 +211,14 @@ public class SyncImportTaskProcessor
         }
     }
 
+    /// <summary>
+    /// Have any CSOs in our Connected System not been imported, and thus are now no longer valid? Put them into an
+    /// Obsolete state, so they can be processed for deletion during a synchronisation run.
+    /// </summary>
+    /// <param name="connectedSystemObjectExternalId">The value for the External ID attribute.</param>
+    /// <param name="connectedSystemAttributeId">The unique identifier for the attribute that represents the External ID in the current Connected System.</param>
+    /// <param name="connectedSystemObjectsToBeUpdated">The cache of CSOs that have been updated as part of this import run.</param>
+    /// <typeparam name="T">The type for the External ID attribute.</typeparam>
     private async Task ObsoleteConnectedSystemObjectAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         // find the cso
@@ -241,13 +248,18 @@ public class SyncImportTaskProcessor
         connectedSystemObjectsToBeUpdated.Add(cso);
     }
     
-    private void AddExternalIdsToCollection(ConnectedSystemImportResult result, ICollection<ExternalIdPair> externalIdsImported)
+    /// <summary>
+    /// Adds the External IDs on CSOs returned in an import result to a collection to help with resolving references later. 
+    /// </summary>
+    /// <param name="importResult">The entire, or a page's worth of import results from a Connected System to retrieve External IDs from.</param>
+    /// <param name="externalIdsImported">The collection used to store all External IDs, over all pages of import results.</param>
+    private void AddExternalIdsToCollection(ConnectedSystemImportResult importResult, ICollection<ExternalIdPair> externalIdsImported)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
         
         // add the external ids from the results to our external id collection
-        foreach (var importedObject in result.ImportObjects)
+        foreach (var importedObject in importResult.ImportObjects)
         {
             // find the object type for the imported object in our schema
             var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
