@@ -11,30 +11,23 @@ namespace JIM.Worker.Processors;
 public class SyncFullSyncTaskProcessor
 {
     private readonly JimApplication _jim;
-    private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
-    private readonly MetaverseObject _initiatedBy;
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
-    private List<ConnectedSystemObjectType>? _objectTypes;
     private List<SyncRule>? _syncRules;
     private bool _haveSyncRules;
     
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
-        IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
-        MetaverseObject initiatedBy,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
     {
         _jim = jimApplication;
-        _connector = connector;
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = connectedSystemRunProfile;
-        _initiatedBy = initiatedBy;
         _activity = activity;
         _cancellationTokenSource = cancellationTokenSource;
     }
@@ -67,11 +60,10 @@ public class SyncFullSyncTaskProcessor
         _haveSyncRules = _syncRules is { Count: > 0 };
         
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
-        _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        //_objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
         
-        // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable time-frame
-        // and to update the Activity as we go, allowing the UI to be updated and users kept informed.
-
+        // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe
+        // and to update the Activity as we go, allowing the UI to be updated and keep users informed.
         const int pageSize = 200;
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
@@ -106,6 +98,10 @@ public class SyncFullSyncTaskProcessor
                 await _jim.Activities.UpdateActivityAsync(_activity);
             }
         }
+        
+        // all objects processed.
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving References");
+        await ResolveReferencesAsync();
     }
 
     private async Task ProcessConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
@@ -205,9 +201,9 @@ public class SyncFullSyncTaskProcessor
 
             if (!wasJoinSuccessful)
             {
-                // try and project the CSO to the Metaverse
+                // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
-                await AttemptProjectionAsync(connectedSystemObject, runProfileExecutionItem);
+                await AttemptProjectionAsync(connectedSystemObject);
             }
         }
         else
@@ -275,10 +271,9 @@ public class SyncFullSyncTaskProcessor
     /// Attempts to create a Metaverse Object from the Connected System Object using the first Sync Rule for the object type that has Projection enabled.
     /// </summary>
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
-    /// <param name="runProfileExecutionItem">The Run Profile Execution Item we're tracking changes/errors against for the CSO.</param>
     /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Sync Rule.</exception>
     /// <exception cref="NotImplementedException">Will be thrown if a Sync Rule attempts to use a Function as a source.</exception>
-    private async Task AttemptProjectionAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task AttemptProjectionAsync(ConnectedSystemObject connectedSystemObject)
     {
         // see if there are any sync rules for this object type where projection is enabled.
         // note: first to project wins, so it probably makes sense to just have a single sync rule for each object type
@@ -296,14 +291,14 @@ public class SyncFullSyncTaskProcessor
             connectedSystemObject.MetaverseObject = mvo;
             
             // now build the MVO attributes from the CSO.
-            AssignMetaverseObjectAttributeValues(mvo, connectedSystemObject, projectionSyncRule, runProfileExecutionItem);
+            AssignMetaverseObjectAttributeValues(mvo, connectedSystemObject, projectionSyncRule);
             
             // persist the mvo
             await _jim.Metaverse.CreateMetaverseObjectAsync(mvo);
         }
     }
 
-    private void AssignMetaverseObjectAttributeValues(MetaverseObject metaverseObject, ConnectedSystemObject connectedSystemObject, SyncRule syncRule, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private void AssignMetaverseObjectAttributeValues(MetaverseObject metaverseObject, ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
     {
         foreach (var mapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
         {
@@ -358,7 +353,10 @@ public class SyncFullSyncTaskProcessor
     /// <param name="metaverseObject">The Metaverse Object to add the Attribute Value to.</param>
     /// <param name="metaverseAttribute">The Metaverse Attribute the Attribute Value will be for.</param>
     /// <param name="connectedSystemObjectAttributeValue">The source for the values on the Metaverse Object Attribute Value.</param>
-    private void SetMetaverseObjectAttributeValue(MetaverseObject metaverseObject, MetaverseAttribute metaverseAttribute, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue)
+    private void SetMetaverseObjectAttributeValue(
+        MetaverseObject metaverseObject, 
+        MetaverseAttribute metaverseAttribute, 
+        ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue)
     {    
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
@@ -374,5 +372,17 @@ public class SyncFullSyncTaskProcessor
             UnresolvedReferenceValue = connectedSystemObjectAttributeValue.ConnectedSystemObject,
             UnresolvedReferenceValueId = connectedSystemObjectAttributeValue.ConnectedSystemObject.Id
         });
+    }
+
+    /// <summary>
+    /// As part of updating or creating reference Metaverse Attribute Values from Connected System Object Attribute Values, references would have been staged
+    /// as unresolved, pointing to the Connected System Object. This converts those CSO unresolved references to MVO references. 
+    /// </summary>
+    private async Task ResolveReferencesAsync()
+    {
+        // find all Metaverse Attribute Values with unresolved reference values
+        // get the joined Metaverse Object and add it to the Metaverse Object Attribute Value
+        // remove the unresolved reference value.
+        // update the Metaverse Object Attribute Value.
     }
 }

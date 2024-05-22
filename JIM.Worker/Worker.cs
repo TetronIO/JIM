@@ -193,7 +193,7 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.DeltaImport:
                                                         case ConnectedSystemRunType.Export:
                                                         case ConnectedSystemRunType.FullSynchronisation:
-                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(taskJim, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
                                                             break;
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
