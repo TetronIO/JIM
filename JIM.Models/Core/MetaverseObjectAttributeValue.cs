@@ -7,6 +7,7 @@ namespace JIM.Models.Core;
 [Index(nameof(DateTimeValue))]
 [Index(nameof(IntValue))]
 [Index(nameof(ReferenceValue))]
+[Index(nameof(UnresolvedReferenceValue))]
 [Index(nameof(GuidValue))]
 public class MetaverseObjectAttributeValue
 {
@@ -17,7 +18,21 @@ public class MetaverseObjectAttributeValue
     public DateTime? DateTimeValue { get; set; }
     public int? IntValue { get; set; }
     public byte[]? ByteValue { get; set; }
+
+    /// <summary>
+    /// A reference to another Metaverse Object. Used for attributes like 'Manager' and 'Member'.
+    /// </summary>
     public MetaverseObject? ReferenceValue { get; set; }
+    public Guid? ReferenceValueId { get; set; }
+
+    /// <summary>
+    /// When wanting to set a ReferenceValue, the referenced MVO may not yet exist as it might not have been projected from a CS to the MV yet.
+    /// In this situation, the reference should be staged by setting a reference to the projecting CSO here. The sync processor can then run through these at
+    /// the end of a sync run when all MVOs have been projected, and convert the UnresolvedReferenceValue to a ReferenceValue.
+    /// </summary>
+    public ConnectedSystemObject? UnresolvedReferenceValue { get; set; }
+    public Guid? UnresolvedReferenceValueId { get; set; }
+
     public Guid? GuidValue { get; set; }
     public bool? BoolValue { get; set; }
 

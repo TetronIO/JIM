@@ -359,8 +359,8 @@ public class SyncFullSyncTaskProcessor
     /// <param name="metaverseAttribute">The Metaverse Attribute the Attribute Value will be for.</param>
     /// <param name="connectedSystemObjectAttributeValue">The source for the values on the Metaverse Object Attribute Value.</param>
     private void SetMetaverseObjectAttributeValue(MetaverseObject metaverseObject, MetaverseAttribute metaverseAttribute, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue)
-    {
-        var mvoAttributeValue = new MetaverseObjectAttributeValue
+    {    
+        metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             MetaverseObject = metaverseObject,
             Attribute = metaverseAttribute,
@@ -370,13 +370,9 @@ public class SyncFullSyncTaskProcessor
             ByteValue = connectedSystemObjectAttributeValue.ByteValue,
             GuidValue = connectedSystemObjectAttributeValue.GuidValue,
             IntValue = connectedSystemObjectAttributeValue.IntValue,
-            DateTimeValue = connectedSystemObjectAttributeValue.DateTimeValue
-        };
-
-        // reference values need translating from a CS reference, to an MV one.
-        // TODO: think about dependency graph here. All referenced objects need to exist in the Metaverse first. How will we ensure all CSOs exist? Do we need to resolve references later?
-        //csoAttributeValue.ReferenceValue
-        
-        metaverseObject.AttributeValues.Add(mvoAttributeValue);
+            DateTimeValue = connectedSystemObjectAttributeValue.DateTimeValue,
+            UnresolvedReferenceValue = connectedSystemObjectAttributeValue.ConnectedSystemObject,
+            UnresolvedReferenceValueId = connectedSystemObjectAttributeValue.ConnectedSystemObject.Id
+        });
     }
 }
