@@ -239,8 +239,7 @@ public class SyncFullSyncTaskProcessor
                     continue;
                 
                 // mvo must not already be joined to a connected system object in this connected system. joins are 1:1.
-                var existingCsoJoins = mvo.ConnectedSystemObjects
-                    .Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
+                var existingCsoJoins = mvo.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
 
                 if (existingCsoJoins.Count > 1)
                     throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
@@ -280,7 +279,7 @@ public class SyncFullSyncTaskProcessor
         // with projection enabled to keep things easy to understand.
         var projectionSyncRule = _syncRules?.FirstOrDefault(sr =>
             sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
-            sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id);
+            sr.ConnectedSystemObjectType.Id == connectedSystemObject.TypeId);
 
         if (projectionSyncRule != null)
         {
@@ -298,8 +297,19 @@ public class SyncFullSyncTaskProcessor
         }
     }
 
+    /// <summary>
+    /// Assigns values to a Metaverse Object, from a Connected System Object using a Sync Rule.
+    /// Does not perform any delta procesing. This is for MVO create scenarios where there are not MVO attribute values already.
+    /// </summary>
+    /// <param name="metaverseObject">The target Metaverse Object to assign attribute values to.</param>
+    /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>
+    /// <param name="syncRule">The Sync Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
+    /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
+    /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
     private void AssignMetaverseObjectAttributeValues(MetaverseObject metaverseObject, ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
     {
+        // TODO: review for evolution into a generic create/update/delete attribute value function, so we don't repeat ourselves later for non-create scenarios.
+        
         foreach (var mapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
         {
             if (mapping.TargetMetaverseAttribute == null)
@@ -332,17 +342,11 @@ public class SyncFullSyncTaskProcessor
                     }
                 }
                 else if (source.Function != null)
-                {
                     throw new NotImplementedException("Functions have not been implemented yet.");
-                }
                 else if (source.MetaverseAttribute != null)
-                {
                     throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. This operation is focused on import flow, so Connected System to Metaverse Object.");
-                }
                 else
-                {
                     throw new InvalidDataException("Expected ConnectedSystemAttribute or Function to be populated in a SyncRuleMappingSource object.");
-                }
             }
         }
     }
@@ -354,10 +358,10 @@ public class SyncFullSyncTaskProcessor
     /// <param name="metaverseAttribute">The Metaverse Attribute the Attribute Value will be for.</param>
     /// <param name="connectedSystemObjectAttributeValue">The source for the values on the Metaverse Object Attribute Value.</param>
     private void SetMetaverseObjectAttributeValue(
-        MetaverseObject metaverseObject, 
-        MetaverseAttribute metaverseAttribute, 
-        ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue)
+        MetaverseObject metaverseObject, MetaverseAttribute metaverseAttribute, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue)
     {    
+        // TODO: review for evolution to handle update/delete scenarios
+        
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             MetaverseObject = metaverseObject,

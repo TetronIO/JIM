@@ -315,10 +315,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             pageSize = 500;
 
         // start building the query for all the CSOs for a particular system.
-        var query = Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues);
+        var query = Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues);
         
         // for optimum performance, do not include attributes
-        // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema
+        // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema whilst in memory
         // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
         if (returnAttributes)
             query.ThenInclude(av => av.Attribute);

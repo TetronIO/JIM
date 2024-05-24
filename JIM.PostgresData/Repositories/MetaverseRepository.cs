@@ -405,7 +405,7 @@ public class MetaverseRepository : IMetaverseRepository
             throw new ArgumentNullException("syncRuleMapping.Sources[0].ConnectedSystemAttribute");
         
         // get the source attribute value(s)
-        var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Id == source.ConnectedSystemAttribute.Id);
+        var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.AttributeId == source.ConnectedSystemAttribute.Id);
         
         // try and find a match for any of the source attribute values.
         // this enables an MVA such as 'CN' to be used as a matching attribute.
@@ -474,15 +474,11 @@ public class MetaverseRepository : IMetaverseRepository
     
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
-        var list = new List<MetaverseObjectAttributeValue>();
-        foreach (var predefinedSearchAttribute in predefinedSearch.Attributes)
-        {
-            var metaverseObjectAttribute = metaverseObject.AttributeValues.SingleOrDefault(q => q.Attribute.Id == predefinedSearchAttribute.MetaverseAttribute.Id);
-            if (metaverseObjectAttribute != null)
-                list.Add(metaverseObjectAttribute);
-        }
-
-        return list;
+        return predefinedSearch.Attributes
+            .Select(predefinedSearchAttribute => metaverseObject.AttributeValues
+            .SingleOrDefault(q => q.Attribute.Id == predefinedSearchAttribute.MetaverseAttribute.Id))
+            .OfType<MetaverseObjectAttributeValue>()
+            .ToList();
     }
     #endregion
 }

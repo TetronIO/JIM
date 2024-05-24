@@ -13,6 +13,7 @@ public class ConnectedSystemObject
     public DateTime? LastUpdated { get; set; }
 
     public ConnectedSystemObjectType Type { get; set; } = null!;
+    public int TypeId { get; set; }
 
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
     public int ConnectedSystemId { get; set; }
