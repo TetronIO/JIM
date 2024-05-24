@@ -1,7 +1,6 @@
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
-using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using Serilog;
