@@ -1,3 +1,4 @@
+using System.Xml;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -192,23 +193,29 @@ public class SyncFullSyncTaskProcessor
             // CSO is not joined to a Metaverse Object.
             // inspect sync rules to determine if we have any join or projection requirements.
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
-            var wasJoinSuccessful = await AttemptJoinAsync(connectedSystemObject, runProfileExecutionItem);
+            await AttemptJoinAsync(connectedSystemObject, runProfileExecutionItem);
             
             // did we encounter an error whilst attempting a join? stop processing the CSO if so.
             if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                 return;
 
-            if (!wasJoinSuccessful)
+            // were we able to join to an existing MVO?
+            if (connectedSystemObject.MetaverseObject == null)
             {
                 // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
                 await AttemptProjectionAsync(connectedSystemObject);
             }
         }
-        else
+
+        // CSO might be joined by this point, ether through a join to an existing MVO, projection to the MV, or via an existing join.
+        // inspect sync rules for any necessary attribute flow updates.
+        if (connectedSystemObject.MetaverseObject != null)
         {
-            // CSO is already joined to a Metaverse Object
-            // inspect sync rules for any necessary attribute flow updates.
+            AssignMetaverseObjectAttributeValues(connectedSystemObject, projectionSyncRule);
+            
+            if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
+                await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
         }
     }
 
@@ -219,10 +226,10 @@ public class SyncFullSyncTaskProcessor
     /// <param name="runProfileExecutionItem">The Run Profile Execution Item we're tracking changes/errors against for the CSO.</param>
     /// <returns>True if a join was established, otherwise False.</returns>
     /// <exception cref="InvalidDataException">Will be thrown if an unsupported join state is found preventing processing.</exception>
-    private async Task<bool> AttemptJoinAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task AttemptJoinAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         if (_syncRules == null)
-            return false;
+            return;
         
         // enumerate all sync rules that have matching rules. first to match wins. 
         // for more deterministic results, admins should make sure an object only matches to a single sync rule
@@ -247,22 +254,21 @@ public class SyncFullSyncTaskProcessor
                 {
                     runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
                     runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO {existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your Object Matching Rules for uniqueness.";
-                    return false;
+                    return;
                 }
                     
                 // establish join! then return as first rule to match, wins.
                 connectedSystemObject.MetaverseObject = mvo;
                 connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
-                return true;
+                return;
             }
             
             // have we joined yet? stop enumerating if so.
             if (connectedSystemObject.MetaverseObject != null)
-                return true;
+                return;
         }
 
         // no join could be established.
-        return false;
     }
 
     /// <summary>
@@ -287,12 +293,7 @@ public class SyncFullSyncTaskProcessor
             mvo.ConnectedSystemObjects.Add(connectedSystemObject);
             mvo.Type = projectionSyncRule.MetaverseObjectType;
             connectedSystemObject.MetaverseObject = mvo;
-            
-            // now build the MVO attributes from the CSO.
-            AssignMetaverseObjectAttributeValues(mvo, connectedSystemObject, projectionSyncRule);
-            
-            // persist the mvo
-            await _jim.Metaverse.CreateMetaverseObjectAsync(mvo);
+            connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         }
     }
 
