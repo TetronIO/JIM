@@ -37,6 +37,15 @@ public class SyncFullSyncTaskProcessor
         Log.Verbose("PerformFullSyncAsync: Starting");
         
         // what needs to happen:
+        // - delete any obsolete CSOs and action any required MVO changes 
+        // - confirm pending exports
+        // - enumerate all enabled sync rules for the connected system
+        //   - find all matching CSOs
+        //   - try and join to existing MVOs per matching rules
+        //   - try and project to MV per matching rules
+        //   - flow attributes per flow rules
+        
+        
         // - confirm pending exports
         // - establish new joins to existing Metaverse Objects
         // - project CSO to the MV if there are no join matches and if a Sync Rule for this CS has Projection enabled.
