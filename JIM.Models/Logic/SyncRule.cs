@@ -63,7 +63,8 @@ public class SyncRule: IValidated
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Contains all the logic that controls what attributes on a metaverse object should flow to what connected system object attribute, or visa-versa, depending on the sync rule direction.
+    /// Contains all the logic that controls what attributes on a metaverse object should flow to what connected system object attribute,
+    /// or visa-versa, depending on the sync rule direction.
     /// </summary>
     public List<SyncRuleMapping> AttributeFlowRules { get; set; } = new();
 
@@ -78,7 +79,7 @@ public class SyncRule: IValidated
     public List<Activity> Activities { get; set; } = null!;
 
     // TODO: what happens when an object is in scope, then falls out of scope?
-    // should/can we provide an option to cause deprovisioning?
+    // should/can we provide an option to cause deprovisioning/disconnection?
 
     /// <summary>
     /// Contains all the logic that determines which Metaverse objects should be exported to the Connected System.

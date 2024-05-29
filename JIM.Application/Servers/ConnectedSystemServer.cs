@@ -658,7 +658,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Causes all of the connected system objects and pending export objects for a connected system to be deleted.
+    /// Causes all the connected system objects and pending export objects for a connected system to be deleted.
     /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of the intended state.
     /// </summary>
     /// <remarks>Only intended to be called by JIM.Service, i.e. this action should always be queued. That's why this method is lightweight and doesn't create it's own activity.</remarks>
