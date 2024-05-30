@@ -36,24 +36,23 @@ public class SyncFullSyncTaskProcessor
     {
         Log.Verbose("PerformFullSyncAsync: Starting");
         
-        // what needs to happen:
-        // - delete any obsolete CSOs and action any required MVO changes 
+        // process:
         // - confirm pending exports
-        // - enumerate all enabled sync rules for the connected system
-        //   - find all matching CSOs
-        //   - try and join to existing MVOs per matching rules
-        //   - try and project to MV per matching rules
-        //   - flow attributes per flow rules
-        
-        
-        // - confirm pending exports
-        // - establish new joins to existing Metaverse Objects
-        // - project CSO to the MV if there are no join matches and if a Sync Rule for this CS has Projection enabled.
-        // - work out if we CAN update any Metaverse Objects (where there's attribute flow) and whether we SHOULD (where there's attribute flow priority).
-        // - update the Metaverse Objects accordingly.
-        // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
+        // - process obsolete CSOs (Connected System Objects)
+        // - enumerate unjoined objects:
+        //   - try and join unjoined CSO to existing MVO (Metaverse Object)
+        //   - if still not joined, try and project CSO to MV but don't apply attribute flow
+        // - enumerate inbound sync rules:
+        //   - get paged joined CSOs
+        //   - evaluate IAF (Inbound Attribute Flow), whilst respecting MV attribute source priority rules
+        //   - process onward changes as a result, i.e. EAF (Export Attribute Flow) to other Connected System Objects
 
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing");
+
+        // how many objects are we processing? that's the sum of:
+        // - pending export objects
+        // - obsolete objects
+        // - unjoined objects
         
         // how many objects are we processing? that's CSO count + Pending Export Object count.
         // update the activity with this info so a progress bar can be shown.
