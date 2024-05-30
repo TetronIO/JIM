@@ -56,8 +56,11 @@ public class SyncFullSyncTaskProcessor
         
         // how many objects are we processing? that's CSO count + Pending Export Object count.
         // update the activity with this info so a progress bar can be shown.
-        var totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+        
         var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
+        var totalObosoleteCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectObsoleteCountAsync(_connectedSystem.Id);
+
+
         var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;

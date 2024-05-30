@@ -414,6 +414,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => cso.ConnectedSystemId == connectedSystemId);
     }
 
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
+    public async Task<int> GetConnectedSystemObjectObsoleteCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
+            cso.ConnectedSystemId == connectedSystemId &&
+            cso.Status == ConnectedSystemObjectStatus.Obosolete);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, that are not joined to a Metaverse Object.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
+    public async Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId)
+    {
+                return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
+            cso.ConnectedSystemId == connectedSystemId &&
+            cso.MetaverseObject == null);
+    }
+
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
         Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);

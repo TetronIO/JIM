@@ -507,9 +507,30 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(connectedSystemId , connectedSystemAttributeId, attributeValue);
     }
 
+    /// <summary>
+    /// Returns the count of all Connected System Objects across all Connected Systems.
+    /// </summary>
     public async Task<int> GetConnectedSystemObjectCountAsync()
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync();
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
+    public async Task<int> GetConnectedSystemObjectObsoleteCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectObsoleteCountAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, that are not joined to a Metaverse Object.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
+    public async Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectUnjoinedCountAsync(connectedSystemId);
     }
     
     /// <summary>

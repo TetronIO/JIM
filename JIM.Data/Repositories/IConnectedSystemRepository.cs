@@ -20,6 +20,7 @@ public interface IConnectedSystemRepository
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
+
     /// <summary>
     /// Retrieves all the Pending Exports for a given Connected System.
     /// </summary>
@@ -31,21 +32,25 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId);
+
     /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
     /// Includes Attributes.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
+
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
     public Task<List<SyncRule>> GetSyncRulesAsync();
+
     /// <summary>
     /// Retrieves all the sync rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules);
+
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
@@ -54,12 +59,30 @@ public interface IConnectedSystemRepository
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, bool returnAttributes = false);
     public Task<SyncRule?> GetSyncRuleAsync(int id);
+
+    /// <summary>
+    /// Returns the count of all Connected System Objects across all Connected Systems.
+    /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();
+
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>s
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
+    public Task<int> GetConnectedSystemObjectObsoleteCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, that are not joined to a Metaverse Object.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
+    public Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);
