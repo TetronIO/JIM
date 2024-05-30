@@ -53,15 +53,11 @@ public class SyncFullSyncTaskProcessor
         // - pending export objects
         // - obsolete objects
         // - unjoined objects
-        
-        // how many objects are we processing? that's CSO count + Pending Export Object count.
         // update the activity with this info so a progress bar can be shown.
-        
         var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
         var totalObosoleteCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectObsoleteCountAsync(_connectedSystem.Id);
-
-
-        var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
+        var totalUnjoinedCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectUnjoinedCountAsync(_connectedSystem.Id);
+        var totalObjectsToProcess = totalPendingExportObjectsToProcess + totalObosoleteCsosToProcess + totalUnjoinedCsosToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityAsync(_activity);
@@ -72,6 +68,13 @@ public class SyncFullSyncTaskProcessor
         
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         //_objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+
+        await ProcessPendingExportsAsync();
+        await ProcessObsoleteConnectedSystemObjectsAsync();
+
+
+
+
         
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe
         // and to update the Activity as we go, allowing the UI to be updated and keep users informed.
@@ -145,42 +148,67 @@ public class SyncFullSyncTaskProcessor
     }
 
     /// <summary>
-    /// See if a Pending Export Object for a Connected System Object can be invalidated and deleted.
-    /// This would occur when the Pending Export changes are visible on the Connected System Object after a confirming import.
+    /// Evaluate all Pending Export objects and see if they can be invalidated and deleted.
+    /// This would occur when Pending Export changes are visible on Connected System Objects after a confirming import.
     /// </summary>
-    private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task ProcessPendingExportsAsync()
     {
-        // todo: all of it! skipping for now.
-        Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
+        Log.Verbose($"ProcessPendingExportsAsync: Executing.");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Pending Exports");
+
+        foreach (var pendingExport in await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id))
+        {
+            // check for cancellation request, and stop work if cancelled.
+            if (_cancellationTokenSource.IsCancellationRequested)
+            {
+                Log.Information("ProcessPendingExportsAsync: Cancellation requested. Stopping.");
+                return;
+            }
+
+            // todo: all of it! skipping for now.
+        }
     }
 
     /// <summary>
-    /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
-    /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
+    /// Evaluates all obsolete CSO and deletes them, applying any joined Metaverse Object changes as necessary.
+    /// As a result, Metaverse Object deletions can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task ProcessObsoleteConnectedSystemObjectsAsync()
     {
-        if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-            return;
-        
-        Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Executing for: {connectedSystemObject}.");
+        Log.Verbose($"ProcessObsoleteConnectedSystemObjectsAsync: Executing.");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Obsolete Objects");
 
-        // - if not joined, delete the cso
-        // - if joined:
-        //   - if the metaverse object should be deleted (determined by mv object deletion rules):
-        //     - should any other connected system objects be deleted?
-        //   - if the metaverse object shouldn't be deleted:
-        //     - should any cso-contributed mvo attributes be removed?
+        // seeing how just getting them all works out. if it becomes problematic for very large sets, we may have to move to a paged model.
+        foreach (var obsoleteCso in await _jim.ConnectedSystems.GetConnectedSystemObjectsObsoleteAsync(_connectedSystem.Id, false))
+        {
+            // check for cancellation request, and stop work if cancelled.
+            if (_cancellationTokenSource.IsCancellationRequested)
+            {
+                Log.Information("ProcessObsoleteConnectedSystemObjectsAsync: Cancellation requested. Stopping.");
+                return;
+            }
 
-        if (connectedSystemObject.MetaverseObject == null)
-        {
-            // not a joiner, delete the CSO.
-            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
-        }
-        else
-        {
-            // todo: joiner, determine Metaverse and onward CSO impact.
-            throw new NotImplementedException("Deleting joined CSOs is not yet supported.");
+            // for linting purposes, really
+            if (obsoleteCso.Status != ConnectedSystemObjectStatus.Obsolete)
+                continue;
+            
+            // - if not joined, delete the cso
+            // - if joined:
+            //   - if the metaverse object should be deleted (determined by mv object deletion rules):
+            //     - should any other connected system objects be deleted?
+            //   - if the metaverse object shouldn't be deleted:
+            //     - should any cso-contributed mvo attributes be removed?
+
+            if (obsoleteCso.MetaverseObject == null)
+            {
+                // not a joiner, delete the CSO.
+                await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(obsoleteCso, runProfileExecutionItem);
+            }
+            else
+            {
+                // todo: joiner, determine Metaverse and onward CSO impact.
+                throw new NotImplementedException("Deleting joined CSOs is not yet supported.");
+            }
         }
     }
 

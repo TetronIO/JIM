@@ -357,6 +357,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     }
 
+    /// <summary>
+    /// Returns all of the CSOs for a Connected System that are marked as Obsolete.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
+    public async Task<ConnectedSystemObject> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes)
+    {
+        // start building the query for all the obsolete CSOs for a particular system.
+        var query = Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues);
+        
+        // for optimum performance, do not include attributes
+        // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema whilst in memory
+        // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
+        if (returnAttributes)
+            query.ThenInclude(av => av.Attribute);
+
+        // add the Connected System filter
+        var objects = from cso in query.Where(q => q.ConnectedSystem.Id == connectedSystemId)
+            select cso;
+
+        return await objects.ToListAsync();
+    }
+
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         return await Repository.Database.ConnectedSystemObjects.Where(cso =>
@@ -431,7 +454,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
     public async Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId)
     {
-                return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
+        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
             cso.ConnectedSystemId == connectedSystemId &&
             cso.MetaverseObject == null);
     }

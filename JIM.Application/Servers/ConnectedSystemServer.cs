@@ -487,6 +487,16 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, returnAttributes);
     }
 
+    /// <summary>
+    /// Returns all of the CSOs for a Connected System that are marked as Obsolete.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
+    public async Task<ConnectedSystemObject> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes);
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);

@@ -58,6 +58,14 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, bool returnAttributes = false);
+    
+    /// <summary>
+    /// Returns all of the CSOs for a Connected System that are marked as Obsolete.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
+    public  Task<ConnectedSystemObject> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes);
+    
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
