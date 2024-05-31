@@ -213,6 +213,15 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.MetaverseObject != null)
         {
             // process sync rules and see if we need to flow any attributes from the CSO to the MVO.
+            foreach(var inboundSyncRule in _syncRules.Where(q => 
+                q.Direction == SyncRuleDirection.Inbound &&
+                q.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+            {
+                // evaluate attribute flow
+            }
+
+
+
 
             // CSO might be joined by this point, ether through a join to an existing MVO, projection to the MV, or via an existing join.
             // inspect sync rules for any necessary attribute flow updates.
