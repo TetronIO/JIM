@@ -60,11 +60,18 @@ public interface IConnectedSystemRepository
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, bool returnAttributes = false);
     
     /// <summary>
-    /// Returns all of the CSOs for a Connected System that are marked as Obsolete.
+    /// Returns all the CSOs for a Connected System that are marked as Obsolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
-    public  Task<ConnectedSystemObject> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes);
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes);
+
+    /// <summary>
+    /// Returns all the CSOs for a Connected System that are not joined to Metaverse Objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsUnJoinedAsync(int connectedSystemId, bool returnAttributes);
     
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
@@ -89,7 +96,7 @@ public interface IConnectedSystemRepository
     /// Returns the count of Connected System Objects for a particular Connected System, that are not joined to a Metaverse Object.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
-    public Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId);
+    public Task<int> GetConnectedSystemObjectUnJoinedCountAsync(int connectedSystemId);
 
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);

@@ -431,7 +431,7 @@ public class ConnectedSystemServer
     {
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
         
-        // create a change object for this deletion
+        // create a Change Object for this deletion
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
@@ -445,7 +445,6 @@ public class ConnectedSystemServer
 
         // the change object will be persisted with the activity run profile execution item further up the stack.
         // we just need to associate the change with the execution item.
-        // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
     }
     
@@ -488,13 +487,23 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Returns all of the CSOs for a Connected System that are marked as Obsolete.
+    /// Returns all the CSOs for a Connected System that are marked as Obsolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
-    public async Task<ConnectedSystemObject> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes)
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsObsoleteAsync(connectedSystemId, returnAttributes);
+    }
+    
+    /// <summary>
+    /// Returns all the CSOs for a Connected System that are not joined to Metaverse Objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsUnJoinedAsync(int connectedSystemId, bool returnAttributes)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsUnJoinedAsync(connectedSystemId, returnAttributes);
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
@@ -540,7 +549,7 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
     public async Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectUnjoinedCountAsync(connectedSystemId);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectUnJoinedCountAsync(connectedSystemId);
     }
     
     /// <summary>

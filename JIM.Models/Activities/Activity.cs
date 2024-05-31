@@ -4,9 +4,8 @@ namespace JIM.Models.Activities;
 
 /// <summary>
 /// Enables all activities being performed in JIM, whether user or system initiated to be tracked and logged.
-/// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being
-/// run or about to be run, then the relevant page can filter for those activities, and the same for say metaverse
-/// object updates to see when a group membership was updated, or a user created, or sync rules changed, etc.
+/// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being run or about to be run, then the relevant page can filter for
+/// those activities, and the same for say metaverse object updates to see when a group membership was updated, or a user created, or sync rules changed, etc.
 /// </summary>
 public class Activity
 {
@@ -21,10 +20,9 @@ public class Activity
     public DateTime Created { get; set; } = DateTime.UtcNow;
     
     /// <summary>
-    /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to
-    /// get to a task for the activity will have an Executed time.
-    /// noticeably later than the created time for the Activity. This enables you to see what the overall,
-    /// user-experienced activity completion time is, and the actual system execution time.
+    /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to get to a task for the activity will have an Executed time.
+    /// noticeably later than the created time for the Activity. This enables you to see what the overall, user-experienced activity completion time is,
+    /// and the actual system execution time.
     /// </summary>
     public DateTime Executed {  get; set; }
 
@@ -41,9 +39,8 @@ public class Activity
 
     /// <summary>
     /// When the activity is complete, a value for how long the activity took to complete should be stored here. 
-    /// This may be a noticeably smaller value than the total activity time, as some activities take a while before they
-    /// are executed, i.e. those processed by JIM.Service which employs a queue and may take time to get round to 
-    /// executing the task the activity is for.
+    /// This may be a noticeably smaller value than the total activity time, as some activities take a while before they are executed, i.e. those processed by JIM.Service which
+    /// employs a queue and may take time to get round to executing the task the activity is for.
     /// </summary>
     public TimeSpan? ExecutionTime { get; set; }
 
@@ -64,9 +61,8 @@ public class Activity
     public ActivityTargetOperationType TargetOperationType { get; set; }
 
     /// <summary>
-    /// The name of the target object. The name is copied here from the object to enable it make identifying
-    /// it easier if/when the target object is deleted and cannot be referenced anymore. The value is not kept
-    /// up to date with the target object, it's just a point in time copy. 
+    /// The name of the target object. The name is copied here from the object to enable it make identifying it easier if/when the target object is deleted and cannot be referenced
+    /// anymore. The value is not kept up to date with the target object, it's just a point in time copy. 
     /// Note: Not all objects will have to support a name, so it's optional.
     /// </summary>
     public string? TargetName { get; set; }
@@ -112,7 +108,7 @@ public class Activity
     // - result item with operation type (create/update/delete) and link to the Metaverse Object and json snapshot
     //   of imported/exported object
 
-     /// <summary>
+    /// <summary>
     /// If the activity TargetType is ConnectedSystemRunProfile, then these items will provide information on the objects affected by a sync run.
     /// </summary>
     public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; init; } = new();
@@ -134,8 +130,7 @@ public class Activity
     
     /// <summary>
     /// Prepares a Run Profile Execution Item that relates to the Activity, but has not yet been added to it.
-    /// This enables items to be prepared, but a decision on whether to persist it or not can come later at the
-    /// callers' discretion.
+    /// This enables items to be prepared, but a decision on whether to persist it or not can come later at the caller's discretion.
     /// </summary>
     public ActivityRunProfileExecutionItem PrepareRunProfileExecutionItem()
     {

@@ -124,10 +124,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
     {
         // retrieve a complex connected system object. break the query down into three parts for optimal performance.
-        // (doing it in one giant include tree query will make it timeout.
-        List<ConnectedSystemObjectType>? types = null;
-        List<ConnectedSystemRunProfile>? runProfiles = null;
-        List<ConnectedSystemPartition>? partitions = null;
+        // doing it in one giant include tree query will make it timeout.
 
         var connectedSystem = await Repository.Database.ConnectedSystems.
             Include(cs => cs.ConnectorDefinition).
@@ -138,14 +135,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystem == null)
             return null;
 
-        runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
+        var runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
 
-        types = await Repository.Database.ConnectedSystemObjectTypes
+        var types = await Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes.OrderBy(a => a.Name))
             .Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
-        partitions = await Repository.Database.ConnectedSystemPartitions
+        var partitions = await Repository.Database.ConnectedSystemPartitions
             .Include(p => p.Containers)!
             .ThenInclude(c => c.ChildContainers)
             .ThenInclude(c => c.ChildContainers)
@@ -358,11 +355,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Returns all of the CSOs for a Connected System that are marked as Obsolete.
+    /// Returns all the CSOs for a Connected System that are marked as Obsolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
-    public async Task<ConnectedSystemObject> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes)
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsObsoleteAsync(int connectedSystemId, bool returnAttributes)
     {
         // start building the query for all the obsolete CSOs for a particular system.
         var query = Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues);
@@ -374,7 +371,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             query.ThenInclude(av => av.Attribute);
 
         // add the Connected System filter
-        var objects = from cso in query.Where(q => q.ConnectedSystem.Id == connectedSystemId)
+        var objects = from cso in query.Where(q => 
+                q.ConnectedSystem.Id == connectedSystemId &&
+                q.Status == ConnectedSystemObjectStatus.Obsolete)
+            select cso;
+
+        return await objects.ToListAsync();
+    }
+    
+    /// <summary>
+    /// Returns all the CSOs for a Connected System that are not joined to Metaverse Objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsUnJoinedAsync(int connectedSystemId, bool returnAttributes)
+    {
+        // start building the query for all the obsolete CSOs for a particular system.
+        var query = Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues);
+        
+        // for optimum performance, do not include attributes
+        // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema whilst in memory
+        // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
+        if (returnAttributes)
+            query.ThenInclude(av => av.Attribute);
+
+        // add the Connected System filter
+        var objects = from cso in query.Where(q => 
+                q.ConnectedSystem.Id == connectedSystemId && 
+                q.MetaverseObject == null)
             select cso;
 
         return await objects.ToListAsync();
@@ -445,14 +469,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
             cso.ConnectedSystemId == connectedSystemId &&
-            cso.Status == ConnectedSystemObjectStatus.Obosolete);
+            cso.Status == ConnectedSystemObjectStatus.Obsolete);
     }
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, that are not joined to a Metaverse Object.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
-    public async Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId)
+    public async Task<int> GetConnectedSystemObjectUnJoinedCountAsync(int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
             cso.ConnectedSystemId == connectedSystemId &&
