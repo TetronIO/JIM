@@ -116,10 +116,10 @@ public class SyncFullSyncTaskProcessor
         try
         {
             await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
-            var wasDeleted = await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+            await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
             
-            // has CSO been deleted? if not, look for Metaverse Object updates. requires we have sync rules.
-            if (_haveSyncRules && !wasDeleted)
+            // if the CSO wasn't marked as obsolete, look for Metaverse Object updates. requires we have sync rules.
+            if (_haveSyncRules && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
                 await ProcessMetaverseObjectChangesAsync(connectedSystemObject, runProfileExecutionItem);
         }
         catch (Exception e)
@@ -149,12 +149,11 @@ public class SyncFullSyncTaskProcessor
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
     /// </summary>
-    /// <returns>True if the object was deleted, false if not.</returns>
-    private async Task<bool> ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
-        if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-            return false;
-        
+        if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete) 
+            return;
+
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Executing for: {connectedSystemObject}.");
 
         // - if not joined, delete the cso
@@ -168,7 +167,7 @@ public class SyncFullSyncTaskProcessor
         {
             // not a joiner, delete the CSO.
             await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
-            return true;
+            return;
         }
         
         // todo: joiner, determine Metaverse and onward CSO impact.
