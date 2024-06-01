@@ -635,7 +635,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Adds a Change object to a Un Profile Execution Item for a CSO that's being updated.
+    /// Adds a Change object to the Run Profile Execution Item for a CSO that's being updated.
     /// </summary>
     private static void ProcessConnectedSystemObjectAttributeValueChanges(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {

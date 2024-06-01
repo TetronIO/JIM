@@ -209,33 +209,20 @@ public class SyncFullSyncTaskProcessor
             }
         }
 
+        // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
             // process sync rules and see if we need to flow any attributes from the CSO to the MVO.
-            foreach(var inboundSyncRule in _syncRules.Where(q => 
-                q.Direction == SyncRuleDirection.Inbound &&
-                q.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+            foreach (var inboundSyncRule in _syncRules.Where(q => q.Direction == SyncRuleDirection.Import && q.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
             {
-                // evaluate attribute flow
+                // evaluate inbound attribute flow
+                AssignMetaverseObjectAttributeValues(connectedSystemObject, inboundSyncRule);
             }
-
-
-
-
-            // CSO might be joined by this point, ether through a join to an existing MVO, projection to the MV, or via an existing join.
-            // inspect sync rules for any necessary attribute flow updates.
-            if (connectedSystemObject.MetaverseObject != null)
-            {
             
-            
-            
-                AssignMetaverseObjectAttributeValues(connectedSystemObject, projectionSyncRule);
-            
-            
-            }
-        
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
-                await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);    
+                await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
+            
+            // todo: process onward-CSO updates
         }
     }
 
@@ -321,13 +308,18 @@ public class SyncFullSyncTaskProcessor
     /// Assigns values to a Metaverse Object, from a Connected System Object using a Sync Rule.
     /// Does not perform any delta procesing. This is for MVO create scenarios where there are not MVO attribute values already.
     /// </summary>
-    /// <param name="metaverseObject">The target Metaverse Object to assign attribute values to.</param>
     /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>
     /// <param name="syncRule">The Sync Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
-    private void AssignMetaverseObjectAttributeValues(MetaverseObject metaverseObject, ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
+    private void AssignMetaverseObjectAttributeValues(ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
     {
+        if (connectedSystemObject.MetaverseObject == null)
+        {
+            Log.Error($"AssignMetaverseObjectAttributeValues: CSO ({connectedSystemObject}) has no MVO!");
+            return;
+        }
+        
         // TODO: review for evolution into a generic create/update/delete attribute value function, so we don't repeat ourselves later for non-create scenarios.
         
         foreach (var mapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
@@ -349,7 +341,7 @@ public class SyncFullSyncTaskProcessor
                     {
                         var csoAttributeValue = connectedSystemObject.GetAttributeValue(source.ConnectedSystemAttribute.Name);
                         if (csoAttributeValue != null)
-                            SetMetaverseObjectAttributeValue(metaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
+                            SetMetaverseObjectAttributeValue(connectedSystemObject.MetaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
                         else
                             Log.Verbose($"AttemptProjectionAsync: Skipping CSO SVA {source.ConnectedSystemAttribute.Name} as it has no value.");
                     }
@@ -358,7 +350,7 @@ public class SyncFullSyncTaskProcessor
                         // multi-valued attribute
                         var csoAttributeValues = connectedSystemObject.GetAttributeValues(source.ConnectedSystemAttribute.Name);
                         foreach (var csoAttributeValue in csoAttributeValues)
-                            SetMetaverseObjectAttributeValue(metaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
+                            SetMetaverseObjectAttributeValue(connectedSystemObject.MetaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
                     }
                 }
                 else if (source.Function != null)
