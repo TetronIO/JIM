@@ -260,7 +260,9 @@ public class SyncFullSyncTaskProcessor
                 if (existingCsoJoins.Count == 1)
                 {
                     runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
-                    runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO {existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your Object Matching Rules for uniqueness.";
+                    runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
+                                                           $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your " +
+                                                           $"Object Matching Rules for uniqueness.";
                     return;
                 }
                     
@@ -301,7 +303,7 @@ public class SyncFullSyncTaskProcessor
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         
-        // do not flow attributes at this point.
+        // do not flow attributes at this point. let that happen separately, so we don't re-process sync rules later.
     }
 
     /// <summary>
@@ -321,7 +323,6 @@ public class SyncFullSyncTaskProcessor
         }
         
         // TODO: review for evolution into a generic create/update/delete attribute value function, so we don't repeat ourselves later for non-create scenarios.
-        
         foreach (var mapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
         {
             if (mapping.TargetMetaverseAttribute == null)
