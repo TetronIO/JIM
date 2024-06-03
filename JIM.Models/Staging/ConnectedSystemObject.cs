@@ -124,7 +124,7 @@ public class ConnectedSystemObject
         if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
             throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued Attribute. Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
 
-        // the attribute might have pending changes already, so clear any previous pending changes as we can only accept the last change to a sva
+        // the attribute might have pending changes already, so clear any previous pending changes as we can only accept the last change to an SVA
         PendingAttributeValueAdditions.RemoveAll(q => q.Attribute.Id == connectedSystemAttribute.Id);
         PendingAttributeValueRemovals.RemoveAll(q => q.Attribute.Id == connectedSystemAttribute.Id);
 
