@@ -547,7 +547,7 @@ public class ConnectedSystemServer
     /// Returns the count of Connected System Objects for a particular Connected System, that are not joined to a Metaverse Object.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
-    public async Task<int> GetConnectedSystemObjectUnjoinedCountAsync(int connectedSystemId)
+    public async Task<int> GetConnectedSystemObjectUnJoinedCountAsync(int connectedSystemId)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectUnJoinedCountAsync(connectedSystemId);
     }
@@ -559,19 +559,6 @@ public class ConnectedSystemServer
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
-    }
-
-    /// <summary>
-    /// Creates a single Connected System Object and appends a Change Object to the Activity Run Profile Execution Item.
-    /// </summary>
-    public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
-    {
-        // persist the cso first.
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
-        
-        // add a change object to the run profile execution item, so the change is logged.
-        // it will be persisted higher up the calling stack as part of the Activity and its Activity Run Profile Execution Items.
-        AddConnectedSystemObjectChange(connectedSystemObject, activityRunProfileExecutionItem);
     }
 
     /// <summary>
@@ -642,10 +629,10 @@ public class ConnectedSystemServer
         if (connectedSystemObject == null)
             throw new ArgumentNullException(nameof(connectedSystemObject));
 
-        if (connectedSystemObject.AttributeValues.Any(csav => csav.Attribute == null))
+        if (connectedSystemObject.AttributeValues.Any(v => v.Attribute == null))
             throw new ArgumentException($"One or more AttributeValue {nameof(ConnectedSystemObjectAttributeValue)} objects do not have an Attribute property set.", nameof(connectedSystemObject));
 
-        if (connectedSystemObject.AttributeValues.Any(csav => csav.ConnectedSystemObject == null))
+        if (connectedSystemObject.AttributeValues.Any(v => v.ConnectedSystemObject == null))
             throw new ArgumentException($"One or more AttributeValue {nameof(ConnectedSystemObjectAttributeValue)} objects do not have a ConnectedSystemObject property set.", nameof(connectedSystemObject));
 
         // check if there's any work to do. we need something in the pending attribute value additions, or removals to continue

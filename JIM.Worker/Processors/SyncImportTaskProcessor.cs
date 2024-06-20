@@ -50,7 +50,7 @@ public class SyncImportTaskProcessor
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
         
-        // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions.
+        // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions later.
         var externalIdsImported = new List<ExternalIdPair>();
         var totalObjectsImported = 0;
             

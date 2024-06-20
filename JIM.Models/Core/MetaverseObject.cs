@@ -24,13 +24,13 @@ public class MetaverseObject
     public List<MetaverseObjectChange> Changes { get; set; } = new();
 
     /// <summary>
-    /// Used by JIM.Application to determine what attribute values need adding and recording.
+    /// Used by JIM.Application to determine what attribute values need adding and change-tracking.
     /// </summary>
     [NotMapped]
     public List<MetaverseObjectAttributeValue> PendingAttributeValueAdditions { get; set; } = new();
 
     /// <summary>
-    /// Used by JIM.Application to determine what attribute values need removing and recording.
+    /// Used by JIM.Application to determine what attribute values need removing and change-tracking.
     /// </summary>
     [NotMapped]
     public List<MetaverseObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();

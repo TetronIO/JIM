@@ -63,13 +63,13 @@ public class ConnectedSystemObject
     public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;
 
     /// <summary>
-    /// Only for use by JIM.Service to determine what attribute values need adding and recording.
+    /// Only for use by JIM.Service to determine what attribute values need adding and change-tracking.
     /// </summary>
     [NotMapped]
     public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueAdditions { get; set; } = new();
 
     /// <summary>
-    /// Only for use by JIM.Service to determine what attribute values need removing and recording.
+    /// Only for use by JIM.Service to determine what attribute values need removing and change-tracking.
     /// </summary>
     [NotMapped]
     public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
