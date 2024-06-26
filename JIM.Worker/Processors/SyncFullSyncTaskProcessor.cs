@@ -14,7 +14,8 @@ public class SyncFullSyncTaskProcessor
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
-    private List<SyncRule>? _syncRules;
+    private List<SyncRule>? _activeSyncRules;
+    private List<ConnectedSystemObjectType>? _objectTypes;
     private bool _haveSyncRules;
     
     public SyncFullSyncTaskProcessor(
@@ -55,11 +56,11 @@ public class SyncFullSyncTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
         
         // get all the active sync rules for this system
-        _syncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
-        _haveSyncRules = _syncRules is { Count: > 0 };
+        _activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+        _haveSyncRules = _activeSyncRules is { Count: > 0 };
         
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
-        //_objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
         
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe
         // and to update the Activity as we go, allowing the UI to be updated and keep users informed.
@@ -68,7 +69,7 @@ public class SyncFullSyncTaskProcessor
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
         for (var i = 0; i < totalCsoPages; i++)
         {
-            var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
+            var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
             foreach (var connectedSystemObject in csoPagedResult.Results)
             {
                 // check for cancellation request, and stop work if cancelled.
@@ -185,7 +186,7 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
         
-        if (_syncRules == null || _syncRules.Count == 0)
+        if (_activeSyncRules == null || _activeSyncRules.Count == 0)
             return;
         
         // do we need to join, or project the CSO to the Metaverse?
@@ -212,13 +213,14 @@ public class SyncFullSyncTaskProcessor
         // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
-            // process sync rules and see if we need to flow any attributes from the CSO to the MVO.
-            foreach (var inboundSyncRule in _syncRules.Where(q => q.Direction == SyncRuleDirection.Import && q.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+            // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
+            foreach (var inboundSyncRule in _activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
             {
-                // evaluate inbound attribute flow
-                AssignMetaverseObjectAttributeValues(connectedSystemObject, inboundSyncRule);
+                // evaluate inbound attribute flow rules
+                ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
             }
             
+            // have we created a new MVO that needs persisting?
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
                 await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
             
@@ -235,13 +237,13 @@ public class SyncFullSyncTaskProcessor
     /// <exception cref="InvalidDataException">Will be thrown if an unsupported join state is found preventing processing.</exception>
     private async Task AttemptJoinAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
-        if (_syncRules == null)
+        if (_activeSyncRules == null)
             return;
         
         // enumerate all sync rules that have matching rules. first to match wins. 
         // for more deterministic results, admins should make sure an object only matches to a single sync rule
         // at any given moment to ensure the single sync rule matching rule priority order is law.
-        foreach (var matchingSyncRule in _syncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+        foreach (var matchingSyncRule in _activeSyncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
         {
             // object matching rules are ordered. respect the ordering. 
             foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
@@ -289,7 +291,7 @@ public class SyncFullSyncTaskProcessor
     private void AttemptProjection(ConnectedSystemObject connectedSystemObject)
     {
         // see if there are any sync rules for this object type where projection is enabled. first to project, wins.
-        var projectionSyncRule = _syncRules?.FirstOrDefault(sr =>
+        var projectionSyncRule = _activeSyncRules?.FirstOrDefault(sr =>
             sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
             sr.ConnectedSystemObjectType.Id == connectedSystemObject.TypeId);
 
@@ -308,13 +310,13 @@ public class SyncFullSyncTaskProcessor
 
     /// <summary>
     /// Assigns values to a Metaverse Object, from a Connected System Object using a Sync Rule.
-    /// Does not perform any delta procesing. This is for MVO create scenarios where there are not MVO attribute values already.
+    /// Does not perform any delta processing. This is for MVO create scenarios where there are not MVO attribute values already.
     /// </summary>
     /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>
     /// <param name="syncRule">The Sync Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
-    private void AssignMetaverseObjectAttributeValues(ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
+    private void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
     {
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -322,46 +324,12 @@ public class SyncFullSyncTaskProcessor
             return;
         }
         
-        // TODO: review for evolution into a generic create/update/delete attribute value function, so we don't repeat ourselves later for non-create scenarios.
-        foreach (var mapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
+        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
         {
-            if (mapping.TargetMetaverseAttribute == null)
+            if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
             
-            foreach (var source in mapping.Sources.OrderBy(q => q.Order))
-            {
-                if (source.ConnectedSystemAttribute != null)
-                {
-                    // CSOs and MVOs have slightly different ways of representing multiple-values due to how
-                    // they need to be used/populated in their respective scenarios.
-                    // CSOs store all values under a single attribute value object.
-                    // MVOs store each value under their own attribute value object.
-                    // so we need to handle MVAs differently when populating the MVO attribute value.
-
-                    if (source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued)
-                    {
-                        var csoAttributeValue = connectedSystemObject.GetAttributeValue(source.ConnectedSystemAttribute.Name);
-                        if (csoAttributeValue != null)
-                            SetMetaverseObjectAttributeValue(connectedSystemObject.MetaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
-                        else
-                            Log.Verbose($"AttemptProjectionAsync: Skipping CSO SVA {source.ConnectedSystemAttribute.Name} as it has no value.");
-                    }
-                    else
-                    {
-                        // multi-valued attribute
-                        var csoAttributeValues = connectedSystemObject.GetAttributeValues(source.ConnectedSystemAttribute.Name);
-                        foreach (var csoAttributeValue in csoAttributeValues)
-                            SetMetaverseObjectAttributeValue(connectedSystemObject.MetaverseObject, mapping.TargetMetaverseAttribute, csoAttributeValue); 
-                    }
-                }
-                else if (source.Function != null)
-                    throw new NotImplementedException("Functions have not been implemented yet.");
-                else if (source.MetaverseAttribute != null)
-                    throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. "+
-                        "This operation is focused on import flow, so Connected System to Metaverse Object.");
-                else
-                    throw new InvalidDataException("Expected ConnectedSystemAttribute or Function to be populated in a SyncRuleMappingSource object.");
-            }
+            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes);
         }
     }
 
