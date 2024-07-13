@@ -21,7 +21,7 @@ public static class SyncRuleMappingProcessor
         foreach (var source in syncRuleMapping.Sources.OrderBy(q => q.Order))
         {
             // goal:
-            // generate or select a source value, to assign to a target attribute (CSO to MVO).
+            // select or generate a source value, to assign to a target attribute (CSO to MVO).
             // inbound sync rule mappings can have one or more sources. those sources can be of different types, i.e:
             // - direct attribute flow
             // - generated from functions
