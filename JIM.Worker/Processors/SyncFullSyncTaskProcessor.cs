@@ -370,5 +370,7 @@ public class SyncFullSyncTaskProcessor
         // get the joined Metaverse Object and add it to the Metaverse Object Attribute Value
         // remove the unresolved reference value.
         // update the Metaverse Object Attribute Value.
+
+        throw new NotImplementedException("This needs to be done!");
     }
 }

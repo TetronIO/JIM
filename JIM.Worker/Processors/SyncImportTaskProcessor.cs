@@ -599,10 +599,11 @@ public class SyncImportTaskProcessor
                         break;
 
                     case AttributeDataType.DateTime:
+                        // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
                         var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
                         if (existingCsoDateTimeAttributeValue == null)
                         {
-                            // set initial value
+                            // we don't have a CSO value for this attribute. set the initial value
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DateTimeValue = importedObjectAttribute.DateTimeValue });
                         }
                         else if (existingCsoDateTimeAttributeValue.DateTimeValue != importedObjectAttribute.DateTimeValue)
