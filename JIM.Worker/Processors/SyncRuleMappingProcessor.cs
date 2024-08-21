@@ -62,7 +62,7 @@ public static class SyncRuleMappingProcessor
                             {
                                 case AttributeDataType.Text:
                                 {
-                                    // find values on the MVO of type string that aren't on the CSO and remove them
+                                    // find values on the MVO of type string that aren't on the CSO and remove them.
                                     var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
                                         mvoav.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id &&
                                         !csoAttributeValues.Any(csoav => csoav.StringValue != null && csoav.StringValue.Equals(mvoav.StringValue)));
@@ -155,9 +155,8 @@ public static class SyncRuleMappingProcessor
                                     // find values on the MVO of type binary that aren't on the CSO and remove them
                                     var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
                                         mvoav.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id &&
-                                        mvoav.ByteValue != null &&
-                                        csoAttributeValues.Any(csoav =>
-                                            csoav.ByteValue != null && !Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
+                                        !csoAttributeValues.Any(csoav =>
+                                            csoav.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
                                     mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
                                     // find values on the CSO of type byte that aren't on the MVO according to the sync rule mapping.
@@ -165,9 +164,7 @@ public static class SyncRuleMappingProcessor
                                         csoav.Attribute.Id == source.ConnectedSystemAttribute.Id &&
                                         !mvo.AttributeValues.Any(mvoav =>
                                             mvoav.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id &&
-                                            !Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
-                                            
-                                    // ^^ don't think that's right
+                                            Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
 
                                     // now turn the new CSO attribute values into MVO attribute values we can add to the MVO.
                                     foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
@@ -176,52 +173,95 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
-                                            IntValue = newCsoNewAttributeValue.IntValue
+                                            ByteValue = newCsoNewAttributeValue.ByteValue
                                         });
                                     }
                                     break;
                                 }
 
                                 case AttributeDataType.Reference:
+                                {
                                     // find unresolved reference values on the cso that aren't on the imported object and remove them first
-                                    var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csotAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)));
-                                    connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingUnresolvedReferenceValues.Any(msav => msav.Id == av.Id)));
+                                    var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av =>
+                                        av.Attribute.Name == csotAttributeName && av.UnresolvedReferenceValue != null &&
+                                        !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)));
+                                    connectedSystemObject.PendingAttributeValueRemovals.AddRange(
+                                        connectedSystemObject.AttributeValues.Where(av => missingUnresolvedReferenceValues.Any(msav => msav.Id == av.Id)));
 
                                     // find imported unresolved reference values that aren't on the cso and add them
-                                    var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csotAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.InvariantCultureIgnoreCase)));
+                                    var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv =>
+                                        !connectedSystemObject.AttributeValues.Any(av =>
+                                            av.Attribute.Name == csotAttributeName && av.UnresolvedReferenceValue != null &&
+                                            av.UnresolvedReferenceValue.Equals(sv, StringComparison.InvariantCultureIgnoreCase)));
                                     foreach (var newUnresolvedReferenceValue in newUnresolvedReferenceValues)
-                                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csotAttribute, UnresolvedReferenceValue = newUnresolvedReferenceValue });
+                                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue
+                                        {
+                                            ConnectedSystemObject = connectedSystemObject, Attribute = csotAttribute, UnresolvedReferenceValue = newUnresolvedReferenceValue
+                                        });
                                     break;
+                                }
 
                                 case AttributeDataType.Guid:
-                                    // find values on the cso of type Guid that aren't on the imported object and remove them first
-                                    var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csotAttributeName && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue)));
-                                    connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingGuidAttributeValues.Any(msav => msav.Id == av.Id)));
+                                {
+                                    // find values on the MVO of type guid that aren't on the CSO and remove them.
+                                    var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
+                                        mvoav.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id &&
+                                        !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
+                                    mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-                                    // find imported values of type Guid that aren't on the cso and add them
-                                    var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csotAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv)));
-                                    foreach (var newGuidValue in newGuidValues)
-                                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csotAttribute, GuidValue = newGuidValue });
+                                    // find values on the CSO of type guid that aren't on the MVO according to the sync rule mapping.
+                                    var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
+                                        csoav.Attribute.Id == source.ConnectedSystemAttribute.Id &&
+                                        !mvo.AttributeValues.Any(mvoav =>
+                                            mvoav.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id &&
+                                            mvoav.GuidValue.HasValue && mvoav.GuidValue.Equals(csoav.GuidValue)));
+
+                                    // now turn the new CSO attribute values into MVO attribute values we can add to the MVO.
+                                    foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
+                                    {
+                                        mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+                                        {
+                                            MetaverseObject = mvo,
+                                            Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            GuidValue = newCsoNewAttributeValue.GuidValue
+                                        });
+                                    }
                                     break;
+                                }
 
                                 case AttributeDataType.Boolean:
-                                    // there will be only a single value for a bool. is it the same or different?
-                                    // if different, remove the old value, add the new one
-                                    // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
-                                    // todo: consider having the ability to update values instead of replacing.
-                                    var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csotAttributeName);
-                                    if (csoBooleanAttributeValue == null)
+                                {
+                                    var csoValue = connectedSystemObject.AttributeValues.SingleOrDefault(csoav => csoav.Attribute.Id == source.ConnectedSystemAttribute.Id);
+                                    var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id);
+                                    
+                                    if (mvoValue != null && csoValue == null)
                                     {
-                                        // set initial value
-                                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csotAttribute, BoolValue = importedObjectAttribute.BoolValue });
+                                        // there is a value on the MVO that isn't on the CSO. remove it.   
+                                        mvo.PendingAttributeValueRemovals.Add(mvoValue);
                                     }
-                                    else if (csoBooleanAttributeValue.BoolValue != importedObjectAttribute.BoolValue)
+                                    else if (csoValue != null && mvoValue == null)
                                     {
-                                        // update existing value by removing and adding
-                                        connectedSystemObject.PendingAttributeValueRemovals.Add(csoBooleanAttributeValue);
-                                        connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csotAttribute, BoolValue = importedObjectAttribute.BoolValue });
+                                        // no MVO value set, but we have a CSO value, so set the MVO value.
+                                        mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+                                        {
+                                            MetaverseObject = mvo,
+                                            Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            BoolValue = csoValue.BoolValue
+                                        });
+                                    }
+                                    else if (csoValue != null && mvoValue != null && mvoValue.BoolValue != csoAttributeValue.BoolValue)
+                                    {
+                                        // there are both MVO and CSO values, but they're different, update the MVO from the CSO.
+                                        mvo.PendingAttributeValueRemovals.Add(mvoValue);
+                                        mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+                                        {
+                                            MetaverseObject = mvo,
+                                            Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            BoolValue = csoValue.BoolValue
+                                        });
                                     }
                                     break;
+                                }
                                 
                                 case AttributeDataType.NotSet:
                                 default:
