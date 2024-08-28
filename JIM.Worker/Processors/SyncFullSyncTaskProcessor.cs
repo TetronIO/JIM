@@ -323,6 +323,9 @@ public class SyncFullSyncTaskProcessor
             Log.Error($"AssignMetaverseObjectAttributeValues: CSO ({connectedSystemObject}) has no MVO!");
             return;
         }
+
+        if (_objectTypes == null)
+            throw new MissingMemberException("_objectTypes is null!");
         
         foreach (var syncRuleMapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
         {
@@ -371,6 +374,6 @@ public class SyncFullSyncTaskProcessor
         // remove the unresolved reference value.
         // update the Metaverse Object Attribute Value.
 
-        throw new NotImplementedException("This needs to be done!");
+        throw new NotImplementedException("Is this still needed? We're assigning MVO references from CSO reference values on sync rule processing.");
     }
 }
