@@ -119,7 +119,8 @@ public class SyncFullSyncTaskProcessor
             await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
             await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
             
-            // if the CSO wasn't marked as obsolete, look for Metaverse Object updates. requires we have sync rules.
+            // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
+            // requires that we have sync rules defined.
             if (_haveSyncRules && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
                 await ProcessMetaverseObjectChangesAsync(connectedSystemObject, runProfileExecutionItem);
         }
@@ -224,6 +225,8 @@ public class SyncFullSyncTaskProcessor
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
                 await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
             
+            // should we persist MVO changes before moving on to onwards CSO updates?
+            // is there value in working out if we need to persist the MVO? i.e. is there a performance hit in letting EF work it out for every MVO?
             // todo: process onward-CSO updates
         }
     }
