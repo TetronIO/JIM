@@ -14,9 +14,7 @@ public class SyncFullSyncTaskProcessor
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
-    private List<SyncRule>? _activeSyncRules;
     private List<ConnectedSystemObjectType>? _objectTypes;
-    private bool _haveSyncRules;
     
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
@@ -46,7 +44,7 @@ public class SyncFullSyncTaskProcessor
 
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing");
         
-        // how many objects are we processing? that's CSO count + Pending Export Object count.
+        // how many objects are we processing? that = CSO count + Pending Export Object count.
         // update the activity with this info so a progress bar can be shown.
         var totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
         var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
@@ -56,14 +54,13 @@ public class SyncFullSyncTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
         
         // get all the active sync rules for this system
-        _activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
-        _haveSyncRules = _activeSyncRules is { Count: > 0 };
+        var activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
         
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
         
-        // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe
-        // and to update the Activity as we go, allowing the UI to be updated and keep users informed.
+        // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe.
+        // it also enables us to update the Activity with progress info as we go, allowing the UI to be updated and keep users informed.
         const int pageSize = 200;
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
@@ -92,7 +89,7 @@ public class SyncFullSyncTaskProcessor
                 // thinking about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
                 // so the same code stack can be used.
                 
-                await ProcessConnectedSystemObjectAsync(connectedSystemObject);
+                await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
                 
                 _activity.ObjectsProcessed++;
                 await _jim.Activities.UpdateActivityAsync(_activity);
@@ -107,7 +104,7 @@ public class SyncFullSyncTaskProcessor
     /// <summary>
     /// Attempts to join/project/delete/flow attributes to the Metaverse for a single Connected System Object.
     /// </summary>
-    private async Task ProcessConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    private async Task ProcessConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         Log.Verbose($"ProcessConnectedSystemObjectAsync: Performing a full sync on Connected System Object: {connectedSystemObject}.");
         
@@ -120,9 +117,9 @@ public class SyncFullSyncTaskProcessor
             await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
             
             // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
-            // requires that we have sync rules defined.
-            if (_haveSyncRules && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-                await ProcessMetaverseObjectChangesAsync(connectedSystemObject, runProfileExecutionItem);
+            // this requires that we have sync rules defined.
+            if (activeSyncRules.Count > 0 && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
+                await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
         }
         catch (Exception e)
         {
@@ -181,13 +178,13 @@ public class SyncFullSyncTaskProcessor
     /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any sync rules.
     /// Changes to Metaverse Objects can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessMetaverseObjectChangesAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task ProcessMetaverseObjectChangesAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
         
-        if (_activeSyncRules == null || _activeSyncRules.Count == 0)
+        if (activeSyncRules.Count == 0)
             return;
         
         // do we need to join, or project the CSO to the Metaverse?
@@ -196,7 +193,7 @@ public class SyncFullSyncTaskProcessor
             // CSO is not joined to a Metaverse Object.
             // inspect sync rules to determine if we have any join or projection requirements.
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
-            await AttemptJoinAsync(connectedSystemObject, runProfileExecutionItem);
+            await AttemptJoinAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
             
             // did we encounter an error whilst attempting a join? stop processing the CSO if so.
             if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -207,7 +204,7 @@ public class SyncFullSyncTaskProcessor
             {
                 // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
-                AttemptProjection(connectedSystemObject);
+                AttemptProjection(activeSyncRules, connectedSystemObject);
             }
         }
 
@@ -215,7 +212,7 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.MetaverseObject != null)
         {
             // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
-            foreach (var inboundSyncRule in _activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+            foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
             {
                 // evaluate inbound attribute flow rules
                 ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
@@ -234,19 +231,17 @@ public class SyncFullSyncTaskProcessor
     /// <summary>
     /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Sync Rules for this system and object type.
     /// </summary>
+    /// <param name="activeSyncRules">The active sync rules that contain all possible join rules to be evaluated.</param>
     /// <param name="connectedSystemObject">The Connected System Object to try and find a matching Metaverse Object for.</param>
     /// <param name="runProfileExecutionItem">The Run Profile Execution Item we're tracking changes/errors against for the CSO.</param>
     /// <returns>True if a join was established, otherwise False.</returns>
     /// <exception cref="InvalidDataException">Will be thrown if an unsupported join state is found preventing processing.</exception>
-    private async Task AttemptJoinAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
-        if (_activeSyncRules == null)
-            return;
-        
         // enumerate all sync rules that have matching rules. first to match wins. 
         // for more deterministic results, admins should make sure an object only matches to a single sync rule
         // at any given moment to ensure the single sync rule matching rule priority order is law.
-        foreach (var matchingSyncRule in _activeSyncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+        foreach (var matchingSyncRule in activeSyncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
         {
             // object matching rules are ordered. respect the ordering. 
             foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
@@ -288,13 +283,14 @@ public class SyncFullSyncTaskProcessor
     /// <summary>
     /// Attempts to create a Metaverse Object from the Connected System Object using the first Sync Rule for the object type that has Projection enabled.
     /// </summary>
+    /// <param name="activeSyncRules">The active sync rules that contain projection and attribute flow information.</param>
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
     /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Sync Rule.</exception>
     /// <exception cref="NotImplementedException">Will be thrown if a Sync Rule attempts to use a Function as a source.</exception>
-    private void AttemptProjection(ConnectedSystemObject connectedSystemObject)
+    private void AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         // see if there are any sync rules for this object type where projection is enabled. first to project, wins.
-        var projectionSyncRule = _activeSyncRules?.FirstOrDefault(sr =>
+        var projectionSyncRule = activeSyncRules?.FirstOrDefault(sr =>
             sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
             sr.ConnectedSystemObjectType.Id == connectedSystemObject.TypeId);
 
