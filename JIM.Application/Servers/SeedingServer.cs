@@ -50,7 +50,7 @@ internal class SeedingServer
         var connectorDefinitions = new List<ConnectorDefinition>();
 
         #region MetaverseAttributes
-        // generic attributes
+        // common attributes
         var accountNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var descriptionAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Description, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var displayNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -110,6 +110,7 @@ internal class SeedingServer
         var otherPagersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherPagers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
         var otherTelephonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherTelephones, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
         var pagerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Pager, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var photoAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Photo, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
         var physicalDeliveryOfficeNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var postalAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
         var postalCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalCode, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -202,6 +203,7 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, otherPagersAttribute);
         AddAttributeToObjectType(userObjectType, otherTelephonesAttribute);
         AddAttributeToObjectType(userObjectType, pagerAttribute);
+        AddAttributeToObjectType(userObjectType, photoAttribute);
         AddAttributeToObjectType(userObjectType, physicalDeliveryOfficeNameAttribute);
         AddAttributeToObjectType(userObjectType, postalAddressesAttribute);
         AddAttributeToObjectType(userObjectType, postalCodeAttribute);

@@ -79,6 +79,7 @@ public static class Constants
         public static string OtherPagers => "Other Pagers";
         public static string OtherTelephones => "Other Telephones";
         public static string Pager => "Pager";
+        public static string Photo => "Photo";
         public static string PhysicalDeliveryOfficeName => "Physical Delivery Office Name";
         public static string PostalAddresses => "Postal Address";
         public static string PostalCode => "Postal Code";

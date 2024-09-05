@@ -27,16 +27,19 @@ public class SyncRule: IValidated
     /// The connected system this sync rule applies to. A sync rule applies to a single connected system only.
     /// </summary>
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
+    public int ConnectedSystemId { get; set; }
         
     /// <summary>
     /// What type of object should this sync rule apply to in the connected system?
     /// </summary>
     public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; } = null!;
+    public int ConnectedSystemObjectTypeId { get; set; }
         
     /// <summary>
     /// What type of object in the Metaverse, should this sync rule apply to?
     /// </summary>
     public MetaverseObjectType MetaverseObjectType { get; set; } = null!;
+    public int MetaverseObjectTypeId { get; set; }
         
     /// <summary>
     /// Which direction should the data flow? Either in to JIM, or out from it.

@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using JIM.Worker.Tests.Models;
@@ -102,9 +103,7 @@ public static class TestUtilities
 
     public static MetaverseObject GetInitiatedBy()
     {
-        return new MetaverseObject {
-            Id = Guid.Parse("25441317-D01C-47DE-BA69-47EEEFD09DC4")
-        };
+        return new MetaverseObject { Id = Guid.Parse("25441317-D01C-47DE-BA69-47EEEFD09DC4") };
     }
 
     public static List<ConnectedSystem> GetConnectedSystemData()
@@ -359,9 +358,264 @@ public static class TestUtilities
         };
     }
 
+    /// <summary>
+    /// Returns test user and group metaverse object types.
+    /// </summary>
+    public static List<MetaverseObjectType> GetMetaverseObjectTypeData()
+    {
+        return new List<MetaverseObjectType>
+        {
+            new ()
+            {
+                Id = 1,
+                Name = "User",
+                BuiltIn = true,
+                Attributes = new List<MetaverseAttribute>
+                {
+                    new()
+                    {
+                        Id = 1,
+                        Name = Constants.BuiltInAttributes.EmployeeId,
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = 2,
+                        Name = Constants.BuiltInAttributes.DisplayName,
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = 3,
+                        Name = Constants.BuiltInAttributes.Email,
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = 4,
+                        Name = Constants.BuiltInAttributes.StartDate,
+                        Type = AttributeDataType.DateTime,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = 5,
+                        Name = Constants.BuiltInAttributes.Manager,
+                        Type = AttributeDataType.Reference,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = 6,
+                        Name = Constants.BuiltInAttributes.Photo,
+                        Type = AttributeDataType.Binary,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CONTRACTED_WEEKLY_HOURS,
+                        Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                        Type = AttributeDataType.Number,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.LOCATION_ID,
+                        Name = MockAttributeName.LOCATION_ID.ToString(),
+                        Type = AttributeDataType.Guid,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.END_DATE,
+                        Name = MockAttributeName.END_DATE.ToString(),
+                        Type = AttributeDataType.DateTime,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.LEAVER,
+                        Name = MockAttributeName.LEAVER.ToString(),
+                        Type = AttributeDataType.Boolean,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.COURSE_COUNT,
+                        Name = MockAttributeName.COURSE_COUNT.ToString(),
+                        Type = AttributeDataType.Number,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.COURSE_END_DATE,
+                        Name = MockAttributeName.COURSE_END_DATE.ToString(),
+                        Type = AttributeDataType.DateTime,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_NAME,
+                        Name = MockAttributeName.CURRENT_COURSE_NAME.ToString(),
+                        Type = AttributeDataType.Text,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_ID,
+                        Name = MockAttributeName.CURRENT_COURSE_ID.ToString(),
+                        Type = AttributeDataType.Guid,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_ACTIVE,
+                        Name = MockAttributeName.CURRENT_COURSE_ACTIVE.ToString(),
+                        Type = AttributeDataType.Boolean,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CURRENT_COURSE_TUTOR,
+                        Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
+                        Type = AttributeDataType.Reference,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.PROXY_ADDRESSES,
+                        Name = MockAttributeName.PROXY_ADDRESSES.ToString(),
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.COMPLETED_COURSE_IDS,
+                        Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
+                        Type = AttributeDataType.Number,
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.PREVIOUS_LOCATION_IDS,
+                        Name = MockAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
+                        Type = AttributeDataType.Guid,
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.CERTIFICATES,
+                        Name = MockAttributeName.CERTIFICATES.ToString(),
+                        Type = AttributeDataType.Binary,
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
+                    }
+                }
+            },
+            new ()
+            {
+                Id = 2,
+                Name = "Group",
+                ConnectedSystemId = 1,
+                Selected = true,
+                Attributes = new List<ConnectedSystemObjectTypeAttribute>
+                {
+                    new()
+                    {
+                        // mimicking a system identifier for the object in a connected system.
+                        // this is intended to be unique for each object in the connected system.
+                        // we use the term "External ID" for this in Jim.
+                        Id = (int)MockAttributeName.GROUP_UID,
+                        Name = MockAttributeName.GROUP_UID.ToString(),
+                        Type = AttributeDataType.Guid,
+                        IsExternalId = true,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.DISPLAY_NAME,
+                        Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                        Type = AttributeDataType.Text,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockAttributeName.MEMBER,
+                        Name = MockAttributeName.MEMBER.ToString(),
+                        Type = AttributeDataType.Reference,
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
+                    }
+                }
+            }
+        };
+    }
+
     public static List<ConnectedSystemPartition> GetConnectedSystemPartitionData()
     {
         return new List<ConnectedSystemPartition>();
+    }
+
+    /// <summary>
+    /// Returns stub test user and group, inbound and outbound sync rules for individual unit tests to customise for specific scenarios.
+    /// </summary>
+    public static List<SyncRule> GetSyncRuleData()
+    {
+        return new List<SyncRule>
+        {
+            new SyncRule
+            {
+                Id = 1,
+                ConnectedSystemId = 1,
+                Name = "Dummy User Import Sync Rule 1",
+                Direction = SyncRuleDirection.Import,
+                Enabled = true,
+                ConnectedSystemObjectTypeId = 1,
+                MetaverseObjectTypeId = 1
+            },
+            new SyncRule
+            {
+                Id = 1,
+                ConnectedSystemId = 1,
+                Name = "Dummy User Export Sync Rule 1",
+                Direction = SyncRuleDirection.Export,
+                Enabled = true,
+                ConnectedSystemObjectTypeId = 1,
+                MetaverseObjectTypeId = 1
+            },
+            new SyncRule
+            {
+                Id = 1,
+                ConnectedSystemId = 1,
+                Name = "Dummy Group Import Sync Rule 1",
+                Direction = SyncRuleDirection.Import,
+                Enabled = true,
+                ConnectedSystemObjectTypeId = 2,
+                MetaverseObjectTypeId = 2
+            },
+            new SyncRule
+            {
+                Id = 1,
+                ConnectedSystemId = 1,
+                Name = "Dummy Group Export Sync Rule 1",
+                Direction = SyncRuleDirection.Export,
+                Enabled = true,
+                ConnectedSystemObjectTypeId = 2,
+                MetaverseObjectTypeId = 2
+            }
+        };
     }
 
     public static List<Activity> GetActivityData(ConnectedSystemRunType connectedSystemRunType, int runProfileId)
