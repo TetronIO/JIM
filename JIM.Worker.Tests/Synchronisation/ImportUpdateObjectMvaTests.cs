@@ -96,25 +96,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
+                    Name = MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString(),
                     IntValues = new List<int> { 1,2,3,4,5 },
                     Type = AttributeDataType.Number
                 }
@@ -137,7 +137,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var completedCourseIdsAttributes = cso1.GetAttributeValues(MockAttributeName.COMPLETED_COURSE_IDS.ToString());
+        var completedCourseIdsAttributes = cso1.GetAttributeValues(MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString());
         Assert.That(completedCourseIdsAttributes, Is.Not.Null);
         Assert.That(completedCourseIdsAttributes.Count == 5);
         
@@ -178,25 +178,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.PROXY_ADDRESSES.ToString(),
+                    Name = MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString(),
                     StringValues = new List<string>
                     {
                         proxyAddress1,
@@ -224,7 +224,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var proxyAddressesAttribute = cso1.GetAttributeValues(MockAttributeName.PROXY_ADDRESSES.ToString());
+        var proxyAddressesAttribute = cso1.GetAttributeValues(MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString());
         Assert.That(proxyAddressesAttribute, Is.Not.Null);
         Assert.That(proxyAddressesAttribute.Count, Is.EqualTo(3));
         
@@ -259,25 +259,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
+                    Name = MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
                     GuidValues = new List<Guid>
                     {
                         previousLocation1,
@@ -305,7 +305,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var previousLocationIdsAttributes = cso1.GetAttributeValues(MockAttributeName.PREVIOUS_LOCATION_IDS.ToString());
+        var previousLocationIdsAttributes = cso1.GetAttributeValues(MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString());
         Assert.That(previousLocationIdsAttributes, Is.Not.Null);
         Assert.That(previousLocationIdsAttributes.Count == 3);
         
@@ -339,25 +339,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.CERTIFICATES.ToString(),
+                    Name = MockConnectedSystemAttributeName.CERTIFICATES.ToString(),
                     ByteValues = new List<byte[]>
                     {
                         certificate1,
@@ -384,7 +384,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var certificatesAttributes = cso1.GetAttributeValues(MockAttributeName.CERTIFICATES.ToString());
+        var certificatesAttributes = cso1.GetAttributeValues(MockConnectedSystemAttributeName.CERTIFICATES.ToString());
         Assert.That(certificatesAttributes, Is.Not.Null);
         Assert.That(certificatesAttributes.Count == 2);
         
@@ -413,19 +413,19 @@ public class ImportUpdateObjectMvaTests
             {
                 new()
                 {
-                    Name = MockAttributeName.GROUP_UID.ToString(),
+                    Name = MockConnectedSystemAttributeName.GROUP_UID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_4_GROUP_UID },
                     Type = AttributeDataType.Guid
                 },
                 new()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_4_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new()
                 {
-                    Name = MockAttributeName.MEMBER.ToString(),
+                    Name = MockConnectedSystemAttributeName.MEMBER.ToString(),
                     ReferenceValues = new List<string>
                     {
                         TestConstants.CS_OBJECT_1_HR_ID.ToString(),
@@ -450,9 +450,9 @@ public class ImportUpdateObjectMvaTests
         Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(4), $"Expected four Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
         
         // get the group cso
-        var cso4 = await Jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(1, (int)MockAttributeName.GROUP_UID, TestConstants.CS_OBJECT_4_GROUP_UID);
+        var cso4 = await Jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(1, (int)MockConnectedSystemAttributeName.GROUP_UID, TestConstants.CS_OBJECT_4_GROUP_UID);
         Assert.That(cso4, Is.Not.EqualTo(null), "Expected to be able to retrieve the group (cso4).");
-        var cso4MemberAttributes = cso4.GetAttributeValues(MockAttributeName.MEMBER.ToString());
+        var cso4MemberAttributes = cso4.GetAttributeValues(MockConnectedSystemAttributeName.MEMBER.ToString());
         Assert.That(cso4MemberAttributes, Is.Not.Null);
         Assert.That(cso4MemberAttributes.Count, Is.EqualTo(3), $"Expected the group to have 3 members. It had {cso4MemberAttributes.Count}");
         
@@ -498,35 +498,35 @@ public class ImportUpdateObjectMvaTests
         {
             Id = Guid.NewGuid(),
             IntValue = 1,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             IntValue = 2,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             IntValue = 3,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             IntValue = 4,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             IntValue = 5,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.COMPLETED_COURSE_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         
@@ -540,25 +540,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
+                    Name = MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString(),
                     IntValues = new List<int> { 1,2,3 },
                     Type = AttributeDataType.Number
                 }
@@ -581,7 +581,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var completedCourseIdsAttributes = cso1.GetAttributeValues(MockAttributeName.COMPLETED_COURSE_IDS.ToString());
+        var completedCourseIdsAttributes = cso1.GetAttributeValues(MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString());
         Assert.That(completedCourseIdsAttributes, Is.Not.Null);
         Assert.That(completedCourseIdsAttributes, Has.Count.EqualTo(3));
         
@@ -615,35 +615,35 @@ public class ImportUpdateObjectMvaTests
         {
             Id = Guid.NewGuid(),
             StringValue = proxyAddress1,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PROXY_ADDRESSES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             StringValue = proxyAddress2,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PROXY_ADDRESSES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             StringValue = proxyAddress3,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PROXY_ADDRESSES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             StringValue = "smtp:cto-pa@phlebas.tetron.io",
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PROXY_ADDRESSES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             StringValue = "smtp:innovation@phlebas.tetron.io",
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PROXY_ADDRESSES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         
@@ -657,25 +657,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.PROXY_ADDRESSES.ToString(),
+                    Name = MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString(),
                     StringValues = new List<string>
                     {
                         proxyAddress1,
@@ -703,7 +703,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var proxyAddressesAttributes = cso1.GetAttributeValues(MockAttributeName.PROXY_ADDRESSES.ToString());
+        var proxyAddressesAttributes = cso1.GetAttributeValues(MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString());
         Assert.That(proxyAddressesAttributes, Is.Not.Null);
         Assert.That(proxyAddressesAttributes, Has.Count.EqualTo(3));
         
@@ -732,35 +732,35 @@ public class ImportUpdateObjectMvaTests
         {
             Id = Guid.NewGuid(),
             GuidValue = previousLocation1,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             GuidValue = previousLocation2,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             GuidValue = previousLocation3,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             GuidValue = Guid.NewGuid(),
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             GuidValue = Guid.NewGuid(),
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         
@@ -774,25 +774,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
+                    Name = MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
                     GuidValues = new List<Guid>
                     {
                         previousLocation1,
@@ -820,7 +820,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var previousLocationIdsAttributes = cso1.GetAttributeValues(MockAttributeName.PREVIOUS_LOCATION_IDS.ToString());
+        var previousLocationIdsAttributes = cso1.GetAttributeValues(MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString());
         Assert.That(previousLocationIdsAttributes, Is.Not.Null);
         Assert.That(previousLocationIdsAttributes, Has.Count.EqualTo(3));
         
@@ -848,28 +848,28 @@ public class ImportUpdateObjectMvaTests
         {
             Id = Guid.NewGuid(),
             ByteValue = certificate1,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.CERTIFICATES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.CERTIFICATES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             ByteValue = certificate2,
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.CERTIFICATES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.CERTIFICATES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             ByteValue = Convert.FromHexString("63d7e1c4060385ab79b6"),
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.CERTIFICATES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.CERTIFICATES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             ByteValue = Convert.FromHexString("117302f584f512760d58"),
-            Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.CERTIFICATES.ToString()),
+            Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.CERTIFICATES.ToString()),
             ConnectedSystemObject = cso1ToSetup
         });
         
@@ -883,25 +883,25 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.CERTIFICATES.ToString(),
+                    Name = MockConnectedSystemAttributeName.CERTIFICATES.ToString(),
                     ByteValues = new List<byte[]>
                     {
                         certificate1,
@@ -928,7 +928,7 @@ public class ImportUpdateObjectMvaTests
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
 
-        var certificatesAttributes = cso1.GetAttributeValues(MockAttributeName.CERTIFICATES.ToString());
+        var certificatesAttributes = cso1.GetAttributeValues(MockConnectedSystemAttributeName.CERTIFICATES.ToString());
         Assert.That(certificatesAttributes, Is.Not.Null);
         Assert.That(certificatesAttributes, Has.Count.EqualTo(2));
         Assert.That(certificatesAttributes[0].ByteValue, Is.EqualTo(certificate1));
@@ -957,7 +957,7 @@ public class ImportUpdateObjectMvaTests
             ReferenceValue = member1,
             ReferenceValueId = member1.Id,
             UnresolvedReferenceValue = TestConstants.CS_OBJECT_1_HR_ID.ToString(),
-            Attribute = groupObjectType.Attributes.Single(q => q.Name == MockAttributeName.MEMBER.ToString()),
+            Attribute = groupObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.MEMBER.ToString()),
             ConnectedSystemObject = groupToSetup
         });
         groupToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
@@ -966,7 +966,7 @@ public class ImportUpdateObjectMvaTests
             ReferenceValue = member2,
             ReferenceValueId = member2.Id,
             UnresolvedReferenceValue = TestConstants.CS_OBJECT_2_HR_ID.ToString(),
-            Attribute = groupObjectType.Attributes.Single(q => q.Name == MockAttributeName.MEMBER.ToString()),
+            Attribute = groupObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.MEMBER.ToString()),
             ConnectedSystemObject = groupToSetup
         });
         groupToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
@@ -975,7 +975,7 @@ public class ImportUpdateObjectMvaTests
             ReferenceValue = member3,
             ReferenceValueId = member3.Id,
             UnresolvedReferenceValue = TestConstants.CS_OBJECT_3_HR_ID.ToString(),
-            Attribute = groupObjectType.Attributes.Single(q => q.Name == MockAttributeName.MEMBER.ToString()),
+            Attribute = groupObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.MEMBER.ToString()),
             ConnectedSystemObject = groupToSetup
         });
         
@@ -989,19 +989,19 @@ public class ImportUpdateObjectMvaTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.GROUP_UID.ToString(),
+                    Name = MockConnectedSystemAttributeName.GROUP_UID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_4_GROUP_UID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_4_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.MEMBER.ToString(),
+                    Name = MockConnectedSystemAttributeName.MEMBER.ToString(),
                     ReferenceValues = new List<string>
                     {
                         TestConstants.CS_OBJECT_3_HR_ID.ToString()
@@ -1027,7 +1027,7 @@ public class ImportUpdateObjectMvaTests
         var cso4 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_4_ID);
         Assert.That(cso4, Is.Not.EqualTo(null), "Expected to be able to retrieve the fourth CSO to validate.");
 
-        var memberAttributes = cso4.GetAttributeValues(MockAttributeName.MEMBER.ToString());
+        var memberAttributes = cso4.GetAttributeValues(MockConnectedSystemAttributeName.MEMBER.ToString());
         Assert.That(memberAttributes, Is.Not.Null, "Expected there to be a member attribute value");
         Assert.That(memberAttributes, Has.Count.EqualTo(1), $"Expected there to only be a single member now. There are {memberAttributes.Count}");
         Assert.That(memberAttributes[0].ReferenceValue, Is.Not.Null, "Expected the sole member reference value to not be null.");
@@ -1054,7 +1054,7 @@ public class ImportUpdateObjectMvaTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = userObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
+            ExternalIdAttributeId = (int)MockConnectedSystemAttributeName.HR_ID
         };
         cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -1062,28 +1062,28 @@ public class ImportUpdateObjectMvaTests
             {
                 Id = Guid.NewGuid(),
                 GuidValue = TestConstants.CS_OBJECT_1_HR_ID,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.HR_ID.ToString()),
                 ConnectedSystemObject = cso1
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 IntValue = 1,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMPLOYEE_ID.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString()),
                 ConnectedSystemObject = cso1
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = TestConstants.CS_OBJECT_1_DISPLAY_NAME,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.DISPLAY_NAME.ToString()),
                 ConnectedSystemObject = cso1
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = "jane.smith@phlebas.tetron.io",
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString()),
                 ConnectedSystemObject = cso1
             }
         };
@@ -1096,7 +1096,7 @@ public class ImportUpdateObjectMvaTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = userObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
+            ExternalIdAttributeId = (int)MockConnectedSystemAttributeName.HR_ID
         };
         cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -1104,28 +1104,28 @@ public class ImportUpdateObjectMvaTests
             {
                 Id = Guid.NewGuid(),
                 GuidValue = TestConstants.CS_OBJECT_2_HR_ID,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.HR_ID.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 IntValue = 2,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMPLOYEE_ID.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = TestConstants.CS_OBJECT_2_DISPLAY_NAME,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.DISPLAY_NAME.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = "joe.bloggs@phlebas.tetron.io",
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString()),
                 ConnectedSystemObject = cso2
             }
         };
@@ -1138,7 +1138,7 @@ public class ImportUpdateObjectMvaTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = userObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
+            ExternalIdAttributeId = (int)MockConnectedSystemAttributeName.HR_ID
         };
         cso3.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -1146,28 +1146,28 @@ public class ImportUpdateObjectMvaTests
             {
                 Id = Guid.NewGuid(),
                 GuidValue = TestConstants.CS_OBJECT_3_HR_ID,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.HR_ID.ToString()),
                 ConnectedSystemObject = cso3
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 IntValue = 3,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMPLOYEE_ID.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString()),
                 ConnectedSystemObject = cso3
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = TestConstants.CS_OBJECT_3_DISPLAY_NAME,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.DISPLAY_NAME.ToString()),
                 ConnectedSystemObject = cso3
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = TestConstants.CS_OBJECT_3_EMAIL,
-                Attribute = userObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString()),
                 ConnectedSystemObject = cso3
             }
         };
@@ -1180,7 +1180,7 @@ public class ImportUpdateObjectMvaTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = groupObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.GROUP_UID
+            ExternalIdAttributeId = (int)MockConnectedSystemAttributeName.GROUP_UID
         };
         cso4.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -1188,14 +1188,14 @@ public class ImportUpdateObjectMvaTests
             {
                 Id = Guid.NewGuid(),
                 GuidValue = TestConstants.CS_OBJECT_4_GROUP_UID,
-                Attribute = groupObjectType.Attributes.Single(q => q.Name == MockAttributeName.GROUP_UID.ToString()),
+                Attribute = groupObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.GROUP_UID.ToString()),
                 ConnectedSystemObject = cso4
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = TestConstants.CS_OBJECT_4_DISPLAY_NAME,
-                Attribute = groupObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                Attribute = groupObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.DISPLAY_NAME.ToString()),
                 ConnectedSystemObject = cso4
             }
         };

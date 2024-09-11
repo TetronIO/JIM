@@ -83,7 +83,7 @@ public class ImportDeleteObjectTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = connectedSystemObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
+            ExternalIdAttributeId = (int)MockConnectedSystemAttributeName.HR_ID
         };
         cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -91,35 +91,35 @@ public class ImportDeleteObjectTests
             {
                 Id = Guid.NewGuid(),
                 GuidValue = TestConstants.CS_OBJECT_1_HR_ID,
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.HR_ID.ToString()),
                 ConnectedSystemObject = cso1
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 IntValue = 1,
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMPLOYEE_ID.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString()),
                 ConnectedSystemObject = cso1
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = TestConstants.CS_OBJECT_1_DISPLAY_NAME,
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.DISPLAY_NAME.ToString()),
                 ConnectedSystemObject = cso1
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = "Manager",
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ROLE.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.ROLE.ToString()),
                 ConnectedSystemObject = cso1
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = "jane.smith@phlebas.tetron.io",
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString()),
                 ConnectedSystemObject = cso1
             }
         };
@@ -132,7 +132,7 @@ public class ImportDeleteObjectTests
             ConnectedSystemId = 1,
             ConnectedSystem = ConnectedSystemsData.First(),
             Type = connectedSystemObjectType,
-            ExternalIdAttributeId = (int)MockAttributeName.HR_ID
+            ExternalIdAttributeId = (int)MockConnectedSystemAttributeName.HR_ID
         };
         cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
         {
@@ -140,35 +140,35 @@ public class ImportDeleteObjectTests
             {
                 Id = Guid.NewGuid(),
                 GuidValue = TestConstants.CS_OBJECT_2_HR_ID,
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.HR_ID.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.HR_ID.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 IntValue = 2,
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMPLOYEE_ID.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = TestConstants.CS_OBJECT_2_DISPLAY_NAME,
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.DISPLAY_NAME.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.DISPLAY_NAME.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = "Developer",
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.ROLE.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.ROLE.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 StringValue = "joe.bloggs@phlebas.tetron.io",
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.EMAIL_ADDRESS.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString()),
                 ConnectedSystemObject = cso2
             },
             new()
@@ -176,7 +176,7 @@ public class ImportDeleteObjectTests
                 Id = Guid.NewGuid(),
                 ReferenceValueId = connectedSystemObjectData.First().Id,
                 ReferenceValue = connectedSystemObjectData.First(),
-                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockAttributeName.MANAGER.ToString()),
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockConnectedSystemAttributeName.MANAGER.ToString()),
                 ConnectedSystemObject = cso2
             }
         };
@@ -202,31 +202,31 @@ public class ImportDeleteObjectTests
             {
                 new ()
                 {
-                    Name = MockAttributeName.HR_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
                     Type = AttributeDataType.Guid
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 },
                     Type = AttributeDataType.Number
                 },
                 new ()
                 {
-                    Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                    Name = MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString(),
                     StringValues = new List<string> { "jane.smith@phlebas.tetron.io" },
                     Type = AttributeDataType.Text
                 },
                 new ()
                 {
-                    Name = MockAttributeName.ROLE.ToString(),
+                    Name = MockConnectedSystemAttributeName.ROLE.ToString(),
                     StringValues = new List<string> { "Manager" },
                     Type = AttributeDataType.Text
                 }
@@ -247,7 +247,7 @@ public class ImportDeleteObjectTests
         Assert.That(connectedSystemObjectData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {connectedSystemObjectData.Count}.");
         
         // inspect the user we expect to be marked for obsolescence
-        var obsoleteUser = connectedSystemObjectData.SingleOrDefault(q => q.AttributeValues.Any(a => a.Attribute.Name == MockAttributeName.HR_ID.ToString() && a.GuidValue == TestConstants.CS_OBJECT_2_HR_ID));
+        var obsoleteUser = connectedSystemObjectData.SingleOrDefault(q => q.AttributeValues.Any(a => a.Attribute.Name == MockConnectedSystemAttributeName.HR_ID.ToString() && a.GuidValue == TestConstants.CS_OBJECT_2_HR_ID));
         Assert.That(obsoleteUser, Is.Not.Null, "Expected to find our second user amongst the Connected System Objects.");
         Assert.That(obsoleteUser.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete), "Expected our second user to have been marked as Obsolete after dropping off the full import.");
         Assert.Pass();

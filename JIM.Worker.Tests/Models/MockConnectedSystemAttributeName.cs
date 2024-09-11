@@ -1,6 +1,6 @@
 ﻿namespace JIM.Worker.Tests.Models;
 
-public enum MockAttributeName
+public enum MockConnectedSystemAttributeName
 {
     EMPLOYEE_ID = 1, // int
     DISPLAY_NAME = 2, // string

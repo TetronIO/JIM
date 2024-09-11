@@ -56,7 +56,6 @@ internal class SeedingServer
         var displayNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var distinguishedNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DistinguishedName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var emailAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Email, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var endDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
         var extensionAttribute1Attribute1 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute1, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var extensionAttribute1Attribute10 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute10, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var extensionAttribute1Attribute11 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute11, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -77,7 +76,9 @@ internal class SeedingServer
         var mailNicknameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MailNickname, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var objectGuidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectGuid, AttributePlurality.SingleValued, AttributeDataType.Guid, attributesToCreate);
         var objectSidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
-        var startDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
+        var employeeStartDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeStartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
+        var employeeEndDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeEndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
+        var employeeStatusAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeStatus, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
         var typeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Type, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
 
         // user-specific attributes
@@ -163,7 +164,9 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, displayNameAttribute);
         AddAttributeToObjectType(userObjectType, distinguishedNameAttribute);
         AddAttributeToObjectType(userObjectType, emailAttribute);
+        AddAttributeToObjectType(userObjectType, employeeEndDateAttribute);
         AddAttributeToObjectType(userObjectType, employeeIdAttribute);
+        AddAttributeToObjectType(userObjectType, employeeStartDateAttribute);
         AddAttributeToObjectType(userObjectType, employeeStatusAttribute);
         AddAttributeToObjectType(userObjectType, employeeTypeAttribute);
         AddAttributeToObjectType(userObjectType, extensionAttribute1Attribute1);
@@ -196,8 +199,8 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, mailNicknameAttribute);
         AddAttributeToObjectType(userObjectType, managerAttribute);
         AddAttributeToObjectType(userObjectType, mobileNumberAttribute);
-        AddAttributeToObjectType(userObjectType, objectIdentifierAttribute);
         AddAttributeToObjectType(userObjectType, objectGuidAttribute);
+        AddAttributeToObjectType(userObjectType, objectIdentifierAttribute);
         AddAttributeToObjectType(userObjectType, objectSidAttribute);
         AddAttributeToObjectType(userObjectType, officeAttribute);
         AddAttributeToObjectType(userObjectType, organisationAttribute);
@@ -209,9 +212,9 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, pagerAttribute);
         AddAttributeToObjectType(userObjectType, photoAttribute);
         AddAttributeToObjectType(userObjectType, physicalDeliveryOfficeNameAttribute);
+        AddAttributeToObjectType(userObjectType, postOfficeBoxesAttribute);
         AddAttributeToObjectType(userObjectType, postalAddressesAttribute);
         AddAttributeToObjectType(userObjectType, postalCodeAttribute);
-        AddAttributeToObjectType(userObjectType, postOfficeBoxesAttribute);
         AddAttributeToObjectType(userObjectType, pronounsAttribute);
         AddAttributeToObjectType(userObjectType, proxyAddressesAttribute);
         AddAttributeToObjectType(userObjectType, scriptPathAttribute);
@@ -228,8 +231,6 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, userPrincipalNameAttribute);
         AddAttributeToObjectType(userObjectType, userSharedFolderAttribute);
         AddAttributeToObjectType(userObjectType, webPageAttribute);
-        AddAttributeToObjectType(userObjectType, startDateAttribute);
-        AddAttributeToObjectType(userObjectType, endDateAttribute);
 
         // create the group object type and attribute mappings
         var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Groups, true);
@@ -245,18 +246,6 @@ internal class SeedingServer
         AddAttributeToObjectType(groupObjectType, displayNameAttribute);
         AddAttributeToObjectType(groupObjectType, distinguishedNameAttribute);
         AddAttributeToObjectType(groupObjectType, emailAttribute);
-        AddAttributeToObjectType(groupObjectType, groupScopeAttribute);
-        AddAttributeToObjectType(groupObjectType, groupTypeAttribute);
-        AddAttributeToObjectType(groupObjectType, hideFromAddressListsAttribute);
-        AddAttributeToObjectType(groupObjectType, infoAttribute);
-        AddAttributeToObjectType(groupObjectType, mailNicknameAttribute);
-        AddAttributeToObjectType(groupObjectType, managedByAttribute);
-        AddAttributeToObjectType(groupObjectType, ownersAttribute);
-        AddAttributeToObjectType(groupObjectType, objectGuidAttribute);
-        AddAttributeToObjectType(groupObjectType, objectSidAttribute);
-        AddAttributeToObjectType(groupObjectType, proxyAddressesAttribute);
-        AddAttributeToObjectType(groupObjectType, staticMembersAttribute);
-        AddAttributeToObjectType(groupObjectType, statusAttribute);
         AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute1);
         AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute10);
         AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute11);
@@ -272,6 +261,18 @@ internal class SeedingServer
         AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute7);
         AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute8);
         AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
+        AddAttributeToObjectType(groupObjectType, groupScopeAttribute);
+        AddAttributeToObjectType(groupObjectType, groupTypeAttribute);
+        AddAttributeToObjectType(groupObjectType, hideFromAddressListsAttribute);
+        AddAttributeToObjectType(groupObjectType, infoAttribute);
+        AddAttributeToObjectType(groupObjectType, mailNicknameAttribute);
+        AddAttributeToObjectType(groupObjectType, managedByAttribute);
+        AddAttributeToObjectType(groupObjectType, objectGuidAttribute);
+        AddAttributeToObjectType(groupObjectType, objectSidAttribute);
+        AddAttributeToObjectType(groupObjectType, ownersAttribute);
+        AddAttributeToObjectType(groupObjectType, proxyAddressesAttribute);
+        AddAttributeToObjectType(groupObjectType, staticMembersAttribute);
+        AddAttributeToObjectType(groupObjectType, statusAttribute);
         #endregion
 
         #region PredefinedSearches
@@ -789,24 +790,24 @@ internal class SeedingServer
             });
         }
 
-        var startDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.StartDate);
-        if (startDateAttribute == null)
+        var employeeStartDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeStartDate);
+        if (employeeStartDateAttribute == null)
         {
             userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
             {
-                MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.StartDate),
+                MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeStartDate),
                 MinDate = DateTime.UtcNow.AddYears(-20),
                 MaxDate = DateTime.UtcNow.AddMonths(3),
                 PopulatedValuesPercentage = 75
             });
         }
 
-        var endDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EndDate);
-        if (endDateAttribute == null)
+        var employeeEndDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeEndDate);
+        if (employeeEndDateAttribute == null)
         {
             userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
             {
-                MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EndDate),
+                MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeEndDate),
                 MinDate = DateTime.UtcNow.AddMonths(-11),
                 MaxDate = DateTime.UtcNow.AddYears(1),
                 PopulatedValuesPercentage = 10
