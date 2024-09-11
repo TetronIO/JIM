@@ -89,12 +89,14 @@ internal class SeedingServer
         var countryCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.CountryCode, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var departmentAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Department, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var employeeIdAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeId, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var employeeStatusAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeStatus, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var employeeTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeType, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var facsimileTelephoneNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FacsimileTelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var firstNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FirstName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var homeDirectoryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomeDirectory, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var homeDriveAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomeDrive, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var homePhoneAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomePhone, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var identityAssuranceLevelAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.IdentityAssuranceLevel, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
         var ipPhoneAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.IpPhone, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var jobTitleAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.JobTitle, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var lastNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.LastName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -162,6 +164,7 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, distinguishedNameAttribute);
         AddAttributeToObjectType(userObjectType, emailAttribute);
         AddAttributeToObjectType(userObjectType, employeeIdAttribute);
+        AddAttributeToObjectType(userObjectType, employeeStatusAttribute);
         AddAttributeToObjectType(userObjectType, employeeTypeAttribute);
         AddAttributeToObjectType(userObjectType, extensionAttribute1Attribute1);
         AddAttributeToObjectType(userObjectType, extensionAttribute1Attribute10);
@@ -184,6 +187,7 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, homeDirectoryAttribute);
         AddAttributeToObjectType(userObjectType, homeDriveAttribute);
         AddAttributeToObjectType(userObjectType, homePhoneAttribute);
+        AddAttributeToObjectType(userObjectType, identityAssuranceLevelAttribute);
         AddAttributeToObjectType(userObjectType, infoAttribute);
         AddAttributeToObjectType(userObjectType, ipPhoneAttribute);
         AddAttributeToObjectType(userObjectType, jobTitleAttribute);

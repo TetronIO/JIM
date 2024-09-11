@@ -422,45 +422,19 @@ public static class TestUtilities
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.CONTRACTED_WEEKLY_HOURS,
-                        Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
-                        Type = AttributeDataType.Number,
-                        Selected = true
+                        Id = 7,
+                        Name = Constants.BuiltInAttributes.EmployeeStatus,
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.LOCATION_ID,
-                        Name = MockAttributeName.LOCATION_ID.ToString(),
-                        Type = AttributeDataType.Guid,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.END_DATE,
-                        Name = MockAttributeName.END_DATE.ToString(),
-                        Type = AttributeDataType.DateTime,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.LEAVER,
-                        Name = MockAttributeName.LEAVER.ToString(),
+                        Id = 8,
+                        Name = Constants.BuiltInAttributes.HideFromAddressLists,
                         Type = AttributeDataType.Boolean,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.COURSE_COUNT,
-                        Name = MockAttributeName.COURSE_COUNT.ToString(),
-                        Type = AttributeDataType.Number,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.COURSE_END_DATE,
-                        Name = MockAttributeName.COURSE_END_DATE.ToString(),
-                        Type = AttributeDataType.DateTime,
-                        Selected = true
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
                     },
                     new()
                     {
@@ -575,7 +549,7 @@ public static class TestUtilities
     {
         return new List<SyncRule>
         {
-            new SyncRule
+            new()
             {
                 Id = 1,
                 ConnectedSystemId = 1,
@@ -585,7 +559,7 @@ public static class TestUtilities
                 ConnectedSystemObjectTypeId = 1,
                 MetaverseObjectTypeId = 1
             },
-            new SyncRule
+            new()
             {
                 Id = 1,
                 ConnectedSystemId = 1,
@@ -595,7 +569,7 @@ public static class TestUtilities
                 ConnectedSystemObjectTypeId = 1,
                 MetaverseObjectTypeId = 1
             },
-            new SyncRule
+            new()
             {
                 Id = 1,
                 ConnectedSystemId = 1,
@@ -605,7 +579,7 @@ public static class TestUtilities
                 ConnectedSystemObjectTypeId = 2,
                 MetaverseObjectTypeId = 2
             },
-            new SyncRule
+            new()
             {
                 Id = 1,
                 ConnectedSystemId = 1,

@@ -37,7 +37,7 @@ public static class Constants
         public static string ExtensionAttribute7 => "Extension Attribute 7";
         public static string ExtensionAttribute8 => "Extension Attribute 8";
         public static string ExtensionAttribute9 => "Extension Attribute 9";
-        public static string HideFromAddressLists => "Hide From Address Lists";
+        public static string HideFromAddressLists => "Hide From Address Lists?";
         public static string MailNickname => "Mail Nickname";
         public static string ObjectGuid => "objectGUID";
         public static string ObjectSid => "objectSid";
@@ -59,11 +59,13 @@ public static class Constants
         public static string Email => "Email";
         public static string EmployeeId => "Employee ID";
         public static string EmployeeType => "Employee Type";
+        public static string EmployeeStatus => "Employee Status";
         public static string FacsimileTelephoneNumber => "Facsimile Telephone Number";
         public static string FirstName => "First Name";
         public static string HomeDirectory => "Home Directory";
         public static string HomeDrive => "Home Drive";
         public static string HomePhone => "Home Phone";
+        public static string IdentityAssuranceLevel => "Identity Assurance Level (IAL)";
         public static string IpPhone => "IP Phone";
         public static string JobTitle => "Job Title";
         public static string LastName => "Last Name";
