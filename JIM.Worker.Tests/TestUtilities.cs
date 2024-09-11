@@ -15,13 +15,13 @@ public static class TestUtilities
     /// </summary>
     /// <param name="connectedSystemObject">The persisted version of the object in Jim that correlates with the object in the connected system.</param>
     /// <param name="connectedSystemImportObject">The Connected System Import Object that a Connector will return after importing data from a Connected System.</param>
-    /// <param name="attributeName">The name of the attribute in the connected system. Must match what's in the persisted schema in JIM.</param>
+    /// <param name="connectedSystemAttributeName">The name of the attribute in the connected system. Must match what's in the persisted schema in JIM.</param>
     /// <param name="connectedSystemObjectTypesData">The mocked database table in Jim for the Connected System Objects.</param>
     /// <exception cref="NotSupportedException">Will be thrown for unsupported attribute data types./</exception>
     public static void ValidateImportAttributesForEquality(
         ConnectedSystemObject connectedSystemObject,
         ConnectedSystemImportObject connectedSystemImportObject,
-        MockAttributeName attributeName,
+        MockConnectedSystemAttributeName connectedSystemAttributeName,
         IEnumerable<ConnectedSystemObjectType> connectedSystemObjectTypesData)
     {
         Assert.That(connectedSystemObject, Is.Not.Null);
@@ -29,15 +29,15 @@ public static class TestUtilities
         Assert.That(connectedSystemImportObject, Is.Not.Null);
         Assert.That(connectedSystemImportObject.Attributes, Is.Not.Null);
 
-        var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Name == attributeName.ToString()).ToList();
+        var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Name == connectedSystemAttributeName.ToString()).ToList();
         Assert.That(csoAttributeValues, Is.Not.Null);
 
-        var csioAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name == attributeName.ToString());
+        var csioAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(q => q.Name == connectedSystemAttributeName.ToString());
         Assert.That(csioAttribute, Is.Not.Null);
 
         // look up the attribute in the ConnectedSystemObjectTypesData list and validate that the Connected System Object that has been built, is compliant with the schema.
         var schemaObjectType = connectedSystemObjectTypesData.Single(q => q.Name.Equals(connectedSystemImportObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
-        var schemaAttribute = schemaObjectType.Attributes.Single(q => q.Name.Equals(attributeName.ToString(), StringComparison.InvariantCultureIgnoreCase));
+        var schemaAttribute = schemaObjectType.Attributes.Single(q => q.Name.Equals(connectedSystemAttributeName.ToString(), StringComparison.InvariantCultureIgnoreCase));
 
         // make sure schema attributes that are single valued, only have a single value
         if (schemaAttribute.AttributePlurality == AttributePlurality.SingleValued)
@@ -149,8 +149,8 @@ public static class TestUtilities
                         // mimicking a system identifier for the object in a connected system.
                         // this is intended to be unique for each object in the connected system.
                         // we use the term "External ID" for this in Jim.
-                        Id = (int)MockAttributeName.HR_ID,
-                        Name = MockAttributeName.HR_ID.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.HR_ID,
+                        Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
                         Type = AttributeDataType.Guid,
                         IsExternalId = true,
                         Selected = true
@@ -160,159 +160,159 @@ public static class TestUtilities
                         // mimicking the organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee ids.
                         // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
-                        Id = (int)MockAttributeName.EMPLOYEE_ID,
-                        Name = MockAttributeName.EMPLOYEE_ID.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.EMPLOYEE_ID,
+                        Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
                         Type = AttributeDataType.Number,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.DISPLAY_NAME,
-                        Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.DISPLAY_NAME,
+                        Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                         Type = AttributeDataType.Text,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.EMAIL_ADDRESS,
-                        Name = MockAttributeName.EMAIL_ADDRESS.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.EMAIL_ADDRESS,
+                        Name = MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString(),
                         Type = AttributeDataType.Text,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.START_DATE,
-                        Name = MockAttributeName.START_DATE.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.START_DATE,
+                        Name = MockConnectedSystemAttributeName.START_DATE.ToString(),
                         Type = AttributeDataType.DateTime,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.ROLE,
-                        Name = MockAttributeName.ROLE.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.ROLE,
+                        Name = MockConnectedSystemAttributeName.ROLE.ToString(),
                         Type = AttributeDataType.Text,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.MANAGER,
-                        Name = MockAttributeName.MANAGER.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.MANAGER,
+                        Name = MockConnectedSystemAttributeName.MANAGER.ToString(),
                         Type = AttributeDataType.Reference,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.QUALIFICATIONS,
-                        Name = MockAttributeName.QUALIFICATIONS.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.QUALIFICATIONS,
+                        Name = MockConnectedSystemAttributeName.QUALIFICATIONS.ToString(),
                         Type = AttributeDataType.Text,
                         AttributePlurality = AttributePlurality.MultiValued,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.PROFILE_PICTURE_BYTES,
-                        Name = MockAttributeName.PROFILE_PICTURE_BYTES.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.PROFILE_PICTURE_BYTES,
+                        Name = MockConnectedSystemAttributeName.PROFILE_PICTURE_BYTES.ToString(),
                         Type = AttributeDataType.Binary,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.CONTRACTED_WEEKLY_HOURS,
-                        Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.CONTRACTED_WEEKLY_HOURS,
+                        Name = MockConnectedSystemAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
                         Type = AttributeDataType.Number,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.LOCATION_ID,
-                        Name = MockAttributeName.LOCATION_ID.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.LOCATION_ID,
+                        Name = MockConnectedSystemAttributeName.LOCATION_ID.ToString(),
                         Type = AttributeDataType.Guid,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.END_DATE,
-                        Name = MockAttributeName.END_DATE.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.END_DATE,
+                        Name = MockConnectedSystemAttributeName.END_DATE.ToString(),
                         Type = AttributeDataType.DateTime,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.LEAVER,
-                        Name = MockAttributeName.LEAVER.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.LEAVER,
+                        Name = MockConnectedSystemAttributeName.LEAVER.ToString(),
                         Type = AttributeDataType.Boolean,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.COURSE_COUNT,
-                        Name = MockAttributeName.COURSE_COUNT.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.COURSE_COUNT,
+                        Name = MockConnectedSystemAttributeName.COURSE_COUNT.ToString(),
                         Type = AttributeDataType.Number,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.COURSE_END_DATE,
-                        Name = MockAttributeName.COURSE_END_DATE.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.COURSE_END_DATE,
+                        Name = MockConnectedSystemAttributeName.COURSE_END_DATE.ToString(),
                         Type = AttributeDataType.DateTime,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_NAME,
-                        Name = MockAttributeName.CURRENT_COURSE_NAME.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.CURRENT_COURSE_NAME,
+                        Name = MockConnectedSystemAttributeName.CURRENT_COURSE_NAME.ToString(),
                         Type = AttributeDataType.Text,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_ID,
-                        Name = MockAttributeName.CURRENT_COURSE_ID.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.CURRENT_COURSE_ID,
+                        Name = MockConnectedSystemAttributeName.CURRENT_COURSE_ID.ToString(),
                         Type = AttributeDataType.Guid,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_ACTIVE,
-                        Name = MockAttributeName.CURRENT_COURSE_ACTIVE.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.CURRENT_COURSE_ACTIVE,
+                        Name = MockConnectedSystemAttributeName.CURRENT_COURSE_ACTIVE.ToString(),
                         Type = AttributeDataType.Boolean,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_TUTOR,
-                        Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.CURRENT_COURSE_TUTOR,
+                        Name = MockConnectedSystemAttributeName.CURRENT_COURSE_TUTOR.ToString(),
                         Type = AttributeDataType.Reference,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.PROXY_ADDRESSES,
-                        Name = MockAttributeName.PROXY_ADDRESSES.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.PROXY_ADDRESSES,
+                        Name = MockConnectedSystemAttributeName.PROXY_ADDRESSES.ToString(),
                         Type = AttributeDataType.Text,
                         AttributePlurality = AttributePlurality.MultiValued,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.COMPLETED_COURSE_IDS,
-                        Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS,
+                        Name = MockConnectedSystemAttributeName.COMPLETED_COURSE_IDS.ToString(),
                         Type = AttributeDataType.Number,
                         AttributePlurality = AttributePlurality.MultiValued,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.PREVIOUS_LOCATION_IDS,
-                        Name = MockAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS,
+                        Name = MockConnectedSystemAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
                         Type = AttributeDataType.Guid,
                         AttributePlurality = AttributePlurality.MultiValued,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.CERTIFICATES,
-                        Name = MockAttributeName.CERTIFICATES.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.CERTIFICATES,
+                        Name = MockConnectedSystemAttributeName.CERTIFICATES.ToString(),
                         Type = AttributeDataType.Binary,
                         AttributePlurality = AttributePlurality.MultiValued,
                         Selected = true
@@ -332,23 +332,23 @@ public static class TestUtilities
                         // mimicking a system identifier for the object in a connected system.
                         // this is intended to be unique for each object in the connected system.
                         // we use the term "External ID" for this in Jim.
-                        Id = (int)MockAttributeName.GROUP_UID,
-                        Name = MockAttributeName.GROUP_UID.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.GROUP_UID,
+                        Name = MockConnectedSystemAttributeName.GROUP_UID.ToString(),
                         Type = AttributeDataType.Guid,
                         IsExternalId = true,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.DISPLAY_NAME,
-                        Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.DISPLAY_NAME,
+                        Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
                         Type = AttributeDataType.Text,
                         Selected = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.MEMBER,
-                        Name = MockAttributeName.MEMBER.ToString(),
+                        Id = (int)MockConnectedSystemAttributeName.MEMBER,
+                        Name = MockConnectedSystemAttributeName.MEMBER.ToString(),
                         Type = AttributeDataType.Reference,
                         AttributePlurality = AttributePlurality.MultiValued,
                         Selected = true
@@ -374,7 +374,7 @@ public static class TestUtilities
                 {
                     new()
                     {
-                        Id = 1,
+                        Id = (int)MockMetaverseAttributeName.EmployeeId,
                         Name = Constants.BuiltInAttributes.EmployeeId,
                         Type = AttributeDataType.Text,
                         AttributePlurality = AttributePlurality.SingleValued,
@@ -382,7 +382,7 @@ public static class TestUtilities
                     },
                     new()
                     {
-                        Id = 2,
+                        Id = (int)MockMetaverseAttributeName.DisplayName,
                         Name = Constants.BuiltInAttributes.DisplayName,
                         Type = AttributeDataType.Text,
                         AttributePlurality = AttributePlurality.SingleValued,
@@ -390,7 +390,7 @@ public static class TestUtilities
                     },
                     new()
                     {
-                        Id = 3,
+                        Id = (int)MockMetaverseAttributeName.Email,
                         Name = Constants.BuiltInAttributes.Email,
                         Type = AttributeDataType.Text,
                         AttributePlurality = AttributePlurality.SingleValued,
@@ -398,15 +398,23 @@ public static class TestUtilities
                     },
                     new()
                     {
-                        Id = 4,
-                        Name = Constants.BuiltInAttributes.StartDate,
+                        Id = (int)MockMetaverseAttributeName.EmployeeStartDate,
+                        Name = Constants.BuiltInAttributes.EmployeeStartDate,
                         Type = AttributeDataType.DateTime,
                         AttributePlurality = AttributePlurality.SingleValued,
                         BuiltIn = true
                     },
                     new()
                     {
-                        Id = 5,
+                        Id = (int)MockMetaverseAttributeName.EmployeeEndDate,
+                        Name = Constants.BuiltInAttributes.EmployeeEndDate,
+                        Type = AttributeDataType.DateTime,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockMetaverseAttributeName.Manager,
                         Name = Constants.BuiltInAttributes.Manager,
                         Type = AttributeDataType.Reference,
                         AttributePlurality = AttributePlurality.SingleValued,
@@ -414,113 +422,19 @@ public static class TestUtilities
                     },
                     new()
                     {
-                        Id = 6,
+                        Id = (int)MockMetaverseAttributeName.LocationId,
+                        Name = "Location Id",
+                        Type = AttributeDataType.Guid,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = false
+                    },
+                    new()
+                    {
+                        Id = (int)MockMetaverseAttributeName.Photo,
                         Name = Constants.BuiltInAttributes.Photo,
                         Type = AttributeDataType.Binary,
                         AttributePlurality = AttributePlurality.SingleValued,
                         BuiltIn = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.CONTRACTED_WEEKLY_HOURS,
-                        Name = MockAttributeName.CONTRACTED_WEEKLY_HOURS.ToString(),
-                        Type = AttributeDataType.Number,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.LOCATION_ID,
-                        Name = MockAttributeName.LOCATION_ID.ToString(),
-                        Type = AttributeDataType.Guid,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.END_DATE,
-                        Name = MockAttributeName.END_DATE.ToString(),
-                        Type = AttributeDataType.DateTime,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.LEAVER,
-                        Name = MockAttributeName.LEAVER.ToString(),
-                        Type = AttributeDataType.Boolean,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.COURSE_COUNT,
-                        Name = MockAttributeName.COURSE_COUNT.ToString(),
-                        Type = AttributeDataType.Number,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.COURSE_END_DATE,
-                        Name = MockAttributeName.COURSE_END_DATE.ToString(),
-                        Type = AttributeDataType.DateTime,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_NAME,
-                        Name = MockAttributeName.CURRENT_COURSE_NAME.ToString(),
-                        Type = AttributeDataType.Text,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_ID,
-                        Name = MockAttributeName.CURRENT_COURSE_ID.ToString(),
-                        Type = AttributeDataType.Guid,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_ACTIVE,
-                        Name = MockAttributeName.CURRENT_COURSE_ACTIVE.ToString(),
-                        Type = AttributeDataType.Boolean,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.CURRENT_COURSE_TUTOR,
-                        Name = MockAttributeName.CURRENT_COURSE_TUTOR.ToString(),
-                        Type = AttributeDataType.Reference,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.PROXY_ADDRESSES,
-                        Name = MockAttributeName.PROXY_ADDRESSES.ToString(),
-                        Type = AttributeDataType.Text,
-                        AttributePlurality = AttributePlurality.MultiValued,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.COMPLETED_COURSE_IDS,
-                        Name = MockAttributeName.COMPLETED_COURSE_IDS.ToString(),
-                        Type = AttributeDataType.Number,
-                        AttributePlurality = AttributePlurality.MultiValued,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.PREVIOUS_LOCATION_IDS,
-                        Name = MockAttributeName.PREVIOUS_LOCATION_IDS.ToString(),
-                        Type = AttributeDataType.Guid,
-                        AttributePlurality = AttributePlurality.MultiValued,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.CERTIFICATES,
-                        Name = MockAttributeName.CERTIFICATES.ToString(),
-                        Type = AttributeDataType.Binary,
-                        AttributePlurality = AttributePlurality.MultiValued,
-                        Selected = true
                     }
                 }
             },
@@ -528,35 +442,32 @@ public static class TestUtilities
             {
                 Id = 2,
                 Name = "Group",
-                ConnectedSystemId = 1,
-                Selected = true,
-                Attributes = new List<ConnectedSystemObjectTypeAttribute>
+                BuiltIn = true,
+                Attributes = new List<MetaverseAttribute>
                 {
                     new()
                     {
-                        // mimicking a system identifier for the object in a connected system.
-                        // this is intended to be unique for each object in the connected system.
-                        // we use the term "External ID" for this in Jim.
-                        Id = (int)MockAttributeName.GROUP_UID,
-                        Name = MockAttributeName.GROUP_UID.ToString(),
-                        Type = AttributeDataType.Guid,
-                        IsExternalId = true,
-                        Selected = true
-                    },
-                    new()
-                    {
-                        Id = (int)MockAttributeName.DISPLAY_NAME,
-                        Name = MockAttributeName.DISPLAY_NAME.ToString(),
+                        Id = (int)MockMetaverseAttributeName.AccountName,
+                        Name = Constants.BuiltInAttributes.AccountName,
                         Type = AttributeDataType.Text,
-                        Selected = true
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
                     },
                     new()
                     {
-                        Id = (int)MockAttributeName.MEMBER,
-                        Name = MockAttributeName.MEMBER.ToString(),
+                        Id = (int)MockMetaverseAttributeName.DisplayName,
+                        Name = Constants.BuiltInAttributes.DisplayName,
+                        Type = AttributeDataType.Text,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
+                        Id = (int)MockMetaverseAttributeName.Member,
+                        Name = Constants.BuiltInAttributes.StaticMembers,
                         Type = AttributeDataType.Reference,
                         AttributePlurality = AttributePlurality.MultiValued,
-                        Selected = true
+                        BuiltIn = true
                     }
                 }
             }

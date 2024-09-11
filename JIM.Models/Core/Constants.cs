@@ -51,14 +51,15 @@ public static class Constants
         public static string Company => "Company";
         public static string Country => "Country";
         public static string CountryCode => "Country Code";
-        public static string StartDate => "Start Date";
-        public static string EndDate => "End Date";
         public static string Department => "Department";
         public static string Description => "Description";
         public static string DistinguishedName => "Distinguished Name";
         public static string Email => "Email";
         public static string EmployeeId => "Employee ID";
         public static string EmployeeType => "Employee Type";
+        public static string EmployeeStatus => "Employee Status";
+        public static string EmployeeStartDate => "Employee Start Date";
+        public static string EmployeeEndDate => "Employee End Date";
         public static string FacsimileTelephoneNumber => "Facsimile Telephone Number";
         public static string FirstName => "First Name";
         public static string HomeDirectory => "Home Directory";
