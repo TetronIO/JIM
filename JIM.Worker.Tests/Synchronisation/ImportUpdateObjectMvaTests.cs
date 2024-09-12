@@ -91,7 +91,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -126,7 +126,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -173,7 +173,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -213,7 +213,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -254,7 +254,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -294,7 +294,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -334,7 +334,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -373,7 +373,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -408,7 +408,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "Group",
+            ObjectType = "SOURCE_GROUP",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new()
@@ -442,7 +442,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -492,7 +492,7 @@ public class ImportUpdateObjectMvaTests
         // changes: MEMBER has values removed.
         
         // add COMPLETED_COURSE_IDS to our CSO first
-        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("User", StringComparison.InvariantCultureIgnoreCase));
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.InvariantCultureIgnoreCase));
         var cso1ToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -535,7 +535,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -570,7 +570,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -609,7 +609,7 @@ public class ImportUpdateObjectMvaTests
         const string proxyAddress1 = "SMTP:jane.smith@phlebas.tetron.io";
         const string proxyAddress2 = "smtp:jane.wright@phlebas.tetron.io";
         const string proxyAddress3 = "smtp:cto@phlebas.tetron.io";
-        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("User", StringComparison.InvariantCultureIgnoreCase));
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.InvariantCultureIgnoreCase));
         var cso1ToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -652,7 +652,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -692,7 +692,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -726,7 +726,7 @@ public class ImportUpdateObjectMvaTests
         var previousLocation1 = Guid.NewGuid();
         var previousLocation2 = Guid.NewGuid();
         var previousLocation3 = Guid.NewGuid();
-        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("User", StringComparison.InvariantCultureIgnoreCase));
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.InvariantCultureIgnoreCase));
         var cso1ToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -769,7 +769,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -809,7 +809,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -842,7 +842,7 @@ public class ImportUpdateObjectMvaTests
         // add CERTIFICATES to our CSO first
         var certificate1 = Convert.FromHexString(TestConstants.IMAGE_1_HEX);
         var certificate2 = Convert.FromHexString(TestConstants.IMAGE_2_HEX);
-        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("User", StringComparison.InvariantCultureIgnoreCase));
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.InvariantCultureIgnoreCase));
         var cso1ToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
         cso1ToSetup.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -878,7 +878,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "User",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -917,7 +917,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -946,7 +946,7 @@ public class ImportUpdateObjectMvaTests
         // changes: CERTIFICATES has some values removed.
         
         // add some MEMBER references to our group CSO first
-        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("Group", StringComparison.InvariantCultureIgnoreCase));
+        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.InvariantCultureIgnoreCase));
         var groupToSetup = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_4_ID);
         var member1 = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_1_ID);
         var member2 = ConnectedSystemObjectsData.Single(q => q.Id == TestConstants.CS_OBJECT_2_ID);
@@ -984,7 +984,7 @@ public class ImportUpdateObjectMvaTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "Group",
+            ObjectType = "SOURCE_GROUP",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -1016,7 +1016,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -1044,8 +1044,8 @@ public class ImportUpdateObjectMvaTests
         ConnectedSystemObjectsData.Clear();
         
         // set the start-state for the tests; create the Connected System Objects we'll alter in the tests
-        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("User", StringComparison.InvariantCultureIgnoreCase));
-        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("Group", StringComparison.InvariantCultureIgnoreCase));
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.InvariantCultureIgnoreCase));
+        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.InvariantCultureIgnoreCase));
         
         // user 1
         var cso1 = new ConnectedSystemObject

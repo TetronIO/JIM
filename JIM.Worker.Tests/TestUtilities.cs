@@ -113,7 +113,12 @@ public static class TestUtilities
             new()
             {
                 Id = 1,
-                Name = "Dummy System"
+                Name = "Dummy Source System"
+            },
+            new()
+            {
+                Id = 2,
+                Name = "Dummy Target System"
             }
         };
     }
@@ -125,9 +130,37 @@ public static class TestUtilities
             new()
             {
                 Id = 1,
-                Name = "Dummy Full Import",
+                Name = "Dummy Source System Full Import",
                 RunType = ConnectedSystemRunType.FullImport,
                 ConnectedSystemId = 1
+            },
+            new()
+            {
+                Id = 2,
+                Name = "Dummy Source System Full Sync",
+                RunType = ConnectedSystemRunType.FullSynchronisation,
+                ConnectedSystemId = 1
+            },
+            new()
+            {
+                Id = 3,
+                Name = "Dummy Target System Full Import",
+                RunType = ConnectedSystemRunType.FullImport,
+                ConnectedSystemId = 2
+            },
+            new()
+            {
+                Id = 4,
+                Name = "Dummy Target System Full Sync",
+                RunType = ConnectedSystemRunType.FullSynchronisation,
+                ConnectedSystemId = 2
+            },
+            new()
+            {
+                Id = 5,
+                Name = "Dummy Target System Export",
+                RunType = ConnectedSystemRunType.Export,
+                ConnectedSystemId = 2
             }
         };
     }
@@ -139,7 +172,7 @@ public static class TestUtilities
             new ()
             {
                 Id = 1,
-                Name = "User",
+                Name = "SOURCE_USER",
                 ConnectedSystemId = 1,
                 Selected = true,
                 Attributes = new List<ConnectedSystemObjectTypeAttribute>
@@ -322,7 +355,7 @@ public static class TestUtilities
             new ()
             {
                 Id = 2,
-                Name = "Group",
+                Name = "SOURCE_GROUP",
                 ConnectedSystemId = 1,
                 Selected = true,
                 Attributes = new List<ConnectedSystemObjectTypeAttribute>

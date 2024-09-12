@@ -89,7 +89,7 @@ public class ImportCreateObjectTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "user",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -145,7 +145,7 @@ public class ImportCreateObjectTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "user",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -210,7 +210,7 @@ public class ImportCreateObjectTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
@@ -275,7 +275,7 @@ public class ImportCreateObjectTests
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
             ChangeType = ObjectChangeType.Create,
-            ObjectType = "user",
+            ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
                 new ()
@@ -334,7 +334,7 @@ public class ImportCreateObjectTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
