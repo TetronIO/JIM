@@ -2,7 +2,9 @@
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
+using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
@@ -61,9 +63,31 @@ public class FullSyncTests
     }
     
     [Test]
-    public async Task PendingExportTestAsync()
+    public async Task PendingExportTestSuccessAsync()
     {
-        // set up the Connected System Objects mock. this is specific to this test
+        // set up the Pending Export objects mock. this is specific to this test
+        var pendingExportObjects = new List<PendingExport>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = 1,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Create,
+                AttributeValueChanges = new()
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Add,
+                        AttributeId = (int)MockConnectedSystemAttributeName.DISPLAY_NAME,
+                        StringValue = "James McGill"
+                    },
+                    
+                }
+            }
+        };
+        
         
         // mock up a connector that will return testable data
         

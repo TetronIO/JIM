@@ -287,7 +287,7 @@ public class SyncFullSyncTaskProcessor
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
     /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Sync Rule.</exception>
     /// <exception cref="NotImplementedException">Will be thrown if a Sync Rule attempts to use a Function as a source.</exception>
-    private void AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    private static void AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         // see if there are any sync rules for this object type where projection is enabled. first to project, wins.
         var projectionSyncRule = activeSyncRules?.FirstOrDefault(sr =>
