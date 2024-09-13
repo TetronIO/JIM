@@ -95,49 +95,49 @@ public class ImportCreateObjectTests
                 new ()
                 {
                     // guid
-                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID }
                 },
                 new ()
                 {
                     // int
-                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 }
                 },
                 new ()
                 {
                     // datetime
-                    Name = MockConnectedSystemAttributeName.START_DATE.ToString(),
+                    Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
                     DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME }
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString(),
+                    Name = MockSourceSystemAttributeNames.EMAIL_ADDRESS.ToString(),
                     StringValues = new List<string> { "jane.smith@phlebas.tetron.io" }
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.ROLE.ToString(),
+                    Name = MockSourceSystemAttributeNames.ROLE.ToString(),
                     StringValues = new List<string> { "Manager" }
                 },
                 new ()
                 {
                     // mva string
-                    Name = MockConnectedSystemAttributeName.QUALIFICATIONS.ToString(),
+                    Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-MNGT-101", "C-MNGT-102", "C-MNGT-103" }
                 },
                 new ()
                 {
                     // boolean string
-                    Name = MockConnectedSystemAttributeName.LEAVER.ToString(),
+                    Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
                     BoolValue = false
                 }
             }
@@ -151,55 +151,55 @@ public class ImportCreateObjectTests
                 new ()
                 {
                     // guid
-                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_2_HR_ID }
                 },
                 new ()
                 {
                     // int
-                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 2 }
                 },
                 new ()
                 {
                     // datetime
-                    Name = MockConnectedSystemAttributeName.START_DATE.ToString(),
+                    Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
                     DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_2_DISPLAY_NAME }
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString(),
+                    Name = MockSourceSystemAttributeNames.EMAIL_ADDRESS.ToString(),
                     StringValues = new List<string> { "joe.bloggs@phlebas.tetron.io" }
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.ROLE.ToString(),
+                    Name = MockSourceSystemAttributeNames.ROLE.ToString(),
                     StringValues = new List<string> { "Developer" }
                 },
                 new ()
                 {
                     // reference
-                    Name = MockConnectedSystemAttributeName.MANAGER.ToString(),
+                    Name = MockSourceSystemAttributeNames.MANAGER.ToString(),
                     ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() }
                 },
                 new ()
                 {
                     // mva string
-                    Name = MockConnectedSystemAttributeName.QUALIFICATIONS.ToString(),
+                    Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-CDEV-101" }
                 },
                 new ()
                 {
                     // boolean string
-                    Name = MockConnectedSystemAttributeName.LEAVER.ToString(),
+                    Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
                     BoolValue = false
                 }
             }
@@ -220,29 +220,29 @@ public class ImportCreateObjectTests
         // validate the first user (who is a manager)
         var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
         var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.HR_ID, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.START_DATE, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.DISPLAY_NAME, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.ROLE, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.QUALIFICATIONS, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.LEAVER, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.HR_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.START_DATE, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.DISPLAY_NAME, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.ROLE, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.QUALIFICATIONS, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.LEAVER, ConnectedSystemObjectTypesData);
         
         // validate the second user (who is a direct-report)
         var secondPersistedConnectedSystemObject = connectedSystemObjectData[1];
         var secondSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[1];
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.HR_ID, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.START_DATE, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.DISPLAY_NAME, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.ROLE, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.QUALIFICATIONS, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.LEAVER, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.HR_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.START_DATE, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.DISPLAY_NAME, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.EMAIL_ADDRESS, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.ROLE, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.QUALIFICATIONS, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.LEAVER, ConnectedSystemObjectTypesData);
         
         // validate second user manager reference
-        var managerAttribute = secondPersistedConnectedSystemObject.AttributeValues.SingleOrDefault(q=>q.Attribute.Name == MockConnectedSystemAttributeName.MANAGER.ToString());
+        var managerAttribute = secondPersistedConnectedSystemObject.AttributeValues.SingleOrDefault(q=>q.Attribute.Name == MockSourceSystemAttributeNames.MANAGER.ToString());
         Assert.That(managerAttribute, Is.Not.Null, "Expected the MANAGER attribute to not be null.");
         Assert.That(managerAttribute.ReferenceValue, Is.Not.Null, "Expected the MANAGER reference value not to be null.");
         Assert.That(!string.IsNullOrEmpty(managerAttribute.UnresolvedReferenceValue), "Expected the MANAGER UnresolvedReferenceValue to also be populated.");
@@ -281,49 +281,49 @@ public class ImportCreateObjectTests
                 new ()
                 {
                     // guid
-                    Name = MockConnectedSystemAttributeName.HR_ID.ToString(),
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
                     GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID }
                 },
                 new ()
                 {
                     // int
-                    Name = MockConnectedSystemAttributeName.EMPLOYEE_ID.ToString(),
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
                     IntValues = new List<int> { 1 }
                 },
                 new ()
                 {
                     // datetime
-                    Name = MockConnectedSystemAttributeName.START_DATE.ToString(),
+                    Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
                     DateTimeValue = null
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.DISPLAY_NAME.ToString(),
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
                     StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME }
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString(),
+                    Name = MockSourceSystemAttributeNames.EMAIL_ADDRESS.ToString(),
                     StringValues = new List<string> { string.Empty }
                 },
                 new ()
                 {
                     // string
-                    Name = MockConnectedSystemAttributeName.ROLE.ToString(),
+                    Name = MockSourceSystemAttributeNames.ROLE.ToString(),
                     StringValues = new List<string> { null! }
                 },
                 new ()
                 {
                     // mva string
-                    Name = MockConnectedSystemAttributeName.QUALIFICATIONS.ToString(),
+                    Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString(),
                     StringValues = new List<string> { "C-MNGT-101", "C-MNGT-102", null!, string.Empty }
                 },
                 new ()
                 {
                     // boolean
-                    Name = MockConnectedSystemAttributeName.LEAVER.ToString(),
+                    Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
                     BoolValue = null
                 }
             }
@@ -345,20 +345,20 @@ public class ImportCreateObjectTests
         var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
         var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
         
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.HR_ID, ConnectedSystemObjectTypesData);
-        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockConnectedSystemAttributeName.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.HR_ID, ConnectedSystemObjectTypesData);
+        TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
    
         // there should be no EMAIL_ADDRESS attribute on the persisted object as it had an empty string on the imported object.
-        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockConnectedSystemAttributeName.EMAIL_ADDRESS.ToString()), Is.EqualTo(0), $"Didn't expect a {MockConnectedSystemAttributeName.EMAIL_ADDRESS} attribute.");
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockSourceSystemAttributeNames.EMAIL_ADDRESS.ToString()), Is.EqualTo(0), $"Didn't expect a {MockSourceSystemAttributeNames.EMAIL_ADDRESS} attribute.");
         
         // there should be no ROLE attribute on the persisted object as it had a null string on the imported object.
-        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockConnectedSystemAttributeName.ROLE.ToString()), Is.EqualTo(0), $"Didn't expect a {MockConnectedSystemAttributeName.ROLE} attribute.");
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockSourceSystemAttributeNames.ROLE.ToString()), Is.EqualTo(0), $"Didn't expect a {MockSourceSystemAttributeNames.ROLE} attribute.");
         
         // there should only be three QUALIFICATIONS attributes as two were null or empty on the imported object.
-        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockConnectedSystemAttributeName.QUALIFICATIONS.ToString()), Is.EqualTo(2), $"Expected only two {MockConnectedSystemAttributeName.QUALIFICATIONS} attributes.");
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockSourceSystemAttributeNames.QUALIFICATIONS.ToString()), Is.EqualTo(2), $"Expected only two {MockSourceSystemAttributeNames.QUALIFICATIONS} attributes.");
         
         // there should be no LEAVER attribute on the persisted object as it had a null value on the imported object.
-        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockConnectedSystemAttributeName.LEAVER.ToString()), Is.EqualTo(0), $"Didn't expect a {MockConnectedSystemAttributeName.LEAVER} attribute.");
+        Assert.That(firstPersistedConnectedSystemObject.AttributeValues.Count(q => q.Attribute.Name == MockSourceSystemAttributeNames.LEAVER.ToString()), Is.EqualTo(0), $"Didn't expect a {MockSourceSystemAttributeNames.LEAVER} attribute.");
         
         Assert.Pass();
     }

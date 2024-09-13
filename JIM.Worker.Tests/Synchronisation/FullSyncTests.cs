@@ -80,7 +80,7 @@ public class FullSyncTests
                     {
                         Id = Guid.NewGuid(),
                         ChangeType = PendingExportAttributeChangeType.Add,
-                        AttributeId = (int)MockConnectedSystemAttributeName.DISPLAY_NAME,
+                        AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
                         StringValue = "James McGill"
                     },
                     

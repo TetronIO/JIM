@@ -1,6 +1,9 @@
 ﻿namespace JIM.Worker.Tests.Models;
 
-public enum MockConnectedSystemAttributeName
+/// <summary>
+/// Mimicking a HR system that contains staff and students.
+/// </summary>
+public enum MockSourceSystemAttributeNames
 {
     EMPLOYEE_ID = 1, // int
     DISPLAY_NAME = 2, // string
@@ -26,5 +29,6 @@ public enum MockConnectedSystemAttributeName
     PREVIOUS_LOCATION_IDS = 22, // mva guids
     CERTIFICATES = 23, // mva byte
     GROUP_UID = 24, // sva guid
-    MEMBER = 25 // mva reference
+    MEMBER = 25, // mva reference
+    EMPLOYEE_TYPE = 26 // string
 }
