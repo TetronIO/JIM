@@ -65,12 +65,14 @@ public class SyncRuleMapping
     /// Also, where Object Matching Rules map to. i.e. a Connected System Attribute (source) might be a direct, or transform comparison to the Metaverse Object (target) attribute.
     /// </summary>
     public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
+    public int? TargetMetaverseAttributeId { get; set; }
 
     /// <summary>
     /// For an export rule, this is where the exported attribute value ends up being assigned to.
     /// Does not apply to Object Matching Rules, as the target is always a Metaverse attribute in that context.
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? TargetConnectedSystemAttribute { get; set; }
+    public int? TargetConnectedSystemAttributeId { get; set; }
 
     /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.

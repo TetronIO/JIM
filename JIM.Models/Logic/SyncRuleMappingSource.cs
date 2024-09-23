@@ -23,11 +23,13 @@ public class SyncRuleMappingSource
     /// For Export sync rules only: If populated, denotes that a Metaverse Attribute should be used to set the target attribute value.
     /// </summary>
     public MetaverseAttribute? MetaverseAttribute { get; set; }
+    public int? MetaverseAttributeId { get; set; }
         
     /// <summary>
     /// For Import sync rules only: If populated, denotes that a Connected System Attribute should be used to set the target attribute value.
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
+    public int? ConnectedSystemAttributeId { get; set; }
         
     /// <summary>
     /// If populated, denotes that a Function (either built-in or extensible) should be used to determine the target attribute value.

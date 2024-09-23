@@ -103,12 +103,40 @@ public class FullSyncTests
     //     Assert.Fail("Not implemented yet. Doesn't need to be done until export scenario worked on.");
     // }
     
-    // todo: CSO obsolete process
+    /// <summary>
+    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a sync rule. 
+    /// </summary>
+    [Test]
+    public async Task CsoJoinToMvoViaTextAttributeTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        
+        // add test-specific matching rules to it
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeId
+        };
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+        
+        // test that a CSO is successfully match to an MVO using the sync rule
+        
+        Assert.Fail("Not implemented.");
+    }
+    
     // todo: CSO joins to MVO
     // todo: CSO projects to MV
     // todo: MVO has pending attribute value adds for all data types as expected
     // todo: MVO has pending attribute value removes for all data types as expected
     // todo: MVO changes are persisted as expected
-    // todo: DELETIONS????
+    // todo: CSO obsolete/deletion process
     // todo: Onward updates as a result of all above scenarios
 }
