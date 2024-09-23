@@ -1,7 +1,7 @@
 ﻿namespace JIM.Worker.Tests.Models;
 
 /// <summary>
-/// Mimicking an Active Directory forest.
+/// Mimicking an Active Directory source system.
 /// </summary>
 public enum MockTargetSystemAttributeNames
 {

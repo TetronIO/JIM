@@ -24,10 +24,10 @@ public enum MockSourceSystemAttributeNames
     CURRENT_COURSE_ID = 17, // guid
     CURRENT_COURSE_ACTIVE = 18, // boolean
     CURRENT_COURSE_TUTOR = 19, // reference
-    PROXY_ADDRESSES = 20, // mva string
+    PROXY_ADDRESSES = 20, // mva string -- TODO: move this to the AD target system mock
     COMPLETED_COURSE_IDS = 21, // mva int
     PREVIOUS_LOCATION_IDS = 22, // mva guids
-    CERTIFICATES = 23, // mva byte
+    CERTIFICATES = 23, // mva byte -- TODO: move this to the AD target system mock
     GROUP_UID = 24, // sva guid
     MEMBER = 25, // mva reference
     EMPLOYEE_TYPE = 26 // string

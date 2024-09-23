@@ -62,49 +62,47 @@ public class FullSyncTests
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
     }
     
-    [Test]
-    public async Task PendingExportTestSuccessAsync()
-    {
-        // set up the Pending Export objects mock. this is specific to this test
-        var pendingExportObjects = new List<PendingExport>
-        {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = 1,
-                Status = PendingExportStatus.Pending,
-                ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new()
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        ChangeType = PendingExportAttributeChangeType.Add,
-                        AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
-                        StringValue = "James McGill"
-                    },
-                    
-                }
-            }
-        };
-        
-        
-        // mock up a connector that will return testable data
-        
-        // now execute Jim functionality we want to test...
-        
-        // confirm the results persisted to the mocked db context
-
-        // validate the first user (who is a manager)
-
-        // validate the second user (who is a direct-report)
-        
-        // validate second user manager reference
-
-        Assert.Pass();
-    }
+    // [Test]
+    // public async Task PendingExportTestSuccessAsync()
+    // {
+    //      // set up the Pending Export objects mock. this is specific to this test
+    //      var pendingExportObjects = new List<PendingExport>
+    //      {
+    //          new()
+    //          {
+    //              Id = Guid.NewGuid(),
+    //              ConnectedSystemId = 1,
+    //              Status = PendingExportStatus.Pending,
+    //              ChangeType = PendingExportChangeType.Create,
+    //              AttributeValueChanges = new()
+    //              {
+    //                  new()
+    //                  {
+    //                      Id = Guid.NewGuid(),
+    //                      ChangeType = PendingExportAttributeChangeType.Add,
+    //                      AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+    //                      StringValue = "James McGill"
+    //                  },
+    //                  
+    //              }
+    //          }
+    //     };
+    //     
+    //     // mock up a connector that will return testable data
+    //     
+    //     // now execute Jim functionality we want to test...
+    //     
+    //     // confirm the results persisted to the mocked db context
+    //
+    //     // validate the first user (who is a manager)
+    //
+    //     // validate the second user (who is a direct-report)
+    //     
+    //     // validate second user manager reference
+    //
+    //     Assert.Fail("Not implemented yet. Doesn't need to be done until export scenario worked on.");
+    // }
     
-    // todo: Pending Export reconciliation
     // todo: CSO obsolete process
     // todo: CSO joins to MVO
     // todo: CSO projects to MV
