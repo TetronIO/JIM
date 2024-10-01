@@ -733,7 +733,25 @@ public static class TestUtilities
 
     public static List<MetaverseObject> GetMetaverseObjectData()
     {
+        var mvo1 = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+        };
         
+        mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockMetaverseAttributeName.EmployeeId,
+            StringValue = "123"
+        });
+        mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockMetaverseAttributeName.DisplayName,
+            StringValue = "joe bloggs"
+        });
+        
+        return new List<MetaverseObject> { mvo1 };
     }
 
     public static List<ConnectedSystemPartition> GetConnectedSystemPartitionData()

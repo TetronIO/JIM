@@ -13,6 +13,7 @@ public class MetaverseObjectAttributeValue
 {
     public Guid Id { get; set; }
     public MetaverseAttribute Attribute { get; set; } = null!;
+    public int AttributeId { get; set; }
     public MetaverseObject MetaverseObject { get; set; } = null!;
     public string? StringValue { get; set; }
     public DateTime? DateTimeValue { get; set; }
