@@ -165,6 +165,143 @@ public static class TestUtilities
         };
     }
 
+    public static List<ConnectedSystemObject> GetConnectedSystemObjectData()
+    {
+        var csos = new List<ConnectedSystemObject>();
+        var cso1 = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("36B5F294-B602-4508-A2C4-1082C9D80B64"),
+            ConnectedSystemId = 1, // mock hr system
+            TypeId = 1, // user
+        };
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            StringValue = "123"
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            StringValue = "Joe Bloggs"
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.START_DATE,
+            DateTimeValue = DateTime.Parse("2021-09-01")
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_TYPE,
+            StringValue = "FTE"
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.LEAVER,
+            BoolValue = false
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
+            StringValue = "Manager"
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+            StringValue = "Excel 101"
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+            StringValue = "Outlook 101"
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+            StringValue = "Workplace Safety 101"
+        });
+        
+        var cso2 = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("EDF6952E-FCF6-4D5B-8BDE-5D901D886E3D"),
+            ConnectedSystemId = 1, // mock hr system
+            TypeId = 1, // user
+        };
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            StringValue = "124"
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            StringValue = "Jane Wright"
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.START_DATE,
+            DateTimeValue = DateTime.Parse("2022-03-05")
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_TYPE,
+            StringValue = "FTE"
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.LEAVER,
+            BoolValue = false
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
+            StringValue = "System Admin"
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+            StringValue = "System Admin 101"
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+            StringValue = "Remote Desktop 101"
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+            StringValue = "Workplace Safety 101"
+        });
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.MANAGER,
+            ReferenceValue = cso1,
+            ReferenceValueId = cso1.Id
+        });
+        
+        csos.Add(cso1);
+        csos.Add(cso2);
+        return csos;
+    }
+
     public static List<ConnectedSystemObjectType> GetConnectedSystemObjectTypeData()
     {
         return new List<ConnectedSystemObjectType>
@@ -592,6 +729,11 @@ public static class TestUtilities
                 }
             }
         };
+    }
+
+    public static List<MetaverseObject> GetMetaverseObjectData()
+    {
+        
     }
 
     public static List<ConnectedSystemPartition> GetConnectedSystemPartitionData()

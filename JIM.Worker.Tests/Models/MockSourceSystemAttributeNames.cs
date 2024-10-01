@@ -7,7 +7,7 @@ public enum MockSourceSystemAttributeNames
 {
     EMPLOYEE_ID = 1, // int
     DISPLAY_NAME = 2, // string
-    EMAIL_ADDRESS = 3, // string
+    EMAIL_ADDRESS = 3, // string -- TODO: move this to the AD target system mock
     ROLE = 4, // string
     MANAGER = 5, // reference
     QUALIFICATIONS = 6, // text, multivalued
