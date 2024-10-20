@@ -21,8 +21,8 @@ public class FullSyncTests
     private Mock<JimDbContext> MockJimDbContext { get; set; }
     private List<Activity> ActivitiesData { get; set; }
     private Mock<DbSet<Activity>> MockDbSetActivities { get; set; }
-    private List<ConnectedSystem> ConnectedSystemsData { get; set; } 
-    public List<ConnectedSystemObject> ConnectedSystemObjectsData { get; set; }
+    private List<ConnectedSystem> ConnectedSystemsData { get; set; }
+    private List<ConnectedSystemObject> ConnectedSystemObjectsData { get; set; }
     private Mock<DbSet<ConnectedSystemObject>> MockDbSetConnectedSystemObjects { get; set; } 
     private List<ConnectedSystemRunProfile> ConnectedSystemRunProfilesData { get; set; }
     private Mock<DbSet<ConnectedSystemRunProfile>> MockDbSetConnectedSystemRunProfiles { get; set; }
@@ -170,7 +170,7 @@ public class FullSyncTests
         // mock up a connector that will return testable data
         var mockFileConnector = new MockFileConnector();
         
-        // test that a CSO is successfully match to an MVO using the sync rule
+        // start the test
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
 
@@ -179,7 +179,16 @@ public class FullSyncTests
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        Assert.Fail("Not implemented.");
+        // test that a CSO is successfully match to an MVO using the sync rule.
+        // we expect the cso with employee id 123 to have joined to the mvo with employee id 123.
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO by Employee ID.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected first CSO to have a join type of Joined.");
+        Assert.That(ConnectedSystemObjectsData[0].DateJoined, Is.Not.Null, "Expected CSO to have joined to a DATE.");
+        
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Null, "Expected MVO to have a non-null CSO list.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects.Count, Is.GreaterThan(0), "Expected MVO to have at least one CSO reference.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects[0].Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first MVO to have a reference to the first CSO.");
     }
     
     // todo: CSO joins to MVO
