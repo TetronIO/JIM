@@ -29,6 +29,8 @@ public class FullSyncTests
     private Mock<DbSet<ConnectedSystem>> MockDbSetConnectedSystems { get; set; }
     private List<ConnectedSystemObjectType> ConnectedSystemObjectTypesData { get; set; } 
     private Mock<DbSet<ConnectedSystemObjectType>> MockDbSetConnectedSystemObjectTypes { get; set; }
+    private List<ConnectedSystemPartition> ConnectedSystemPartitionsData { get; set; }
+    private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; }
     private List<MetaverseObjectType> MetaverseObjectTypesData { get; set; }
     private Mock<DbSet<MetaverseObjectType>> MockDbSetMetaverseObjectTypes { get; set; }
     private List<MetaverseObject> MetaverseObjectsData { get; set; }
@@ -70,6 +72,10 @@ public class FullSyncTests
         // set up the metaverse object types mock
         MetaverseObjectTypesData = TestUtilities.GetMetaverseObjectTypeData();
         MockDbSetMetaverseObjectTypes = MetaverseObjectTypesData.AsQueryable().BuildMockDbSet();
+        
+        // setup up the Connected System Partitions mock
+        ConnectedSystemPartitionsData = TestUtilities.GetConnectedSystemPartitionData();
+        MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
 
         // set up the metaverse objects mock
         MetaverseObjectsData = TestUtilities.GetMetaverseObjectData();
@@ -82,13 +88,15 @@ public class FullSyncTests
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
         MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
-        MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
-        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(MockDbSetConnectedSystemRunProfiles.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
         MockJimDbContext.Setup(m => m.MetaverseObjectTypes).Returns(MockDbSetMetaverseObjectTypes.Object);
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+
         
         // instantiate Jim using the mocked db context
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
