@@ -45,18 +45,18 @@ public class FullSyncTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
         
+        // setup up the connected system run profiles mock
+        ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
+        MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.AsQueryable().BuildMockDbSet();
+        
         // set up the activity mock
-        var fullImportRunProfile = ConnectedSystemRunProfilesData[0];
-        ActivitiesData = TestUtilities.GetActivityData(fullImportRunProfile.RunType, fullImportRunProfile.Id);
+        var fullSyncRunProfile = ConnectedSystemRunProfilesData.Single(rp => rp.Name == "Dummy Source System Full Sync");
+        ActivitiesData = TestUtilities.GetActivityData(fullSyncRunProfile.RunType, fullSyncRunProfile.Id);
         MockDbSetActivities = ActivitiesData.AsQueryable().BuildMockDbSet();
         
         // set up the connected systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.AsQueryable().BuildMockDbSet();
-        
-        // setup up the connected system run profiles mock
-        ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
-        MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.AsQueryable().BuildMockDbSet();
         
         // todo: not sure if we need this. remove if not
         // set up the connected system object types mock. this acts as the persisted schema in JIM
