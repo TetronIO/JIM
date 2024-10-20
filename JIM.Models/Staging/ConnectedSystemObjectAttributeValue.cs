@@ -46,35 +46,63 @@ public class ConnectedSystemObjectAttributeValue
 
     public override string ToString()
     {
-        if (Attribute == null)
-            return Id.ToString();
-        
+        var output = "";
+        if (Attribute != null)
+            output += $"{Attribute.Name}: ";
+
         if (!string.IsNullOrEmpty(StringValue))
-            return $"{Attribute.Name}: " + StringValue;
+        {
+            output += StringValue;
+            return output;
+        }
 
-        if (DateTimeValue.HasValue)
-            return $"{Attribute.Name}: " + DateTimeValue.Value.ToString(CultureInfo.InvariantCulture);
+        if (DateTimeValue != null)
+        {
+            output += DateTimeValue.ToString();
+            return output;
+        }
 
-        if (IntValue.HasValue)
-            return $"{Attribute.Name}: " + IntValue.Value;
+        if (IntValue != null)
+        {
+            output += IntValue.ToString();
+            return output;
+        }
 
         if (ByteValue != null)
-            return $"{Attribute.Name}: " + ByteValue.Length;
+        {
+            output += ByteValue.Length.ToString();
+            return output;
+        }
 
         if (GuidValue.HasValue)
-            return $"{Attribute.Name}: " + GuidValue.Value;
+        {
+            output += GuidValue.Value.ToString();
+            return output;
+        }
 
         if (BoolValue.HasValue)
-            return $"{Attribute.Name}: " + BoolValue.Value;
+        {
+            output += BoolValue.Value.ToString();
+            return output;
+        }
 
         if (ReferenceValue != null && !string.IsNullOrEmpty(UnresolvedReferenceValue))
-            return $"{Attribute.Name} - Resolved: {ReferenceValue.Id}. Unresolved: {UnresolvedReferenceValue}";
-        
+        {
+            output += $"Resolved: {ReferenceValue.Id}. Unresolved: {UnresolvedReferenceValue}";
+            return output;
+        }
+
         if (ReferenceValue != null)
-            return $"{Attribute.Name} - Resolved: " + ReferenceValue.Id;
+        {
+            output += $"Resolved: " + ReferenceValue.Id;
+            return output;
+        }
 
         if (!string.IsNullOrEmpty(UnresolvedReferenceValue))
-            return $"{Attribute.Name} - Unresolved: " + UnresolvedReferenceValue;
+        {
+            output += $"Unresolved: " + UnresolvedReferenceValue;
+            return output;
+        }
 
         return string.Empty;
     }
