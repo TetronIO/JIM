@@ -778,7 +778,7 @@ public static class TestUtilities
             },
             new()
             {
-                Id = 1,
+                Id = 2,
                 ConnectedSystemId = 1,
                 Name = "Dummy User Export Sync Rule 1",
                 Direction = SyncRuleDirection.Export,
@@ -788,7 +788,7 @@ public static class TestUtilities
             },
             new()
             {
-                Id = 1,
+                Id = 3,
                 ConnectedSystemId = 1,
                 Name = "Dummy Group Import Sync Rule 1",
                 Direction = SyncRuleDirection.Import,
@@ -798,7 +798,7 @@ public static class TestUtilities
             },
             new()
             {
-                Id = 1,
+                Id = 4,
                 ConnectedSystemId = 1,
                 Name = "Dummy Group Export Sync Rule 1",
                 Direction = SyncRuleDirection.Export,
