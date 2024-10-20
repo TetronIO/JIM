@@ -166,18 +166,14 @@ public class FullSyncTests
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID
         });
         importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
-        
-        // mock up a connector that will return testable data
-        var mockFileConnector = new MockFileConnector();
-        
+     
         // start the test
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
-
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
         // test that a CSO is successfully match to an MVO using the sync rule.
         // we expect the cso with employee id 123 to have joined to the mvo with employee id 123.
