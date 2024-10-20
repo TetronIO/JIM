@@ -187,11 +187,10 @@ public class FullSyncTests
         Assert.That(ConnectedSystemObjectsData[0].DateJoined, Is.Not.Null, "Expected CSO to have joined to a DATE.");
         
         Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Null, "Expected MVO to have a non-null CSO list.");
-        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects.Count, Is.GreaterThan(0), "Expected MVO to have at least one CSO reference.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Empty, "Expected MVO to have at least one CSO reference.");
         Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects[0].Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first MVO to have a reference to the first CSO.");
     }
     
-    // todo: CSO joins to MVO
     // todo: CSO projects to MV
     // todo: MVO has pending attribute value adds for all data types as expected
     // todo: MVO has pending attribute value removes for all data types as expected
