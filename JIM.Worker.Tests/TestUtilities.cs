@@ -177,54 +177,99 @@ public static class TestUtilities
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+                Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
             StringValue = "123"
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+                Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
             StringValue = "Joe Bloggs"
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.START_DATE,
+                Name = MockSourceSystemAttributeNames.START_DATE.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.START_DATE,
             DateTimeValue = DateTime.Parse("2021-09-01")
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_TYPE,
+                Name = MockSourceSystemAttributeNames.EMPLOYEE_TYPE.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_TYPE,
             StringValue = "FTE"
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.LEAVER,
+                Name = MockSourceSystemAttributeNames.LEAVER.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.LEAVER,
             BoolValue = false
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.ROLE,
+                Name = MockSourceSystemAttributeNames.ROLE.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
             StringValue = "Manager"
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+                Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
             StringValue = "Excel 101"
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+                Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
             StringValue = "Outlook 101"
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+                Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
             StringValue = "Workplace Safety 101"
         });
@@ -238,60 +283,110 @@ public static class TestUtilities
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+                Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
             StringValue = "124"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+                Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
             StringValue = "Jane Wright"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.START_DATE,
+                Name = MockSourceSystemAttributeNames.START_DATE.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.START_DATE,
             DateTimeValue = DateTime.Parse("2022-03-05")
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_TYPE,
+                Name = MockSourceSystemAttributeNames.EMPLOYEE_TYPE.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_TYPE,
             StringValue = "FTE"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.LEAVER,
+                Name = MockSourceSystemAttributeNames.LEAVER.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.LEAVER,
             BoolValue = false
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.ROLE,
+                Name = MockSourceSystemAttributeNames.ROLE.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
             StringValue = "System Admin"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+                Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
             StringValue = "System Admin 101"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+                Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
             StringValue = "Remote Desktop 101"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
+                Name = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.QUALIFICATIONS,
             StringValue = "Workplace Safety 101"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.MANAGER,
+                Name = MockSourceSystemAttributeNames.MANAGER.ToString()
+            },
             AttributeId = (int)MockSourceSystemAttributeNames.MANAGER,
             ReferenceValue = cso1,
             ReferenceValueId = cso1.Id

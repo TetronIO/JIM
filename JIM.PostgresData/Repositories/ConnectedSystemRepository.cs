@@ -322,7 +322,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             query.ThenInclude(av => av.Attribute);
 
         // add the Connected System filter
-        var objects = from cso in query.Where(q => q.ConnectedSystem.Id == connectedSystemId)
+        var objects = from cso in query.Where(q => q.ConnectedSystemId == connectedSystemId)
             select cso;
         
         // now just add a page's worth of results filter to the query and project to a list we can return.
@@ -580,7 +580,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjectTypes
             .Include(q => q.Attributes)
-            .Where(x => x.ConnectedSystem.Id == connectedSystemId).OrderBy(x => x.Name)
+            .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
     }
 
@@ -735,9 +735,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
     {
         if (includeDisabledSyncRules)
-            return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystem.Id == connectedSystemId).ToListAsync();
+            return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystemId == connectedSystemId).ToListAsync();
         
-        return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystem.Id == connectedSystemId && sr.Enabled).ToListAsync();
+        return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystemId == connectedSystemId && sr.Enabled).ToListAsync();
     }
 
     public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()

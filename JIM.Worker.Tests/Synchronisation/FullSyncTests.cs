@@ -31,6 +31,8 @@ public class FullSyncTests
     private Mock<DbSet<ConnectedSystemObjectType>> MockDbSetConnectedSystemObjectTypes { get; set; }
     private List<ConnectedSystemPartition> ConnectedSystemPartitionsData { get; set; }
     private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; }
+    private List<PendingExport> PendingExportsData { get; set; }
+    private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; }
     private List<MetaverseObjectType> MetaverseObjectTypesData { get; set; }
     private Mock<DbSet<MetaverseObjectType>> MockDbSetMetaverseObjectTypes { get; set; }
     private List<MetaverseObject> MetaverseObjectsData { get; set; }
@@ -47,41 +49,44 @@ public class FullSyncTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
         
-        // setup up the connected system run profiles mock
+        // setup up the Connected System Run Profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.AsQueryable().BuildMockDbSet();
         
-        // set up the activity mock
+        // set up the Activity mock
         var fullSyncRunProfile = ConnectedSystemRunProfilesData.Single(rp => rp.Name == "Dummy Source System Full Sync");
         ActivitiesData = TestUtilities.GetActivityData(fullSyncRunProfile.RunType, fullSyncRunProfile.Id);
         MockDbSetActivities = ActivitiesData.AsQueryable().BuildMockDbSet();
         
-        // set up the connected systems mock
+        // set up the Connected Systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.AsQueryable().BuildMockDbSet();
         
-        // todo: not sure if we need this. remove if not
-        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        // set up the Connected System Object Types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.AsQueryable().BuildMockDbSet();
         
-        // set up the connected system objects mock
+        // set up the Connected System Objects mock
         ConnectedSystemObjectsData = TestUtilities.GetConnectedSystemObjectData();
         MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.AsQueryable().BuildMockDbSet();
-        
-        // set up the metaverse object types mock
-        MetaverseObjectTypesData = TestUtilities.GetMetaverseObjectTypeData();
-        MockDbSetMetaverseObjectTypes = MetaverseObjectTypesData.AsQueryable().BuildMockDbSet();
         
         // setup up the Connected System Partitions mock
         ConnectedSystemPartitionsData = TestUtilities.GetConnectedSystemPartitionData();
         MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
+        
+        // set up the Pending Export objects mock
+        PendingExportsData = new List<PendingExport>();
+        MockDbSetPendingExports = PendingExportsData.AsQueryable().BuildMockDbSet();
+        
+        // set up the Metaverse Object Types mock
+        MetaverseObjectTypesData = TestUtilities.GetMetaverseObjectTypeData();
+        MockDbSetMetaverseObjectTypes = MetaverseObjectTypesData.AsQueryable().BuildMockDbSet();
 
-        // set up the metaverse objects mock
+        // set up the Metaverse Objects mock
         MetaverseObjectsData = TestUtilities.GetMetaverseObjectData();
         MockDbSetMetaverseObjects = MetaverseObjectsData.AsQueryable().BuildMockDbSet();
         
-        // set up the sync rule stub mocks. they will be customised to specific use-cases in individual tests.
+        // set up the Sync Rule stub mocks. they will be customised to specific use-cases in individual tests.
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.AsQueryable().BuildMockDbSet();
         
@@ -95,8 +100,8 @@ public class FullSyncTests
         MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
         MockJimDbContext.Setup(m => m.MetaverseObjectTypes).Returns(MockDbSetMetaverseObjectTypes.Object);
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
+        MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
-
         
         // instantiate Jim using the mocked db context
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
