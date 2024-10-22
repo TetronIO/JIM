@@ -51,7 +51,7 @@ public class ActivityRunProfileExecutionItem
     /// </summary>
     public string? DataSnapshot { get; set; }
 
-    public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; }
+    public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; } = ActivityRunProfileExecutionItemErrorType.NotSet;
 
     public string? ErrorMessage { get; set; }
     

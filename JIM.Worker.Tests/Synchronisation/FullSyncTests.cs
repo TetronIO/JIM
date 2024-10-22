@@ -163,12 +163,16 @@ public class FullSyncTests
             Id = 1,
             Type = SyncRuleMappingType.ObjectMatching,
             ObjectMatchingSynchronisationRule = importSyncRule,
-            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeId
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
         objectMatchingRule.Sources.Add(new SyncRuleMappingSource
         {
             Id = 1,
-            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER").
+                Attributes.Single(q=>q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
         });
         importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
      

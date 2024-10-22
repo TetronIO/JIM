@@ -167,12 +167,16 @@ public static class TestUtilities
 
     public static List<ConnectedSystemObject> GetConnectedSystemObjectData()
     {
+        var csTypes = GetConnectedSystemObjectTypeData();
+        var csUserType = csTypes.Single(t => t.Name == "SOURCE_USER");
+        
         var csos = new List<ConnectedSystemObject>();
         var cso1 = new ConnectedSystemObject
         {
             Id = Guid.Parse("36B5F294-B602-4508-A2C4-1082C9D80B64"),
             ConnectedSystemId = 1, // mock hr system
-            TypeId = 1, // user
+            Type = csUserType,
+            TypeId = csUserType.Id 
         };
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -278,7 +282,8 @@ public static class TestUtilities
         {
             Id = Guid.Parse("EDF6952E-FCF6-4D5B-8BDE-5D901D886E3D"),
             ConnectedSystemId = 1, // mock hr system
-            TypeId = 1, // user
+            Type = csUserType,
+            TypeId = csUserType.Id
         };
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -427,7 +432,7 @@ public static class TestUtilities
                         // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
                         Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
                         Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
-                        Type = AttributeDataType.Number,
+                        Type = AttributeDataType.Text,
                         Selected = true
                     },
                     new()
@@ -828,21 +833,28 @@ public static class TestUtilities
 
     public static List<MetaverseObject> GetMetaverseObjectData()
     {
+        var mvTypes = GetMetaverseObjectTypeData();
+        var mvUserType = mvTypes.Single(t => t.Name == "User");
+        
         var mvo1 = new MetaverseObject
         {
             Id = Guid.NewGuid(),
+            Type = mvUserType
         };
         
         mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             AttributeId = (int)MockMetaverseAttributeName.EmployeeId,
+            Attribute = mvUserType.Attributes.Single(a=>a.Id == (int)MockMetaverseAttributeName.EmployeeId),
             StringValue = "123"
         });
+        
         mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Id = Guid.NewGuid(),
             AttributeId = (int)MockMetaverseAttributeName.DisplayName,
+            Attribute = mvUserType.Attributes.Single(a=>a.Id == (int)MockMetaverseAttributeName.DisplayName),
             StringValue = "joe bloggs"
         });
         
@@ -859,6 +871,14 @@ public static class TestUtilities
     /// </summary>
     public static List<SyncRule> GetSyncRuleData()
     {
+        var mvTypes = GetMetaverseObjectTypeData();
+        var mvUserType = mvTypes.Single(t => t.Name == "User");
+        var mvGroupType = mvTypes.Single(t => t.Name == "Group");
+
+        var csTypes = GetConnectedSystemObjectTypeData();
+        var csUserType = csTypes.Single(t => t.Name == "SOURCE_USER");
+        var csGroupType = csTypes.Single(t => t.Name == "SOURCE_GROUP");
+        
         return new List<SyncRule>
         {
             new()
@@ -868,8 +888,10 @@ public static class TestUtilities
                 Name = "Dummy User Import Sync Rule 1",
                 Direction = SyncRuleDirection.Import,
                 Enabled = true,
-                ConnectedSystemObjectTypeId = 1,
-                MetaverseObjectTypeId = 1
+                ConnectedSystemObjectTypeId = csUserType.Id,
+                ConnectedSystemObjectType = csUserType,
+                MetaverseObjectTypeId = mvUserType.Id,
+                MetaverseObjectType = mvUserType
             },
             new()
             {
@@ -878,8 +900,10 @@ public static class TestUtilities
                 Name = "Dummy User Export Sync Rule 1",
                 Direction = SyncRuleDirection.Export,
                 Enabled = true,
-                ConnectedSystemObjectTypeId = 1,
-                MetaverseObjectTypeId = 1
+                ConnectedSystemObjectTypeId = csUserType.Id,
+                ConnectedSystemObjectType = csUserType,
+                MetaverseObjectTypeId = mvUserType.Id,
+                MetaverseObjectType = mvUserType
             },
             new()
             {
@@ -888,8 +912,10 @@ public static class TestUtilities
                 Name = "Dummy Group Import Sync Rule 1",
                 Direction = SyncRuleDirection.Import,
                 Enabled = true,
-                ConnectedSystemObjectTypeId = 2,
-                MetaverseObjectTypeId = 2
+                ConnectedSystemObjectTypeId = csGroupType.Id,
+                ConnectedSystemObjectType = csGroupType,
+                MetaverseObjectTypeId = mvGroupType.Id,
+                MetaverseObjectType = mvGroupType
             },
             new()
             {
@@ -898,8 +924,10 @@ public static class TestUtilities
                 Name = "Dummy Group Export Sync Rule 1",
                 Direction = SyncRuleDirection.Export,
                 Enabled = true,
-                ConnectedSystemObjectTypeId = 2,
-                MetaverseObjectTypeId = 2
+                ConnectedSystemObjectTypeId = csGroupType.Id,
+                ConnectedSystemObjectType = csGroupType,
+                MetaverseObjectTypeId = mvGroupType.Id,
+                MetaverseObjectType = mvGroupType
             }
         };
     }

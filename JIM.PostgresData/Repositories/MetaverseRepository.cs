@@ -402,7 +402,7 @@ public class MetaverseRepository : IMetaverseRepository
         // at this point in development, we expect and can process a single source.
         var source = syncRuleMapping.Sources[0];
         if (source.ConnectedSystemAttribute == null)
-            throw new ArgumentNullException("syncRuleMapping.Sources[0].ConnectedSystemAttribute");
+            throw new InvalidDataException("syncRuleMapping.Sources[0].ConnectedSystemAttribute");
         
         // get the source attribute value(s)
         var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.AttributeId == source.ConnectedSystemAttribute.Id);
@@ -413,24 +413,24 @@ public class MetaverseRepository : IMetaverseRepository
         {
             // construct the base query. This much is true, regardless of the sync rule mapping properties.
             var metaVerseObjects = from o in Repository.Database.MetaverseObjects.
-                    Include(mo => mo.AttributeValues).
+                    Include(mvo => mvo.AttributeValues).
                     ThenInclude(av => av.Attribute).
-                    Where(q => q.Type.Id == metaverseObjectType.Id)
+                    Where(mvo => mvo.Type.Id == metaverseObjectType.Id)
                     select o;
             
             // work out what type of attribute it is
             switch (source.ConnectedSystemAttribute.Type)
             {
                 case AttributeDataType.Text:
-                    metaVerseObjects = metaVerseObjects.Where(q => 
-                        q.AttributeValues.Any(av => 
+                    metaVerseObjects = metaVerseObjects.Where(mvo => 
+                        mvo.AttributeValues.Any(av => 
                             syncRuleMapping.TargetMetaverseAttribute != null && 
                             av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
                             av.StringValue == csoAttributeValue.StringValue));
                     break;
                 case AttributeDataType.Number:
-                    metaVerseObjects = metaVerseObjects.Where(q => 
-                        q.AttributeValues.Any(av => 
+                    metaVerseObjects = metaVerseObjects.Where(mvo => 
+                        mvo.AttributeValues.Any(av => 
                             syncRuleMapping.TargetMetaverseAttribute != null && 
                             av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
                             av.IntValue == csoAttributeValue.IntValue));
@@ -442,8 +442,8 @@ public class MetaverseRepository : IMetaverseRepository
                 case AttributeDataType.Reference:
                     throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
                 case AttributeDataType.Guid:
-                    metaVerseObjects = metaVerseObjects.Where(q => 
-                        q.AttributeValues.Any(av => 
+                    metaVerseObjects = metaVerseObjects.Where(mvo => 
+                        mvo.AttributeValues.Any(av => 
                             syncRuleMapping.TargetMetaverseAttribute != null && 
                             av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
                             av.GuidValue == csoAttributeValue.GuidValue));
@@ -452,7 +452,7 @@ public class MetaverseRepository : IMetaverseRepository
                     throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
                 case AttributeDataType.NotSet:
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    throw new InvalidDataException("Unexpected Connected System Attribute Type");
             }
             
             // execute the search. did we find an MVO?

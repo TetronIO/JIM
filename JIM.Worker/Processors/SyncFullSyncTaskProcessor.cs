@@ -96,6 +96,7 @@ public class SyncFullSyncTaskProcessor
             }
         }
         
+        // TODO: work out if CSO changes have been persisted. Is a dedicated db update call needed?
         // all objects processed.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
         await ResolveReferencesAsync();
@@ -212,6 +213,7 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.MetaverseObject != null)
         {
             // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
+            // TODO: fix null connectedSystemObject.Type
             foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
             {
                 // evaluate inbound attribute flow rules
@@ -241,7 +243,7 @@ public class SyncFullSyncTaskProcessor
         // enumerate all sync rules that have matching rules. first to match wins. 
         // for more deterministic results, admins should make sure an object only matches to a single sync rule
         // at any given moment to ensure the single sync rule matching rule priority order is law.
-        foreach (var matchingSyncRule in activeSyncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+        foreach (var matchingSyncRule in activeSyncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
         {
             // object matching rules are ordered. respect the ordering. 
             foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
