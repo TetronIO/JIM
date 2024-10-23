@@ -97,8 +97,9 @@ public class SyncFullSyncTaskProcessor
         }
         
         // TODO: work out if CSO changes have been persisted. Is a dedicated db update call needed?
-        // all objects processed.
+        // ensure the activity and any pending db updates are applied.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
+        
         await ResolveReferencesAsync();
     }
 
@@ -271,6 +272,8 @@ public class SyncFullSyncTaskProcessor
                 // establish join! then return as first rule to match, wins.
                 connectedSystemObject.MetaverseObject = mvo;
                 connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
+                connectedSystemObject.DateJoined = DateTime.UtcNow;
+                mvo.ConnectedSystemObjects.Add(connectedSystemObject);
                 return;
             }
             
@@ -374,7 +377,7 @@ public class SyncFullSyncTaskProcessor
         // get the joined Metaverse Object and add it to the Metaverse Object Attribute Value
         // remove the unresolved reference value.
         // update the Metaverse Object Attribute Value.
-
-        throw new NotImplementedException("Is this still needed? We're assigning MVO references from CSO reference values on sync rule processing.");
+        
+        // TODO: "Is this still needed? We're assigning MVO references from CSO reference values on sync rule processing."
     }
 }

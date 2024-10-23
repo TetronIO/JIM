@@ -187,9 +187,9 @@ public class FullSyncTests
         // test that a CSO is successfully match to an MVO using the sync rule.
         // we expect the cso with employee id 123 to have joined to the mvo with employee id 123.
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO by Employee ID.");
-        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(MetaverseObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
         Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected first CSO to have a join type of Joined.");
-        Assert.That(ConnectedSystemObjectsData[0].DateJoined, Is.Not.Null, "Expected CSO to have joined to a DATE.");
+        Assert.That(ConnectedSystemObjectsData[0].DateJoined, Is.Not.Null, "Expected CSO to have joined to a DATE value.");
         
         Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Null, "Expected MVO to have a non-null CSO list.");
         Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Empty, "Expected MVO to have at least one CSO reference.");
