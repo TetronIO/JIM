@@ -1,3 +1,5 @@
+[![.NET Build & Test](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml/badge.svg)](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml)
+
 # Junctional Identity Manager (JIM)
 A modern Identity Manager for organisations. Features:
 
