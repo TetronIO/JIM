@@ -1122,7 +1122,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
-                    IntValues = new List<int> { 1 },
+                    StringValues = new List<string> { "1" },
                     Type = AttributeDataType.Number
                 },
                 new()
@@ -1192,7 +1192,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
-                    IntValues = new List<int> { 2 },
+                    StringValues = new List<string> { "2" },
                     Type = AttributeDataType.Number
                 },
                 new()
@@ -1269,7 +1269,7 @@ public class ImportUpdateObjectSvaTests
                 new()
                 {
                     Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
-                    IntValues = new List<int> { 3 },
+                    StringValues = new List<string> { "3" },
                     Type = AttributeDataType.Number
                 },
                 new()
@@ -1342,7 +1342,7 @@ public class ImportUpdateObjectSvaTests
         Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(3), $"Expected three Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
         
         // get the new manager
-        var cso3 = await Jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(1, (int)MockSourceSystemAttributeNames.EMPLOYEE_ID, 3);
+        var cso3 = await Jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(1, (int)MockSourceSystemAttributeNames.EMPLOYEE_ID, "3");
         Assert.That(cso3, Is.Not.EqualTo(null), "Expected to be able to retrieve the new manager (cso3).");
         var cso3ManagerAttribute = cso3.GetAttributeValue(MockSourceSystemAttributeNames.MANAGER.ToString());
         Assert.That(cso3ManagerAttribute, Is.Not.Null);
@@ -2781,7 +2781,7 @@ public class ImportUpdateObjectSvaTests
             new()
             {
                 Id = Guid.NewGuid(),
-                IntValue = 1,
+                StringValue = "1",
                 Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()),
                 ConnectedSystemObject = cso1
             },
@@ -2864,7 +2864,7 @@ public class ImportUpdateObjectSvaTests
             new()
             {
                 Id = Guid.NewGuid(),
-                IntValue = 2,
+                StringValue = "2",
                 Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()),
                 ConnectedSystemObject = cso2
             },

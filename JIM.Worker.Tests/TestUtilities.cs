@@ -187,7 +187,7 @@ public static class TestUtilities
                 Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()
             },
             AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
-            StringValue = "123"
+            StringValue = "E123"
         });
         cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -294,7 +294,7 @@ public static class TestUtilities
                 Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()
             },
             AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
-            StringValue = "124"
+            StringValue = "E124"
         });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -847,7 +847,7 @@ public static class TestUtilities
             Id = Guid.NewGuid(),
             AttributeId = (int)MockMetaverseAttributeName.EmployeeId,
             Attribute = mvUserType.Attributes.Single(a=>a.Id == (int)MockMetaverseAttributeName.EmployeeId),
-            StringValue = "123"
+            StringValue = "E123"
         });
         
         mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
