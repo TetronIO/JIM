@@ -5,14 +5,16 @@
 /// </summary>
 public enum MockMetaverseAttributeName
 {
-    EmployeeId = 1, // int
-    DisplayName = 2, // string
-    Email = 3, // text
-    EmployeeStartDate = 4, // datetime
-    EmployeeEndDate = 5, // datetime
-    Manager = 6, // reference
-    LocationId = 7, // guid
-    Photo = 8, // binary
-    AccountName = 9, // text
-    Member = 10 // reference
+    HrId = 1, // guid
+    EmployeeId = 2, // string
+    EmployeeNumber = 3, // int
+    DisplayName = 4, // string
+    Email = 5, // text
+    EmployeeStartDate = 6, // datetime
+    EmployeeEndDate = 7, // datetime
+    Manager = 8, // reference
+    LocationId = 9, // guid
+    Photo = 10, // binary
+    AccountName = 11, // text
+    Member = 12 // reference
 }

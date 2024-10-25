@@ -194,6 +194,17 @@ public static class TestUtilities
             Id = Guid.NewGuid(),
             Attribute = new ConnectedSystemObjectTypeAttribute()
             {
+                Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+                Name = MockSourceSystemAttributeNames.EMPLOYEE_NUMBER.ToString()
+            },
+            AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+            IntValue = 123
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
                 Id = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
                 Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()
             },
@@ -427,12 +438,22 @@ public static class TestUtilities
                     },
                     new()
                     {
-                        // mimicking the organisational unique and immutable identifier for a person in the organisation.
+                        // mimicking an organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee ids.
-                        // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
+                        // intended to be used as a correlating attribute for Metaverse to Connected System object joins.
                         Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
                         Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
                         Type = AttributeDataType.Text,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        // mimicking another organisational unique and immutable identifier for a person in the organisation.
+                        // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee numbers.
+                        // intended to be used as a correlating attribute for Metaverse to Connected System object joins.
+                        Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+                        Name = MockSourceSystemAttributeNames.EMPLOYEE_NUMBER.ToString(),
+                        Type = AttributeDataType.Number,
                         Selected = true
                     },
                     new()
@@ -739,6 +760,14 @@ public static class TestUtilities
                     },
                     new()
                     {
+                        Id = (int)MockMetaverseAttributeName.EmployeeNumber,
+                        Name = Constants.BuiltInAttributes.EmployeeNumber,
+                        Type = AttributeDataType.Number,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = true
+                    },
+                    new()
+                    {
                         Id = (int)MockMetaverseAttributeName.DisplayName,
                         Name = Constants.BuiltInAttributes.DisplayName,
                         Type = AttributeDataType.Text,
@@ -848,6 +877,14 @@ public static class TestUtilities
             AttributeId = (int)MockMetaverseAttributeName.EmployeeId,
             Attribute = mvUserType.Attributes.Single(a=>a.Id == (int)MockMetaverseAttributeName.EmployeeId),
             StringValue = "E123"
+        });
+        
+        mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockMetaverseAttributeName.EmployeeNumber,
+            Attribute = mvUserType.Attributes.Single(a=>a.Id == (int)MockMetaverseAttributeName.EmployeeNumber),
+            IntValue = 123
         });
         
         mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue

@@ -149,7 +149,7 @@ public class FullSyncTests
     // }
     
     /// <summary>
-    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a sync rule. 
+    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a sync rule using a text data type attribute. 
     /// </summary>
     [Test]
     public async Task CsoJoinToMvoViaTextAttributeTestAsync()
@@ -173,6 +173,54 @@ public class FullSyncTests
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
             ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER").
                 Attributes.Single(q=>q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+     
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+        
+        // test that a CSO is successfully match to an MVO using the sync rule.
+        // we expect the cso with employee id 123 to have joined to the mvo with employee id 123.
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO by Employee ID.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(MetaverseObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected first CSO to have a join type of Joined.");
+        Assert.That(ConnectedSystemObjectsData[0].DateJoined, Is.Not.Null, "Expected CSO to have joined to a DATE value.");
+        
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Null, "Expected MVO to have a non-null CSO list.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Empty, "Expected MVO to have at least one CSO reference.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects[0].Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first MVO to have a reference to the first CSO.");
+    }
+    
+    /// <summary>
+    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a sync rule using a number data type attribute. 
+    /// </summary>
+    [Test]
+    public async Task CsoJoinToMvoViaNumberAttributeTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        
+        // add test-specific matching rules to it
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeNumber)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER").
+                Attributes.Single(q=>q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER)
         });
         importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
      

@@ -88,6 +88,7 @@ internal class SeedingServer
         var departmentAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Department, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var employeeEndDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeEndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
         var employeeIdAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeId, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var employeeNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeNumber, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
         var employeeStartDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeStartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
         var employeeStatusAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeStatus, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var employeeTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeType, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -165,6 +166,7 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, emailAttribute);
         AddAttributeToObjectType(userObjectType, employeeEndDateAttribute);
         AddAttributeToObjectType(userObjectType, employeeIdAttribute);
+        AddAttributeToObjectType(userObjectType, employeeNumberAttribute);
         AddAttributeToObjectType(userObjectType, employeeStartDateAttribute);
         AddAttributeToObjectType(userObjectType, employeeStatusAttribute);
         AddAttributeToObjectType(userObjectType, employeeTypeAttribute);

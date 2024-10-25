@@ -56,6 +56,7 @@ public static class Constants
         public static string DistinguishedName => "Distinguished Name";
         public static string Email => "Email";
         public static string EmployeeId => "Employee ID";
+        public static string EmployeeNumber => "Employee Number";
         public static string EmployeeType => "Employee Type";
         public static string EmployeeStatus => "Employee Status";
         public static string EmployeeStartDate => "Employee Start Date";
