@@ -127,6 +127,10 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObjectAttributeValue>()
             .HasOne(moav => moav.ReferenceValue)
             .WithMany();
+        
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .HasOne(moav => moav.UnresolvedReferenceValue)
+            .WithMany();
 
         modelBuilder.Entity<MetaverseObjectType>()
             .HasMany(mot => mot.Attributes);
