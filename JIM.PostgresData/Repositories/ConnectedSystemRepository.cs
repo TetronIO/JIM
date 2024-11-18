@@ -511,11 +511,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         if (deleteAllConnectedSystemObjectChangeObjects)
         {
-            // it sounds like postgresql cascade delete might auto-delete dependent objects
             await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjectChanges\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
         }
-
-        // it sounds like postgresql cascade delete might auto-delete dependent objects
+        
+        //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjectAttributeValues\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
         await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjects\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
     }
 

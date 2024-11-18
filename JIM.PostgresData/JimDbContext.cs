@@ -87,7 +87,7 @@ public class JimDbContext : DbContext
 
         _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}";
 
-        _ = bool.TryParse(dbLogSensitiveInfo, out bool logSensitiveInfo);
+        _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
         if (logSensitiveInfo)
             _connectionString += ";Include Error Detail=True";
     }
@@ -101,12 +101,28 @@ public class JimDbContext : DbContext
     {
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasMany(cso => cso.AttributeValues)
-            .WithOne(csoav => csoav.ConnectedSystemObject);
+            .WithOne(av => av.ConnectedSystemObject)
+            .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemAttributeValue objects when the CSO is deleted.
 
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasMany(cso => cso.ActivityRunProfileExecutionItems)
             .WithOne(i => i.ConnectedSystemObject)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.SetNull); // let the db clear the fk value to the CSO.
+        
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasMany(cso => cso.Changes)
+            .WithOne(c => c.ConnectedSystemObject)
+            .OnDelete(DeleteBehavior.SetNull); // let the db clear the fk value to the CSO.
+        
+        modelBuilder.Entity<ConnectedSystemObjectChange>()
+            .HasMany(cso => cso.AttributeChanges)
+            .WithOne(ac => ac.ConnectedSystemChange)
+            .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemObjectChangeAttribute objects when the parent is deleted.
+
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttribute>()
+            .HasMany(ca => ca.ValueChanges)
+            .WithOne(av => av.ConnectedSystemObjectChangeAttribute)
+            .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemObjectChangeAttributeValue objects when the parent is deleted.
 
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)

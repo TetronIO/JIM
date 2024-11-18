@@ -18,7 +18,7 @@ public class ConnectedSystemObjectChangeAttribute
     /// <summary>
     /// A list of what values were added to or removed from this attribute.
     /// </summary>
-    public List<ConnectedSystemObjectChangeAttributeValue> ValueChanges { get; set; } = new();
+    public List<ConnectedSystemObjectChangeAttributeValue> ValueChanges { get; } = new();
 
     public override string ToString()
     {
