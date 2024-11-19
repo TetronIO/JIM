@@ -46,64 +46,41 @@ public class ConnectedSystemObjectAttributeValue
 
     public override string ToString()
     {
-        var output = "";
         if (Attribute != null)
-            output += $"{Attribute.Name}: ";
+            return $"{Attribute.Name}: {ToStringNoName()}";    
 
+        return ToStringNoName() ?? "";
+    }
+
+    public string? ToStringNoName()
+    {
         if (!string.IsNullOrEmpty(StringValue))
-        {
-            output += StringValue;
-            return output;
-        }
+            return StringValue;
 
         if (DateTimeValue != null)
-        {
-            output += DateTimeValue.ToString();
-            return output;
-        }
+            return DateTimeValue.ToString();
 
         if (IntValue != null)
-        {
-            output += IntValue.ToString();
-            return output;
-        }
+            return IntValue.ToString();
 
         if (ByteValue != null)
-        {
-            output += ByteValue.Length.ToString();
-            return output;
-        }
+            return ByteValue.Length.ToString();
 
         if (GuidValue.HasValue)
-        {
-            output += GuidValue.Value.ToString();
-            return output;
-        }
+            return GuidValue.Value.ToString();
 
         if (BoolValue.HasValue)
-        {
-            output += BoolValue.Value.ToString();
-            return output;
-        }
+            return BoolValue.Value.ToString();
 
         if (ReferenceValue != null && !string.IsNullOrEmpty(UnresolvedReferenceValue))
-        {
-            output += $"Resolved: {ReferenceValue.Id}. Unresolved: {UnresolvedReferenceValue}";
-            return output;
-        }
+            return $"Resolved: {ReferenceValue.Id}. Unresolved: {UnresolvedReferenceValue}";
 
         if (ReferenceValue != null)
-        {
-            output += $"Resolved: " + ReferenceValue.Id;
-            return output;
-        }
+            return "Resolved: " + ReferenceValue.Id;
 
-        if (!string.IsNullOrEmpty(UnresolvedReferenceValue))
-        {
-            output += $"Unresolved: " + UnresolvedReferenceValue;
-            return output;
-        }
-
-        return string.Empty;
+        if (string.IsNullOrEmpty(UnresolvedReferenceValue)) 
+            return string.Empty;
+        
+        return "Unresolved: " + UnresolvedReferenceValue;
     }
 }

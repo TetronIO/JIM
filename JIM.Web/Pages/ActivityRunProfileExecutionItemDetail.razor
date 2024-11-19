@@ -10,10 +10,10 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Run Profile Execution Item: @_activityRunProfileExecutionItem.?Id</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution Item:</span> @(_activityRunProfileExecutionItem != null ? _activityRunProfileExecutionItem.Id : null)</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution Item:</span> @_activityRunProfileExecutionItem?.Id</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-    @if (_activityRunProfileExecutionItem != null)
+@if (_activityRunProfileExecutionItem != null)
 {
     <MudStack Row="true" Class="mt-5 mb-5">
 
@@ -77,7 +77,7 @@
                                 <MudText>@(_externalIdAttributeValue.Attribute.Name):</MudText>
                             </MudTooltip>
                             <span>&nbsp;</span>
-                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">@_externalIdAttributeValue.ToString()</MudLink>
+                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">@_externalIdAttributeValue.ToStringNoName()</MudLink>
                         }
                         else
                         {
@@ -151,7 +151,7 @@
         </MudSimpleTable>
     }
 
-    @if (_activityRunProfileExecutionItem.ErrorType.HasValue)
+    @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
     {
         <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
             @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))

@@ -47,7 +47,7 @@ public class Worker : BackgroundService
     /// </summary>
     private List<TaskTask> CurrentTasks { get; } = new();
     private readonly object _currentTasksLock = new();
-
+    
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         InitialiseLogging();
