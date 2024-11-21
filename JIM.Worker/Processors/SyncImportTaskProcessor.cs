@@ -115,6 +115,7 @@ public class SyncImportTaskProcessor
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0)
         {
+            // TODO: find out why this caused CSOs to be persisted early, and why this conflicts with later create CSOs statement
             await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
             await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
         }
@@ -126,8 +127,8 @@ public class SyncImportTaskProcessor
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Commiting changes");
-        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
-        await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
+        //await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
+        //await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
 
         // final Activity update now that references have been resolved, CSOs have been persisted and IDs generated, etc.
         await _jim.Activities.UpdateActivityAsync(_activity);
