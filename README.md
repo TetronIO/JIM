@@ -11,6 +11,8 @@ A modern Identity Manager for organisations. Features:
 - A modern Web Portal and API
 - Single Sign-On (SSO) using OpenID Connect
 
+![A screenshot of JIM running](https://tetron.io/images/jim/jim-8.png "JIM Screenshot")
+
 ## Scenarios
 JIM is designed to support the following common IGA scenarios:
 - Synchronise users from HCM (aka HR) systems to directories and apps
@@ -41,3 +43,6 @@ JIM is currently targetting the following means of connecting to systems via it'
 
 ## Roadmap
 JIM is in active development. There are many plans for new features. Check back soon for more details.
+
+## More Information
+Please go to https://tetron.io/jim for more information.
