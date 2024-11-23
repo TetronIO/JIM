@@ -127,8 +127,10 @@ public class SyncImportTaskProcessor
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Commiting changes");
-        //await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
-        //await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
+        
+        // commented these out as new objects are already being persisted when the activity is above. this is not what we want. fix.
+        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
+        await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
 
         // final Activity update now that references have been resolved, CSOs have been persisted and IDs generated, etc.
         await _jim.Activities.UpdateActivityAsync(_activity);
