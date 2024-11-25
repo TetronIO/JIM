@@ -566,6 +566,14 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
     {
+        await CreateConnectedSystemObjectsAsync(connectedSystemObjects, activity.RunProfileExecutionItems);
+    }
+    
+    /// <summary>
+    /// Bulk persists Connected System Objects and appends a Change Object to the Activity Run Profile Execution Item.
+    /// </summary>
+    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
+    {
         // bulk persist csos creates
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
         
@@ -573,8 +581,8 @@ public class ConnectedSystemServer
         // they will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
-                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created further up the stack.");
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
 
             AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem);
         }
@@ -585,12 +593,20 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
     {
+        await UpdateConnectedSystemObjectsAsync(connectedSystemObjects, activity.RunProfileExecutionItems);
+    }
+    
+    /// <summary>
+    /// Bulk persists Connected System Object updates and appends a Change Object to the Activity Run Profile Execution Item for each one.
+    /// </summary>
+    public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
+    {
         // add a change object to the relevant activity run profile execution item for each cso to be updated.
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
-                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created further up the stack.");
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
             
             ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
         }

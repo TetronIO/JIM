@@ -2,6 +2,7 @@ using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
+using JIM.Models.Activities;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -205,9 +206,9 @@ public class Worker : BackgroundService
                                                     }
 
                                                     // task completed. determine final status, depending on how the run profile execution went
-                                                    if (newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue))
+                                                    if (newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
                                                         await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
-                                                    else if (newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue))
+                                                    else if (newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
                                                         await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
                                                     else
                                                         await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
