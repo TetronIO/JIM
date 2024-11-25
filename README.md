@@ -25,8 +25,8 @@ JIM is designed to support the following common IGA scenarios:
 ## Deployment
 JIM runs in Docker containers and can be deployed onto on-premises infrastructure (no Internet connection required for air-gapped networks) or Cloud container services, such as Microsoft Azure or AWS.
 
-Various topologies supported, depending on your needs:
-- Standalone (single-server, built-in database) - Perfect for smaller organisations or pre-production environments
+Various topologies are planned, depending on your needs:
+- Standalone (single-server, built-in database) - Perfect for smaller organisations or pre-production environments. The current topology.
 - External database - Use an existing database platform for reslliancy and scale
 - Scaled-out web frontends - To handle more users accessing the web app and for high-availability
 
