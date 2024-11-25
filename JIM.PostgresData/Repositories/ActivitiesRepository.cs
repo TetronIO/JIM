@@ -171,7 +171,7 @@ public class ActivityRepository : IActivityRepository
         {
             ActivityId = activityId,
             TotalObjectChangeCount = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId),
-            TotalObjectErrors = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ErrorType != null),                
+            TotalObjectErrors = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),                
             TotalObjectCreates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Create),
             TotalObjectDeletes = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Delete),
             TotalObjectUpdates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Update),

@@ -36,7 +36,7 @@
                             <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.ConnectedSystemRunProfile when _connectedSystemHeader != null:
-                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_connectedSystemHeader.Name</MudLink> @:/ @_activity.TargetName break;
+                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_connectedSystemHeader.Name</MudLink> @:/ @_activity.TargetName
                             break;
                         case ActivityTargetType.MetaverseObject when _metaverseObjectHeader != null:
                             <MudLink Href="@Utilities.GetMetaverseObjectHref(_metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(_metaverseObjectHeader)</MudLink>
@@ -168,7 +168,7 @@
                     <MudChip Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Error Type">
-                    @if (context.ErrorType.HasValue)
+                    @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                     {
                         <MudChip Variant="Variant.Text" Color="Color.Error">@context.ErrorType.Value.ToString().SplitOnCapitalLetters()</MudChip>
                     }
