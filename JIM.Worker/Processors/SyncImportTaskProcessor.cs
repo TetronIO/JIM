@@ -19,6 +19,7 @@ public class SyncImportTaskProcessor
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly MetaverseObject _initiatedBy;
     private readonly JIM.Models.Activities.Activity _activity;
+    private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     public SyncImportTaskProcessor(
@@ -33,10 +34,15 @@ public class SyncImportTaskProcessor
         _jim = jimApplication;
         _connector = connector;
         _connectedSystem = connectedSystem;
+        _cancellationTokenSource = cancellationTokenSource;
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _initiatedBy = initiatedBy;
         _activity = activity;
-        _cancellationTokenSource = cancellationTokenSource;
+        
+        // we will maintain this list separate from the activity, and add the items to the activity when all CSOs are persisted
+        // this is so we don't create a dependency on CSOs with the Activity whilst we're still processing and updating the activity status, which would cause EF to persist
+        // CSOs before we're ready to do so.
+        _activityRunProfileExecutionItems = new List<ActivityRunProfileExecutionItem>();
     }
 
     public async Task PerformFullImportAsync()
@@ -99,7 +105,7 @@ public class SyncImportTaskProcessor
                 var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
                 totalObjectsImported = result.ImportObjects.Count;
                 
-                // todo: simplify externalIdsImported. objects are too complex
+                // todo: simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
                 
@@ -126,13 +132,13 @@ public class SyncImportTaskProcessor
         await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Commiting changes");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
+        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+        await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
         
-        // commented these out as new objects are already being persisted when the activity is above. this is not what we want. fix.
-        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activity);
-        await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activity);
-
-        // final Activity update now that references have been resolved, CSOs have been persisted and IDs generated, etc.
+        // now persist the activity run profile execution items with the activity
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
+        _activity.AddRunProfileExecutionItems(_activityRunProfileExecutionItems);
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
@@ -240,7 +246,8 @@ public class SyncImportTaskProcessor
         }
         
         // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
-        var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
+        var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
+        _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         
@@ -287,7 +294,8 @@ public class SyncImportTaskProcessor
         foreach (var importObject in connectedSystemImportResult.ImportObjects)
         {
             // this will store the detail for the import object that will persist in the history for the run
-            var activityRunProfileExecutionItem = _activity.AddRunProfileExecutionItem();
+            var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
+            _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
             
             try
             {
@@ -552,7 +560,7 @@ public class SyncImportTaskProcessor
         if (csoIsInvalid)
             return null;
 
-        // now associate the persisted cso with the activityRunProfileExecutionItem
+        // now associate the cso with the activityRunProfileExecutionItem
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
         stopwatch.Stop();

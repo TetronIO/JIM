@@ -129,6 +129,20 @@ public class Activity
     }
     
     /// <summary>
+    /// If you want to prepare ActivityRunProfileExecutionItems separate from the activity to be able to update the activity without creating a dependency on the item's dependencies
+    /// then use this method to bulk add them to this Activity. It will make sure the items are associated with the activity.
+    /// </summary>
+    public void AddRunProfileExecutionItems(List<ActivityRunProfileExecutionItem> runProfileExecutionItems)
+    {
+        foreach (var item in runProfileExecutionItems)
+        {
+            item.Activity = this;
+            item.ActivityId = Id;
+            RunProfileExecutionItems.Add(item);
+        }
+    }
+    
+    /// <summary>
     /// Prepares a Run Profile Execution Item that relates to the Activity, but has not yet been added to it.
     /// This enables items to be prepared, but a decision on whether to persist it or not can come later at the caller's discretion.
     /// </summary>
