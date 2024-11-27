@@ -1,25 +1,25 @@
-﻿<MudNavMenu Dense="true" Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Class="pa-2">
+﻿<MudNavMenu Color="Color.Primary" Class="pt-3 pb-3">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
 
-    <MudNavGroup Title="Users" Expanded="true" Icon="@Icons.Material.Filled.Person">
+    <MudNavGroup Title="Users" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!DrawerOpen)">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All">All Users</MudNavLink>
         <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix">People</MudNavLink>
         <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix">Service Principals</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Groups" Expanded="true" Icon="@Icons.Material.Filled.Groups">
+    <MudNavGroup Title="Groups" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Groups" HideExpandIcon="@(!DrawerOpen)">
         <MudNavLink Href="/t/groups" Match="NavLinkMatch.All">All Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix">Security Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix">Distribution Groups</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Activity" Expanded="true" Icon="@Icons.Material.Filled.DynamicFeed">
-        <MudNavLink Href="/activity" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.FilterAltOff">Activity</MudNavLink>
-        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.FilterAlt">My Activity</MudNavLink>
+    <MudNavGroup Title="Activity" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)">
+        <MudNavLink Href="/activity" Match="NavLinkMatch.All">Activity</MudNavLink>
+        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All">My Activity</MudNavLink>
     </MudNavGroup>
 
     <AuthorizeView Roles="Administrators">
-        <MudNavGroup Title="Dashboard" Expanded="false" Icon="@Icons.Material.Filled.Dashboard">
+        <MudNavGroup Title="Dashboard" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)">
             <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All">Daily</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All">Weekly</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All">Monthly</MudNavLink>
@@ -28,7 +28,7 @@
     </AuthorizeView>
 
     <AuthorizeView Roles="Administrators">
-        <MudNavGroup Title="Admin" Expanded="true" Icon="@Icons.Material.Filled.Settings">
+        <MudNavGroup Title="Admin" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)">
             <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix">Operations</MudNavLink>
             <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.All">Connected Systems</MudNavLink>
             <MudNavLink Href="/admin/connected-systems/sync-rules" Match="NavLinkMatch.All">Synchronisation Rules</MudNavLink>
@@ -39,3 +39,13 @@
         </MudNavGroup>
     </AuthorizeView>
 </MudNavMenu>
+
+@code {
+    [Parameter] 
+    [EditorRequired] 
+    public bool DrawerOpen { get; set; }
+
+    protected override void OnParametersSet()
+    {
+    }
+}

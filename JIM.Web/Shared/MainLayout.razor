@@ -19,18 +19,28 @@
             @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.LibraryBooks">Library</MudNavLink> *@
             @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Group">Community</MudNavLink> *@
             @* </MudNavMenu> *@
+            
+            <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+            <NavMenu DrawerOpen="_open"/>
+            
+           @* <MudNavMenu> *@
+           @*      <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink> *@
+           @* *@
+           @*      <MudNavGroup Title="Users" Expanded="@_open" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!_open)"> *@
+           @*          <MudNavLink Href="/t/users" Match="NavLinkMatch.All">All Users</MudNavLink> *@
+           @*          <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix">People</MudNavLink> *@
+           @*          <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix">Service Principals</MudNavLink> *@
+           @*      </MudNavGroup> *@
+           @* *@
+           @* *@
+           @*      <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Groups">Groups</MudNavLink> *@
+           @*      <MudNavLink Href="/activity" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Activity</MudNavLink> *@
+           @*      <AuthorizeView Roles="Administrators"> *@
+           @*          <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink> *@
+           @*          <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Admin</MudNavLink> *@
+           @*      </AuthorizeView> *@
+           @*  </MudNavMenu>  *@
 
-            <MudNavMenu>
-                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
-                <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Person">Users</MudNavLink>
-                <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Groups">Groups</MudNavLink>
-                <MudNavLink Href="/activity" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Activity</MudNavLink>
-                <AuthorizeView Roles="Administrators">
-                    <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-                    <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Admin</MudNavLink>
-                </AuthorizeView>
-            </MudNavMenu>
-          
         </MudDrawer>
 
         <MudMainContent>
@@ -39,7 +49,6 @@
                 @* <div class="d-flex justify-center align-center"> *@
                 @*     <MudButton OnClick="@ToggleDrawer" Color="Color.Primary">Toggle</MudButton> *@
                 @* </div> *@
-
 
                 @Body
 
@@ -55,7 +64,7 @@
 
             </MudContainer>
         </MudMainContent>
-        
+
     </MudDrawerContainer>
 
 </MudLayout>
