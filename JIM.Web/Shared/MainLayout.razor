@@ -8,48 +8,20 @@
 
 <MudLayout Style="Position: static">
 
-    @* <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0"> *@
-    @*     <NavMenu/> *@
-    @* </MudDrawer> *@
-
     <MudDrawerContainer Class="mud-height-full">
-        <MudDrawer @bind-Open="@_open" Fixed="false" Elevation="1" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true">
-            @* <MudNavMenu> *@
-            @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Store">Store</MudNavLink> *@
-            @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.LibraryBooks">Library</MudNavLink> *@
-            @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Group">Community</MudNavLink> *@
-            @* </MudNavMenu> *@
-            
+        <MudDrawer @bind-Open="@IsDrawerOpen" Fixed="false" Elevation="1" Variant="@(IsDrawerToRemainOpen ? DrawerVariant.Persistent : DrawerVariant.Mini)" OpenMiniOnHover="true">
             <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
-            <NavMenu DrawerOpen="_open"/>
-            
-           @* <MudNavMenu> *@
-           @*      <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink> *@
-           @* *@
-           @*      <MudNavGroup Title="Users" Expanded="@_open" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!_open)"> *@
-           @*          <MudNavLink Href="/t/users" Match="NavLinkMatch.All">All Users</MudNavLink> *@
-           @*          <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix">People</MudNavLink> *@
-           @*          <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix">Service Principals</MudNavLink> *@
-           @*      </MudNavGroup> *@
-           @* *@
-           @* *@
-           @*      <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Groups">Groups</MudNavLink> *@
-           @*      <MudNavLink Href="/activity" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Activity</MudNavLink> *@
-           @*      <AuthorizeView Roles="Administrators"> *@
-           @*          <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink> *@
-           @*          <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Admin</MudNavLink> *@
-           @*      </AuthorizeView> *@
-           @*  </MudNavMenu>  *@
-
+            <NavMenu DrawerOpen="@IsDrawerOpen"/>
+            @if (IsDrawerOpen)
+            {
+                <div class="jim-drawer-container mud-text-secondary">
+                    <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Class="ms-4" Size="Size.Small"></MudCheckBox>
+                </div>
+            }
         </MudDrawer>
 
         <MudMainContent>
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
-
-                @* <div class="d-flex justify-center align-center"> *@
-                @*     <MudButton OnClick="@ToggleDrawer" Color="Color.Primary">Toggle</MudButton> *@
-                @* </div> *@
-
                 @Body
 
                 <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
@@ -124,14 +96,9 @@
     private MudThemeProvider? _mudThemeProvider;
     private const string LightModeText = "Light Mode";
     private const string DarkModeText = "Dark Mode";
-    private bool IsDrawerOpen { get; set; } = true;
+    private bool IsDrawerOpen { get; set; }
+    private bool IsDrawerToRemainOpen { get; set; }
     private bool IsDarkMode { get; set; }
-    
-    private bool _open = false;
-    private void ToggleDrawer()
-    {
-        _open = !_open;
-    } 
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -140,10 +107,5 @@
             IsDarkMode = await _mudThemeProvider.GetSystemPreference();
             StateHasChanged();
         }
-    }
-
-    void DrawerToggle()
-    {
-        IsDrawerOpen = !IsDrawerOpen;
     }
 }

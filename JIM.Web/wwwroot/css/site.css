@@ -14,6 +14,10 @@ html, body {
     transition: color 0.3s !important;
 }
 
+.mud-main-content {
+    padding-top: 0;
+}
+
 /* JIM CUSTOM */
 .jim-header-title {
     font-weight: 300;
@@ -27,6 +31,10 @@ html, body {
     font-family: "Lucida Console", "Courier New", monospace;
 }
 
-.mud-main-content {
-    padding-top: 0;
+.jim-drawer-container {
+    margin: 0 20px 0 20px;
+    border-top-style: solid;
+    border-top-width: 1px;
+    border-top-color: var(--mud-palette-lines-default);
+    padding-top: 5px;
 }
