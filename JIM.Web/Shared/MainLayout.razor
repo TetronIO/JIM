@@ -14,19 +14,31 @@
 
     <MudDrawerContainer Class="mud-height-full">
         <MudDrawer @bind-Open="@_open" Fixed="false" Elevation="1" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true">
+            @* <MudNavMenu> *@
+            @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Store">Store</MudNavLink> *@
+            @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.LibraryBooks">Library</MudNavLink> *@
+            @*     <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Group">Community</MudNavLink> *@
+            @* </MudNavMenu> *@
+
             <MudNavMenu>
-                <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Store">Store</MudNavLink>
-                <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.LibraryBooks">Library</MudNavLink>
-                <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Group">Community</MudNavLink>
+                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+                <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Person">Users</MudNavLink>
+                <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Groups">Groups</MudNavLink>
+                <MudNavLink Href="/activity" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DynamicFeed">Activity</MudNavLink>
+                <AuthorizeView Roles="Administrators">
+                    <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+                    <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Admin</MudNavLink>
+                </AuthorizeView>
             </MudNavMenu>
+          
         </MudDrawer>
 
         <MudMainContent>
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
 
-                <div class="d-flex justify-center align-center">
-                    <MudButton OnClick="@ToggleDrawer" Color="Color.Primary">Toggle</MudButton>
-                </div>
+                @* <div class="d-flex justify-center align-center"> *@
+                @*     <MudButton OnClick="@ToggleDrawer" Color="Color.Primary">Toggle</MudButton> *@
+                @* </div> *@
 
 
                 @Body

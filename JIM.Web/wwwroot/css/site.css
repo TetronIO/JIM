@@ -26,3 +26,7 @@ html, body {
 .jim-text-code {
     font-family: "Lucida Console", "Courier New", monospace;
 }
+
+.mud-main-content {
+    padding-top: 0;
+}
