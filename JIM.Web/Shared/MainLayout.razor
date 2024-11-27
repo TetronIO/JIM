@@ -6,37 +6,46 @@
 
 <PageTitle>JIM</PageTitle>
 
-<MudLayout>
-    <MudAppBar Elevation="1">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
-        <MudImage Src="/images/jim-logo.png" Height="40" Class="ms-3 mr-3" title="JIM logo" />
-        <MudText Typo="Typo.h6" Class="jim-header-title">Junctional Identity Manager</MudText>
-        <MudSpacer />
-        <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
-            <MudToggleIconButton @bind-Toggled="@IsDarkMode"
-                                 Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
-                                 ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
-        </MudTooltip>
-    </MudAppBar>
-    <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0">
-        <NavMenu />
-    </MudDrawer>
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
-            @Body
+<MudLayout Style="Position: static">
 
-            <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
-                &copy; @DateTime.UtcNow.Year Tetron
-            </MudText>
+    @* <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0"> *@
+    @*     <NavMenu/> *@
+    @* </MudDrawer> *@
 
-            <MudText Align="Align.Center">
-                <MudLink Href="https://github.com/TetronIO/JIM">
-                    <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;" />
-                </MudLink>
-            </MudText>
+    <MudDrawerContainer Class="mud-height-full">
+        <MudDrawer @bind-Open="@_open" Fixed="false" Elevation="1" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true">
+            <MudNavMenu>
+                <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Store">Store</MudNavLink>
+                <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.LibraryBooks">Library</MudNavLink>
+                <MudNavLink Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Group">Community</MudNavLink>
+            </MudNavMenu>
+        </MudDrawer>
 
-        </MudContainer>
-    </MudMainContent>
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
+
+                <div class="d-flex justify-center align-center">
+                    <MudButton OnClick="@ToggleDrawer" Color="Color.Primary">Toggle</MudButton>
+                </div>
+
+
+                @Body
+
+                <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
+                    &copy; @DateTime.UtcNow.Year Tetron
+                </MudText>
+
+                <MudText Align="Align.Center">
+                    <MudLink Href="https://github.com/TetronIO/JIM">
+                        <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;"/>
+                    </MudLink>
+                </MudText>
+
+            </MudContainer>
+        </MudMainContent>
+        
+    </MudDrawerContainer>
+
 </MudLayout>
 
 @code
@@ -96,6 +105,12 @@
     private const string DarkModeText = "Dark Mode";
     private bool IsDrawerOpen { get; set; } = true;
     private bool IsDarkMode { get; set; }
+    
+    private bool _open = false;
+    private void ToggleDrawer()
+    {
+        _open = !_open;
+    } 
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
