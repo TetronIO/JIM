@@ -10,13 +10,21 @@
 
     <MudDrawerContainer Class="mud-height-full">
         <MudDrawer @bind-Open="@IsDrawerOpen" Fixed="false" Elevation="1" Variant="@(IsDrawerToRemainOpen ? DrawerVariant.Persistent : DrawerVariant.Mini)" OpenMiniOnHover="true">
-            <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+            
+            <div class="jim-drawer-logo">
+                <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+                @if (IsDrawerOpen)
+                {
+                    <MudText Inline="true">JIM</MudText>
+                }
+            </div>
+
             <NavMenu DrawerOpen="@IsDrawerOpen"/>
             <div class="@(IsDrawerOpen ? "jim-drawer-container" : "jim-drawer-container-small") mud-text-secondary">
                 <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
                     <MudToggleIconButton @bind-Toggled="@IsDarkMode"
                                          Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
-                                         ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
+                                         ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On"/>
                     @if (IsDrawerOpen)
                     {
                         <text>@(IsDarkMode ? "Dark" : "Light") mode</text>
