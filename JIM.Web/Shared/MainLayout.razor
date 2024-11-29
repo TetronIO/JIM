@@ -12,13 +12,6 @@
         <MudDrawer @bind-Open="@IsDrawerOpen" Fixed="false" Elevation="1" Variant="@(IsDrawerToRemainOpen ? DrawerVariant.Persistent : DrawerVariant.Mini)" OpenMiniOnHover="true">
             <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
             <NavMenu DrawerOpen="@IsDrawerOpen"/>
-            @if (IsDrawerOpen)
-            {
-                <div class="jim-drawer-container mud-text-secondary">
-                    <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Size="Size.Small"></MudCheckBox>
-                </div>
-            }
-
             <div class="@(IsDrawerOpen ? "jim-drawer-container" : "jim-drawer-container-small") mud-text-secondary">
                 <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
                     <MudToggleIconButton @bind-Toggled="@IsDarkMode"
@@ -27,6 +20,7 @@
                     @if (IsDrawerOpen)
                     {
                         <text>@(IsDarkMode ? "Dark" : "Light") mode</text>
+                        <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Size="Size.Small"></MudCheckBox>
                     }
                 </MudTooltip>
             </div>
