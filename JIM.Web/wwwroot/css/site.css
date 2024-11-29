@@ -36,5 +36,13 @@ html, body {
     border-top-style: solid;
     border-top-width: 1px;
     border-top-color: var(--mud-palette-lines-default);
-    padding-top: 5px;
+    padding: 5px 0 5px 0;
+}
+
+.jim-drawer-container-small {
+    margin: 0 6px 0 6px;
+    border-top-style: solid;
+    border-top-width: 1px;
+    border-top-color: var(--mud-palette-lines-default);
+    padding: 5px 0 5px 0;
 }

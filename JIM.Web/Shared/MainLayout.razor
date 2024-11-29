@@ -15,9 +15,21 @@
             @if (IsDrawerOpen)
             {
                 <div class="jim-drawer-container mud-text-secondary">
-                    <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Class="ms-4" Size="Size.Small"></MudCheckBox>
+                    <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Size="Size.Small"></MudCheckBox>
                 </div>
             }
+
+            <div class="@(IsDrawerOpen ? "jim-drawer-container" : "jim-drawer-container-small") mud-text-secondary">
+                <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
+                    <MudToggleIconButton @bind-Toggled="@IsDarkMode"
+                                         Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
+                                         ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
+                    @if (IsDrawerOpen)
+                    {
+                        <text>@(IsDarkMode ? "Dark" : "Light") mode</text>
+                    }
+                </MudTooltip>
+            </div>
         </MudDrawer>
 
         <MudMainContent>
@@ -94,8 +106,8 @@
     };
 
     private MudThemeProvider? _mudThemeProvider;
-    private const string LightModeText = "Light Mode";
-    private const string DarkModeText = "Dark Mode";
+    private const string LightModeText = "Switch to light mode";
+    private const string DarkModeText = "Switch to dark mode";
     private bool IsDrawerOpen { get; set; }
     private bool IsDrawerToRemainOpen { get; set; }
     private bool IsDarkMode { get; set; }
