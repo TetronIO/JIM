@@ -9,7 +9,7 @@
 <MudLayout Style="Position: static">
 
     <MudDrawerContainer Class="mud-height-full">
-        <MudDrawer @bind-Open="@IsDrawerOpen" Fixed="false" Elevation="1" Variant="@(IsDrawerToRemainOpen ? DrawerVariant.Persistent : DrawerVariant.Mini)" OpenMiniOnHover="true">
+        <MudDrawer @bind-Open="@IsDrawerOpen" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" DisableOverlay="true" Overlay="false" Fixed="false" Elevation="1">
             
             <div class="jim-drawer-logo">
                 <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
@@ -28,7 +28,8 @@
                     @if (IsDrawerOpen)
                     {
                         <text>@(IsDarkMode ? "Dark" : "Light") mode</text>
-                        <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Size="Size.Small"></MudCheckBox>
+                        @* <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Size="Size.Small"></MudCheckBox> *@
+                        <MudButton OnClick="@ToggleDrawer">Show/Hide</MudButton>
                     }
                 </MudTooltip>
             </div>
@@ -111,7 +112,6 @@
     private const string LightModeText = "Switch to light mode";
     private const string DarkModeText = "Switch to dark mode";
     private bool IsDrawerOpen { get; set; }
-    private bool IsDrawerToRemainOpen { get; set; }
     private bool IsDarkMode { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -121,5 +121,10 @@
             IsDarkMode = await _mudThemeProvider.GetSystemPreference();
             StateHasChanged();
         }
+    }
+
+    private void ToggleDrawer()
+    {
+        IsDrawerOpen = !IsDrawerOpen;
     }
 }
