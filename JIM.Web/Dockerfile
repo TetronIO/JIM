@@ -1,16 +1,15 @@
 #See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-USER $APP_UID
 WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
 RUN apt-get update \
-    && apt-get install -y libldap-2.4-2 \
+    && apt-get install -y libldap-common \
     && apt-get install -y cifs-utils \
     && apt-get install -y --no-install-recommends iputils-ping \
-    && apt-get install -y --no-install-recommends netcat \
+    && apt-get install -y --no-install-recommends netcat-traditional \
     && rm -rf /var/lib/apt/lists/*
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
