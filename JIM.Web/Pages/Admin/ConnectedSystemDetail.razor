@@ -537,34 +537,36 @@
                                     <MudButton>Select All</MudButton>
                                     <MudButton>Clear All</MudButton>
                                 </MudButtonGroup>
-
-                                <MudTreeView Items="@partition.Containers">
-                                    <ItemTemplate>
-                                        <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.ChildContainers">
-                                            <Content>
-                                                <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.ChildContainers.Count > 0)" />
-                                                @if (context.Included)
-                                                {
-                                                    <MudCheckBox T="bool?"
-                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
-                                                                 UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                                 Disabled="true"
-                                                                 title="Included" />
-                                                }
-                                                else
-                                                {
-                                                    <MudCheckBox T="bool?"
-                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
-                                                                 title="@(context.Selected ? "Selected" : "")" />
-                                                }
-                                                <MudText>@context.Name</MudText>
-                                            </Content>
-                                        </MudTreeViewItem>
-                                    </ItemTemplate>
-                                </MudTreeView>
                                 
+                                @if (partition.Containers != null)
+                                {
+                                    <MudTreeView Items="@GetTreeItemData(partition.Containers)">
+                                        <ItemTemplate>
+                                            <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.Children">
+                                                <Content>
+                                                    <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.Value.ChildContainers.Count > 0)" />
+                                                    @if (context.Value.Included)
+                                                    {
+                                                        <MudCheckBox T="bool?"
+                                                                     Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                     ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
+                                                                     UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                                     Disabled="true"
+                                                                     title="Included" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudCheckBox T="bool?"
+                                                                     Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                     ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
+                                                                     title="@(context.Selected ? "Selected" : "")" />
+                                                    }
+                                                    <MudText>@context.Value.Name</MudText>
+                                                </Content>
+                                            </MudTreeViewItem>
+                                        </ItemTemplate>
+                                    </MudTreeView>
+                                }
                             </div>
                         </MudPaper>
                     }
@@ -944,6 +946,20 @@
         return !attributeSelectedFilter || element.Selected;
     }
 
+    private List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
+    {
+        var output = new List<TreeItemData<ConnectedSystemContainer>>();
+        foreach (var connectedSystemContainer in containers)
+        {
+            output.Add(new TreeItemData<ConnectedSystemContainer>
+            {
+                Value = connectedSystemContainer,
+                Children = GetTreeItemData(connectedSystemContainer.ChildContainers)
+            });
+        }
+        return output;
+    }
+    
     private static void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
     {
         // if included and clicked, change to not included, not selected
