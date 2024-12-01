@@ -34,7 +34,7 @@
     @foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
     {
         <div class="mt-5">
-            <MudChip>
+            <MudChip T="string">
                 <AvatarContent>
                     <MudTooltip Text="Metaverse Attribute">
                         <MudAvatar>MV</MudAvatar>
@@ -42,8 +42,8 @@
                 </AvatarContent>
                 <ChildContent>@criteria.MetaverseAttribute.Name</ChildContent>
             </MudChip>
-            <MudChip>@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
-            <MudChip>@criteria.ToString()</MudChip>
+            <MudChip T="string">@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
+            <MudChip T="string">@criteria.ToString()</MudChip>
             <MudIconButton 
                 Icon="@Icons.Material.Filled.Delete" 
                 Variant="Variant.Filled"

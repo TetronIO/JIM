@@ -18,8 +18,8 @@
 @if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
 {
     <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
-        <MudTooltip Text="A JIM-generated value that is used internally to identify the Connected System Object" Arrow="true" Placement="Placement.Right"><MudText Typo="Typo.overline" Style="@($"color:{Colors.Grey.Darken3};")">Internal Id:</MudText></MudTooltip>
-        <MudText Style="@($"color:{Colors.Grey.Darken3};")">@ConnectedSystemObject.Id</MudText>
+        <MudTooltip Text="A JIM-generated value that is used internally to identify the Connected System Object" Arrow="true" Placement="Placement.Right"><MudText Typo="Typo.overline" Style="@($"color:{Colors.Gray.Darken3};")">Internal Id:</MudText></MudTooltip>
+        <MudText Style="@($"color:{Colors.Gray.Darken3};")">@ConnectedSystemObject.Id</MudText>
 
         @if (ExternalIdAttributeValue != null)
         {
@@ -72,7 +72,7 @@
                 <MudTd DataLabel="Value">
                     @if (context.ReferenceValue != null)
                     {
-                        <MudChip Color="Color.Default" Size="Size.Small">@context.ReferenceValue.Type.Name</MudChip>
+                        <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.Type.Name</MudChip>
                         <text> </text>
                         <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">@context.ReferenceValue.DisplayNameOrId</MudLink> 
                         
@@ -83,7 +83,7 @@
                     }
                     else if (context.UnresolvedReferenceValue != null)
                     {
-                        <Text>Unresolved reference: <span Style="@($"color:{Colors.Grey.Darken2};")">@context.ToString()</span></Text>
+                        <Text>Unresolved reference: <span Style="@($"color:{Colors.Gray.Darken2};")">@context.ToString()</span></Text>
                     }
                     else
                     {

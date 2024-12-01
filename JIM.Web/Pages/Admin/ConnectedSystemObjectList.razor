@@ -145,12 +145,12 @@
         return false;
     }
 
-    private async void HandleDeleteAllObjectsClickAsync()
+    private async Task HandleDeleteAllObjectsClickAsync()
     {
         if (DeleteAllObjectsMessageBox == null)
             return;
 
-        var userPromptResult = await DeleteAllObjectsMessageBox.Show();
+        var userPromptResult = await DeleteAllObjectsMessageBox.ShowAsync();
         if (!userPromptResult.HasValue || !userPromptResult.Value) 
             return;
         

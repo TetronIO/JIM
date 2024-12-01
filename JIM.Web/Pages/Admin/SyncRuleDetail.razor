@@ -185,7 +185,7 @@
                                     <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
                                 </MudItem>
                                 <MudItem xs="6">
-                                    <MudChip>
+                                    <MudChip T="string">
                                         <AvatarContent>
                                             <MudTooltip Text="Metaverse Attribute">
                                                 <MudAvatar>MV</MudAvatar>
@@ -193,8 +193,8 @@
                                         </AvatarContent>
                                         <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
                                     </MudChip>
-                                    <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon></MudChip>
-                                    <MudChip>
+                                    <MudChip T="string"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon></MudChip>
+                                    <MudChip T="string">
                                         <AvatarContent>
                                             <MudTooltip Text="Connected System Attribute">
                                                 <MudAvatar>CS</MudAvatar>
@@ -252,7 +252,7 @@
                                 @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued).OrderBy(a => a.Name))
                                 {
                                     <MudSelectItem Value="@metaverseAttribute">
-                                        @metaverseAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                        @metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
                                     </MudSelectItem>
                                 }
                             </MudSelect>
@@ -270,7 +270,7 @@
                                     @foreach (var connectedSystemObjectTypeAttribute in _syncRule.ConnectedSystemObjectType.Attributes.Where(a => a.AttributePlurality == AttributePlurality.SingleValued).OrderBy(a => a.Name))
                                     {
                                         <MudSelectItem Value="@connectedSystemObjectTypeAttribute" Disabled="@(connectedSystemObjectTypeAttribute.Type != _matchingRuleMapping.TargetMetaverseAttribute.Type)">
-                                            @connectedSystemObjectTypeAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@connectedSystemObjectTypeAttribute.Type : @connectedSystemObjectTypeAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                            @connectedSystemObjectTypeAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemObjectTypeAttribute.Type : @connectedSystemObjectTypeAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
                                         </MudSelectItem>
                                     }
                                 </MudSelect>
@@ -404,7 +404,7 @@
                                 Variant="Variant.Outlined">
                                 @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType.Attributes)
                                 {
-                                    <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@connectedSystemAttribute.Type : @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
+                                    <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type : @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
                                 }
                             </MudSelect>
                         }
@@ -420,7 +420,7 @@
                                 Variant="Variant.Outlined">
                                 @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes)
                                 {
-                                    <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
+                                    <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
                                 }
                             </MudSelect>
                         }
@@ -453,7 +453,7 @@
                                 <MudSelectItem
                                     Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)"
                                     Value="@metaverseAttribute">
-                                    @metaverseAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                    @metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type : @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
                                 </MudSelectItem>
                             }
                         </MudSelect>
@@ -473,7 +473,7 @@
                                 <MudSelectItem
                                     Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
                                     Value="@connectedSystemAttribute">
-                                    @connectedSystemAttribute.Name <span style="@($"color:{Colors.Grey.Darken1};")">(@connectedSystemAttribute.Type : @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                    @connectedSystemAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type : @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
                                 </MudSelectItem>
                             }
                         </MudSelect>
@@ -508,7 +508,7 @@
                 
                 @if (_syncRule.Direction == SyncRuleDirection.Import)
                 {
-                    <MudChip>
+                    <MudChip T="string">
                         <AvatarContent>
                             <MudTooltip Text="Metaverse Attribute">
                                 <MudAvatar Color="Color.Dark">MV</MudAvatar>
@@ -517,13 +517,13 @@
                         <ChildContent>@attributeFlowRule.TargetMetaverseAttribute?.Name</ChildContent>
                     </MudChip>
 
-                    <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
+                    <MudChip T="string"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon></MudChip>
 
                     foreach (var source in attributeFlowRule.Sources.OrderBy(q => q.Order))
                     {
                         if (source.ConnectedSystemAttribute != null)
                         {
-                            <MudChip>
+                            <MudChip T="string">
                                 <AvatarContent>
                                     <MudTooltip Text="Connected System Attribute">
                                         <MudAvatar Color="Color.Dark">CS</MudAvatar>
@@ -546,7 +546,7 @@
                     {
                         if (source.MetaverseAttribute != null)
                         {
-                            <MudChip>
+                            <MudChip T="string">
                                 <AvatarContent>
                                     <MudTooltip Text="Metaverse Attribute">
                                         <MudAvatar Color="Color.Dark">MV</MudAvatar>
@@ -563,9 +563,9 @@
                         <!-- some thought needs to be given to how we handle specifying constant values -->
                     }
 
-                    <MudChip><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight"></MudIcon></MudChip>
+                    <MudChip T="string"><MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight"></MudIcon></MudChip>
 
-                    <MudChip>
+                    <MudChip T="string">
                         <AvatarContent>
                             <MudTooltip Text="Connected System Attribute">
                                 <MudAvatar Color="Color.Dark">CS</MudAvatar>
@@ -582,10 +582,10 @@
     {
         <MudAlert Severity="Severity.Normal" Class="mt-5">
             <MudText>There are issues:</MudText>
-            <MudList>
+            <MudList T="string">
                 @foreach (var item in _syncRule.Validate())
                 {
-                    <MudListItem IconColor="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)" Icon="@(item.Level == JIM.Models.Utility.ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)">
+                    <MudListItem T="string" IconColor="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)" Icon="@(item.Level == JIM.Models.Utility.ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)">
                         @item.Message
                     </MudListItem>
                 }    

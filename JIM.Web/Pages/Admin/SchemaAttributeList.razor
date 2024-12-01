@@ -45,7 +45,7 @@
                 foreach (var stub in context.MetaverseObjectTypes)
                 {
                     var attributeUrl = $"/admin/schema/object-types/{stub.Key}";
-                    <MudChip Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
+                    <MudChip T="string" Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
                 }
             }
         </MudTd>

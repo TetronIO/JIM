@@ -71,7 +71,7 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Status:</MudText><br />
-                <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Execution Time:</MudText>
@@ -165,12 +165,12 @@
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
                 <MudTd DataLabel="Change Type">
-                    <MudChip Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Error Type">
                     @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                     {
-                        <MudChip Variant="Variant.Text" Color="Color.Error">@context.ErrorType.Value.ToString().SplitOnCapitalLetters()</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">@context.ErrorType.Value.ToString().SplitOnCapitalLetters()</MudChip>
                     }
                 </MudTd>
             </RowTemplate>

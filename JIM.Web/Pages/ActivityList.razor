@@ -47,7 +47,7 @@
                 }
             </MudTd>
             <MudTd DataLabel="Status">
-                <MudChip Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">@context.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">@context.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudTd>
             <MudTd DataLabel="Execution Time">@context.ExecutionTime</MudTd>
         </RowTemplate>

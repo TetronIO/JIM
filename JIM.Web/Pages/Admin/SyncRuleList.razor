@@ -51,11 +51,11 @@
         <MudTd DataLabel="Direction">
             @if (context.Direction == SyncRuleDirection.Import)
             {
-                <MudChip Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft">Inbound</MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft">Inbound</MudChip>
             }
             else
             {
-                <MudChip Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight">Outbound</MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight">Outbound</MudChip>
             }
         </MudTd>
         <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
@@ -84,11 +84,11 @@
         <MudTd DataLabel="Status">
             @if (context.Enabled)
             {
-                <MudChip Color="Color.Success">Enabled</MudChip>
+                <MudChip T="string" Color="Color.Success">Enabled</MudChip>
             }
             else
             {
-                <MudChip Color="Color.Default">Disabled</MudChip>
+                <MudChip T="string" Color="Color.Default">Disabled</MudChip>
             }
         </MudTd>
     </RowTemplate>
