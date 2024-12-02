@@ -964,8 +964,6 @@
     {
         return containers.Select(connectedSystemContainer => new TreeItemData<ConnectedSystemContainer>
         {
-            Text = connectedSystemContainer.Name, 
-            Selected = connectedSystemContainer.Selected, 
             Value = connectedSystemContainer, 
             Children = GetTreeItemData(connectedSystemContainer.ChildContainers)
         }).ToList();
