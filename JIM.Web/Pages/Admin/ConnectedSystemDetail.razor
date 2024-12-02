@@ -25,7 +25,7 @@
                     <MudTextField T="string" Label="Connector" @bind-Value="_connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
                     <MudTextField T="string" Label="Name" @bind-Value="_connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
                     <MudTextField T="string" Label="Description" Required="false" @bind-Value="_connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DisableElevation="true">Save Changes</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
         </MudTabPanel>
@@ -136,7 +136,7 @@
                     </MudAlert>
                 }
 
-                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DisableElevation="true" OnClick="HandleValidSettingsSubmitAsync">
+                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
                     @if (_settingsBeingSaved)
                     {
                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -173,7 +173,7 @@
                     Size="Size.Small"
                     OnClick="HandleImportSchemaAsync"
                     Class="mt-5"
-                    DisableElevation="true">
+                    DropShadow="false">
                     @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                     {
                         if (_schemaBeingRetrieved)
@@ -243,7 +243,7 @@
                 <DialogActions>
                     <MudButton 
                         Disabled="!_objectTypeAttributeBeingEditedIsEditable" 
-                        DisableElevation="true" 
+                        DropShadow="false" 
                         Variant="Variant.Filled" 
                         Color="Color.Primary" 
                         OnClick="HandleEditAttributeDataTypeButtonClick" 
@@ -272,13 +272,13 @@
                 {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                            <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
+                            <MudButtonGroup Color="Color.Default" Class="mb-5" DropShadow="false" Variant="Variant.Outlined">
                                 @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
                                 {
                                     <MudButton 
-                                        OnClick="@((e) => HandleActiveObjectTypeClick(objectType))"
+                                        OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
                                         Disabled="DisableSelectedSchemaObjectType(objectType)"
-                                        DisableElevation="true">@objectType.Name</MudButton>
+                                        DropShadow="false">@objectType.Name</MudButton>
                                 }
                             </MudButtonGroup>
                         </div>
@@ -364,7 +364,7 @@
                             <MudItem xs="2">
                                 <MudButton 
                                     Variant="Variant.Filled"
-                                    DisableElevation="true"
+                                    DropShadow="false"
                                     Class="mt-4"
                                     Color="Color.Default"
                                     OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
@@ -436,7 +436,7 @@
                             {
                                 <MudTd>
                                     <MudButton 
-                                        DisableElevation="true" 
+                                        DropShadow="false" 
                                         Size="Size.Small" 
                                         Variant="Variant.Filled"
                                         OnClick="(() => HandleShowEditAttributeDialogAsync(context))"
@@ -461,7 +461,7 @@
                     Variant="Variant.Filled" 
                     OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" 
                     Class="mt-5" 
-                    DisableElevation="true"
+                    DropShadow="false"
                     Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
             }
 
@@ -491,7 +491,7 @@
                             OnClick="HandleImportHierarchyAsync"
                             Variant="Variant.Filled"
                             Class="mt-5"
-                            DisableElevation="true">
+                            DropShadow="false">
                         @if (_connectedSystem.Partitions?.Count == 0)
                         {
                             if (_hierarchyBeingRetrieved)
@@ -551,7 +551,7 @@
                                                         {
                                                             <MudCheckBox T="bool?"
                                                                          Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                         ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
+                                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(context.Value))"
                                                                          UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
                                                                          Disabled="true"
                                                                          title="Included"/>
@@ -560,7 +560,7 @@
                                                         {
                                                             <MudCheckBox T="bool?"
                                                                          Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                         ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
+                                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(context.Value))"
                                                                          title="@(context.Selected ? "Selected" : "")"/>
                                                         }
                                                         <MudText>@context.Value.Name</MudText>    
@@ -574,7 +574,7 @@
                         </MudPaper>
                     }
 
-                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5" DisableElevation="true">Save Changes</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5" DropShadow="false">Save Changes</MudButton>
                 }
             </MudTabPanel>
         }
@@ -609,13 +609,21 @@
                         @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
                         {
                             var runTypeSupported = true;
-                            if (runType == ConnectedSystemRunType.Export && !_connectedSystem.ConnectorDefinition.SupportsExport)
-                                runTypeSupported = false;
-                            else if (runType == ConnectedSystemRunType.DeltaImport && !_connectedSystem.ConnectorDefinition.SupportsDeltaImport)
-                                runTypeSupported = false;
-                            else if (runType == ConnectedSystemRunType.FullImport && !_connectedSystem.ConnectorDefinition.SupportsFullImport)
-                                runTypeSupported = false;
-                            
+                            switch (runType)
+                            {
+                                case ConnectedSystemRunType.Export when !_connectedSystem.ConnectorDefinition.SupportsExport:
+                                case ConnectedSystemRunType.DeltaImport when !_connectedSystem.ConnectorDefinition.SupportsDeltaImport:
+                                case ConnectedSystemRunType.FullImport when !_connectedSystem.ConnectorDefinition.SupportsFullImport:
+                                    runTypeSupported = false;
+                                    break;
+                                case ConnectedSystemRunType.NotSet:
+                                case ConnectedSystemRunType.FullSynchronisation:
+                                case ConnectedSystemRunType.DeltaSynchronisation:
+                                    break;
+                                default:
+                                    throw new ArgumentOutOfRangeException();
+                            }
+
                             <MudSelectItem Value="@runType" Disabled="@(!runTypeSupported)">
                                 @runType.ToString().SplitOnCapitalLetters()
                                 @if (!runTypeSupported)
@@ -644,7 +652,7 @@
                         </MudSelect>
                     }
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DisableElevation="true">Create Run Profile</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DropShadow="false">Create Run Profile</MudButton>
                 </MudForm>
             </MudPaper>
 
@@ -660,7 +668,7 @@
                 <RowTemplate>
                     <MudTd>
                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconSize="Size.Small" OnClick="((e) => HandleRunProfileDeleteAsync(context))">Delete</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconSize="Size.Small" OnClick="_ => HandleRunProfileDeleteAsync(context)">Delete</MudMenuItem>
                         </MudMenu>
                     </MudTd>
                     <MudTd DataLabel="Name">@context.Name</MudTd>
@@ -685,9 +693,9 @@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
     private bool IsDetailsFormValid { get; set; }
-    private string[] DetailsFormErrors { get; set; } = { };
+    private string[] DetailsFormErrors { get; set; } = [];
     private bool IsSettingsFormValid { get; set; }
-    private string[] SettingsFormErrors { get; set; } = { };
+    private string[] SettingsFormErrors { get; set; } = [];
     private Dictionary<string, string> SettingsFormCustomErrors { get; } = new();
     private bool IsNewRunProfileFormValid { get; set; }
     private ConnectedSystem? _connectedSystem;
@@ -723,12 +731,12 @@
             return;
         }
 
-        _breadcrumbs = new List<BreadcrumbItem>
-        {
+        _breadcrumbs =
+        [
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
             new("Connected Systems", href: "/admin/connected-systems/"),
             new(_connectedSystem.Name, href: null, disabled: true)
-        };
+        ];
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
         _settingCategories = _connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
@@ -949,7 +957,7 @@
         return !attributeSelectedFilter || element.Selected;
     }
 
-    private List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
+    private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
     {
         var output = new List<TreeItemData<ConnectedSystemContainer>>();
         foreach (var connectedSystemContainer in containers)
@@ -969,14 +977,14 @@
         if (container.Included)
         {
             container.Selected = false;
-            container.Included = false;
         }
         else
         {
             // toggle the current setting
             container.Selected = !container.Selected;
-            container.Included = false;
         }
+
+        container.Included = false;
 
         // set the right selected/included values for all children
         if (container.Selected)
@@ -1003,7 +1011,7 @@
         // set the parent(s) if necessary
         if (container.ParentContainer != null)
         {
-            // go up a level. if all children are selected, then make parent selected and all children (resursively) included.
+            // go up a level. if all children are selected, then make parent selected and all children (recursively) included.
             CorrectUpwardContainerStatus(container.ParentContainer);
         }
     }
@@ -1101,7 +1109,7 @@
 
     private async Task HandleRunProfileDeleteAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
     {
-        if (_connectedSystem == null || _connectedSystem.RunProfiles == null)
+        if (_connectedSystem?.RunProfiles == null)
             return;
 
         _connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
