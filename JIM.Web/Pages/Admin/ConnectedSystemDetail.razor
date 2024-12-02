@@ -733,9 +733,9 @@
 
         _breadcrumbs =
         [
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Connected Systems", href: "/admin/connected-systems/"),
-            new(_connectedSystem.Name, href: null, disabled: true)
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+            new BreadcrumbItem(_connectedSystem.Name, href: null, disabled: true)
         ];
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
