@@ -623,8 +623,6 @@
                                 case ConnectedSystemRunType.FullSynchronisation:
                                 case ConnectedSystemRunType.DeltaSynchronisation:
                                     break;
-                                default:
-                                    throw new ArgumentOutOfRangeException();
                             }
 
                             <MudSelectItem Value="@runType" Disabled="@(!runTypeSupported)">
