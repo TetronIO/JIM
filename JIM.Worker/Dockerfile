@@ -5,6 +5,7 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y libldap-common \
+    && apt-get install -y libldap-2.5-0 \
     && rm -rf /var/lib/apt/lists/*
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build

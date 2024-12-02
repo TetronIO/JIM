@@ -7,6 +7,7 @@ EXPOSE 443
 
 RUN apt-get update \
     && apt-get install -y libldap-common \
+    && apt-get install -y libldap-2.5-0 \
     && apt-get install -y cifs-utils \
     && apt-get install -y --no-install-recommends iputils-ping \
     && apt-get install -y --no-install-recommends netcat-traditional \
