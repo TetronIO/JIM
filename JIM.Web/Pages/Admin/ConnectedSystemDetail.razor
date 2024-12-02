@@ -152,7 +152,7 @@
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
 
-            <MudAlert Severity="(_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info)">
+            <MudAlert Severity="_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info">
                 @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                 {
                     <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
@@ -167,7 +167,7 @@
                     </MudText>
                 }
                 <MudButton 
-                    Color="(_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
+                    Color="_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
                     Disabled="@(_schemaBeingRetrieved)"
                     Variant="Variant.Filled"
                     Size="Size.Small"
@@ -439,7 +439,7 @@
                                         DropShadow="false" 
                                         Size="Size.Small" 
                                         Variant="Variant.Filled"
-                                        OnClick="(() => HandleShowEditAttributeDialogAsync(context))"
+                                        OnClick="() => HandleShowEditAttributeDialogAsync(context)"
                                         StartIcon="@Icons.Material.Filled.Edit">
                                         Edit
                                     </MudButton>
@@ -486,7 +486,7 @@
                     }
                     <MudButton 
                             Disabled="@_hierarchyBeingRetrieved"
-                            Color="(_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
+                            Color="_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
                             Size="Size.Small"
                             OnClick="HandleImportHierarchyAsync"
                             Variant="Variant.Filled"
