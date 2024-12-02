@@ -544,24 +544,27 @@
                                         <ItemTemplate>
                                             <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.Children">
                                                 <Content>
-                                                    <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.Value.ChildContainers.Count > 0)" />
-                                                    @if (context.Value.Included)
+                                                    @if (context.Value != null)
                                                     {
-                                                        <MudCheckBox T="bool?"
-                                                                     Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                     ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
-                                                                     UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                                     Disabled="true"
-                                                                     title="Included" />
+                                                        <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.Value.ChildContainers.Count > 0)"/>
+                                                        @if (context.Value.Included)
+                                                        {
+                                                            <MudCheckBox T="bool?"
+                                                                         Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                         ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
+                                                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                                         Disabled="true"
+                                                                         title="Included"/>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudCheckBox T="bool?"
+                                                                         Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
+                                                                         ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
+                                                                         title="@(context.Selected ? "Selected" : "")"/>
+                                                        }
+                                                        <MudText>@context.Value.Name</MudText>    
                                                     }
-                                                    else
-                                                    {
-                                                        <MudCheckBox T="bool?"
-                                                                     Value="@(context.Value.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                     ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context.Value))"
-                                                                     title="@(context.Selected ? "Selected" : "")" />
-                                                    }
-                                                    <MudText>@context.Value.Name</MudText>
                                                 </Content>
                                             </MudTreeViewItem>
                                         </ItemTemplate>
