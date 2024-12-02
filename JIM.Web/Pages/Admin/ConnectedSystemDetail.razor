@@ -617,9 +617,9 @@
                                 case ConnectedSystemRunType.Export when !_connectedSystem.ConnectorDefinition.SupportsExport:
                                 case ConnectedSystemRunType.DeltaImport when !_connectedSystem.ConnectorDefinition.SupportsDeltaImport:
                                 case ConnectedSystemRunType.FullImport when !_connectedSystem.ConnectorDefinition.SupportsFullImport:
+                                case ConnectedSystemRunType.NotSet:
                                     runTypeSupported = false;
                                     break;
-                                case ConnectedSystemRunType.NotSet:
                                 case ConnectedSystemRunType.FullSynchronisation:
                                 case ConnectedSystemRunType.DeltaSynchronisation:
                                     break;
