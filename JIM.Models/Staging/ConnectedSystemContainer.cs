@@ -38,7 +38,7 @@ public class ConnectedSystemContainer
     public bool Hidden { get; set; }
 
     /// <summary>
-    /// Indicates whether or not the container has been selected to be managed, i.e. whether or not objects are
+    /// Indicates whether the container has been selected to be managed, i.e. whether or not objects are
     /// imported from here or not.
     /// </summary>
     public bool Selected { get; set; }
