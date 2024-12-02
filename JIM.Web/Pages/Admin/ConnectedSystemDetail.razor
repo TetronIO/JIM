@@ -1012,6 +1012,72 @@
             // go up a level. if all children are selected, then make parent selected and all children (recursively) included.
             CorrectUpwardContainerStatus(container.ParentContainer);
         }
+
+        // make sure the partition is selected if not already
+        AutoSelectPartitionIfContainersSelected(container);
+    }
+
+    /// <summary>
+    /// Makes sure the partition is selected if any contains in its hierarchy are selected.
+    /// </summary>
+    private static void AutoSelectPartitionIfContainersSelected(ConnectedSystemContainer container)
+    {
+        // this method could probably be optimised. I was having a hard time writing this.
+        // get the partition at the top of the container hierarchy
+        var partition = container.Partition;
+        var areAnyContainersSelected = container.Selected;
+        if (partition != null && areAnyContainersSelected && !partition.Selected)
+        {
+            partition.Selected = true;
+            return;
+        }
+        
+        // we need a variable to hold the TLC when we eventually find it
+        ConnectedSystemContainer? topLevelContainer = null;
+        
+        // we need a variable to hold the current container as we navigate up the hierarchy
+        var currentContainer = container;
+        
+        // keep moving up the container hierarchy until we find the TLC
+        // ReSharper disable once LoopVariableIsNeverChangedInsideLoop : incorrect
+        while (topLevelContainer == null)
+        {
+            if (currentContainer.ParentContainer == null)
+            {
+                // found it! stop looping
+                topLevelContainer = currentContainer;
+                break;
+            }
+
+            // move up one level in the container hierarchy
+            currentContainer = currentContainer.ParentContainer;
+        }
+
+        // it's possible the TLC hasn't been found
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalse : incorrect
+        if (topLevelContainer == null)
+        {
+            Log.Warning("Couldn't find the top-level container. unable to auto-select partition.");
+            return;
+        }
+
+        // we might already know if any containers are selected
+        if (!areAnyContainersSelected)
+        {
+            // we have a TLC! now, are any containers in the hierarchy selected?
+            if (topLevelContainer.Partition is { Containers: not null })
+                if (topLevelContainer.Partition.Containers.Any(IsContainerOrAnyChildrenSelected))
+                    areAnyContainersSelected = true;
+        }
+        
+        // does the top-level container have a parent partition?
+        if (topLevelContainer.Partition != null && areAnyContainersSelected)
+            topLevelContainer.Partition.Selected = true;
+    }
+
+    private static bool IsContainerOrAnyChildrenSelected(ConnectedSystemContainer container)
+    {
+        return container.Selected || container.ChildContainers.Any(IsContainerOrAnyChildrenSelected);
     }
 
     private static void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
