@@ -46,6 +46,7 @@ JIM is in active development. There are many plans for new features. Check back 
 
 ## Getting Started
 To run JIM locally:
+1. Make sure Docker Desktop is installed
 1. Clone the repo
 1. Create a `.env` file in the repo root (see example below)
 1. Run Docker Compose in your favourite IDE, configured for your platform (see examples below)
@@ -68,7 +69,20 @@ SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your user object identifier, i.
 Note, the `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE` variable enables you to sign in to JIM as the initial admin.
 
 ### Configuring your IDE to start Docker Compose
-Todo...
+- Visual Studio on Windows. Just press the play button, making sure the Docker project is selected.
+- JetBrains Rider on Windows. As above.
+- JetBrains Rider on macOS. Create a Run/Debug Configuration for macOS buy cloning the default one and changing the docker-compose.override.yml file for the docker-compose.override.macos.yml one. Play this one.
+
+<img width="1142" alt="jim-rider-docker-windows" src="https://github.com/user-attachments/assets/801ba32b-c436-4b76-87d4-00e73800da01"><br>
+Clone the docker Compose configuration and name it for Windows.<br><br>
+
+
+<img width="1151" alt="jim-rider-docker-macos" src="https://github.com/user-attachments/assets/81a295f1-080f-49e2-bc8f-35e0724b2e9b"><br>
+With the new cloned configuration, name it for macOS and change the override file to the macOS one.<br><br>
+
+
+<img width="590" alt="jim-rider-docker-play" src="https://github.com/user-attachments/assets/f15ef378-d88b-4a51-9b11-4f01529d7f77"><br>
+Then change the active configuration and press the play button.
 
 ## More Information
 Please go to https://tetron.io/jim for more information.
