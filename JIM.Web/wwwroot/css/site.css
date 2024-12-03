@@ -57,3 +57,7 @@ html, body {
     border-top-color: var(--mud-palette-lines-default);
     padding: 5px 0 5px 0;
 }
+
+.jim-nowrap {
+    white-space: nowrap;
+}
