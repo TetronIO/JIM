@@ -27,6 +27,10 @@ html, body {
     font-family: "Lucida Console", "Courier New", monospace;
 }
 
+.jim-drawer {
+    border-right: 1px solid var(--mud-palette-lines-default);
+}
+
 .jim-drawer-logo img {
     vertical-align: middle;
 }
