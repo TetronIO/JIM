@@ -23,10 +23,6 @@ html, body {
     font-weight: 300;
 }
 
-.jim-no-wrap {
-    white-space: nowrap;
-}
-
 .jim-text-code {
     font-family: "Lucida Console", "Courier New", monospace;
 }
