@@ -52,10 +52,17 @@
         <MudMainContent>
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
           
-                <!-- change the button icon later (open/closed) -->
-                <MudButton OnClick="@ToggleDrawer" Variant="Variant.Filled" DropShadow="false" IconColor="Color.Primary">Show/Hide Sidebar</MudButton>
+                <!-- if someone could find a way to move this to the sidebar and remain functional, that would be amazing -->
+                <MudButton 
+                    OnClick="@ToggleDrawer" 
+                    Variant="Variant.Filled" 
+                    DropShadow="false" 
+                    StartIcon="@(IsDrawerOpen ? Icons.Material.Filled.MenuOpen : Icons.Material.Filled.Menu)"
+                    Size="Size.Small"
+                    Class="mb-3">
+                    @(IsDrawerOpen ? "Close" : "Open") 
+                </MudButton>
             
-                
                 @Body
 
                 <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
