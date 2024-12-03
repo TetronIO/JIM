@@ -10,7 +10,7 @@
 <MudLayout Style="Position: static">
 
     <MudDrawerContainer Class="mud-height-full">
-        <MudDrawer @bind-Open="@IsDrawerOpen" Fixed="false" Elevation="1" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" Overlay="false">
+        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" Overlay="false">
             
             <div class="jim-drawer-logo">
                 <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
@@ -52,8 +52,8 @@
         <MudMainContent>
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
           
-                <!-- change the button icon later (light/dark) -->
-                <MudButton OnClick="@ToggleDrawer" Variant="Variant.Filled" IconColor="Color.Primary">Show/Hide</MudButton>
+                <!-- change the button icon later (open/closed) -->
+                <MudButton OnClick="@ToggleDrawer" Variant="Variant.Filled" DropShadow="false" IconColor="Color.Primary">Show/Hide Sidebar</MudButton>
             
                 
                 @Body
