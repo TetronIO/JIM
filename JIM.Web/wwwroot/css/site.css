@@ -1,3 +1,5 @@
+/* reference: https://github.com/MudBlazor/MudBlazor/blob/ff672a8b988fdfb1f5ab9f556813823d885118d4/src/MudBlazor.UnitTests/Components/ThemeProviderTests.cs#L92 */
+
 /* MUDBLAZOR CUSTOMISATIONS */
 html, body {
     --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
@@ -14,15 +16,50 @@ html, body {
     transition: color 0.3s !important;
 }
 
+.mud-main-content {
+    padding-top: 0;
+}
+
 /* JIM CUSTOM */
 .jim-header-title {
     font-weight: 300;
 }
 
-.jim-no-wrap {
-    white-space: nowrap;
-}
-
 .jim-text-code {
     font-family: "Lucida Console", "Courier New", monospace;
+}
+
+.jim-drawer {
+    border-right: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-drawer-logo img {
+    vertical-align: middle;
+}
+.jim-drawer-logo p {
+    margin: 4px 0 0 10px;
+    font-weight: 700;
+    font-size: 1.2rem;
+    vertical-align: text-top;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-drawer-container {
+    margin: 0 20px 0 20px;
+    border-top-style: solid;
+    border-top-width: 1px;
+    border-top-color: var(--mud-palette-lines-default);
+    padding: 10px 0 10px 0;
+}
+
+.jim-drawer-container-small {
+    margin: 0 6px 0 6px;
+    border-top-style: solid;
+    border-top-width: 1px;
+    border-top-color: var(--mud-palette-lines-default);
+    padding: 5px 0 5px 0;
+}
+
+.jim-nowrap {
+    white-space: nowrap;
 }

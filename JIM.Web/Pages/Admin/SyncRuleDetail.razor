@@ -21,14 +21,32 @@
 @if (_syncRule != null)
 {
     <MudPaper Class="pa-4 mt-5" Outlined="true">
-        <MudText Typo="Typo.h5" Class="mb-5">Details</MudText>
+
+        <div class="d-flex justify-space-between">
+            <MudText Typo="Typo.h5" Class="mb-5">Details</MudText>
+            @if (_syncRule.Id > 0)
+            {
+                <MudText Class="mud-text-secondary mud-text-small" Typo="Typo.body2">
+                    Created: @_syncRule.Created.ToShortDateString() (@_syncRule.Created.ToShortTimeString())
+                    @if (_syncRule.CreatedBy != null)
+                    {
+                        <span> - By: <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">@_syncRule.CreatedBy.DisplayName</MudLink></span>
+                    }
+                    @if (_syncRule.LastUpdated.HasValue)
+                    {
+                        <span> - Last Updated: @_syncRule.LastUpdated.Value.ToShortDateString() (@_syncRule.LastUpdated.Value.ToShortTimeString())</span>
+                    }
+                </MudText>
+            }
+        </div>
+
         <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
-            <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name" Variant="Variant.Outlined" />
+            <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name" Variant="Variant.Outlined"/>
             @if (_syncRule.Id == 0)
             {
                 @if (_connectedSystemHeaders != null)
                 {
-                    <MudSelect 
+                    <MudSelect
                         T="string"
                         Label="Connected System"
                         Placeholder="Please select a Connected System..."
@@ -44,10 +62,10 @@
                         }
                     </MudSelect>
                 }
-                
+
                 @if (_syncRule.ConnectedSystem != null)
                 {
-                    <MudSelect 
+                    <MudSelect
                         T="string"
                         Label="Direction"
                         Placeholder="Please select an attribute flow direction..."
@@ -69,17 +87,18 @@
                                 {
                                     directionSupported = _syncRule.ConnectedSystem.ConnectorDefinition.SupportsDeltaImport || _syncRule.ConnectedSystem.ConnectorDefinition.SupportsFullImport;
                                 }
+
                                 <MudSelectItem Disabled="!directionSupported" Value="@direction.ToString()">@direction@(directionSupported ? "" : " (not supported by Connector)")</MudSelectItem>
                             }
                         }
                     </MudSelect>
                 }
-                
+
                 @if (_syncRule.ConnectedSystem != null && _syncRule.Direction != SyncRuleDirection.NotSet && _metaverseObjectTypes != null && _syncRule.ConnectedSystem is { ObjectTypes: not null })
                 {
                     <MudGrid>
                         <MudItem xs="5">
-                            <MudSelect 
+                            <MudSelect
                                 T="MetaverseObjectType"
                                 Label="Metaverse Object Type"
                                 @bind-Value="@_syncRule.MetaverseObjectType"
@@ -98,7 +117,7 @@
                             </MudPaper>
                         </MudItem>
                         <MudItem xs="5">
-                            <MudSelect 
+                            <MudSelect
                                 T="ConnectedSystemObjectType"
                                 Label="Connected System Object Type"
                                 @bind-Value="@_syncRule.ConnectedSystemObjectType"
@@ -116,36 +135,19 @@
 
                 @if (_syncRule.Direction == SyncRuleDirection.Import)
                 {
-                    <MudSwitch @bind-Value="@_syncRule.ProjectToMetaverse" Color="Color.Primary" Label="Create imported objects in the Metaverse?" />
+                    <MudSwitch @bind-Value="@_syncRule.ProjectToMetaverse" Color="Color.Primary" Label="Create imported objects in the Metaverse?"/>
                     <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, objects imported from this Connected System matched in this synchronisation rule will not result in a Metaverse object being created. Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a HR system.</MudAlert>
                 }
-                
+
                 @if (_syncRule.Direction == SyncRuleDirection.Export)
                 {
-                    <MudSwitch @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary" Label="Create objects in the Connected System?" />
+                    <MudSwitch @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary" Label="Create objects in the Connected System?"/>
                     <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, Metaverse objects matched in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse object to be created in the Connected System. You would typically enable this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudAlert>
                 }
             }
         </MudForm>
-        <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
-        <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">Synchronisation Rules will not be evaluated when disabled, enabling you to either prepare a rule in advance of it being needed, or to temporarily stop evaluating a sync rule..</MudAlert>
-        
-        @if (_syncRule.Id > 0)
-        {
-            <div class="mt-5">
-                <MudText Class="mud-text-secondary">
-                    Created: @_syncRule.Created
-                    @if (_syncRule.CreatedBy != null)
-                    {
-                    <span> - By: <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">@_syncRule.CreatedBy.DisplayName</MudLink></span>
-                    }
-                    @if (_syncRule.LastUpdated.HasValue)
-                    {
-                    <span> - Last Updated: @_syncRule.LastUpdated</span>
-                    }
-                </MudText>    
-            </div>
-        }
+        <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?"/>
+        <MudAlert Class="mt-5" Severity="Severity.Info" Variant="Variant.Text">Synchronisation Rules will not be evaluated when disabled, enabling you to either prepare a rule in advance of it being needed, or to temporarily stop evaluating a sync rule..</MudAlert>    
     </MudPaper>
 
     @if (_syncRule.Direction == SyncRuleDirection.Import)
@@ -165,6 +167,7 @@
                 OnClick="HandleOpenAddMatchingRuleMappingDialog"
                 Color="Color.Default"
                 Class="mt-5"
+                DropShadow="false"
                 Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)">Add Matching Rule</MudButton>
 
             @foreach (var objectMatchingRule in _syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
@@ -286,7 +289,13 @@
                 }
             </DialogContent>
             <DialogActions>
-                <MudButton Disabled="DisableAddMappingButton()" DropShadow="false" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
+                <MudButton 
+                    Disabled="DisableAddMappingButton()" 
+                    DropShadow="false" 
+                    Variant="Variant.Filled" 
+                    Color="Color.Primary" 
+                    OnClick="HandleAddMappingButtonClick" 
+                    Class="ma-4">Add Matching Rule</MudButton>
             </DialogActions>
         </MudDialog>
     }

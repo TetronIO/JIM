@@ -510,12 +510,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task DeleteAllConnectedSystemObjectsAsync(int connectedSystemId, bool deleteAllConnectedSystemObjectChangeObjects)
     {
         if (deleteAllConnectedSystemObjectChangeObjects)
-        {
-            await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjectChanges\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
-        }
+            await Repository.Database.Database.ExecuteSqlAsync($"DELETE FROM \"ConnectedSystemObjectChanges\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
         
-        //await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjectAttributeValues\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
-        await Repository.Database.Database.ExecuteSqlRawAsync($"DELETE FROM \"ConnectedSystemObjects\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
+        await Repository.Database.Database.ExecuteSqlAsync($"DELETE FROM \"ConnectedSystemObjects\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
     }
 
     public void DeleteAllPendingExportObjects(int connectedSystemId)
