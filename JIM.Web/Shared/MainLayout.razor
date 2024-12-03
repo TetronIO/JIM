@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor.Utilities
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
+<MudPopoverProvider/>
 <MudDialogProvider />
 <MudSnackbarProvider />
 
@@ -8,14 +9,14 @@
 
 <MudLayout>
     <MudAppBar Elevation="1">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(_ => DrawerToggle())" />
         <MudImage Src="/images/jim-logo.png" Height="40" Class="ms-3 mr-3" title="JIM logo" />
         <MudText Typo="Typo.h6" Class="jim-header-title">Junctional Identity Manager</MudText>
         <MudSpacer />
         <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
             <MudToggleIconButton @bind-Toggled="@IsDarkMode"
-                                 Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
-                                 ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On" />
+                                 Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit"
+                                 ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" />
         </MudTooltip>
     </MudAppBar>
     <MudDrawer @bind-Open="@IsDrawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0">
@@ -47,18 +48,19 @@
         {
             Default = new Default()
             {
-                FontFamily = new[] {
+                FontFamily =
+                [
                     "-apple-system",
                     "Segoe UI Variable Display",
                     "Roboto",
                     "Helvetica Neue",
                     "Arial"
-                },
+                ],
                 FontWeight = 400,
                 FontSize = "16px"
             }
         },
-        Palette = new PaletteLight()
+        PaletteLight = new PaletteLight()
         {
             AppbarBackground = new MudColor("rgb(60,148,255)"),
             Background = new MudColor("#f6f9fc"),

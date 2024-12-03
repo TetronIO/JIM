@@ -14,7 +14,7 @@
 
 <MudPaper Elevation="0" Class="mt-2" Outlined="true">
     <MudToolBar>
-        <MudButton Href="/admin/connected-systems/sync-rules" Color="Color.Primary" DisableElevation="true" Disabled="true">Synchronisation Rules</MudButton>
+        <MudButton Href="/admin/connected-systems/sync-rules" Color="Color.Primary" DropShadow="false" Disabled="true">Synchronisation Rules</MudButton>
         <MudSpacer />
         <MudButton 
             StartIcon="@Icons.Material.Filled.Add" 
@@ -22,7 +22,7 @@
             Href="/admin/connected-systems/sync-rules/new" 
             Color="Color.Primary"
             Disabled="@(!_canCreateSyncRules)"
-            DisableElevation="true">Create Synchronisation Rule</MudButton>
+            DropShadow="false">Create Synchronisation Rule</MudButton>
     </MudToolBar>
 </MudPaper>
 
@@ -51,11 +51,11 @@
         <MudTd DataLabel="Direction">
             @if (context.Direction == SyncRuleDirection.Import)
             {
-                <MudChip Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft">Inbound</MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft">Inbound</MudChip>
             }
             else
             {
-                <MudChip Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight">Outbound</MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight">Outbound</MudChip>
             }
         </MudTd>
         <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
@@ -84,11 +84,11 @@
         <MudTd DataLabel="Status">
             @if (context.Enabled)
             {
-                <MudChip Color="Color.Success">Enabled</MudChip>
+                <MudChip T="string" Color="Color.Success">Enabled</MudChip>
             }
             else
             {
-                <MudChip Color="Color.Default">Disabled</MudChip>
+                <MudChip T="string" Color="Color.Default">Disabled</MudChip>
             }
         </MudTd>
     </RowTemplate>

@@ -25,7 +25,7 @@
                     <MudTextField T="string" Label="Connector" @bind-Value="_connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
                     <MudTextField T="string" Label="Name" @bind-Value="_connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
                     <MudTextField T="string" Label="Description" Required="false" @bind-Value="_connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DisableElevation="true">Save Changes</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
         </MudTabPanel>
@@ -136,7 +136,7 @@
                     </MudAlert>
                 }
 
-                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DisableElevation="true" OnClick="HandleValidSettingsSubmitAsync">
+                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
                     @if (_settingsBeingSaved)
                     {
                         <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -152,7 +152,7 @@
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
 
-            <MudAlert Severity="(_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info)">
+            <MudAlert Severity="_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info">
                 @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                 {
                     <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
@@ -167,13 +167,13 @@
                     </MudText>
                 }
                 <MudButton 
-                    Color="(_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning)"
+                    Color="_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
                     Disabled="@(_schemaBeingRetrieved)"
                     Variant="Variant.Filled"
                     Size="Size.Small"
                     OnClick="HandleImportSchemaAsync"
                     Class="mt-5"
-                    DisableElevation="true">
+                    DropShadow="false">
                     @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                     {
                         if (_schemaBeingRetrieved)
@@ -201,7 +201,7 @@
                 </MudButton>
             </MudAlert>
 
-            <MudDialog @bind-IsVisible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
+            <MudDialog @bind-Visible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
                 <TitleContent>
                     <MudText Typo="Typo.h6">
                         <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Schema Attribute: @_objectTypeAttributeBeingEdited?.Name
@@ -243,7 +243,7 @@
                 <DialogActions>
                     <MudButton 
                         Disabled="!_objectTypeAttributeBeingEditedIsEditable" 
-                        DisableElevation="true" 
+                        DropShadow="false" 
                         Variant="Variant.Filled" 
                         Color="Color.Primary" 
                         OnClick="HandleEditAttributeDataTypeButtonClick" 
@@ -272,13 +272,13 @@
                 {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                            <MudButtonGroup Color="Color.Default" Class="mb-5" DisableElevation="true" Variant="Variant.Outlined">
+                            <MudButtonGroup Color="Color.Default" Class="mb-5" DropShadow="false" Variant="Variant.Outlined">
                                 @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
                                 {
                                     <MudButton 
-                                        OnClick="@((e) => HandleActiveObjectTypeClick(objectType))"
+                                        OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
                                         Disabled="DisableSelectedSchemaObjectType(objectType)"
-                                        DisableElevation="true">@objectType.Name</MudButton>
+                                        DropShadow="false">@objectType.Name</MudButton>
                                 }
                             </MudButtonGroup>
                         </div>
@@ -364,7 +364,7 @@
                             <MudItem xs="2">
                                 <MudButton 
                                     Variant="Variant.Filled"
-                                    DisableElevation="true"
+                                    DropShadow="false"
                                     Class="mt-4"
                                     Color="Color.Default"
                                     OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
@@ -436,10 +436,10 @@
                             {
                                 <MudTd>
                                     <MudButton 
-                                        DisableElevation="true" 
+                                        DropShadow="false" 
                                         Size="Size.Small" 
                                         Variant="Variant.Filled"
-                                        OnClick="(() => HandleShowEditAttributeDialogAsync(context))"
+                                        OnClick="() => HandleShowEditAttributeDialogAsync(context)"
                                         StartIcon="@Icons.Material.Filled.Edit">
                                         Edit
                                     </MudButton>
@@ -461,7 +461,7 @@
                     Variant="Variant.Filled" 
                     OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" 
                     Class="mt-5" 
-                    DisableElevation="true"
+                    DropShadow="false"
                     Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
             }
 
@@ -486,12 +486,12 @@
                     }
                     <MudButton 
                             Disabled="@_hierarchyBeingRetrieved"
-                            Color="(_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning)"
+                            Color="_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
                             Size="Size.Small"
                             OnClick="HandleImportHierarchyAsync"
                             Variant="Variant.Filled"
                             Class="mt-5"
-                            DisableElevation="true">
+                            DropShadow="false">
                         @if (_connectedSystem.Partitions?.Count == 0)
                         {
                             if (_hierarchyBeingRetrieved)
@@ -533,43 +533,51 @@
 
                             <div class="pa-4">
                                 <MudText>Select the containers you want to manage in this partition.</MudText>
+                                
+                                @*
+                                TODO:
                                 <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5">
                                     <MudButton>Select All</MudButton>
                                     <MudButton>Clear All</MudButton>
                                 </MudButtonGroup>
-
-                                <MudTreeView Items="@partition.Containers">
-                                    <ItemTemplate>
-                                        <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.ChildContainers">
-                                            <Content>
-                                                <MudTreeViewItemToggleButton @bind-Expanded="@context.Expanded" Visible="@(context.ChildContainers.Count > 0)" />
-                                                @if (context.Included)
-                                                {
-                                                    <MudCheckBox T="bool?"
-                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
-                                                                 UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                                 Disabled="true"
-                                                                 title="Included" />
-                                                }
-                                                else
-                                                {
-                                                    <MudCheckBox T="bool?"
-                                                                 Value="@(context.AreAnyChildContainersSelected() ? null : context.Selected)"
-                                                                 ValueChanged="@((e) => ConnectedSystemContainerSelectedChanged(context))"
-                                                                 title="@(context.Selected ? "Selected" : "")" />
-                                                }
-                                                <MudText>@context.Name</MudText>
-                                            </Content>
-                                        </MudTreeViewItem>
-                                    </ItemTemplate>
-                                </MudTreeView>
+                                *@
                                 
+                                @if (partition.Containers != null)
+                                {
+                                    <MudTreeView Items="@GetTreeItemData(partition.Containers)" ReadOnly AutoExpand>
+                                        <ItemTemplate Context="item">
+                                            <MudTreeViewItem @bind-Expanded="@item.Expanded" Items="@item.Children">
+                                                <BodyContent>
+                                                    @if (item.Value != null)
+                                                    {
+                                                        @if (item.Value.Included)
+                                                        {
+                                                            <MudCheckBox T="bool?"
+                                                                         Value="@(item.Value.AreAnyChildContainersSelected() ? null : item.Value.Selected)"
+                                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
+                                                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                                         Disabled="true"
+                                                                         title="Included"/>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudCheckBox T="bool?"
+                                                                         Value="@(item.Value.AreAnyChildContainersSelected() ? null : item.Value.Selected)"
+                                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
+                                                                         title="@(item.Value.Selected ? "Selected" : string.Empty)"/>
+                                                        }
+                                                        <MudText>@item.Value.Name</MudText>    
+                                                    }
+                                                </BodyContent>
+                                            </MudTreeViewItem>
+                                        </ItemTemplate>
+                                    </MudTreeView>
+                                }
                             </div>
                         </MudPaper>
                     }
 
-                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5" DisableElevation="true">Save Changes</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5" DropShadow="false">Save Changes</MudButton>
                 }
             </MudTabPanel>
         }
@@ -604,13 +612,19 @@
                         @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
                         {
                             var runTypeSupported = true;
-                            if (runType == ConnectedSystemRunType.Export && !_connectedSystem.ConnectorDefinition.SupportsExport)
-                                runTypeSupported = false;
-                            else if (runType == ConnectedSystemRunType.DeltaImport && !_connectedSystem.ConnectorDefinition.SupportsDeltaImport)
-                                runTypeSupported = false;
-                            else if (runType == ConnectedSystemRunType.FullImport && !_connectedSystem.ConnectorDefinition.SupportsFullImport)
-                                runTypeSupported = false;
-                            
+                            switch (runType)
+                            {
+                                case ConnectedSystemRunType.Export when !_connectedSystem.ConnectorDefinition.SupportsExport:
+                                case ConnectedSystemRunType.DeltaImport when !_connectedSystem.ConnectorDefinition.SupportsDeltaImport:
+                                case ConnectedSystemRunType.FullImport when !_connectedSystem.ConnectorDefinition.SupportsFullImport:
+                                case ConnectedSystemRunType.NotSet:
+                                    runTypeSupported = false;
+                                    break;
+                                case ConnectedSystemRunType.FullSynchronisation:
+                                case ConnectedSystemRunType.DeltaSynchronisation:
+                                    break;
+                            }
+
                             <MudSelectItem Value="@runType" Disabled="@(!runTypeSupported)">
                                 @runType.ToString().SplitOnCapitalLetters()
                                 @if (!runTypeSupported)
@@ -639,7 +653,7 @@
                         </MudSelect>
                     }
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DisableElevation="true">Create Run Profile</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DropShadow="false">Create Run Profile</MudButton>
                 </MudForm>
             </MudPaper>
 
@@ -655,7 +669,7 @@
                 <RowTemplate>
                     <MudTd>
                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconSize="Size.Small" OnClick="((e) => HandleRunProfileDeleteAsync(context))">Delete</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconSize="Size.Small" OnClick="_ => HandleRunProfileDeleteAsync(context)">Delete</MudMenuItem>
                         </MudMenu>
                     </MudTd>
                     <MudTd DataLabel="Name">@context.Name</MudTd>
@@ -680,9 +694,9 @@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
     private bool IsDetailsFormValid { get; set; }
-    private string[] DetailsFormErrors { get; set; } = { };
+    private string[] DetailsFormErrors { get; set; } = [];
     private bool IsSettingsFormValid { get; set; }
-    private string[] SettingsFormErrors { get; set; } = { };
+    private string[] SettingsFormErrors { get; set; } = [];
     private Dictionary<string, string> SettingsFormCustomErrors { get; } = new();
     private bool IsNewRunProfileFormValid { get; set; }
     private ConnectedSystem? _connectedSystem;
@@ -718,12 +732,12 @@
             return;
         }
 
-        _breadcrumbs = new List<BreadcrumbItem>
-        {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Connected Systems", href: "/admin/connected-systems/"),
-            new(_connectedSystem.Name, href: null, disabled: true)
-        };
+        _breadcrumbs =
+        [
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+            new BreadcrumbItem(_connectedSystem.Name, href: null, disabled: true)
+        ];
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
         _settingCategories = _connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
@@ -944,20 +958,29 @@
         return !attributeSelectedFilter || element.Selected;
     }
 
+    private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
+    {
+        return containers.Select(connectedSystemContainer => new TreeItemData<ConnectedSystemContainer>
+        {
+            Value = connectedSystemContainer, 
+            Children = GetTreeItemData(connectedSystemContainer.ChildContainers)
+        }).ToList();
+    }
+    
     private static void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
     {
         // if included and clicked, change to not included, not selected
         if (container.Included)
         {
             container.Selected = false;
-            container.Included = false;
         }
         else
         {
             // toggle the current setting
             container.Selected = !container.Selected;
-            container.Included = false;
         }
+
+        container.Included = false;
 
         // set the right selected/included values for all children
         if (container.Selected)
@@ -984,9 +1007,75 @@
         // set the parent(s) if necessary
         if (container.ParentContainer != null)
         {
-            // go up a level. if all children are selected, then make parent selected and all children (resursively) included.
+            // go up a level. if all children are selected, then make parent selected and all children (recursively) included.
             CorrectUpwardContainerStatus(container.ParentContainer);
         }
+
+        // make sure the partition is selected if not already
+        AutoSelectPartitionIfContainersSelected(container);
+    }
+
+    /// <summary>
+    /// Makes sure the partition is selected if any contains in its hierarchy are selected.
+    /// </summary>
+    private static void AutoSelectPartitionIfContainersSelected(ConnectedSystemContainer container)
+    {
+        // this method could probably be optimised. I was having a hard time writing this.
+        // get the partition at the top of the container hierarchy
+        var partition = container.Partition;
+        var areAnyContainersSelected = container.Selected;
+        if (partition != null && areAnyContainersSelected && !partition.Selected)
+        {
+            partition.Selected = true;
+            return;
+        }
+        
+        // we need a variable to hold the TLC when we eventually find it
+        ConnectedSystemContainer? topLevelContainer = null;
+        
+        // we need a variable to hold the current container as we navigate up the hierarchy
+        var currentContainer = container;
+        
+        // keep moving up the container hierarchy until we find the TLC
+        // ReSharper disable once LoopVariableIsNeverChangedInsideLoop : incorrect
+        while (topLevelContainer == null)
+        {
+            if (currentContainer.ParentContainer == null)
+            {
+                // found it! stop looping
+                topLevelContainer = currentContainer;
+                break;
+            }
+
+            // move up one level in the container hierarchy
+            currentContainer = currentContainer.ParentContainer;
+        }
+
+        // it's possible the TLC hasn't been found
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalse : incorrect
+        if (topLevelContainer == null)
+        {
+            Log.Warning("Couldn't find the top-level container. unable to auto-select partition.");
+            return;
+        }
+
+        // we might already know if any containers are selected
+        if (!areAnyContainersSelected)
+        {
+            // we have a TLC! now, are any containers in the hierarchy selected?
+            if (topLevelContainer.Partition is { Containers: not null })
+                if (topLevelContainer.Partition.Containers.Any(IsContainerOrAnyChildrenSelected))
+                    areAnyContainersSelected = true;
+        }
+        
+        // does the top-level container have a parent partition?
+        if (topLevelContainer.Partition != null && areAnyContainersSelected)
+            topLevelContainer.Partition.Selected = true;
+    }
+
+    private static bool IsContainerOrAnyChildrenSelected(ConnectedSystemContainer container)
+    {
+        return container.Selected || container.ChildContainers.Any(IsContainerOrAnyChildrenSelected);
     }
 
     private static void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
@@ -1082,7 +1171,7 @@
 
     private async Task HandleRunProfileDeleteAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
     {
-        if (_connectedSystem == null || _connectedSystem.RunProfiles == null)
+        if (_connectedSystem?.RunProfiles == null)
             return;
 
         _connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
