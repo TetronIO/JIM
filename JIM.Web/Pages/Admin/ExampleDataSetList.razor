@@ -30,11 +30,11 @@
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.BuiltIn)">Built-in?</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Culture)">Culture</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Values)">Values</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Culture)"><MudText Typo="Typo.button">Culture</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Values)"><MudText Typo="Typo.button">Values</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/example-data/datasets/"+context.Id)">@context.Name</MudLink></MudTd>

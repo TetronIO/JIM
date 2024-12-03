@@ -21,13 +21,13 @@
 
     <MudTable T="Activity" Items="@_activities.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
         <HeaderContent>
-            <MudTh>Target</MudTh>
-            <MudTh>Type</MudTh>
-            <MudTh>Operation</MudTh>
-            <MudTh>Created</MudTh>
-            <MudTh>Initiated By</MudTh>
-            <MudTh>Status</MudTh>
-            <MudTh>Execution Time</MudTh>
+            <MudTh><MudText Typo="Typo.button">Target</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Operation</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Execution Time</MudText></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Target">
@@ -35,7 +35,7 @@
             </MudTd>
             <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Operation">@context.TargetOperationType.ToString().SplitOnCapitalLetters()</MudTd>
-            <MudTd DataLabel="Created">@context.Created</MudTd>
+            <MudTd DataLabel="Created">@context.Created.ToFriendlyDate()</MudTd>
             <MudTd DataLabel="Initiated By">
                 @if (context.InitiatedBy != null)
                 {

@@ -112,32 +112,32 @@
             <MudStack Row="true" Class="mt-5 mb-5">
 
                 <MudPaper Class="pa-5" Outlined="true">
-                    <MudText Typo="Typo.overline">Total Objects</MudText>
+                    <MudText Typo="Typo.button">Total Objects</MudText>
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectChangeCount</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
-                    <MudText Typo="Typo.overline">Objects Created</MudText>
+                    <MudText Typo="Typo.button">Objects Created</MudText>
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectCreates</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
-                    <MudText Typo="Typo.overline">Objects Updated</MudText>
+                    <MudText Typo="Typo.button">Objects Updated</MudText>
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectUpdates</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
-                    <MudText Typo="Typo.overline">Objects Deleted</MudText>
+                    <MudText Typo="Typo.button">Objects Deleted</MudText>
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
-                    <MudText Typo="Typo.overline">Object Types</MudText>
+                    <MudText Typo="Typo.button">Object Types</MudText>
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectTypes</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true" Style="@(_activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
-                    <MudText Typo="Typo.overline">Errors</MudText>
+                    <MudText Typo="Typo.button">Errors</MudText>
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectErrors</MudText>
                 </MudPaper>
 
@@ -152,12 +152,12 @@
                 <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
             </ToolBarContent>
             <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.Id)">Internal Id</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ExternalIdValue!)">External Id</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName!)">Name</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType!)">External Object Type</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ObjectChangeType)">Change Type</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType!)">Error Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.Id)"><MudText Typo="Typo.button">Internal Id</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ExternalIdValue!)"><MudText Typo="Typo.button">External Id</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.DisplayName!)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ConnectedSystemObjectType!)"><MudText Typo="Typo.button">External Object Type</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ObjectChangeType)"><MudText Typo="Typo.button">Change Type</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ActivityRunProfileExecutionItemHeader, object>(x => x.ErrorType!)"><MudText Typo="Typo.button">Error Type</MudText></MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Internal Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.Id</MudLink></MudTd>

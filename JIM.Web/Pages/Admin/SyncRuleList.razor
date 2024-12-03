@@ -37,14 +37,14 @@
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction)">Direction</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemName)">Connected System</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.MetaverseObjectTypeName)">Metaverse Object Type</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemObjectTypeName)">Connected System Object Type</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem!)">Provision?</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse!)">Project?</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)">Status</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction)"><MudText Typo="Typo.button">Direction</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">Connected System</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Metaverse Object Type</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemObjectTypeName)"><MudText Typo="Typo.button">Connected System Object Type</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem!)"><MudText Typo="Typo.button">Provision?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse!)"><MudText Typo="Typo.button">Project?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>

@@ -18,7 +18,7 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Converts a string taken from a Url parameter back to the plain text version.
+    /// Converts a string taken from an Url parameter back to the plain text version.
     /// Note: This does not change case from lower-case URL param to whatever it was originally.
     /// </summary>
     public static string ConvertFromUrlParam(string urlParam)
@@ -27,7 +27,7 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Returns the MetaverseObject for the currently signed-in JIM.Web user.
+    /// Returns the MetaverseObject for the currently signed in JIM.Web user.
     /// </summary>
     public static async Task<MetaverseObject> GetUserAsync(JimApplication jimApplication, Task<AuthenticationState>? authenticationStateTask)
     {
@@ -37,6 +37,14 @@ public static class Helpers
         var userId = IdentityUtilities.GetUserId((await authenticationStateTask).User);
         var user = await jimApplication.Metaverse.GetMetaverseObjectAsync(userId);
         return user ?? throw new Exception($"User not found for user id: {userId}");
+    }
+
+    /// <summary>
+    /// Extension method that converts a DateTime into a more human-readable string.
+    /// </summary>
+    public static string ToFriendlyDate(this DateTime dateTime)
+    {
+        return $"{dateTime.ToShortDateString()} ({dateTime.ToShortTimeString()})";
     }
 
     #region mudblazor related

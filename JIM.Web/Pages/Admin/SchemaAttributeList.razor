@@ -26,12 +26,12 @@
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Type)">Type</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.BuiltIn)">Built-in?</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
-        <MudTh>Object Types</MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudText Typo="Typo.button">Object Types</MudText></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name">@context.Name</MudTd>

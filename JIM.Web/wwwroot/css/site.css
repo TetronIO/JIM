@@ -20,6 +20,10 @@ html, body {
     padding-top: 0;
 }
 
+.mud-table-empty-row {
+    font-weight: normal;
+}
+
 /* JIM CUSTOM */
 .jim-header-title {
     font-weight: 300;
