@@ -35,7 +35,7 @@
                     {
                         if (!string.IsNullOrEmpty(context.Pattern))
                         {
-                            <MudChip Color="Color.Primary"><b>Pattern:</b>&nbsp;@context.Pattern</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Pattern:</b>&nbsp;@context.Pattern</MudChip>
                         }
 
                         if (context.ExampleDataSetInstances is { Count: > 0 })
@@ -46,17 +46,17 @@
                                 setValues = setValues.Substring(0, setValues.Length - 2);
                             }
 
-                            <MudChip Color="Color.Primary"><b>Data set(s):</b>&nbsp;@setValues</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Data set(s):</b>&nbsp;@setValues</MudChip>
                         }
 
                         if (context.MinNumber.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
                         }
 
                         if (context.MaxNumber.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
                         }
 
                         var weightedStringValues = "";
@@ -64,65 +64,65 @@
                         {
                             weightedStringValues = context.WeightedStringValues.Aggregate(weightedStringValues, (current, wsv) => current + $"{wsv.Value}: {wsv.Weight}, ");
                             weightedStringValues = weightedStringValues.Substring(0, weightedStringValues.Length - 2);
-                            <MudChip Color="Color.Primary"><b>Weighted Values:</b>&nbsp;@weightedStringValues</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Weighted Values:</b>&nbsp;@weightedStringValues</MudChip>
                         }
                     }
                     else if (context.MetaverseAttribute?.Type == AttributeDataType.Number)
                     {
                         if (context.MinNumber.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
                         }
 
                         if (context.MaxNumber.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
                         }
 
                         if (context.SequentialNumbers.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Sequential:</b>&nbsp;@context.SequentialNumbers.Value.ToString()</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Sequential:</b>&nbsp;@context.SequentialNumbers.Value.ToString()</MudChip>
                         }
 
                         if (context.RandomNumbers.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Random numbers:</b>&nbsp;@context.RandomNumbers.Value.ToString()</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Random numbers:</b>&nbsp;@context.RandomNumbers.Value.ToString()</MudChip>
                         }
                     }
                     else if (context.MetaverseAttribute?.Type == AttributeDataType.Boolean)
                     {
                         if (context.BoolShouldBeRandom.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Random:</b>&nbsp;@context.BoolShouldBeRandom.Value.ToString()</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Random:</b>&nbsp;@context.BoolShouldBeRandom.Value.ToString()</MudChip>
                         }
 
                         if (context.BoolTrueDistribution.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>True distribution:</b>&nbsp;@context.BoolTrueDistribution.Value.ToString("N0")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>True distribution:</b>&nbsp;@context.BoolTrueDistribution.Value.ToString("N0")</MudChip>
                         }
                     }
                     else if (context.MetaverseAttribute?.Type == AttributeDataType.DateTime && (context.MinDate.HasValue || context.MaxDate.HasValue))
                     {
                         if (context.MinDate.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinDate.Value.ToShortDateString()</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Min:</b>&nbsp;@context.MinDate.Value.ToShortDateString()</MudChip>
                         }
 
                         if (context.MaxDate.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Min:</b>&nbsp;@context.MaxDate.Value.ToShortDateString()</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Min:</b>&nbsp;@context.MaxDate.Value.ToShortDateString()</MudChip>
                         }
                     }
                     else if (context.MetaverseAttribute?.Type == AttributeDataType.Reference)
                     {
                         if (context.MvaRefMinAssignments.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>MVA min assignments:</b>&nbsp;@context.MvaRefMinAssignments.Value.ToString("N0")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>MVA min assignments:</b>&nbsp;@context.MvaRefMinAssignments.Value.ToString("N0")</MudChip>
                         }
 
                         if (context.MvaRefMaxAssignments.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>MVA max assignments:</b>&nbsp;@context.MvaRefMaxAssignments.Value.ToString("N0")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>MVA max assignments:</b>&nbsp;@context.MvaRefMaxAssignments.Value.ToString("N0")</MudChip>
                         }
 
                         if (context.ReferenceMetaverseObjectTypes is { Count: > 0 })
@@ -131,12 +131,12 @@
                             if (refTypes.EndsWith(", "))
                                 refTypes = refTypes.Substring(0, refTypes.Length - 2);
 
-                            <MudChip Color="Color.Primary"><b>Reference type(s):</b>&nbsp;@refTypes</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Reference type(s):</b>&nbsp;@refTypes</MudChip>
                         }
 
                         if (context.ManagerDepthPercentage.HasValue)
                         {
-                            <MudChip Color="Color.Primary"><b>Manager depth:</b>&nbsp;@(context.ManagerDepthPercentage + "%")</MudChip>
+                            <MudChip T="string" Color="Color.Primary"><b>Manager depth:</b>&nbsp;@(context.ManagerDepthPercentage + "%")</MudChip>
                         }
                     }
                 </MudTd>
@@ -160,7 +160,7 @@
                Color="Color.Warning"
                Disabled="@(_status != null)"
                OnClick="ExecuteTemplateAsync"
-               DisableElevation="true">
+               DropShadow="false">
         @if (_status is WorkerTaskStatus.Processing)
         {
             <text>Processing...</text>

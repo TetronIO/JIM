@@ -67,10 +67,10 @@
                 <MudText>
 
                     <MudTooltip Text="Object Type">
-                        <MudChip Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
+                        <MudChip T="string" Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
                     </MudTooltip>
 
-                    <MudChip Color="Color.Info" Variant="Variant.Outlined" Label="true">
+                    <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Label="true">
                         @if (_externalIdAttributeValue != null)
                         {
                             <MudTooltip Text="External Id Attribute Name">
@@ -122,14 +122,14 @@
                             {
                                 <td rowspan="@changeAttribute.ValueChanges.Count">@changeAttribute.Attribute.Name</td>
                             }
-                            <td><MudChip Variant="Variant.Text" Color="Helpers.GetMudBlazorColorForValueChangeType(changeAttribute.ValueChanges[i].ValueChangeType)" Class="ml-0">@changeAttribute.ValueChanges[i-1].ValueChangeType</MudChip></td>
+                            <td><MudChip T="string" Variant="Variant.Text" Color="Helpers.GetMudBlazorColorForValueChangeType(changeAttribute.ValueChanges[i].ValueChangeType)" Class="ml-0">@changeAttribute.ValueChanges[i-1].ValueChangeType</MudChip></td>
                             <td>
                                 @if (changeAttribute.ValueChanges[i].ReferenceValue != null)
                                 {
                                     var rv = changeAttribute.ValueChanges[i].ReferenceValue;
                                     if (rv != null)
                                     {
-                                        <MudChip Color="Color.Default" Size="Size.Small">@rv.Type.Name</MudChip>
+                                        <MudChip T="string" Color="Color.Default" Size="Size.Small">@rv.Type.Name</MudChip>
                                         <text> </text>
                                         <MudLink Href="@Utilities.GetConnectedSystemObjectHref(rv)">@rv.DisplayNameOrId</MudLink>
 

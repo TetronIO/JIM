@@ -29,7 +29,7 @@
     <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
         @foreach (var metaverseAttribute in _metaverseObjectType.Attributes)
         {
-            <MudChip Variant="Variant.Filled" Color="Color.Primary">@metaverseAttribute.Name</MudChip>
+            <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">@metaverseAttribute.Name</MudChip>
         }
     </MudPaper>
 }

@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor.Utilities
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
+<MudPopoverProvider/>
 <MudDialogProvider />
 <MudSnackbarProvider />
 
@@ -64,18 +65,19 @@
         {
             Default = new Default()
             {
-                FontFamily = new[] {
+                FontFamily =
+                [
                     "-apple-system",
                     "Segoe UI Variable Display",
                     "Roboto",
                     "Helvetica Neue",
                     "Arial"
-                },
+                ],
                 FontWeight = 400,
                 FontSize = "16px"
             }
         },
-        Palette = new PaletteLight()
+        PaletteLight = new PaletteLight()
         {
             AppbarBackground = new MudColor("rgb(60,148,255)"),
             Background = new MudColor("#f6f9fc"),

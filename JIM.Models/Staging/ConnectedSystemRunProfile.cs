@@ -34,7 +34,7 @@ public class ConnectedSystemRunProfile
     public string? FilePath { get; set; }
 
     /// <summary>
-    /// Back-link to depedent activity objects. 
+    /// Back-link to dependent activity objects. 
     /// Optional relationship.
     /// Used by EntityFramework.
     /// </summary>

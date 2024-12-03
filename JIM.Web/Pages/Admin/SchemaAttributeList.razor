@@ -13,8 +13,8 @@
 
 <MudPaper Elevation="0" Class="mt-5" Outlined="true">
     <MudToolBar>
-        <MudButton Href="/admin/schema" Color="Color.Primary" DisableElevation="true">Object Types</MudButton>
-        <MudButton Href="/admin/schema/attributes" Color="Color.Primary" DisableElevation="true" Disabled="true">Attributes</MudButton>
+        <MudButton Href="/admin/schema" Color="Color.Primary" DropShadow="false">Object Types</MudButton>
+        <MudButton Href="/admin/schema/attributes" Color="Color.Primary" DropShadow="false" Disabled="true">Attributes</MudButton>
         <MudSpacer />
     </MudToolBar>
 </MudPaper>
@@ -45,7 +45,7 @@
                 foreach (var stub in context.MetaverseObjectTypes)
                 {
                     var attributeUrl = $"/admin/schema/object-types/{stub.Key}";
-                    <MudChip Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
+                    <MudChip T="string" Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
                 }
             }
         </MudTd>
