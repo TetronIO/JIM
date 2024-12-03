@@ -201,7 +201,7 @@
                 </MudButton>
             </MudAlert>
 
-            <MudDialog @bind-IsVisible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
+            <MudDialog @bind-Visible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
                 <TitleContent>
                     <MudText Typo="Typo.h6">
                         <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Schema Attribute: @_objectTypeAttributeBeingEdited?.Name

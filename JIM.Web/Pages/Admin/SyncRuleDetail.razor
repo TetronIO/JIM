@@ -165,8 +165,7 @@
                 OnClick="HandleOpenAddMatchingRuleMappingDialog"
                 Color="Color.Default"
                 Class="mt-5"
-                Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)"
-                DisableElevation="true">Add Matching Rule</MudButton>
+                Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)">Add Matching Rule</MudButton>
 
             @foreach (var objectMatchingRule in _syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
             {
@@ -215,7 +214,7 @@
             }
         </MudPaper>
 
-        <MudDialog @bind-IsVisible="_addMatchingRuleDialogVisible" Options="_dialogOptions">
+        <MudDialog @bind-Visible="_addMatchingRuleDialogVisible" Options="_dialogOptions">
             <TitleContent>
                 <MudText Typo="Typo.h6">
                     <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> Add Matching Rule
@@ -287,7 +286,7 @@
                 }
             </DialogContent>
             <DialogActions>
-                <MudButton Disabled="DisableAddMappingButton()" DisableElevation="true" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
+                <MudButton Disabled="DisableAddMappingButton()" DropShadow="false" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
             </DialogActions>
         </MudDialog>
     }
@@ -312,10 +311,10 @@
                            Variant="Variant.Filled"
                            OnClick="HandleOpenAddScopingCriteriaGroupDialog"
                            Class="mt-5"
-                           DisableElevation="true">Add Criteria Group</MudButton>
+                           DropShadow="false">Add Criteria Group</MudButton>
                 }
 
-                <MudDialog @bind-IsVisible="_addScopingCriteriaGroupDialogVisible" Options="_dialogOptions">
+                <MudDialog @bind-Visible="_addScopingCriteriaGroupDialogVisible" Options="_dialogOptions">
                     <TitleContent>
                         <MudText Typo="Typo.h6">
                             <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
@@ -340,7 +339,7 @@
                             Color="Color.Primary"
                             OnClick="HandleAddCriteriaGroupButtonClick"
                             Disabled="DisableAddScopingCriteriaGroupFormButton()"
-                            DisableElevation="true"
+                            DropShadow="false"
                             Class="ma-4">Add Group</MudButton>
                     </DialogActions>
                 </MudDialog>
@@ -365,9 +364,9 @@
         Color="Color.Default"
         Class="mt-5 mb-5"
         Disabled="DisableAddAttributeFlowButton()"
-        DisableElevation="true">Add Attribute Flow</MudButton>
+        DropShadow="false">Add Attribute Flow</MudButton>
     
-    <MudDialog @bind-IsVisible="_addAttributeFlowRuleDialogVisible" Options="_dialogOptions">
+    <MudDialog @bind-Visible="_addAttributeFlowRuleDialogVisible" Options="_dialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
                 <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> Add Attribute Flow
@@ -484,7 +483,7 @@
         <DialogActions>
             <MudButton 
                 Disabled="DisableAddAttributeFlowMappingButton()" 
-                DisableElevation="true" 
+                DropShadow="false" 
                 Variant="Variant.Filled" 
                 Color="Color.Primary" 
                 OnClick="HandleAddAttributeFlowMappingButtonClick" 
@@ -585,7 +584,7 @@
             <MudList T="string">
                 @foreach (var item in _syncRule.Validate())
                 {
-                    <MudListItem T="string" IconColor="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)" Icon="@(item.Level == JIM.Models.Utility.ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)">
+                    <MudListItem T="string" IconColor="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)" Icon="@(item.Level == ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)">
                         @item.Message
                     </MudListItem>
                 }    
@@ -600,13 +599,13 @@
             Class="mt-5"
             OnClick="HandleCreateOrUpdateSyncRuleAsync"
             Disabled="!_syncRule.IsValid()"
-            DisableElevation="true">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule</MudButton>
+            DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule</MudButton>
         <MudButton 
             Variant="Variant.Filled" 
             StartIcon="@Icons.Material.Filled.Delete" 
             OnClick="HandleDeleteSyncRuleAsync"
             Class="mt-5"
-            DisableElevation="true"
+            DropShadow="false"
             Disabled="@(_syncRule.Id == 0)"
             Color="Color.Error">Delete Sync Rule</MudButton>
     </MudStack>
@@ -645,11 +644,11 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _breadcrumbs = new List<BreadcrumbItem>
-        {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Synchronisation Rules", href: "/admin/connected-systems/sync-rules/")
-        };
+        _breadcrumbs =
+        [
+            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync-rules/")
+        ];
 
         if (Id != null)
         {
