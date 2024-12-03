@@ -60,7 +60,7 @@
     }
 
     <!-- this needs to move to a component and for SyncRuleDetail to use it as well, to avoid duplication. -->
-    <MudDialog @bind-IsVisible="_addCriteriaGroupDialogVisible" Options="_dialogOptions">
+    <MudDialog @bind-Visible="_addCriteriaGroupDialogVisible" Options="_dialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
                 <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
@@ -90,7 +90,7 @@
 
 </MudPaper>
 
-<MudDialog @bind-IsVisible="_addCriteriaDialogVisible" Options="_dialogOptions">
+<MudDialog @bind-Visible="_addCriteriaDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> Add Criteria
