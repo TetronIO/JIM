@@ -44,5 +44,31 @@ JIM is currently targetting the following means of connecting to systems via it'
 ## Roadmap
 JIM is in active development. There are many plans for new features. Check back soon for more details.
 
+## Getting Started
+To run JIM locally:
+1. Clone the repo
+1. Create a `.env` file in the repo root (see example below)
+1. Run Docker Compose in your favourite IDE, configured for your platform (see examples below)
+
+### `.env` Entra ID Example:
+For federating JIM with Entra ID. Replace `<...>` elements with your real values.
+```
+DB_NAME=jim
+DB_USERNAME=jim
+DB_PASSWORD=password
+DB_LOG_SENSITIVE_INFO=true
+SSO_AUTHORITY=<your IDP URL, i.e. https://login.microsoftonline.com/f9953c7e-b69b-4cb1-ad60-b11df84f8af2>
+SSO_CLIENT_ID=<your client id, i.e. 24d89e93-353e-45d6-9528-cc2dd2529dad>
+SSO_SECRET=<your client secret, i.e. abcd1234>
+SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=http://schemas.microsoft.com/identity/claims/objectidentifier
+SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=Object Identifier
+SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your user object identifier, i.e. 1a2e0377-e36c-4388-b185-c489ae7daa6a>
+```
+
+Note, the `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE` variable enables you to sign in to JIM as the initial admin.
+
+### Configuring your IDE to start Docker Compose
+Todo...
+
 ## More Information
 Please go to https://tetron.io/jim for more information.
