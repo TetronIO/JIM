@@ -46,10 +46,11 @@ JIM is in active development. There are many plans for new features. Check back 
 
 ## Getting Started
 To run JIM locally:
-1. Make sure Docker Desktop is installed
-1. Clone the repo
-1. Create a `.env` file in the repo root (see example below)
-1. Run Docker Compose in your favourite IDE, configured for your platform (see examples below)
+1. Configure an OIDC client for JIM with your IDP (i.e. KeyCloak/ADFS/Entra ID/etc.) using a Hybrid Flow [more info needed here]
+1. Make sure Docker Desktop is installed.
+1. Clone the repo.
+1. Create a `.env` file in the repo root (see example below).
+1. Run Docker Compose in your favourite IDE, configured for your platform (see examples below).
 
 ### `.env` Entra ID Example:
 For federating JIM with Entra ID. Replace `<...>` elements with your real values.
