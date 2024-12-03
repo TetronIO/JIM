@@ -24,8 +24,8 @@
             <div class="@(IsDrawerOpen ? "jim-drawer-container" : "jim-drawer-container-small") mud-text-secondary">
                 <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
                     <MudToggleIconButton @bind-Toggled="@IsDarkMode"
-                                         Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit" Title="Off"
-                                         ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" ToggledTitle="On"/>
+                                         Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit"
+                                         ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" />
                     @if (IsDrawerOpen)
                     {
                         <text>@(IsDarkMode ? "Dark" : "Light") mode</text>
