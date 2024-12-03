@@ -21,26 +21,39 @@
             </div>
 
             <NavMenu DrawerOpen="@IsDrawerOpen"/>
-            
+
+            <div class="@(IsDrawerOpen ? "jim-drawer-container" : "jim-drawer-container-small") mud-text-secondary">
+                @if (IsDrawerOpen)
+                {
+                    <MudButton 
+                        Variant="Variant.Filled" 
+                        StartIcon="@(IsDarkMode  ? Icons.Material.Filled.WbSunny : Icons.Material.Filled.DarkMode)" 
+                        FullWidth="true"
+                        DropShadow="false"
+                        OnClick="@(() => IsDarkMode = !IsDarkMode)">
+                        @(IsDarkMode ? "Light" : "Dark") mode
+                    </MudButton>
+                }
+                else
+                {
+                    <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
+                        <MudToggleIconButton @bind-Toggled="@IsDarkMode"
+                                             Icon="@Icons.Material.Filled.WbSunny" 
+                                             Color="@Color.Inherit"
+                                             ToggledIcon="@Icons.Material.Filled.DarkMode" 
+                                             ToggledColor="@Color.Inherit"/>
+                    </MudTooltip>
+                }
+            </div>
 
             
         </MudDrawer>
 
         <MudMainContent>
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
-
           
-                    <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
-                        <MudToggleIconButton @bind-Toggled="@IsDarkMode"
-                                             Icon="@Icons.Material.Filled.WbSunny" Color="@Color.Inherit"
-                                             ToggledIcon="@Icons.Material.Filled.DarkMode" ToggledColor="@Color.Inherit" />
-                       
-                            <text>@(IsDarkMode ? "Dark" : "Light") mode</text>
-                            @* <MudCheckBox @bind-Value="@IsDrawerToRemainOpen" Label="Keep open" Size="Size.Small"></MudCheckBox> *@
-                            <!-- change the button icon later (light/dark) -->
-                            <MudButton OnClick="@ToggleDrawer">Show/Hide</MudButton>
-                        
-                    </MudTooltip>
+                <!-- change the button icon later (light/dark) -->
+                <MudButton OnClick="@ToggleDrawer" Variant="Variant.Filled" IconColor="Color.Primary">Show/Hide</MudButton>
             
                 
                 @Body
