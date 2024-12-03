@@ -165,6 +165,7 @@
                 OnClick="HandleOpenAddMatchingRuleMappingDialog"
                 Color="Color.Default"
                 Class="mt-5"
+                DropShadow="false"
                 Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)">Add Matching Rule</MudButton>
 
             @foreach (var objectMatchingRule in _syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
@@ -286,7 +287,13 @@
                 }
             </DialogContent>
             <DialogActions>
-                <MudButton Disabled="DisableAddMappingButton()" DropShadow="false" Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
+                <MudButton 
+                    Disabled="DisableAddMappingButton()" 
+                    DropShadow="false" 
+                    Variant="Variant.Filled" 
+                    Color="Color.Primary" 
+                    OnClick="HandleAddMappingButtonClick" 
+                    Class="ma-4">Add Matching Rule</MudButton>
             </DialogActions>
         </MudDialog>
     }
