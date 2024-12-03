@@ -12,13 +12,13 @@
     <MudDrawerContainer Class="mud-height-full">
         <MudDrawer @bind-Open="@IsDrawerOpen" Fixed="false" Elevation="1" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" Overlay="false">
             
-            @*<div class="jim-drawer-logo">
+            <div class="jim-drawer-logo">
                 <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
                 @if (IsDrawerOpen)
                 {
                     <MudText Inline="true">JIM</MudText>
                 }
-            </div>*@
+            </div>
 
             <NavMenu DrawerOpen="@IsDrawerOpen"/>
             
