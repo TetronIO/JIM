@@ -160,7 +160,7 @@
                Color="Color.Warning"
                Disabled="@(_status != null)"
                OnClick="ExecuteTemplateAsync"
-               DisableElevation="true">
+               DropShadow="false">
         @if (_status is WorkerTaskStatus.Processing)
         {
             <text>Processing...</text>

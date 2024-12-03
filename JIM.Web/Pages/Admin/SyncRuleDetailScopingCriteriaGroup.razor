@@ -11,7 +11,7 @@
             <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @SyncRuleScopingCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
         </MudItem>
         <MudItem xs="6" Class="d-flex align-center justify-end">
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Variant="Variant.Filled" DisableElevation="true" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Variant="Variant.Filled" DropShadow="false" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
         </MudItem>
     </MudGrid>
 
@@ -19,12 +19,12 @@
                Variant="Variant.Filled"
                Class="me-3"
                OnClick="HandleOpenAddCriteriaGroupDialog"
-               DisableElevation="true">Add Criteria Group</MudButton>
+               DropShadow="false">Add Criteria Group</MudButton>
 
     <MudButton StartIcon="@Icons.Material.Filled.Add"
                Variant="Variant.Filled"
                OnClick="HandleShowAddCriteriaDialogButtonClick"
-               DisableElevation="true">Add Criteria</MudButton>
+               DropShadow="false">Add Criteria</MudButton>
 
     @if (SyncRuleScopingCriteriaGroup.ChildGroups.Count == 0 && SyncRuleScopingCriteriaGroup.Criteria.Count == 0)
     {
@@ -47,7 +47,7 @@
             <MudIconButton 
                 Icon="@Icons.Material.Filled.Delete" 
                 Variant="Variant.Filled"
-                DisableElevation="true"
+                DropShadow="false"
                 Size="Size.Small" 
                 aria-label="delete"
                 OnClick="@(() => HandleDeleteCriteria(criteria))"></MudIconButton>
@@ -83,7 +83,7 @@
                        Color="Color.Primary"
                        OnClick="HandleAddCriteriaGroupButtonClick"
                        Disabled="DisableAddCriteriaGroupFormButton()"
-                       DisableElevation="true"
+                       DropShadow="false"
                        Class="ma-4">Add Group</MudButton>
         </DialogActions>
     </MudDialog>
@@ -162,7 +162,7 @@
 
     </DialogContent>
     <DialogActions>
-        <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DisableElevation="true" Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick" Class="ma-4">Add Criteria</MudButton>
+        <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick" Class="ma-4">Add Criteria</MudButton>
     </DialogActions>
 </MudDialog>
 

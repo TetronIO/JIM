@@ -22,7 +22,7 @@
 {
     <MudGrid Class="mt-5">
         <MudItem xs="6">
-            <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DisableElevation="true">
+            <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DropShadow="false">
                 <MudMenuItem IconSize="Size.Small" IconColor="Color.Primary" Icon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteAllObjectsClickAsync">Delete all objects</MudMenuItem>
             </MudMenu>
         </MudItem>
@@ -85,7 +85,7 @@
             The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
         </MessageContent>
         <YesButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Error" DisableElevation="true" StartIcon="@Icons.Material.Filled.DeleteForever" Class="ml-2">Delete all objects</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false" StartIcon="@Icons.Material.Filled.DeleteForever" Class="ml-2">Delete all objects</MudButton>
         </YesButton>
     </MudMessageBox>
 }

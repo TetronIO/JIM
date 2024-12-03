@@ -14,7 +14,7 @@
 
 <MudPaper Elevation="0" Class="mt-2" Outlined="true">
     <MudToolBar>
-        <MudButton Href="/admin/connected-systems/sync-rules" Color="Color.Primary" DisableElevation="true" Disabled="true">Synchronisation Rules</MudButton>
+        <MudButton Href="/admin/connected-systems/sync-rules" Color="Color.Primary" DropShadow="false" Disabled="true">Synchronisation Rules</MudButton>
         <MudSpacer />
         <MudButton 
             StartIcon="@Icons.Material.Filled.Add" 
@@ -22,7 +22,7 @@
             Href="/admin/connected-systems/sync-rules/new" 
             Color="Color.Primary"
             Disabled="@(!_canCreateSyncRules)"
-            DisableElevation="true">Create Synchronisation Rule</MudButton>
+            DropShadow="false">Create Synchronisation Rule</MudButton>
     </MudToolBar>
 </MudPaper>
 
