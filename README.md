@@ -70,9 +70,10 @@ SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your user object identifier, i.
 Note, the `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE` variable enables you to sign in to JIM as the initial admin.
 
 ### Configuring your IDE to start Docker Compose
-- Visual Studio on Windows. Just press the play button, making sure the Docker project is selected.
-- JetBrains Rider on Windows. As above.
-- JetBrains Rider on macOS. Create a Run/Debug Configuration for macOS buy cloning the default one and changing the docker-compose.override.yml file for the docker-compose.override.macos.yml one. Play this one.
+- Visual Studio on Windows: Just press the play button, making sure the Docker project is selected.
+- JetBrains Rider on Windows: As above.
+- JetBrains Rider on macOS: Create a Run/Debug Configuration for macOS buy cloning the default one and changing the docker-compose.override.yml file for the docker-compose.override.macos.yml one. Play this one.
+- JetBrains Rider on Linux: As above, but use docker-compose-override.linux.yml
 
 <img width="1142" alt="jim-rider-docker-windows" src="https://github.com/user-attachments/assets/801ba32b-c436-4b76-87d4-00e73800da01"><br>
 Clone the docker Compose configuration and name it for Windows.<br><br>
