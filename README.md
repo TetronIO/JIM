@@ -76,15 +76,18 @@ Note, the `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE` variable enables you
 - JetBrains Rider on Linux: As above, but use docker-compose-override.linux.yml
 
 <img width="1142" alt="jim-rider-docker-windows" src="https://github.com/user-attachments/assets/801ba32b-c436-4b76-87d4-00e73800da01"><br>
-Clone the docker Compose configuration and name it for Windows.<br><br>
+macOS/Linux Docker Setup: Clone the docker Compose configuration and name it for Windows.<br><br>
 
 
 <img width="1151" alt="jim-rider-docker-macos" src="https://github.com/user-attachments/assets/81a295f1-080f-49e2-bc8f-35e0724b2e9b"><br>
-With the new cloned configuration, name it for macOS and change the override file to the macOS one.<br><br>
+macOS/Linux Docker Setup: With the new cloned configuration, name it for macOS and change the override file to the macOS one.<br><br>
 
 
 <img width="590" alt="jim-rider-docker-play" src="https://github.com/user-attachments/assets/f15ef378-d88b-4a51-9b11-4f01529d7f77"><br>
-Then change the active configuration and press the play button.
+macOS/Linux Docker Setup: Then change the active configuration and press the play button.
+
+### Federate JIM with your IDP
+Todo...
 
 ## More Information
 Please go to https://tetron.io/jim for more information.
