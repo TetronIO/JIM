@@ -52,7 +52,7 @@ To run JIM locally:
 1. Create a `.env` file in the repo root (see example below).
 1. Run Docker Compose in your favourite IDE, configured for your platform (see examples below).
 
-2. ### Setup SSO
+### Setup SSO
 Todo...
 
 ### `.env` Entra ID Example:
