@@ -46,11 +46,14 @@ JIM is in active development. There are many plans for new features. Check back 
 
 ## Getting Started
 To run JIM locally:
-1. Configure an OIDC client for JIM with your IDP (i.e. KeyCloak/ADFS/Entra ID/etc.) using a Hybrid Flow [more info needed here]
+1. Configure an OIDC client for JIM with your IDP (i.e. KeyCloak/ADFS/Entra ID/Okta/NetIQ/etc.) using a Hybrid Flow (see section below)
 1. Make sure Docker Desktop is installed.
 1. Clone the repo.
 1. Create a `.env` file in the repo root (see example below).
 1. Run Docker Compose in your favourite IDE, configured for your platform (see examples below).
+
+2. ### Setup SSO
+Todo...
 
 ### `.env` Entra ID Example:
 For federating JIM with Entra ID. Replace `<...>` elements with your real values.
@@ -85,9 +88,6 @@ macOS/Linux Docker Setup: With the new cloned configuration, name it for macOS a
 
 <img width="590" alt="jim-rider-docker-play" src="https://github.com/user-attachments/assets/f15ef378-d88b-4a51-9b11-4f01529d7f77"><br>
 macOS/Linux Docker Setup: Then change the active configuration and press the play button.
-
-### Federate JIM with your IDP
-Todo...
 
 ## More Information
 Please go to https://tetron.io/jim for more information.
