@@ -1,7 +1,8 @@
 [![.NET Build & Test](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml/badge.svg)](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml)
 
 # Junctional Identity Manager (JIM)
-A modern Identity Manager for organisations. Features include:
+JIM is a modern Identity Management system designed for organisations with non-trivial Identity Management and synchronisation requirements. 
+It's designed to be self-hosted, deployable on container platforms and is suitable for connected, or air-gapped networks. Features include:
 
 - Synchronises objects between systems. Supports Users and Groups by default
 - Supports custom object types, i.e. Departments, Qualifications, Courses, Licenses, Roles, Computers, etc.
@@ -15,6 +16,7 @@ A modern Identity Manager for organisations. Features include:
 
 ## Scenarios
 JIM is designed to support the following common Identity, Governance & Administration (IGA) scenarios:
+
 - Automate JML by synchronising users from HR systems to directories, apps and systems
 - Keep HR systems up to date by writing I.T related attributes back to HR systems, i.e. email address, telephone numbers, etc.
 - Centrally manage user entitlements, i.e. group memberships in directories, apps and systems
