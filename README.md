@@ -94,7 +94,7 @@ macOS/Linux Docker Setup: With the new cloned configuration, name it for macOS a
 macOS/Linux Docker Setup: Then change the active configuration and press the play button.
 
 ## State of Development
-In JIM currently, you can setup connectors to LDAP-based systems (tested against Active Directory so far) and CSVs and perform imports. Synchronisation Rules can also be created, though synchronisation (from connected systems to the Metaverse) is currently under development, with Unit Tests being developed. Once that's done, export functionality will be next, to target an Minimum Viable Product (MVP) status.
+In JIM currently, you can setup connectors to LDAP-based systems (tested against Active Directory so far) and CSV files and perform imports. Synchronisation Rules can also be created, though synchronisation of objects (from connected systems to the Metaverse) is currently under development, with unit tests being worked on. Once that's complete, export functionality will be next, to target an Minimum Viable Product (MVP) status.
 
 If you don't have any connected systems available, you can also use the Data Generation feature to fill JIM with thousands of users and groups. The UI for users and groups is basic, with a fully customisable UI planned.
 
