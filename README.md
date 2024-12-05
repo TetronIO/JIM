@@ -7,7 +7,7 @@ A modern Identity Manager for organisations. Features:
 - Supports custom object types, i.e. Departments, Qualifications, Courses, Licenses, Roles, Computers, etc.
 - Transform data using a wide range of functions
 - Extensible with custom functions
-- Extensible with custom JIM connectors (fully unit-testable)
+- Extensible with custom connectors (fully unit-testable)
 - A modern Web Portal and API
 - Single Sign-On (SSO) using OpenID Connect
 
@@ -15,15 +15,15 @@ A modern Identity Manager for organisations. Features:
 
 ## Scenarios
 JIM is designed to support the following common IGA scenarios:
-- Synchronise users from HCM (aka HR) systems to directories and apps
-- Synchronise attributes back to HCM systems, i.e. email address, telephone numbers, etc.
-- Centrally manage user entitlements, i.e. group memberships in directories and apps
-- Perform domain consolidations, i.e. to prepare for migrating to the cloud, simplification, or for organisational mergers
-- Perform domain migrations, i.e. to facilitate divestitures
+- Synchronise users from HR systems to directories, apps and systems
+- Synchronise attributes back to HR systems, i.e. email address, telephone numbers, etc.
+- Centrally manage user entitlements, i.e. group memberships in directories, apps and systems
+- Facilitate domain consolidations, i.e. to prepare for migrating to the cloud, simplification, or for organisational mergers
+- Facilitate domain migrations, i.e. divestitures
 - Identity fusing - bring together user/entitlement data from various business apps and systems
 
 ## Deployment
-JIM runs in Docker containers and can be deployed onto on-premises infrastructure (no Internet connection required for air-gapped networks) or Cloud container services, such as Microsoft Azure or AWS.
+JIM runs in a Docker stack using containers and can be deployed to on-premises infrastructure (no Internet connection required for air-gapped networks), or Cloud container services, such as Microsoft Azure or AWS.
 
 Various topologies are planned, depending on your needs:
 - Standalone (single-server, built-in database): Perfect for smaller organisations or pre-production environments. The current topology.
