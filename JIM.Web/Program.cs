@@ -1,5 +1,4 @@
 using JIM.Application;
-using JIM.Data;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using Microsoft.AspNetCore.Authentication;
@@ -39,7 +38,7 @@ try
     await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
-    builder.Services.AddTransient<JimApplication>(x => new JimApplication(new PostgresDataRepository(new JimDbContext())));
+    builder.Services.AddTransient<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
 
     // setup OpenID Connect (OIDC) authentication
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
@@ -81,12 +80,13 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddServerSideBlazor();
 
+    builder.Services.AddSerilog(configuration => InitialiseLogging(configuration, false));
+
     // now setup logging with the web framework
-    builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
+    //builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
 
     // MudBlazor
-    builder.Services.AddMudServices(config =>
-    {
+    builder.Services.AddMudServices(config => {
         config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomCenter;
     });
 
@@ -130,10 +130,10 @@ finally
 static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assignLogLogger)
 {
     var loggingMinimumLevel = Environment.GetEnvironmentVariable("LOGGING_LEVEL");
-    var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
-
     if (loggingMinimumLevel == null)
         throw new ApplicationException("LOGGING_LEVEL environment variable not found. Cannot continue");
+    
+    var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
     if (loggingPath == null)
         throw new ApplicationException("LOGGING_PATH environment variable not found. Cannot continue");
 
@@ -227,7 +227,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     
     Log.Verbose("AuthoriseAndUpdateUserAsync: Called.");
 
-    if (context.Principal == null || context.Principal.Identity == null)
+    if (context.Principal?.Identity == null)
     {
         Log.Error($"AuthoriseAndUpdateUserAsync: User doesn't have a principal or identity");
         return;
