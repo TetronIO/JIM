@@ -59,6 +59,7 @@ try
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
+            options.UsePkce = true;
             options.Scope.Add("profile");
 
             // intercept the user login when a token is received and validate we can map them to a JIM user
