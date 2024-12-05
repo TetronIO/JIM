@@ -46,14 +46,14 @@ JIM is in active development. There are many plans for new features. Check back 
 
 ## Getting Started
 To run JIM locally:
-1. Configure an OIDC client for JIM with your IDP (i.e. KeyCloak/ADFS/Entra ID/Okta/NetIQ/etc.) using a Hybrid Flow (see section below)
-1. Make sure Docker Desktop is installed.
-1. Clone the repo.
-1. Create a `.env` file in the repo root (see example below).
-1. Run Docker Compose in your favourite IDE, configured for your platform (see examples below).
+1. Configure SSO with your IDP (see below).
+1. Make sure Docker Desktop is installed and running.
+1. Clone this repo.
+1. Create a `.env` file in the repo root for your secrets (see below).
+1. Run the Docker Compose configuration in your favourite IDE, configured for your platform (see below).
 
 ### Setup SSO
-Todo...
+JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IDP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Note, JIM uses PKCE with this flow for maximum security. JIM has been tested against Microsoft Entra ID to date but should work with all OIDC-compliant Identity Providers (IdPs).
 
 ### `.env` Entra ID Example:
 For federating JIM with Entra ID. Replace `<...>` elements with your real values.
