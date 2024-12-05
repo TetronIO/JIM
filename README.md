@@ -26,9 +26,9 @@ JIM is designed to support the following common IGA scenarios:
 JIM runs in Docker containers and can be deployed onto on-premises infrastructure (no Internet connection required for air-gapped networks) or Cloud container services, such as Microsoft Azure or AWS.
 
 Various topologies are planned, depending on your needs:
-- Standalone (single-server, built-in database) - Perfect for smaller organisations or pre-production environments. The current topology.
-- External database - Use an existing database platform for reslliancy and scale
-- Scaled-out web frontends - To handle more users accessing the web app and for high-availability
+- Standalone (single-server, built-in database): Perfect for smaller organisations or pre-production environments. The current topology.
+- External database: Use an existing database platform for reslliancy and scale.
+- Scaled-out web frontends: For organisations who need redundancy and/or to support a larger number of users accessing the web app.
 
 ## Connectors
 JIM is currently targetting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will also be able to develop their own custom Connectors for use with JIM to support bespoke scenarios.
@@ -53,16 +53,11 @@ To run JIM locally:
 1. Run the Docker Compose configuration in your favourite IDE, configured for your platform (see below).
 
 ### Setup SSO
-JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. 
-Note: JIM uses PKCE with this flow for maximum security. Also, JIM has been tested against Microsoft Entra ID to date but should work with all OIDC-compliant Identity Providers (IdPs).
+JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
 
-We delegate authorsation to your IdP by using application entitlements, so you need to configure the JIM client in your IdP to add roles in the token that JIM consumes and uses to control what users can do.
-The two roles we publish at the moment are:
+> Note: JIM uses PKCE with this flow for improved security. Also, JIM has been tested with Microsoft Entra ID so far, but should work with all OIDC-compliant Identity Providers (IdPs).
 
-- Users (default, does not need to be supplied by your IdP, all users accessing JIM get assigned this role).
-- Administrators (needs to be provided by your IdP for a user to have admin rights within JIM).
-
-> Note: Entra ID calls these App roles, and are configured in the associated App Registration for your Enterprise App.
+Currently there can only be a single administrator, the one you setup in your `.env` file below. Later releases will include a full RBAC model. All other users accessing JIM will be standard users with no privileges.
 
 ### `.env` Entra ID Example:
 Replace `<...>` elements with your real values. Suggested values are for Entra ID.
@@ -97,6 +92,11 @@ macOS/Linux Docker Setup: With the new cloned configuration, name it for macOS a
 
 <img width="590" alt="jim-rider-docker-play" src="https://github.com/user-attachments/assets/f15ef378-d88b-4a51-9b11-4f01529d7f77"><br>
 macOS/Linux Docker Setup: Then change the active configuration and press the play button.
+
+## State of Development
+In JIM currently, you can setup connectors to LDAP-based systems (tested against Active Directory so far) and CSVs and perform imports. Synchronisation Rules can also be created, though synchronisation (from connected systems to the Metaverse) is currently under development, with Unit Tests being developed. Once that's done, export functionality will be next, to target an Minimum Viable Product (MVP) status.
+
+If you don't have any connected systems available, you can also use the Data Generation feature to fill JIM with thousands of users and groups. The UI for users and groups is basic, with a fully customisable UI planned.
 
 ## More Information
 Please go to https://tetron.io/jim for more information.
