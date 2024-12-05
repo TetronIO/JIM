@@ -46,17 +46,26 @@ JIM is in active development. There are many plans for new features. Check back 
 
 ## Getting Started
 To run JIM locally:
-1. Configure SSO with your IDP (see below).
+1. Configure SSO with your IdP (see below).
 1. Make sure Docker Desktop is installed and running.
 1. Clone this repo.
 1. Create a `.env` file in the repo root for your secrets (see below).
 1. Run the Docker Compose configuration in your favourite IDE, configured for your platform (see below).
 
 ### Setup SSO
-JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IDP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Note, JIM uses PKCE with this flow for maximum security. JIM has been tested against Microsoft Entra ID to date but should work with all OIDC-compliant Identity Providers (IdPs).
+JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. 
+Note: JIM uses PKCE with this flow for maximum security. Also, JIM has been tested against Microsoft Entra ID to date but should work with all OIDC-compliant Identity Providers (IdPs).
+
+We delegate authorsation to your IdP by using application entitlements, so you need to configure the JIM client in your IdP to add roles in the token that JIM consumes and uses to control what users can do.
+The two roles we publish at the moment are:
+
+- Users (default, does not need to be supplied by your IdP, all users accessing JIM get assigned this role).
+- Administrators (needs to be provided by your IdP for a user to have admin rights within JIM).
+
+> Note: Entra ID calls these App roles, and are configured in the associated App Registration for your Enterprise App.
 
 ### `.env` Entra ID Example:
-For federating JIM with Entra ID. Replace `<...>` elements with your real values.
+Replace `<...>` elements with your real values. Suggested values are for Entra ID.
 ```
 DB_NAME=jim
 DB_USERNAME=jim
@@ -65,8 +74,8 @@ DB_LOG_SENSITIVE_INFO=true
 SSO_AUTHORITY=<your IDP URL, i.e. https://login.microsoftonline.com/f9953c7e-b69b-4cb1-ad60-b11df84f8af2>
 SSO_CLIENT_ID=<your client id, i.e. 24d89e93-353e-45d6-9528-cc2dd2529dad>
 SSO_SECRET=<your client secret, i.e. abcd1234>
-SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=http://schemas.microsoft.com/identity/claims/objectidentifier
-SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=Object Identifier
+SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=<the unique identifier claim from your IdP, i.e. http://schemas.microsoft.com/identity/claims/objectidentifier for Entra ID>
+SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=<the JIM Metaverse attribute the token unique identifier claim type maps to, i.e. Object Identifier>
 SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your user object identifier, i.e. 1a2e0377-e36c-4388-b185-c489ae7daa6a>
 ```
 
