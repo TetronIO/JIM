@@ -24,6 +24,16 @@ JIM is designed to support the following common Identity, Governance & Administr
 - Facilitate domain migrations, i.e. divestitures
 - Identity fusing - bring together user/entitlement data from various business apps and systems
 
+## Benefits
+
+Why choose JIM?
+
+- It's modern. No legacy hosting requirements or janky old UIs
+- Supports SSO to comply with modern security requirements
+- Open Source. You can see exactly what it does and help improve it
+- Flexible. We're developing it now, so you can suggest your must-have features
+- Built by people with decades of experience of integrating IDAM systems into the real world
+
 ## Deployment
 JIM runs in a Docker stack using containers and can be deployed to on-premises infrastructure (no Internet connection required for air-gapped networks), or Cloud container services, such as Microsoft Azure or AWS.
 
