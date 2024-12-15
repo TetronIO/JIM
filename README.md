@@ -110,5 +110,8 @@ In JIM currently, you can setup connectors to LDAP-based systems (tested against
 
 If you don't have any connected systems available, you can also use the Example Data feature to fill JIM with thousands of users and groups. The UI for users and groups is basic, with a fully customisable UI planned.
 
+## Licensing
+JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [Full details can be found here](https://tetron.io/jim/#licensing).
+
 ## More Information
 Please go to https://tetron.io/jim for more information.
