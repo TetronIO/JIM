@@ -244,6 +244,55 @@ public class FullSyncTests
         Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects[0].Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first MVO to have a reference to the first CSO.");
     }
     
+    /// <summary>
+    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a sync rule using a guid data type attribute. 
+    /// </summary>
+    [Test]
+    public async Task CsoJoinToMvoViaGuidAttributeTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        
+        // add test-specific matching rules to it
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.HrId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER").
+                Attributes.Single(q=>q.Id == (int)MockSourceSystemAttributeNames.HR_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+     
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+        
+        // test that a CSO is successfully match to an MVO using the sync rule.
+        // we expect the cso with HR_ID A98D00CB-FB7F-48BE-A093-DF79E193836E to have joined to the mvo with HrId A98D00CB-FB7F-48BE-A093-DF79E193836E.
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO by HR ID.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(MetaverseObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected first CSO to have a join type of Joined.");
+        Assert.That(ConnectedSystemObjectsData[0].DateJoined, Is.Not.Null, "Expected CSO to have joined to a DateJoined value.");
+        
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Null, "Expected MVO to have a non-null CSO list.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Empty, "Expected MVO to have at least one CSO reference.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects[0].Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first MVO to have a reference to the first CSO.");
+    }
+    
+    // todo: CSO can join to an MVO using a guid
     // todo: CSO projects to MV
     // todo: MVO has pending attribute value adds for all data types as expected
     // todo: MVO has pending attribute value removes for all data types as expected

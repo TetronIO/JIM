@@ -183,6 +183,17 @@ public static class TestUtilities
             Id = Guid.NewGuid(),
             Attribute = new ConnectedSystemObjectTypeAttribute()
             {
+                Id = (int)MockSourceSystemAttributeNames.HR_ID,
+                Name = MockSourceSystemAttributeNames.HR_ID.ToString()
+            },
+            AttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            GuidValue = Guid.Parse("A98D00CB-FB7F-48BE-A093-DF79E193836E")
+        });
+        cso1.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
                 Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
                 Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()
             },
@@ -296,6 +307,17 @@ public static class TestUtilities
             Type = csUserType,
             TypeId = csUserType.Id
         };
+        cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute()
+            {
+                Id = (int)MockSourceSystemAttributeNames.HR_ID,
+                Name = MockSourceSystemAttributeNames.HR_ID.ToString()
+            },
+            AttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            GuidValue = Guid.Parse("E1A7D0DF-6C87-4EE7-ADDD-9BA084093A4B")
+        });
         cso2.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
@@ -752,6 +774,14 @@ public static class TestUtilities
                 {
                     new()
                     {
+                        Id = (int)MockMetaverseAttributeName.HrId,
+                        Name = "HR ID",
+                        Type = AttributeDataType.Guid,
+                        AttributePlurality = AttributePlurality.SingleValued,
+                        BuiltIn = false
+                    },
+                    new()
+                    {
                         Id = (int)MockMetaverseAttributeName.EmployeeId,
                         Name = Constants.BuiltInAttributes.EmployeeId,
                         Type = AttributeDataType.Text,
@@ -870,6 +900,14 @@ public static class TestUtilities
             Id = Guid.NewGuid(),
             Type = mvUserType
         };
+        
+        mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockMetaverseAttributeName.HrId,
+            Attribute = mvUserType.Attributes.Single(a=>a.Id == (int)MockMetaverseAttributeName.HrId),
+            GuidValue = Guid.Parse("A98D00CB-FB7F-48BE-A093-DF79E193836E")
+        });
         
         mvo1.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
