@@ -292,7 +292,6 @@ public class FullSyncTests
         Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects[0].Id, Is.EqualTo(ConnectedSystemObjectsData[0].Id), "Expected first MVO to have a reference to the first CSO.");
     }
     
-    // todo: CSO can join to an MVO using a guid
     // todo: CSO projects to MV
     // todo: MVO has pending attribute value adds for all data types as expected
     // todo: MVO has pending attribute value removes for all data types as expected
