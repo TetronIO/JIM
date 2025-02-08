@@ -1,5 +1,4 @@
 using JIM.Application;
-using JIM.Data;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using Microsoft.AspNetCore.Authentication;
@@ -39,7 +38,7 @@ try
     await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
-    builder.Services.AddTransient<JimApplication>(x => new JimApplication(new PostgresDataRepository(new JimDbContext())));
+    builder.Services.AddTransient<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
 
     // setup OpenID Connect (OIDC) authentication
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
@@ -55,11 +54,12 @@ try
         .AddOpenIdConnect(options =>
         {
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-            options.UseTokenLifetime = true; // use the IDPs token lifetime as our session lifetime
+            options.UseTokenLifetime = true; // respect the IdP token lifetime and use it as our session lifetime
             options.Authority = authority;
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
+            options.UsePkce = true;
             options.Scope.Add("profile");
 
             // intercept the user login when a token is received and validate we can map them to a JIM user
@@ -81,12 +81,11 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddServerSideBlazor();
 
-    // now setup logging with the web framework
-    builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
-
-    // MudBlazor
-    builder.Services.AddMudServices(config =>
-    {
+    // setup logging properly now (it's been bootstrapped initially)
+    builder.Services.AddSerilog(configuration => InitialiseLogging(configuration, false));
+    
+    // setup MudBlazor
+    builder.Services.AddMudServices(config => {
         config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomCenter;
     });
 
@@ -130,10 +129,10 @@ finally
 static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assignLogLogger)
 {
     var loggingMinimumLevel = Environment.GetEnvironmentVariable("LOGGING_LEVEL");
-    var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
-
     if (loggingMinimumLevel == null)
         throw new ApplicationException("LOGGING_LEVEL environment variable not found. Cannot continue");
+    
+    var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
     if (loggingPath == null)
         throw new ApplicationException("LOGGING_PATH environment variable not found. Cannot continue");
 
@@ -227,7 +226,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     
     Log.Verbose("AuthoriseAndUpdateUserAsync: Called.");
 
-    if (context.Principal == null || context.Principal.Identity == null)
+    if (context.Principal?.Identity == null)
     {
         Log.Error($"AuthoriseAndUpdateUserAsync: User doesn't have a principal or identity");
         return;
@@ -260,30 +259,29 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     var user = await jim.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue);
     if (user != null)
     {
-        // we mapped a token user to a Metaverse user, now we need to create a new identity that represents an internal view
-        // of the user, with their roles claims. We have to create a new identity as we cannot modify the default one.
-        // This will do for MVP, when we need more a more developed RBAC system later, we might need to extend ClaimsIdentity to accomodate more complex roles.
+        // we mapped a token user to a Metaverse user, now we need to create a new ASP.NET identity that represents an internal view
+        // of the user, with their roles claims. We have to create a new identity as we cannot modify the default ASP.NET one.
+        // This will do to start with. When we need a more developed RBAC system later, we might need to extend ClaimsIdentity to accomodate more complex roles.
 
-        var roles = await jim.Security.GetMetaverseObjectRolesAsync(user);
+        // retrieve the existing JIM role assignments for this user.
+        var userRoles = await jim.Security.GetMetaverseObjectRolesAsync(user);
 
-        // prepare a list of JIM-specific claims for our new identity
-        var claims = new List<Claim>();
-        foreach (var role in roles)
-            claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name));
+        // convert their JIM role assignments to ASP.NET claims.
+        var userRoleClaims = userRoles.Select(role => new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name)).ToList();
 
-        // add a virtual-role claim for user
-        // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much
-        claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
+        // add a virtual-role claim for user.
+        // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much.
+        userRoleClaims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
 
         // add their metaverse object id claim to the new identity as well.
         // we'll use this to attribute user actions to the claims identity.
-        claims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
+        userRoleClaims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
 
-        // the new JIM-specific identity is read, now add it to the .NET identity so it can be easily retrieved later
-        var jimIdentity = new ClaimsIdentity(claims) { Label = "JIM.Web" };
+        // the new JIM-specific identity is ready, now add it to the ASP.NET identity so it can be easily retrieved later.
+        var jimIdentity = new ClaimsIdentity(userRoleClaims) { Label = "JIM.Web" };
         context.Principal.AddIdentity(jimIdentity);
 
-        // now also see if we can assign any initial user attribute values from the claims principal
+        // now see if we can supplement the JIM identity with any supplied from the IdP to more fully populate the user.
         await UpdateUserAttributesFromClaimsAsync(jim, user, context.Principal);
     }
     
@@ -316,7 +314,7 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
         }
     }
 
-    // do it again. some IDPs use "name" instad of the xmlsoap version below for conveying display name
+    // do it again. some IDPs use "name" instead of the xmlsoap version below for conveying display name
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.DisplayName))
     {
         var nameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");

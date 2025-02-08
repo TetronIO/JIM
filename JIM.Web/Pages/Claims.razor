@@ -6,7 +6,7 @@
 
 @if (User != null)
 {
-    <MudTable Items="@User.Claims" Hover="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
+    <MudTable Items="@User.Claims.OrderBy(q=> q.Type)" Hover="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
         <HeaderContent>
             <MudTh>Claim Type</MudTh>
             <MudTh>Claim Value</MudTh>
