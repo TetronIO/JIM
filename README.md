@@ -67,7 +67,7 @@ To run JIM locally:
 ### Setup SSO
 JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
 
-> Note: JIM uses PKCE with this flow for improved security. Also, JIM has been tested with Microsoft Entra ID so far, but should work with all OIDC-compliant Identity Providers (IdPs).
+> Note: JIM uses PKCE for improved security. Also, JIM has been tested with Microsoft Entra ID to date, but should work with all OIDC-compliant Identity Providers (IdPs).
 
 Currently there can only be a single administrator, the one you setup in your `.env` file below. Later releases will include a full RBAC model. All other users accessing JIM will be standard users with no privileges.
 
