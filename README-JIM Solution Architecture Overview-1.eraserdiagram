@@ -1,0 +1,35 @@
+cloud-architecture-diagram
+
+// Solution architecture overview for the JIM solution
+title JIM Solution Architecture Overview
+
+Clients [icon: users] {
+  Web Browser [icon: monitor]
+  API Client [icon: code]
+}
+
+SSO Provider [icon: lock]
+
+JIM Environment [icon: docker] {
+  JIM Web [icon: layout, label: "JIM Web"]
+  JIM API [icon: layout, label: "JIM API"]
+  JIM Worker [icon: cog, label: "Worker"]
+  JIM Scheduler [icon: calendar, label: "Scheduler"]
+  Adminer [icon: layout, label: "Adminer DB UI"]
+  PostgresDB [icon: postgresql, label: "Database"]
+}
+
+// Connections
+Web Browser > JIM Web: HTTPS
+API Client > JIM API: HTTPS
+
+Web Browser <> SSO Provider: authenticate
+JIM Web > SSO Provider: validate token
+JIM API > SSO Provider: validate token
+
+JIM Web <> PostgresDB
+JIM API <> PostgresDB
+JIM Worker --> PostgresDB: poll tasks
+JIM Scheduler --> PostgresDB: read schedules
+Adminer <> PostgresDB
+
