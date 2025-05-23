@@ -31,7 +31,7 @@ Why choose JIM?
 - Flexible. We're developing it now, so you can suggest your must-have features
 - Built by people with decades of experience of integrating IDAM systems into the real world
 ## Architecture
-![Architectural Overview](/.eraser/hu66H2plzGk7p5V72bvl___44vA8jicvbaSo4TRRGjoo2oaf1H2___---figure---8w8aF08rM9X-3ii_mZoDd---figure---b9D9qWj62TYh-ntCC_MGZw.png "Architectural Overview")
+![Architectural Overview](/.eraser/hu66H2plzGk7p5V72bvl___44vA8jicvbaSo4TRRGjoo2oaf1H2___---figure---_2tKMB_71uSk9GyWNIWDb---figure---b9D9qWj62TYh-ntCC_MGZw.png "Architectural Overview")
 
 JIM is a container-based distributed application. It is comprised of:
 
