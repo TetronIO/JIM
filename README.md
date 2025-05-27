@@ -31,15 +31,15 @@ Why choose JIM?
 - Flexible. We're developing it now, so you can suggest your must-have features
 - Built by people with decades of experience of integrating IDAM systems into the real world
 ## Architecture
-![Architectural Overview](/.eraser/hu66H2plzGk7p5V72bvl___44vA8jicvbaSo4TRRGjoo2oaf1H2___---figure---EplovGTcQTv2SfzeO7YUc---figure---b9D9qWj62TYh-ntCC_MGZw.png "Architectural Overview")
+![Architectural Overview](/.eraser/hu66H2plzGk7p5V72bvl___44vA8jicvbaSo4TRRGjoo2oaf1H2___---figure---AsEcQdWWC9Ez-6AlCS2oF---figure---b9D9qWj62TYh-ntCC_MGZw.png "Architectural Overview")
 
 JIM is a container-based distributed application. It is comprised of:
 
-- JIM.Web - A website, built using ﻿[﻿ASP.NET](https://asp.net/) Blazor Server.
-- JIM.API - ﻿﻿A web API, built using ﻿[﻿ASP.NET](https://asp.net/) Web API
-- JIM.Scheduler - A console app, built using .NET
-- A queue worker - A console app, built using .NET
-- A database - PostgresSQL
+- **JIM.Web** - A website, built using ﻿[﻿ASP.NET](https://asp.net/) Blazor Server.
+- **JIM.API **- ﻿﻿A web API, built using ﻿[﻿ASP.NET](https://asp.net/) Web API
+- **JIM.Scheduler** - A console app, built using .NET
+- **JIM.Worker **- A console app, built using .NET
+- A database - PostgreSQL
 - A database admin website - Adminer
 Dependencies:
 
