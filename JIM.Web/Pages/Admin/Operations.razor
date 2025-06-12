@@ -151,7 +151,7 @@
                 if (stateHasChanged)
                     await InvokeAsync(StateHasChanged);
 
-                Thread.Sleep(TimeSpan.FromSeconds(2));
+                await Task.Delay(TimeSpan.FromSeconds(2), token);
                 if (token.IsCancellationRequested)
                     break;
             }

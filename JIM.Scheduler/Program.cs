@@ -14,6 +14,7 @@
 // **************************************************************************************
 
 using Serilog;
+using System.Threading.Tasks;
 InitialiseLogging();
 Log.Information("Starting JIM.Scheduler");
 
@@ -22,7 +23,7 @@ try
     while (true)
     {
         Log.Information("JIM.Scheduler - Doing some work!");
-        Thread.Sleep(4000);
+        await Task.Delay(4000);
     }
 }
 catch (Exception ex)
