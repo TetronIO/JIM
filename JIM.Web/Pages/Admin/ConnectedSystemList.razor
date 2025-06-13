@@ -3,6 +3,7 @@
 @using JIM.Application
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities;
+@using System;
 @inject JimApplication Jim
 
 <PageTitle>Connected Systems</PageTitle>
@@ -82,7 +83,8 @@
         if (bigNumber == 0 || smallNumber == 0)
             return string.Empty;
 
-        var percentage = 100 / bigNumber * smallNumber;
+        // avoid integer division truncation by using floating point arithmetic
+        var percentage = (int)Math.Round((double)smallNumber / bigNumber * 100);
         return $"({percentage}%)";
     }
 
