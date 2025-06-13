@@ -9,6 +9,7 @@ using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
 using System.Security.Claims;
+using System.Threading.Tasks;
 
 // Required environment variables:
 // -------------------------------
@@ -210,7 +211,7 @@ static async Task InitialiseJimApplicationAsync()
         }
 
         Log.Information("JIM.Application is not ready yet. Sleeping...");
-        Thread.Sleep(1000);
+        await Task.Delay(1000);
     }
 }
 
