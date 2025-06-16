@@ -100,6 +100,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         await reader.CsvReader.ReadAsync();
         reader.CsvReader.ReadHeader();
         var columnNames = reader.CsvReader.HeaderRecord;
+        if (columnNames == null || columnNames.Length == 0)
+            throw new InvalidOperationException("CSV file is missing column headers.");
 
         // start building the schema by inspecting the file!
         var schema = new ConnectorSchema();
