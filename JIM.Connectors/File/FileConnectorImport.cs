@@ -98,7 +98,9 @@ internal class FileConnectorImport
 
                 if (attribute.Type == AttributeDataType.Text)
                 {
-                    importObjectAttribute.StringValues.Add(_reader.CsvReader.GetField(attribute.Name));
+                    var stringValue = _reader.CsvReader.GetField(attribute.Name);
+                    if (!string.IsNullOrEmpty(stringValue))
+                        importObjectAttribute.StringValues.Add(stringValue);
                 }
                 else if (attribute.Type == AttributeDataType.Number)
                 {
@@ -118,7 +120,9 @@ internal class FileConnectorImport
                 }
                 else if (attribute.Type == AttributeDataType.Reference)
                 {
-                    importObjectAttribute.ReferenceValues.Add(_reader.CsvReader.GetField(attribute.Name));
+                    var referenceValue = _reader.CsvReader.GetField(attribute.Name);
+                    if (!string.IsNullOrEmpty(referenceValue))
+                        importObjectAttribute.ReferenceValues.Add(referenceValue);
                 }
                 else
                 {
