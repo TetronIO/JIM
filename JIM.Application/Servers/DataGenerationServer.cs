@@ -458,12 +458,12 @@ public class DataGenerationServer
         //if (dataGenerationTemplateAttribute.BoolTrueDistribution.HasValue)
         //{
         // a certain number of true values are required over the total number of objects created
-        // todo: this, because, it's tired and I can't work this out atm
+        // TODO: implement true value distribution logic
         //}
         //else
         //{
         // bool should be random
-        value = Convert.ToBoolean(random.Next(0, 1));
+        value = Convert.ToBoolean(random.Next(0, 2));
         //}
 
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -494,7 +494,7 @@ public class DataGenerationServer
         if (templateAttribute.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued)
         {
             // pick a random metaverse object and assign
-            var referencedMetaverseObjectIndex = random.Next(0, metaverseObjectsOfTypes.Count - 1);
+            var referencedMetaverseObjectIndex = random.Next(0, metaverseObjectsOfTypes.Count);
             var referencedMetaverseObject = metaverseObjectsOfTypes[referencedMetaverseObjectIndex];
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
@@ -512,7 +512,7 @@ public class DataGenerationServer
 
             for (var i = 0; i < attributeValuesToCreate; i++)
             {
-                var referencedObject = metaverseObjectsOfTypes[random.Next(0, metaverseObjectsOfTypes.Count - 1)];
+                var referencedObject = metaverseObjectsOfTypes[random.Next(0, metaverseObjectsOfTypes.Count)];
                 metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
                 {
                     Attribute = templateAttribute.MetaverseAttribute,
@@ -551,13 +551,13 @@ public class DataGenerationServer
         var users = metaverseObjectsToCreate.Where(mo => mo.Type == objectType.MetaverseObjectType).ToList();
         var managerTreePrepStopwatch = Stopwatch.StartNew();
         var managerAttribute = templateManagerAttribute.MetaverseAttribute;
-        var managersNeeded = users.Count / 100 * templateManagerAttribute.ManagerDepthPercentage.Value;
+        var managersNeeded = users.Count * templateManagerAttribute.ManagerDepthPercentage.Value / 100;
 
         // randomly select managers and remove them from the users list so we have a list of managers and a list of potential direct reports
         var managers = new List<MetaverseObject>();
         for (var i = 0; i < managersNeeded; i++)
         {
-            var userIndex = random.Next(0, users.Count - 1);
+            var userIndex = random.Next(0, users.Count);
             managers.Add(users[userIndex]);
             users.RemoveAt(userIndex);
         }
@@ -576,7 +576,7 @@ public class DataGenerationServer
 
         // do the same for non-manager subordinates, i.e. assign everyone else a manager
         var subordinatesAssigned = 0;
-        var subordinatesToAssign = users.Count / (managerTreeNodeCount - 1);
+        var subordinatesToAssign = managerTreeNodeCount > 1 ? users.Count / (managerTreeNodeCount - 1) : users.Count;
         RecursivelyAssignSubordinates(managerTree, subordinatesToAssign, users, isFirstNode: true, templateManagerAttribute.MetaverseAttribute, ref subordinatesAssigned);
         Log.Verbose($"ExecuteTemplateAsync: Assigned {subordinatesAssigned:N0} subordinates a manager");
 
@@ -602,7 +602,8 @@ public class DataGenerationServer
                 // determine how many we need to eliminate
                 // randomly clear that many from the metaverse objects
 
-                var needToRemove = metaverseObjectsOfType.Count / 100 * dataGenAttributeToReduce.PopulatedValuesPercentage;
+                var percentage = dataGenAttributeToReduce.PopulatedValuesPercentage ?? 100;
+                var needToRemove = metaverseObjectsOfType.Count * (100 - percentage) / 100;
                 for (var i = 0; i < needToRemove; i++)
                 {
                     var indexToRemove = random.Next(0, metaverseObjectsOfType.Count);
@@ -727,7 +728,7 @@ public class DataGenerationServer
 
                 // get the example data set and then choose a random value from it before replacing the variable
                 var exampleDataSet = exampleDataSetInstances[exampleDataSetIndex].ExampleDataSet;
-                var randomValueIndex = random.Next(0, exampleDataSet.Values.Count - 1);
+                var randomValueIndex = random.Next(0, exampleDataSet.Values.Count);
                 var randomValue = exampleDataSet.Values[randomValueIndex].StringValue;
 
                 if (string.IsNullOrEmpty(randomValue))
@@ -875,7 +876,7 @@ public class DataGenerationServer
             var subordinates = new MetaverseObject[availableSubordinates];
             for (var i = 0; i < availableSubordinates; i++)
                 subordinates[i] = users[i];
-            users.RemoveRange(0, subordinates.Length - 1);
+            users.RemoveRange(0, subordinates.Length);
 
             foreach (var user in subordinates)
             {
