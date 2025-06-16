@@ -490,7 +490,13 @@ public class DataGenerationServer
         }
 
         // is this going to be slow?
-        var metaverseObjectsOfTypes = metaverseObjects.Where(q => q != null && templateAttribute.ReferenceMetaverseObjectTypes != null && templateAttribute.ReferenceMetaverseObjectTypes.Contains(q.Type)).ToList();
+        var metaverseObjectsOfTypes = metaverseObjects.Where(q => q != null &&
+                                                                  templateAttribute.ReferenceMetaverseObjectTypes != null &&
+                                                                  templateAttribute.ReferenceMetaverseObjectTypes.Contains(q.Type)).ToList();
+
+        if (metaverseObjectsOfTypes.Count == 0)
+            return;
+
         if (templateAttribute.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued)
         {
             // pick a random metaverse object and assign
