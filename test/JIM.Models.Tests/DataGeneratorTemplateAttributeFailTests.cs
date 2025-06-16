@@ -128,7 +128,7 @@ public class DataGeneratorTemplateAttributeFailTests
             PopulatedValuesPercentage = 100,
             BoolShouldBeRandom = true
         };
-        Assert.Catch<DataGenerationTemplateAttributeException>(subject3.Validate);
+        Assert.Catch<DataGenerationTemplateAttributeException>(subject4.Validate);
     }
 
     [Test]
