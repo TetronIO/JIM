@@ -175,6 +175,9 @@ public class DataGenerationTemplateAttribute
         if (attributeDataType != AttributeDataType.Reference && usingMvaRefMinMaxAttributes)
             throw new DataGenerationTemplateAttributeException("MvaRefMinAssignments or MvaRefMaxAssignments can only be used with reference attribute data types");
 
+        if (attributeDataType != AttributeDataType.Text && usingWeightedStringValues)
+            throw new DataGenerationTemplateAttributeException("WeightedStringValues can only be used with text attribute data types");
+
         if (attributeDataType == AttributeDataType.Text && !usingPattern && !usingExampleData && !usingWeightedStringValues && !IsUsingNumbers())
             throw new DataGenerationTemplateAttributeException("String but not using pattern, example data, weighted string values or numbers");
 
@@ -192,14 +195,11 @@ public class DataGenerationTemplateAttribute
 
         if (IsUsingNumbers())
         {
-            if (MaxNumber <= MinNumber)
-                throw new DataGenerationTemplateAttributeException("Number and max number is less than or equal to min number");
-
-            if (MinNumber >= MaxNumber)
+            if (MinNumber.HasValue && MaxNumber.HasValue && MinNumber.Value >= MaxNumber.Value)
                 throw new DataGenerationTemplateAttributeException("Number and min number is equal or greater than max number");
 
             if (SequentialNumbers == true && RandomNumbers == true)
-                throw new DataGenerationTemplateAttributeException("Number and sequential nubmers and random numbers");
+                throw new DataGenerationTemplateAttributeException("Number and sequential numbers and random numbers");
         }
 
         if (attributeDataType == AttributeDataType.DateTime)
