@@ -13,7 +13,7 @@ public static class Extensions
         var enumerable = sequence as T[] ?? sequence.ToArray();
         var totalWeight = enumerable.Sum(weightSelector);
         // The weight we are after...
-        var itemWeightIndex = (float)new Random().NextDouble() * totalWeight;
+        var itemWeightIndex = (float)Random.Shared.NextDouble() * totalWeight;
         float currentWeightIndex = 0;
 
         foreach (var item in from weightedItem in enumerable select new { Value = weightedItem, Weight = weightSelector(weightedItem) })
