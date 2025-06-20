@@ -3,7 +3,7 @@
 public static class Extensions
 {
     /// <summary>
-    /// Picks a random item from a collection of values, where the likelihood on which item is selected depends 
+    /// Picks a random item from a collection of values, where the likelihood of which item is selected depends 
     /// on the weight of the item in the collection.
     /// 
     /// Usage: variable.RandomElementByWeight(x => x.Weight);
@@ -20,7 +20,7 @@ public static class Extensions
         {
             currentWeightIndex += item.Weight;
 
-            // If we've hit or passed the weight we are after for this item then it's the one we want....
+            // If we've hit or passed the weight we are after for this item, then it's the one we want...
             if (currentWeightIndex > itemWeightIndex)
                 return item.Value;
         }

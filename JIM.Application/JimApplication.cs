@@ -67,7 +67,7 @@ public class JimApplication
 
         // SSO AUTHENTICATION PROPERTIES
         // The variables that enable authentication via SSO with our Identity Provider are mastered in the docker-compose configuration file.
-        // we want to mirror these into the database via the ServiceSettings object to make life easy for administrators, so they don't have to access the hosting environment
+        // We want to mirror these into the database via the ServiceSettings object to make life easy for administrators, so they don't have to access the hosting environment
         // to check the values and can do so through JIM Web.
         // We will need to update the database if the configuration file values change.
         if (string.IsNullOrEmpty(serviceSettings.SSOAuthority) || serviceSettings.SSOAuthority != ssoAuthority)
@@ -95,8 +95,8 @@ public class JimApplication
 
         // INBOUND CLAIM MAPPING:
         // We want to make it easy for IDP and JIM admin teams to enable SSO. We don't want them to have to add JIM-specific claims to the OIDC ID token if possible.
-        // we want to allow an IDP admin team to setup the client for JIM using their standard integration approach, where possible.
-        // this will provide the slickest integration experience.
+        // We want to allow an IDP admin team to set up the client for JIM using their standard integration approach, where possible.
+        // This will provide the slickest integration experience.
         if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType) || serviceSettings.SSOUniqueIdentifierClaimType != uniqueIdentifierClaimType)
         {
             serviceSettings.SSOUniqueIdentifierClaimType = uniqueIdentifierClaimType;
@@ -112,7 +112,7 @@ public class JimApplication
         }
 
         // check for a matching user, if not create the initial admin user, and check admin role assignment
-        // get user by attribute = get metaverse object by attribute value
+        // get user by attribute = get a metaverse object by attribute value
         var objectType = await Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false) ?? 
                          throw new Exception($"{Constants.BuiltInObjectTypes.Users} object type could not be found. Something went wrong with db seeding.");
 
@@ -125,7 +125,7 @@ public class JimApplication
         }
         else
         {
-            // no matching user found, create them in stub form; just enough to sign-in
+            // no matching user found, create them in stub form; just enough to sign in
             user = new MetaverseObject { Type = objectType };
             user.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
