@@ -75,6 +75,20 @@ finally
     Log.CloseAndFlush();
 }
 
+/// <summary>
+/// Initialises the Serilog logging configuration based on environment variables.
+/// </summary>
+/// <param name="loggerConfiguration">The LoggerConfiguration instance to configure</param>
+/// <param name="assignLogLogger">If true, assigns the created logger to the static Log.Logger property</param>
+/// <exception cref="ApplicationException">Thrown when required environment variables LOGGING_LEVEL or LOGGING_PATH are not set</exception>
+/// <remarks>
+/// This method configures logging with the following features:
+/// - Sets minimum log level based on LOGGING_LEVEL environment variable
+/// - Configures file logging to the path specified in LOGGING_PATH environment variable
+/// - Sets up console logging
+/// - Overrides Microsoft framework logging levels to reduce noise
+/// - Uses daily rolling file interval for log files
+/// </remarks>
 static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assignLogLogger)
 {
     var loggingMinimumLevel = Environment.GetEnvironmentVariable("LOGGING_LEVEL");
