@@ -21,6 +21,11 @@ public class MetaverseObject
 
     public MetaverseObjectStatus Status { get; set; } = MetaverseObjectStatus.Normal;
 
+    /// <summary>
+    /// Concurrency token using PostgreSQL's xmin system column.
+    /// </summary>
+    public uint xmin { get; set; }
+
     public List<MetaverseObjectChange> Changes { get; set; } = new();
 
     /// <summary>
