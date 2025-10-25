@@ -437,3 +437,6 @@ Vagrantfile
 
 *.exe
 env
+
+# Claude Code configuration
+.claude/
