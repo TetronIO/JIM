@@ -13,14 +13,15 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20241118091254_CSOCascadeDeletes")]
-    partial class CSOCascadeDeletes
+    [Migration("20251025175737_Initial")]
+    partial class Initial
     {
+        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "6.0.29")
+                .HasAnnotation("ProductVersion", "9.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -215,7 +216,8 @@ namespace JIM.PostgresData.Migrations
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid");
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id");
 
@@ -1803,7 +1805,7 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<List<string>>("DropDownValues")
+                    b.PrimitiveCollection<List<string>>("DropDownValues")
                         .HasColumnType("text[]");
 
                     b.Property<string>("Name")
@@ -1850,7 +1852,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Discriminator")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(55)
+                        .HasColumnType("character varying(55)");
 
                     b.Property<int>("ExecutionMode")
                         .HasColumnType("integer");
@@ -1875,7 +1878,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.ToTable("WorkerTasks");
 
-                    b.HasDiscriminator<string>("Discriminator").HasValue("WorkerTask");
+                    b.HasDiscriminator().HasValue("WorkerTask");
+
+                    b.UseTphMappingStrategy();
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>
@@ -1982,8 +1987,13 @@ namespace JIM.PostgresData.Migrations
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
 
                     b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer")
-                        .HasColumnName("ClearConnectedSystemObjectsWorkerTask_ConnectedSystemId");
+                        .HasColumnType("integer");
+
+                    b.ToTable("WorkerTasks", t =>
+                        {
+                            t.Property("ConnectedSystemId")
+                                .HasColumnName("ClearConnectedSystemObjectsWorkerTask_ConnectedSystemId");
+                        });
 
                     b.HasDiscriminator().HasValue("ClearConnectedSystemObjectsWorkerTask");
                 });
