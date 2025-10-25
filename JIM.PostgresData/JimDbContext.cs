@@ -163,6 +163,10 @@ public class JimDbContext : DbContext
         // for our most heavily updated objects.
         // https://www.npgsql.org/efcore/modeling/concurrency.html?tabs=data-annotations
         // https://learn.microsoft.com/en-us/ef/core/saving/concurrency?tabs=data-annotations
-        modelBuilder.Entity<MetaverseObject>().UseXminAsConcurrencyToken();
+        // Note: In Npgsql.EntityFrameworkCore.PostgreSQL 7.0+, UseXminAsConcurrencyToken() is obsolete.
+        // Use the standard EF Core approach with a uint xmin property and IsRowVersion() instead.
+        modelBuilder.Entity<MetaverseObject>()
+            .Property(e => e.xmin)
+            .IsRowVersion();
     }
 }
