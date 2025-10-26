@@ -39,7 +39,7 @@ try
     await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
-    builder.Services.AddTransient<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
+    builder.Services.AddScoped<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
 
     // setup OpenID Connect (OIDC) authentication
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");

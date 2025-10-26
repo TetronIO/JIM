@@ -88,7 +88,7 @@
     {
         Typography = new Typography()
         {
-            Default = new Default()
+            Default = new DefaultTypography()
             {
                 FontFamily =
                 [
@@ -98,7 +98,7 @@
                     "Helvetica Neue",
                     "Arial"
                 ],
-                FontWeight = 400,
+                FontWeight = "400",
                 FontSize = "16px"
             }
         },
@@ -145,7 +145,7 @@
     {
         if (firstRender && _mudThemeProvider != null)
         {
-            IsDarkMode = await _mudThemeProvider.GetSystemPreference();
+            IsDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
             StateHasChanged();
         }
     }
