@@ -1,4 +1,4 @@
-﻿using JIM.Application;
+using JIM.Application;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -39,24 +39,24 @@ public class ImportDeleteObjectTests
         
         // set up the connected systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
-        MockDbSetConnectedSystems = ConnectedSystemsData.AsQueryable().BuildMockDbSet();
+        MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
         
         // setup up the connected system run profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
-        MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.AsQueryable().BuildMockDbSet();
+        MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.BuildMockDbSet();
         
         // set up the connected system object types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
-        MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.AsQueryable().BuildMockDbSet();
+        MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
         
         // setup up the Connected System Partitions mock
         ConnectedSystemPartitionsData = TestUtilities.GetConnectedSystemPartitionData();
-        MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.AsQueryable().BuildMockDbSet();
+        MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.BuildMockDbSet();
         
         // set up the activity mock
         var fullImportRunProfile = ConnectedSystemRunProfilesData[0];
         ActivitiesData = TestUtilities.GetActivityData(fullImportRunProfile.RunType, fullImportRunProfile.Id);
-        MockDbSetActivities = ActivitiesData.AsQueryable().BuildMockDbSet();
+        MockDbSetActivities = ActivitiesData.BuildMockDbSet();
         
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
@@ -182,7 +182,7 @@ public class ImportDeleteObjectTests
         };
         connectedSystemObjectData.Add(cso2);
 
-        var mockDbSetConnectedSystemObject = connectedSystemObjectData.AsQueryable().BuildMockDbSet();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
         mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
             (IEnumerable<ConnectedSystemObject> entities) => {
                 var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
