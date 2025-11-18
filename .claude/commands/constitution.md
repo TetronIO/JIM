@@ -1,12 +1,12 @@
 # JIM Constitution
 
 > **Project**: Junctional Identity Manager (JIM)
-> **Purpose**: Enterprise-grade identity management system for synchronization, governance, and domain migrations
+> **Purpose**: Enterprise-grade identity management system for synchronisation, governance, and domain migrations
 > **License**: Source-available, commercial license required for production use
 
 ## Overview
 
-JIM is a .NET-based Identity Management (IDM) system implementing the metaverse pattern for centralized identity governance. It synchronizes identities across heterogeneous systems (Active Directory, LDAP, files, databases) with bi-directional attribute flows, provisioning rules, and compliance tracking.
+JIM is a .NET-based Identity Management (IDM) system implementing the metaverse pattern for centralised identity governance. It synchronises identities across heterogeneous systems (Active Directory, LDAP, files, databases, etc.) with bi-directional attribute flows, provisioning rules, and compliance tracking.
 
 ## Architecture Principles
 
@@ -22,7 +22,7 @@ JIM is a .NET-based Identity Management (IDM) system implementing the metaverse 
 ### 2. Metaverse Pattern
 The metaverse is the authoritative identity repository:
 - **MetaverseObject**: Central identity entity (users, groups, custom types)
-- **ConnectedSystem**: External systems synchronized with the metaverse
+- **ConnectedSystem**: External systems synchronised with the metaverse
 - **SyncRule**: Bidirectional mappings between connected systems and metaverse
 - **Staging Areas**: Import/export staging for transactional integrity
 
@@ -54,7 +54,7 @@ The metaverse is the authoritative identity repository:
 - **OpenID Connect (OIDC)**: SSO authentication (required)
 - **PKCE**: Enhanced auth flow security
 - **Cookie Authentication**: Session management
-- **Claims-based Authorization**: Role-based access control from metaverse
+- **Claims-based Authorisation**: Role-based access control from metaverse
 
 **Rule**: No local authentication. SSO/OIDC required for all deployments.
 
@@ -71,7 +71,7 @@ The metaverse is the authoritative identity repository:
 
 ## Development Guidelines
 
-### 1. Project Organization
+### 1. Project Organisation
 When adding functionality:
 - **Domain models**: Add to `JIM.Models/Models/`
 - **DTOs**: Add to appropriate `DTOs/` subdirectories
@@ -82,6 +82,7 @@ When adding functionality:
 - **Connectors**: Create new project or extend `JIM.Connectors/`
 
 ### 2. Coding Conventions
+Use the en-GB region for spellings and formats.
 
 **C# Standards**:
 ```csharp
@@ -124,7 +125,7 @@ try
 }
 catch (Exception ex)
 {
-    Log.Error(ex, "Synchronization failed for {SystemId}", systemId);
+    Log.Error(ex, "Synchronisation failed for {SystemId}", systemId);
     throw; // Re-throw unless handled
 }
 ```
@@ -218,15 +219,15 @@ public class MetaverseController : ControllerBase
 - **No local accounts**: Users authenticated via external identity provider
 - **Claims mapping**: Map OIDC claims to metaverse objects for role assignment
 
-### 2. Authorization
-- **Role-based**: Use claims-based authorization in controllers/pages
+### 2. Authorisation
+- **Role-based**: Use claims-based authorisation in controllers/pages
 - **Metaverse-driven**: Roles defined in metaverse, not hardcoded
-- **Attribute-based**: Support for custom authorization rules via Functions
+- **Attribute-based**: Support for custom authorisation rules via Functions
 
 ### 3. Input Validation
 - Validate all user input (web, API)
 - Use DTOs with data annotations
-- Sanitize for SQL injection (EF Core parameterizes queries)
+- Sanitise for SQL injection (EF Core parameterises queries)
 - Protect against XSS in Blazor components (framework handles by default)
 
 ### 4. Secrets Management
@@ -259,7 +260,7 @@ public void GetObjectAsync_WithInvalidId_ReturnsNull() { }
 ## Common Patterns
 
 ### 1. Server Pattern
-Business logic organized into domain-specific servers:
+Business logic organised into domain-specific servers:
 ```csharp
 public class MetaverseServer
 {
@@ -292,7 +293,7 @@ public class JimApplication
     {
         Metaverse = new MetaverseServer(repository);
         ConnectedSystems = new ConnectedSystemServer(repository);
-        // ... initialize others
+        // ... initialise others
     }
 }
 ```
@@ -340,7 +341,7 @@ Log all significant operations for audit:
 ```csharp
 var activity = new Activity
 {
-    Name = "Synchronization",
+    Name = "Synchronisation",
     Description = $"Full sync for {connectedSystem.Name}",
     StartTime = DateTime.UtcNow,
     Status = ActivityStatus.InProgress
@@ -443,7 +444,7 @@ docker compose exec jim.web dotnet ef database update
 1. Add method to appropriate controller in `JIM.Api/Controllers/`
 2. Use DTOs for request/response
 3. Add XML comments for Swagger
-4. Add authorization attributes if needed
+4. Add authorisation attributes if needed
 5. Test via Swagger UI
 
 ### Modifying Database Schema
