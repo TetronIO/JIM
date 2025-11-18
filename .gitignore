@@ -440,3 +440,5 @@ env
 
 # Claude Code configuration
 .claude/
+# But allow spec-kit commands to be committed
+!.claude/commands/
