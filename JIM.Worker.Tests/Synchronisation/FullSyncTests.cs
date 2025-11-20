@@ -601,7 +601,7 @@ public class FullSyncTests
     /// This test documents the current limitation and should be updated when MVO deletion logic is implemented.
     /// </summary>
     [Test]
-    public void CsoObsoleteDeletionForJoinedCsoThrowsNotImplementedTestAsync()
+    public async Task CsoObsoleteDeletionForJoinedCsoThrowsNotImplementedTestAsync()
     {
         // get a stub import sync rule with object matching
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
@@ -639,7 +639,7 @@ public class FullSyncTests
             var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
             var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
-        }, "Expected NotImplementedException when attempting to delete a joined CSO.");
+        });
     }
 
     /// <summary>
