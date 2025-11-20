@@ -632,7 +632,7 @@ public class FullSyncTests
         ConnectedSystemObjectsData[0].Status = ConnectedSystemObjectStatus.Obsolete;
 
         // verify that attempting to process this throws NotImplementedException
-        Assert.ThrowsAsync<NotImplementedException>(async () =>
+        await Assert.ThrowsAsync<NotImplementedException>(async () =>
         {
             var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
             var activity = ActivitiesData.First();
