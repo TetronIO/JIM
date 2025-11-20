@@ -6,8 +6,7 @@ name: .NET Build & Test
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  pull_request:  # This will run on ALL pull requests regardless of source/target branch
 
 jobs:
   build:
