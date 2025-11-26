@@ -1,4 +1,7 @@
 # Junctional Identity Manager (JIM)
+
+[![.NET Build & Test](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml)
+
 JIM is a modern Identity Management system designed for organisations with non-trivial Identity Management and synchronisation requirements.
 It's designed to be self-hosted, deployable on container platforms and is suitable for connected, or air-gapped networks. Features include:
 
@@ -9,7 +12,7 @@ It's designed to be self-hosted, deployable on container platforms and is suitab
 - Extensible with custom connectors (fully unit-testable)
 - A modern Web Portal and API
 - Single Sign-On (SSO) using OpenID Connect
-  
+
 ![A screenshot of JIM running](https://tetron.io/images/jim/jim-8.png "JIM Screenshot")
 
 ## Scenarios
