@@ -638,17 +638,19 @@ public class FullSyncTests
         // mark the joined CSO as obsolete (simulating it was not present in the import)
         ConnectedSystemObjectsData[0].Status = ConnectedSystemObjectStatus.Obsolete;
 
-        // verify that attempting to process this throws NotImplementedException
-        var ex = Assert.ThrowsAsync<NotImplementedException>(async () =>
-        {
-            var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
-            Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
-            var activity = ActivitiesData.First();
-            var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
-            await syncFullSyncTaskProcessor.PerformFullSyncAsync();
-        });
-        Assert.That(ex, Is.Not.Null);
+        // verify that attempting to process this logs NotImplementedException error
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify error was logged in activity
+        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
+        var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(q => q.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError);
+        Assert.That(errorItem, Is.Not.Null, "Expected an error item to be logged.");
+        Assert.That(errorItem.ErrorMessage, Does.Contain("not yet supported"), "Expected error message about deletion not being supported.");
     }
 
     /// <summary>

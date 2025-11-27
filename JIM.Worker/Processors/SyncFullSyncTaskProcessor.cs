@@ -214,8 +214,7 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.MetaverseObject != null)
         {
             // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
-            // TODO: fix null connectedSystemObject.Type
-            foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectType.Id == connectedSystemObject.Type.Id))
+            foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
             {
                 // evaluate inbound attribute flow rules
                 ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
@@ -266,6 +265,7 @@ public class SyncFullSyncTaskProcessor
                     runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
                                                            $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your " +
                                                            $"Object Matching Rules for uniqueness.";
+                    _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                     return;
                 }
                     
