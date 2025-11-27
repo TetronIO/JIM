@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <!-- Treat all warnings as errors to match CI behavior -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Temporarily exclude nullable reference warnings while fixing incrementally -->
+    <!-- Remove these as warnings are fixed -->
+    <WarningsNotAsErrors>CS8600;CS8601;CS8602;CS8603;CS8604;CS1998</WarningsNotAsErrors>
+
+    <!-- Enforce code quality standards -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+</Project>
