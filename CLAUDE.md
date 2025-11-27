@@ -1,0 +1,206 @@
+# JIM Development Quick Reference
+
+> Identity Management System - .NET 9.0, EF Core, PostgreSQL, Blazor
+
+## Bash Commands
+
+**Build & Test:**
+- `dotnet build JIM.sln` - Build entire solution
+- `dotnet test JIM.sln` - Run all tests
+- `dotnet test --filter "FullyQualifiedName~TestName"` - Run specific test
+- `dotnet clean && dotnet build` - Clean build
+
+**Database:**
+- `dotnet ef migrations add [Name] --project JIM.PostgresData` - Add migration
+- `dotnet ef database update --project JIM.PostgresData` - Apply migrations
+- `docker compose exec jim.web dotnet ef database update` - Apply migrations in Docker
+
+**Docker:**
+- `docker compose up -d` - Start all services
+- `docker compose down` - Stop all services
+- `docker compose logs [service]` - View service logs
+- `docker compose build` - Rebuild images
+
+## Key Project Locations
+
+**Where to add:**
+- API endpoints: `JIM.Api/Controllers/`
+- UI pages: `JIM.Web/Pages/`
+- Blazor components: `JIM.Web/Shared/`
+- Business logic: `JIM.Application/Servers/`
+- Domain models: `JIM.Models/Core/` or `JIM.Models/Staging/`
+- Database repositories: `JIM.PostgresData/`
+- Connectors: `JIM.Connectors/` or new connector project
+- Tests: `JIM.Worker.Tests/` or `test/JIM.Models.Tests/`
+
+## Code Style & Conventions
+
+**IMPORTANT Rules:**
+- YOU MUST use async/await for all I/O operations (method suffix: `Async`)
+- YOU MUST use constructor injection for all dependencies
+- YOU MUST test method signature: `[Test] public async Task TestNameAsync()`
+- IMPORTANT: Use en-GB spellings (e.g., "authorisation", "synchronisation")
+
+**Naming Patterns:**
+- Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`
+- Classes: Full descriptive names (avoid abbreviations)
+- Properties: PascalCase with nullable reference types enabled
+
+**Common Patterns:**
+```csharp
+// Async all I/O
+public async Task<MetaverseObject> GetObjectAsync(Guid id)
+{
+    return await _repository.Metaverse.GetObjectAsync(id);
+}
+
+// Constructor injection
+public class MyServer
+{
+    private readonly IRepository _repository;
+
+    public MyServer(IRepository repository)
+    {
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+    }
+}
+
+// Error handling with logging
+try
+{
+    await ProcessSync();
+}
+catch (Exception ex)
+{
+    Log.Error(ex, "Sync failed for {SystemId}", systemId);
+    throw;
+}
+```
+
+## Testing
+
+**Before Committing:**
+- IMPORTANT: YOU MUST build and test locally before committing
+- Run affected tests: `dotnet test JIM.Worker.Tests/JIM.Worker.Tests.csproj`
+- Check for compilation errors
+
+**Test Structure:**
+- Use NUnit with `[Test]` attribute
+- Async tests: `public async Task TestNameAsync()`
+- Use `Assert.That()` syntax
+- Mock with Moq: `Mock<DbSet<T>>`
+- Test naming: `MethodName_Scenario_ExpectedResult`
+
+**Common Test Patterns:**
+```csharp
+[Test]
+public async Task GetObjectAsync_WithValidId_ReturnsObject()
+{
+    // Arrange
+    var expectedObject = new MetaverseObject { Id = Guid.NewGuid() };
+
+    // Act
+    var result = await _server.GetObjectAsync(expectedObject.Id);
+
+    // Assert
+    Assert.That(result, Is.Not.Null);
+    Assert.That(result.Id, Is.EqualTo(expectedObject.Id));
+}
+```
+
+## Architecture Quick Reference
+
+**Metaverse Pattern:**
+- MetaverseObject = Central identity entity
+- ConnectedSystemObject = External system identity
+- SyncRule = Bidirectional mapping between systems
+- All operations flow through the metaverse (never direct system-to-system)
+
+**Layer Dependencies (top to bottom):**
+1. JIM.Web, JIM.Api (Presentation)
+2. JIM.Application (Business Logic)
+3. JIM.Models (Domain)
+4. JIM.Data, JIM.PostgresData (Data Access)
+
+**Access Pattern:**
+```csharp
+// Access via JimApplication facade
+var jim = new JimApplication(repository);
+var obj = await jim.Metaverse.GetObjectAsync(id);
+var systems = await jim.ConnectedSystems.GetAllAsync();
+```
+
+## Common Development Tasks
+
+**Adding a Connector:**
+1. Implement `IConnector` and capability interfaces
+2. Add to `JIM.Connectors/` or create new project
+3. Register in DI container
+4. Add tests
+
+**Adding API Endpoint:**
+1. Add method to controller in `JIM.Api/Controllers/`
+2. Use DTOs for request/response
+3. Add XML comments for Swagger
+4. Test via Swagger UI (port 5203)
+
+**Modifying Database Schema:**
+1. Update entity in `JIM.Models/`
+2. Create migration: `dotnet ef migrations add [Name] --project JIM.PostgresData`
+3. Review generated migration
+4. Test: `dotnet ef database update --project JIM.PostgresData`
+5. Commit migration files
+
+## Environment Setup
+
+**Required:**
+- .NET 9.0 SDK
+- PostgreSQL 18 (via Docker)
+- Docker & Docker Compose
+
+**Configuration:**
+- Copy `.env.example` to `.env`
+- Set database credentials
+- Configure SSO/OIDC settings (required)
+
+## Troubleshooting
+
+**Build fails:**
+- Check .NET 9.0 SDK installed: `dotnet --version`
+- Restore packages: `dotnet restore JIM.sln`
+
+**Tests fail:**
+- Verify test method signature: `public async Task TestNameAsync()`
+- Check `Assert.ThrowsAsync` is awaited: `await Assert.ThrowsAsync<Exception>(...)`
+
+**Database connection:**
+- Verify PostgreSQL running: `docker compose ps`
+- Check `.env` connection string
+- Apply migrations if needed
+
+## Workflow Best Practices
+
+**Git:**
+- Branch naming: `feature/description` or `claude/description-sessionId`
+- Commit messages: Descriptive, include issue reference if applicable
+- IMPORTANT: Build and test before committing
+- Push to feature branches, create PRs to main
+
+**Development Cycle:**
+1. Create/checkout feature branch
+2. Make changes
+3. **Build**: `dotnet build JIM.sln`
+4. **Test**: `dotnet test JIM.sln`
+5. Fix any errors
+6. Commit with clear message
+7. Push and create PR
+
+## Resources
+
+- **Full Architecture Guide**: `docs/DEVELOPER_GUIDE.md`
+- **Repository**: https://github.com/TetronIO/JIM
+- **Documentation**: `README.md`
+- **.NET 9 Docs**: https://learn.microsoft.com/dotnet/
+- **EF Core**: https://learn.microsoft.com/ef/core/
+- **Blazor**: https://learn.microsoft.com/aspnet/core/blazor/
+- **MudBlazor**: https://mudblazor.com/
