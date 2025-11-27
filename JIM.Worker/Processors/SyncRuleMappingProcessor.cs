@@ -42,19 +42,16 @@ public static class SyncRuleMappingProcessor
             
             if (source.ConnectedSystemAttribute != null)
             {
-                // process each known CSO attribute (potential updates). Unknown ones on a CSO will be ignored. The CSO type schema is king.
-                foreach (var csotAttributeName in csoType.Attributes.Select(a => a.Name))
+                // process the specific CSO attribute defined in this sync rule mapping source
+                var csotAttribute = csoType.Attributes.SingleOrDefault(a => a.Id == source.ConnectedSystemAttribute.Id);
+                if (csotAttribute != null)
                 {
-                    // what MVO attribute does this CSO attribute map to? source.MetaverseAttribute
-                    // what MVO should we be updating? connectedSystemObject.MetaverseObject
-                    
                     // are there matching attribute values on the CSO for this attribute?
                     // this might return multiple objects if the attribute is multivalued, i.e. a member attribute on a group.
-                    var csoAttributeValues = connectedSystemObject.GetAttributeValues(csotAttributeName);
+                    // use AttributeId instead of GetAttributeValues because Attribute navigation property may not be loaded
+                    var csoAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.AttributeId == csotAttribute.Id).ToList();
                     if (csoAttributeValues.Count > 0)
                     {
-                        // work out what data type this attribute is and get the attribute
-                        var csotAttribute = csoType.Attributes.Single(a => a.Name.Equals(csotAttributeName, StringComparison.InvariantCultureIgnoreCase));
                         foreach (var csoAttributeValue in csoAttributeValues)
                         {
                             // process attribute additions and removals...
@@ -283,7 +280,7 @@ public static class SyncRuleMappingProcessor
                     else
                     {
                         // there are no CSO values for this attribute. reflect this by deleting all MVO attribute values for this attribute.
-                        var mvoAttributeValuesToDelete = connectedSystemObject.MetaverseObject.AttributeValues.Where(q => q.Attribute.Name == csotAttributeName);
+                        var mvoAttributeValuesToDelete = connectedSystemObject.MetaverseObject.AttributeValues.Where(q => q.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
                         connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.AddRange(mvoAttributeValuesToDelete);
                     }
                 }
