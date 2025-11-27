@@ -642,6 +642,7 @@ public class FullSyncTests
         var ex = Assert.ThrowsAsync<NotImplementedException>(async () =>
         {
             var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+            Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
             var activity = ActivitiesData.First();
             var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
             var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
