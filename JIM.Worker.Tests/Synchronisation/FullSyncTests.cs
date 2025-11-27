@@ -355,7 +355,8 @@ public class FullSyncTests
             Type = SyncRuleMappingType.AttributeFlow,
             AttributeFlowSynchronisationRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
-            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName,
+            Order = 1
         };
         displayNameMapping.Sources.Add(new SyncRuleMappingSource
         {

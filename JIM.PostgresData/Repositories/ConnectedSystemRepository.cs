@@ -730,10 +730,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
     {
-        if (includeDisabledSyncRules)
-            return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystemId == connectedSystemId).ToListAsync();
-        
-        return await Repository.Database.SyncRules.Where(sr => sr.ConnectedSystemId == connectedSystemId && sr.Enabled).ToListAsync();
+        var query = Repository.Database.SyncRules
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.TargetMetaverseAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Sources)
+            .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Sources)
+            .ThenInclude(s => s.MetaverseAttribute)
+            .Include(sr => sr.ConnectedSystem)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            .Include(sr => sr.MetaverseObjectType)
+            .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
+            .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
+            .ThenInclude(omr => omr.Sources)
+            .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(sr => sr.ObjectMatchingRules)
+            .ThenInclude(omr => omr.TargetMetaverseAttribute)
+            .Where(sr => sr.ConnectedSystemId == connectedSystemId);
+
+        if (!includeDisabledSyncRules)
+            query = query.Where(sr => sr.Enabled);
+
+        return await query.ToListAsync();
     }
 
     public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
