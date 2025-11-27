@@ -2,6 +2,23 @@
 
 > Identity Management System - .NET 9.0, EF Core, PostgreSQL, Blazor
 
+## ⚠️ CRITICAL REQUIREMENTS ⚠️
+
+**YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR:**
+
+1. **ALWAYS** run `dotnet build JIM.sln` - Build must succeed with zero errors
+2. **ALWAYS** run `dotnet test JIM.sln` - All tests must pass
+3. **NEVER** commit code that hasn't been built and tested locally
+4. **NEVER** create a PR without verifying build and tests pass
+5. **NEVER** assume tests will pass without running them
+
+**Failure to build and test wastes CI/CD resources and delays the project.**
+
+If you cannot build/test locally due to environment constraints, you MUST:
+- Clearly state this limitation in the PR description
+- Mark the PR as draft
+- Request manual review and testing before merge
+
 ## Bash Commands
 
 **Build & Test:**
@@ -79,10 +96,12 @@ catch (Exception ex)
 
 ## Testing
 
-**Before Committing:**
-- IMPORTANT: YOU MUST build and test locally before committing
-- Run affected tests: `dotnet test JIM.Worker.Tests/JIM.Worker.Tests.csproj`
-- Check for compilation errors
+**Before Committing (MANDATORY - NO EXCEPTIONS):**
+- ⚠️ **CRITICAL**: YOU MUST build and test locally before EVERY commit
+- Run `dotnet build JIM.sln` - Must complete with zero errors
+- Run `dotnet test JIM.sln` - All tests must pass
+- For specific test projects: `dotnet test JIM.Worker.Tests/JIM.Worker.Tests.csproj`
+- **DO NOT proceed to commit if any tests fail or build has errors**
 
 **Test Structure:**
 - Use NUnit with `[Test]` attribute
@@ -183,17 +202,18 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 **Git:**
 - Branch naming: `feature/description` or `claude/description-sessionId`
 - Commit messages: Descriptive, include issue reference if applicable
-- IMPORTANT: Build and test before committing
+- ⚠️ **CRITICAL**: Build and test before EVERY commit - NO EXCEPTIONS
 - Push to feature branches, create PRs to main
 
-**Development Cycle:**
+**Development Cycle (FOLLOW THIS EXACTLY):**
 1. Create/checkout feature branch
 2. Make changes
-3. **Build**: `dotnet build JIM.sln`
-4. **Test**: `dotnet test JIM.sln`
-5. Fix any errors
-6. Commit with clear message
-7. Push and create PR
+3. ⚠️ **MANDATORY: Build**: `dotnet build JIM.sln` - Must succeed
+4. ⚠️ **MANDATORY: Test**: `dotnet test JIM.sln` - All must pass
+5. If build or tests fail, fix errors and repeat steps 3-4
+6. **ONLY AFTER** build and tests pass: Commit with clear message
+7. **ONLY AFTER** successful commit: Push and create PR
+8. **NEVER** create a PR with failing tests or build errors
 
 ## Resources
 

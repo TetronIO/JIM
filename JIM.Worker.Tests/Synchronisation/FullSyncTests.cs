@@ -625,7 +625,14 @@ public class FullSyncTests
         });
         importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
 
-        // ensure first CSO is joined to an MVO (this is set up by default test data)
+        // manually join the first CSO to the first MVO to set up the test scenario
+        ConnectedSystemObjectsData[0].MetaverseObject = MetaverseObjectsData[0];
+        ConnectedSystemObjectsData[0].MetaverseObjectId = MetaverseObjectsData[0].Id;
+        ConnectedSystemObjectsData[0].JoinType = ConnectedSystemObjectJoinType.Joined;
+        ConnectedSystemObjectsData[0].DateJoined = DateTime.UtcNow;
+        MetaverseObjectsData[0].ConnectedSystemObjects.Add(ConnectedSystemObjectsData[0]);
+
+        // verify the CSO is now joined to an MVO
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to be joined to an MVO.");
 
         // mark the joined CSO as obsolete (simulating it was not present in the import)
