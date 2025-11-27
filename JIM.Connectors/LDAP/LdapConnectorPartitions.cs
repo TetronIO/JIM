@@ -32,7 +32,7 @@ internal class LdapConnectorPartitions
                 var partition = new ConnectorPartition
                 {
                     Id = entry.DistinguishedName,
-                    Name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname"),
+                    Name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname") ?? entry.DistinguishedName,
                     //DnsNames = GetEntryAttributeStringValues(entry, "dnsroot"),
                     //NetbiosName = GetEntryAttributeStringValue(entry, "netbiosname"),
                     Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags") != "3", // domain
@@ -65,7 +65,7 @@ internal class LdapConnectorPartitions
         // move top-level containers to the new list
         var topLevelContainers = entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(partition.Name, StringComparison.CurrentCultureIgnoreCase)).ToList();
         entries.RemoveAll(q => topLevelContainers.Contains(q));
-        var containers = topLevelContainers.Select(topLevelContainer => new ConnectorContainer(topLevelContainer.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(topLevelContainer, "name"))).ToList();
+        var containers = topLevelContainers.Select(topLevelContainer => new ConnectorContainer(topLevelContainer.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(topLevelContainer, "name") ?? topLevelContainer.DistinguishedName)).ToList();
 
         // keep track of how many entries we've processed so we can validate completion
         var entriesProcessedCounter = containers.Count;
@@ -82,7 +82,7 @@ internal class LdapConnectorPartitions
     {
         foreach (var entry in entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(containerToLookForChildrenFor.Id, StringComparison.CurrentCultureIgnoreCase)))
         {
-            var newChildContainer = new ConnectorContainer(entry.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name"));
+            var newChildContainer = new ConnectorContainer(entry.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? entry.DistinguishedName);
             containerToLookForChildrenFor.ChildContainers.Add(newChildContainer);
             entriesProcessedCounter++;
             ProcessContainerNodeForHierarchyRecursively(entries, newChildContainer, ref entriesProcessedCounter);
