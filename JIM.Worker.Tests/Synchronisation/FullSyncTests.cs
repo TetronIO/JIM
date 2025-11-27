@@ -571,7 +571,7 @@ public class FullSyncTests
         // ensure CSO is not joined to any MVO
         ConnectedSystemObjectsData[0].MetaverseObject = null;
         ConnectedSystemObjectsData[0].MetaverseObjectId = null;
-        ConnectedSystemObjectsData[0].JoinType = null;
+        ConnectedSystemObjectsData[0].JoinType = ConnectedSystemObjectJoinType.NotJoined;
 
         var initialCsoCount = ConnectedSystemObjectsData.Count;
 
@@ -639,7 +639,7 @@ public class FullSyncTests
         ConnectedSystemObjectsData[0].Status = ConnectedSystemObjectStatus.Obsolete;
 
         // verify that attempting to process this throws NotImplementedException
-        await Assert.ThrowsAsync<NotImplementedException>(async () =>
+        var ex = Assert.ThrowsAsync<NotImplementedException>(async () =>
         {
             var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
             var activity = ActivitiesData.First();
@@ -647,6 +647,7 @@ public class FullSyncTests
             var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         });
+        Assert.That(ex, Is.Not.Null);
     }
 
     /// <summary>
@@ -680,7 +681,7 @@ public class FullSyncTests
         // ensure CSO starts as non-joined
         ConnectedSystemObjectsData[0].MetaverseObject = null;
         ConnectedSystemObjectsData[0].MetaverseObjectId = null;
-        ConnectedSystemObjectsData[0].JoinType = null;
+        ConnectedSystemObjectsData[0].JoinType = ConnectedSystemObjectJoinType.NotJoined;
         ConnectedSystemObjectsData[0].DateJoined = null;
 
         // start the test
@@ -735,10 +736,10 @@ public class FullSyncTests
         // ensure both CSOs start as non-joined
         ConnectedSystemObjectsData[0].MetaverseObject = null;
         ConnectedSystemObjectsData[0].MetaverseObjectId = null;
-        ConnectedSystemObjectsData[0].JoinType = null;
+        ConnectedSystemObjectsData[0].JoinType = ConnectedSystemObjectJoinType.NotJoined;
         ConnectedSystemObjectsData[1].MetaverseObject = null;
         ConnectedSystemObjectsData[1].MetaverseObjectId = null;
-        ConnectedSystemObjectsData[1].JoinType = null;
+        ConnectedSystemObjectsData[1].JoinType = ConnectedSystemObjectJoinType.NotJoined;
 
         // start the test
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);

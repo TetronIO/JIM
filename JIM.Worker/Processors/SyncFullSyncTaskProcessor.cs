@@ -271,6 +271,7 @@ public class SyncFullSyncTaskProcessor
                     
                 // establish join! then return as first rule to match, wins.
                 connectedSystemObject.MetaverseObject = mvo;
+                connectedSystemObject.MetaverseObjectId = mvo.Id;
                 connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
                 connectedSystemObject.DateJoined = DateTime.UtcNow;
                 mvo.ConnectedSystemObjects.Add(connectedSystemObject);
@@ -303,11 +304,16 @@ public class SyncFullSyncTaskProcessor
             return;
         
         // create the MVO using type from the Sync Rule.
-        var mvo = new MetaverseObject();
+        var mvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid()
+        };
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
         mvo.Type = projectionSyncRule.MetaverseObjectType;
         connectedSystemObject.MetaverseObject = mvo;
+        connectedSystemObject.MetaverseObjectId = mvo.Id;
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
+        connectedSystemObject.DateJoined = DateTime.UtcNow;
         
         // do not flow attributes at this point. let that happen separately, so we don't re-process sync rules later.
     }

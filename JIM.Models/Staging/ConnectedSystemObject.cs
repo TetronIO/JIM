@@ -48,6 +48,11 @@ public class ConnectedSystemObject
     public MetaverseObject? MetaverseObject { get; set; }
 
     /// <summary>
+    /// Foreign key for the MetaverseObject navigation property
+    /// </summary>
+    public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
     /// How was this CSO joined to an MVO, if at all?
     /// </summary>
     public ConnectedSystemObjectJoinType JoinType { get; set; } = ConnectedSystemObjectJoinType.NotJoined;
