@@ -1,0 +1,266 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // Build Tasks
+    {
+      "label": "build-web",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/JIM.Web/JIM.Web.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-api",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/JIM.Api/JIM.Api.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-worker",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/JIM.Worker/JIM.Worker.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-scheduler",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/JIM.Scheduler/JIM.Scheduler.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-solution",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/JIM.sln",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+
+    // Clean Tasks
+    {
+      "label": "clean-solution",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "clean",
+        "${workspaceFolder}/JIM.sln"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "clean-build-solution",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "clean-solution",
+        "build-solution"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+
+    // Test Tasks
+    {
+      "label": "test-all",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "test",
+        "${workspaceFolder}/JIM.sln",
+        "--no-build",
+        "--verbosity",
+        "normal"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "test-with-coverage",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "test",
+        "${workspaceFolder}/JIM.sln",
+        "--collect:\"XPlat Code Coverage\"",
+        "--verbosity",
+        "normal"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
+      "label": "test-worker",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "test",
+        "${workspaceFolder}/JIM.Worker.Tests/JIM.Worker.Tests.csproj",
+        "--verbosity",
+        "normal"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
+      "label": "test-models",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "test",
+        "${workspaceFolder}/test/JIM.Models.Tests/JIM.Models.Tests.csproj",
+        "--verbosity",
+        "normal"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+
+    // Database Tasks
+    {
+      "label": "db-update",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "ef",
+        "database",
+        "update",
+        "--project",
+        "${workspaceFolder}/JIM.PostgresData"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "db-migration-add",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "ef",
+        "migrations",
+        "add",
+        "${input:migrationName}",
+        "--project",
+        "${workspaceFolder}/JIM.PostgresData"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "db-migration-remove",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "ef",
+        "migrations",
+        "remove",
+        "--project",
+        "${workspaceFolder}/JIM.PostgresData"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+
+    // Docker Tasks
+    {
+      "label": "docker-db-up",
+      "command": "docker",
+      "type": "shell",
+      "args": [
+        "compose",
+        "-f",
+        "${workspaceFolder}/db.yml",
+        "up",
+        "-d"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "docker-db-down",
+      "command": "docker",
+      "type": "shell",
+      "args": [
+        "compose",
+        "-f",
+        "${workspaceFolder}/db.yml",
+        "down"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "docker-db-logs",
+      "command": "docker",
+      "type": "shell",
+      "args": [
+        "compose",
+        "-f",
+        "${workspaceFolder}/db.yml",
+        "logs",
+        "-f"
+      ],
+      "problemMatcher": [],
+      "isBackground": true
+    },
+
+    // Composite Tasks
+    {
+      "label": "build-and-test",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "build-solution",
+        "test-all"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "setup-database",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "docker-db-up",
+        "db-update"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "migrationName",
+      "type": "promptString",
+      "description": "Migration name",
+      "default": "NewMigration"
+    }
+  ]
+}

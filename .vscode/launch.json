@@ -1,0 +1,115 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "JIM Web (Blazor)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-web",
+      "program": "${workspaceFolder}/JIM.Web/bin/Debug/net9.0/JIM.Web.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/JIM.Web",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "%s"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "https://localhost:7000;http://localhost:5000"
+      },
+      "sourceFileMap": {
+        "/Views": "${workspaceFolder}/Views"
+      },
+      "logging": {
+        "moduleLoad": false
+      }
+    },
+    {
+      "name": "JIM API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-api",
+      "program": "${workspaceFolder}/JIM.Api/bin/Debug/net9.0/JIM.Api.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/JIM.Api",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "%s/swagger"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "https://localhost:7203;http://localhost:5203"
+      },
+      "logging": {
+        "moduleLoad": false
+      }
+    },
+    {
+      "name": "JIM Worker",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-worker",
+      "program": "${workspaceFolder}/JIM.Worker/bin/Debug/net9.0/JIM.Worker.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/JIM.Worker",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "JIM Scheduler",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-scheduler",
+      "program": "${workspaceFolder}/JIM.Scheduler/bin/Debug/net9.0/JIM.Scheduler.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/JIM.Scheduler",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "Attach to JIM Process",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "JIM Full Stack (Web + API + Worker)",
+      "configurations": [
+        "JIM Web (Blazor)",
+        "JIM API",
+        "JIM Worker"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "Full Stack",
+        "order": 1
+      },
+      "stopAll": true
+    },
+    {
+      "name": "JIM Web Stack (Web + API)",
+      "configurations": [
+        "JIM Web (Blazor)",
+        "JIM API"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "Web Stack",
+        "order": 2
+      },
+      "stopAll": true
+    }
+  ]
+}
