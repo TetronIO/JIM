@@ -11,7 +11,7 @@ services:
 
   jim.database:
     container_name: JIM.Database
-    image: postgres
+    image: postgres:18
     restart: always
     volumes:
       - jim-db-volume:/var/lib/postgresql/data
