@@ -1,4 +1,4 @@
-# JIM Constitution
+# JIM Developer Guide
 
 > **Project**: Junctional Identity Manager (JIM)
 > **Purpose**: Enterprise-grade identity management system for synchronisation, governance, and domain migrations
@@ -367,6 +367,44 @@ finally
 }
 ```
 
+## Development Environment
+
+JIM uses GitHub Codespaces to provide a fully configured development environment with all dependencies pre-installed.
+
+**Features**:
+- Pre-installed .NET 9.0 SDK
+- Docker and Docker Compose
+- PostgreSQL 18 with optimised memory settings
+- VS Code with recommended extensions
+- Pre-configured shell aliases for common tasks
+
+**Quick Start**:
+1. Open repository in GitHub
+2. Click **Code** > **Codespaces** > **Create codespace on main**
+3. Wait for provisioning (automatic setup via `.devcontainer/setup.sh`)
+4. Update the auto-generated `.env` file with your SSO configuration
+5. Use shell aliases: `jim-db`, `jim-web`, `jim-stack`, etc.
+
+> **Note**: The setup script automatically creates a `.env` file with development defaults. You can also set a `DOTENV_BASE64` GitHub Codespaces secret to restore your own `.env` file automatically.
+
+**Available Shell Aliases**:
+- `jim-build` - Build entire solution
+- `jim-test` - Run all tests
+- `jim-db` - Start PostgreSQL (local debugging workflow)
+- `jim-db-stop` - Stop PostgreSQL
+- `jim-migrate` - Apply EF Core migrations
+- `jim-stack` - Start full Docker stack (all services containerised)
+- `jim-stack-down` - Stop full Docker stack
+
+**Development Workflows**:
+1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
+2. **Full Stack**: Use `jim-stack` to run all services in containers for integration testing
+
+**Technical Details**:
+- PostgreSQL memory settings automatically optimised for Codespaces constraints
+- Port forwarding configured for Web (5200), API (5202), and Adminer (8080)
+- Custom docker-compose override: `docker-compose.override.codespaces.yml`
+
 ## Environment Configuration
 
 Configuration via environment variables (defined in `.env`):
@@ -425,6 +463,8 @@ docker compose exec jim.web dotnet ef database update
 
 ## Common Development Tasks
 
+> **Note**: All `dotnet` commands below work out of the box in Codespaces. Use shell aliases like `jim-build`, `jim-test`, and `jim-migrate` for convenience.
+
 ### Adding a New Connector
 1. Create class implementing `IConnector` (and capability interfaces)
 2. Add to `JIM.Connectors` project or create new project
@@ -457,27 +497,33 @@ docker compose exec jim.web dotnet ef database update
 
 ## Troubleshooting
 
-### Common Issues
-
 **Build Errors**:
-- Ensure .NET 9.0 SDK installed
-- Restore NuGet packages: `dotnet restore`
-- Clean build: `dotnet clean && dotnet build`
+- Ensure .NET 9.0 SDK installed: `dotnet --version` (should show 9.0.x)
+- Restore NuGet packages: `dotnet restore JIM.sln` or use `jim-build` alias
+- Clean build: `dotnet clean && dotnet build JIM.sln`
 
 **Database Connection**:
+- Start PostgreSQL: `jim-db`
 - Verify PostgreSQL running: `docker compose ps`
 - Check connection string in `.env`
-- Ensure database created and migrations applied
+- Apply migrations: `jim-migrate`
 
 **Authentication Failures**:
 - Verify SSO configuration in `.env`
 - Check OIDC authority is accessible
 - Review callback URL registration in IdP
+- Ensure callback URLs include your Codespaces URL
 
 **Worker Not Processing Tasks**:
 - Check worker service is running: `docker compose logs jim.worker`
 - Verify tasks in database: Check `WorkerTasks` table
 - Review worker logs for errors
+
+**Codespaces Issues**:
+- **Port Forwarding**: Ensure ports are set to public if accessing from external browser
+- **PostgreSQL Memory**: If database crashes, memory settings are pre-optimised in `.devcontainer/setup.sh`
+- **Docker Issues**: Restart Codespace or rebuild container if Docker daemon issues occur
+- **Missing Aliases**: Run `source ~/.zshrc` or restart terminal if shell aliases not available
 
 ## Best Practices Summary
 

@@ -70,13 +70,23 @@ JIM is currently targeting the following means of connecting to systems via it's
 JIM is in active development. There are many plans for new features. Check back soon for more details.
 
 ## Getting Started
-To run JIM locally:
 
-1. Configure SSO with your IdP (see below).
-2. Make sure Docker Desktop is installed and running.
-3. Clone this repo.
-4. Create a `.env`  file in the repo root for your secrets (see below).
-5. Run the Docker Compose configuration in your favourite IDE, configured for your platform (see below).
+JIM uses GitHub Codespaces to provide a fully configured development environment in the cloud with all dependencies pre-installed (.NET 9.0, Docker, PostgreSQL).
+
+**Quick Start:**
+
+1. Click the **Code** button on the GitHub repository
+2. Select **Codespaces** > **Create codespace on main**
+3. Wait for the environment to provision (includes automatic `.env` creation)
+4. Update the `.env` file with your SSO settings (see below)
+5. Use the pre-configured shell aliases:
+   - `jim-db` - Start PostgreSQL database
+   - `jim-web` - Run Web UI locally (press F5 in VS Code)
+   - `jim-api` - Run API locally
+   - `jim-stack` - Start full Docker stack
+   - `jim-migrate` - Apply database migrations
+
+For local development instructions and advanced setup, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
    
 ### Setup SSO
 JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [﻿Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
@@ -101,18 +111,6 @@ SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=<the JIM Metaverse attribute the 
 SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your user object identifier, i.e. 1a2e0377-e36c-4388-b185-c489ae7daa6a>
 ```
 Note, the `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE` variable enables you to sign in to JIM as the initial admin.
-
-### Configuring your IDE to start Docker Compose
-- Visual Studio on Windows: Just press the play button, making sure the Docker project is selected.
-- JetBrains Rider on Windows: As above.
-- JetBrains Rider on macOS: Create a Run/Debug Configuration for macOS buy cloning the default one and changing the `docker-compose.override.yml` file for the `docker-compose.override.macos.yml` one. Play this one.
-- JetBrains Rider on Linux: As above, but use `docker-compose-override.linux.yml`
-  
-![jim-rider-docker-windows](https://github.com/user-attachments/assets/801ba32b-c436-4b76-87d4-00e73800da01 "")
-
-![jim-rider-docker-macos](https://github.com/user-attachments/assets/81a295f1-080f-49e2-bc8f-35e0724b2e9b "")
-
-![jim-rider-docker-play](https://github.com/user-attachments/assets/f15ef378-d88b-4a51-9b11-4f01529d7f77 "")
 
 ## State of Development
 In JIM currently, you can setup connectors to LDAP-based systems (tested against Active Directory so far) and CSV files and perform imports. Synchronisation Rules can also be created, though synchronisation of objects (from connected systems to the Metaverse) is currently under development, with unit tests being worked on. Once that's complete, export functionality will be next, to target an Minimum Viable Product (MVP) status.
