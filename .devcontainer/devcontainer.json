@@ -1,14 +1,10 @@
 {
   "name": "JIM Development Environment",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  // Use the official .NET devcontainer base image which has vscode user pre-configured
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm",
 
   // Features - pre-built development tools
   "features": {
-    // .NET 9.0 SDK (installed fresh on clean Ubuntu image)
-    "ghcr.io/devcontainers/features/dotnet:2": {
-      "version": "9.0",
-      "installUsingApt": true
-    },
     // Docker-in-Docker for running docker-compose
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
       "version": "latest",
@@ -18,15 +14,6 @@
     // GitHub CLI
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
-    },
-    // Common utilities
-    "ghcr.io/devcontainers/features/common-utils:2": {
-      "installZsh": true,
-      "installOhMyZsh": true,
-      "upgradePackages": true,
-      "username": "vscode",
-      "userUid": "automatic",
-      "userGid": "automatic"
     }
   },
 
@@ -146,8 +133,6 @@
 
   // Container user
   "remoteUser": "vscode",
-  "containerUser": "vscode",
-  "updateRemoteUserUID": true,
 
   // Lifecycle scripts
   "postCreateCommand": "bash .devcontainer/setup.sh",
