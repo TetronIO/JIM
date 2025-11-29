@@ -1,0 +1,27 @@
+services:
+  jim.web:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+    ports:
+      - "5200:80"
+    volumes:
+      # Codespaces doesn't need HTTPS certificates for internal development
+      # Use /tmp for connector files (ephemeral, but works for dev)
+      - /tmp/jim-connector-files:/var/connector-files
+
+  jim.api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+    ports:
+      - "5202:80"
+
+  jim.worker:
+    volumes:
+      - /tmp/jim-connector-files:/var/connector-files
+
+  # Expose Adminer for database management
+  adminer:
+    ports:
+      - "8080:8080"
