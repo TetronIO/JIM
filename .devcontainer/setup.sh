@@ -28,8 +28,12 @@ if ! dotnet tool list -g | grep -q dotnet-ef; then
     dotnet tool install --global dotnet-ef
     print_success "dotnet-ef installed globally"
 else
-    dotnet tool update --global dotnet-ef
-    print_success "dotnet-ef updated to latest version"
+    # Try to update, but don't fail if it errors (can happen in some environments)
+    if dotnet tool update --global dotnet-ef 2>/dev/null; then
+        print_success "dotnet-ef updated to latest version"
+    else
+        print_warning "dotnet-ef update skipped (already installed)"
+    fi
 fi
 
 # Add .NET tools to PATH
