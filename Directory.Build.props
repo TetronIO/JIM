@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <!-- Treat all warnings as errors to match CI behavior -->
+    <!-- Treat all warnings as errors to match CI behaviour -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <!-- Temporarily exclude nullable reference warnings while fixing incrementally -->
