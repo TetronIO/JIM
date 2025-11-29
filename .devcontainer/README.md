@@ -150,15 +150,69 @@ jim-api            # Run REST API
 jim-worker         # Run background worker
 ```
 
-### Database
+### Database (Local Development)
 ```bash
-jim-db             # Start PostgreSQL
+jim-db             # Start PostgreSQL only (for local debugging)
 jim-db-stop        # Stop PostgreSQL
 jim-db-logs        # View database logs
 jim-adminer        # Get Adminer URL
 jim-migrate        # Apply migrations
 jim-migration [N]  # Create new migration
 ```
+
+### Docker Stack (Full Containerized Environment)
+```bash
+jim-stack          # Start all services in Docker (web, api, worker, scheduler, db)
+jim-stack-build    # Build and start all Docker services
+jim-stack-logs     # View all Docker service logs
+jim-stack-down     # Stop all Docker services
+```
+
+## 🔀 Development Workflows
+
+JIM supports two different development workflows. Choose the one that fits your needs:
+
+### Workflow 1: Local Debugging (Recommended)
+
+**Use when:** You want to actively debug code with breakpoints and hot reload.
+
+1. Start the database: `jim-db`
+2. Press `F5` in VS Code and select a debug configuration
+3. Set breakpoints and debug your code
+4. Services run locally on your machine with full debugging support
+
+**Advantages:**
+- Full debugging capabilities (breakpoints, step-through, watch variables)
+- Faster iteration with hot reload
+- Lower resource usage
+- Easy to debug multiple services simultaneously
+
+**Services run at:**
+- Database: `localhost:5432`
+- Adminer: `http://localhost:8080`
+- JIM Web: `https://localhost:7000`
+- JIM API: `https://localhost:7203`
+
+### Workflow 2: Full Docker Stack
+
+**Use when:** You want to test the entire system in a production-like containerized environment.
+
+1. Run: `jim-stack`
+2. Access services via forwarded ports
+3. View logs: `jim-stack-logs`
+
+**Advantages:**
+- Production-like environment
+- Tests containerization and service interaction
+- No local .NET runtime needed
+
+**Services run at:**
+- Database: Internal (container network)
+- Adminer: `http://localhost:8080`
+- JIM Web: `http://localhost:5200`
+- JIM API: `http://localhost:5202`
+
+**Note:** In GitHub Codespaces, the docker stack uses optimized PostgreSQL memory settings automatically via `docker-compose.override.codespaces.yml`.
 
 ## 🐛 Debugging
 
@@ -239,9 +293,23 @@ Edit `devcontainer.json`:
 
 ### Database Won't Start
 
+**For local development (jim-db):**
 ```bash
 docker compose -f db.yml up -d
 docker compose -f db.yml logs
+```
+
+**For full Docker stack (jim-stack):**
+```bash
+jim-stack
+jim-stack-logs
+```
+
+If you see memory allocation errors in Codespaces, the PostgreSQL settings are automatically optimized via `docker-compose.override.codespaces.yml`. If issues persist:
+```bash
+# Clean restart
+docker compose -f db.yml down -v
+jim-db
 ```
 
 ### Migrations Fail

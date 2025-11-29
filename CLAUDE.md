@@ -32,11 +32,20 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `dotnet ef database update --project JIM.PostgresData` - Apply migrations
 - `docker compose exec jim.web dotnet ef database update` - Apply migrations in Docker
 
-**Docker:**
-- `docker compose up -d` - Start all services
-- `docker compose down` - Stop all services
+**Shell Aliases (Recommended):**
+- `jim-build` - Build entire solution
+- `jim-test` - Run all tests
+- `jim-db` - Start PostgreSQL (for local debugging)
+- `jim-db-stop` - Stop PostgreSQL
+- `jim-migrate` - Apply migrations
+- `jim-stack` - Start full Docker stack (all services containerized)
+- `jim-stack-down` - Stop full Docker stack
+
+**Docker (Manual Commands):**
+- `docker compose -f db.yml up -d` - Start database only (same as jim-db)
+- `docker compose -f db.yml down` - Stop database
+- `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml up -d` - Start full stack in Codespaces (same as jim-stack)
 - `docker compose logs [service]` - View service logs
-- `docker compose build` - Rebuild images
 
 ## Key Project Locations
 
@@ -170,6 +179,24 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 4. Test: `dotnet ef database update --project JIM.PostgresData`
 5. Commit migration files
 
+## Development Workflows
+
+**Choose one of two workflows:**
+
+**Workflow 1 - Local Debugging (Recommended):**
+1. Start database: `jim-db`
+2. Press F5 in VS Code or run: `jim-web` / `jim-api`
+3. Debug with breakpoints and hot reload
+4. Services: Web (https://localhost:7000), API (https://localhost:7203)
+
+**Workflow 2 - Full Docker Stack:**
+1. Start all services: `jim-stack`
+2. Access containerized services
+3. Services: Web (http://localhost:5200), API (http://localhost:5202)
+
+**Use Workflow 1** for active development and debugging.
+**Use Workflow 2** for integration testing or production-like environment.
+
 ## Environment Setup
 
 **Required:**
@@ -181,6 +208,10 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 - Copy `.env.example` to `.env`
 - Set database credentials
 - Configure SSO/OIDC settings (required)
+
+**GitHub Codespaces:**
+- PostgreSQL memory settings automatically optimized
+- Use `jim-db` or `jim-stack` aliases (already configured)
 
 ## Troubleshooting
 
