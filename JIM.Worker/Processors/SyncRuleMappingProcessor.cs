@@ -79,6 +79,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             StringValue = newCsoNewAttributeValue.StringValue
                                         });
                                     }
@@ -107,6 +108,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             IntValue = newCsoNewAttributeValue.IntValue
                                         });
                                     }
@@ -117,10 +119,10 @@ public static class SyncRuleMappingProcessor
                                 {
                                     var csoValue = connectedSystemObject.AttributeValues.SingleOrDefault(csoav => csoav.AttributeId == source.ConnectedSystemAttributeId.Value);
                                     var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
-                                    
+
                                     if (mvoValue != null && csoValue == null)
                                     {
-                                        // there is a value on the MVO that isn't on the CSO. remove it.   
+                                        // there is a value on the MVO that isn't on the CSO. remove it.
                                         mvo.PendingAttributeValueRemovals.Add(mvoValue);
                                     }
                                     else if (csoValue != null && mvoValue == null)
@@ -130,6 +132,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             DateTimeValue = csoValue.DateTimeValue
                                         });
                                     }
@@ -141,6 +144,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             DateTimeValue = csoValue.DateTimeValue
                                         });
                                     }
@@ -170,6 +174,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             ByteValue = newCsoNewAttributeValue.ByteValue
                                         });
                                     }
@@ -184,7 +189,7 @@ public static class SyncRuleMappingProcessor
                                         mvoav.ReferenceValue != null &&
                                         !csoAttributeValues.Any(csoav => csoav.ReferenceValue is { MetaverseObject: not null } && csoav.ReferenceValue.MetaverseObject.Id ==  mvoav.ReferenceValue.Id));
                                     mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
-                                    
+
                                     // find values on the CSO of type reference that aren't on the MVO according to the sync rule mapping.
                                     var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
                                         csoav.AttributeId == source.ConnectedSystemAttributeId.Value &&
@@ -192,17 +197,18 @@ public static class SyncRuleMappingProcessor
                                         !mvo.AttributeValues.Any(mvoav =>
                                             mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id &&
                                             mvoav.ReferenceValue != null && mvoav.ReferenceValue.Id.Equals(csoav.ReferenceValue.MetaverseObject.Id)));
-                                    
+
                                     // now turn the new CSO attribute values into MVO attribute values we can add to the MVO.
                                     foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
                                     {
                                         if (newCsoNewAttributeValue.ReferenceValue?.MetaverseObject == null)
                                             continue;
-                                        
+
                                         mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             ReferenceValue = newCsoNewAttributeValue.ReferenceValue.MetaverseObject
                                         });
                                     }
@@ -231,6 +237,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             GuidValue = newCsoNewAttributeValue.GuidValue
                                         });
                                     }
@@ -241,10 +248,10 @@ public static class SyncRuleMappingProcessor
                                 {
                                     var csoValue = connectedSystemObject.AttributeValues.SingleOrDefault(csoav => csoav.AttributeId == source.ConnectedSystemAttributeId.Value);
                                     var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
-                                    
+
                                     if (mvoValue != null && csoValue == null)
                                     {
-                                        // there is a value on the MVO that isn't on the CSO. remove it.   
+                                        // there is a value on the MVO that isn't on the CSO. remove it.
                                         mvo.PendingAttributeValueRemovals.Add(mvoValue);
                                     }
                                     else if (csoValue != null && mvoValue == null)
@@ -254,6 +261,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             BoolValue = csoValue.BoolValue
                                         });
                                     }
@@ -265,6 +273,7 @@ public static class SyncRuleMappingProcessor
                                         {
                                             MetaverseObject = mvo,
                                             Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                            AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id,
                                             BoolValue = csoValue.BoolValue
                                         });
                                     }
