@@ -103,7 +103,7 @@
     7000   // JIM.Web (HTTPS)
   ],
 
-  // Port labels and auto-forward behavior
+  // Port labels and auto-forward behaviour
   "portsAttributes": {
     "5432": {
       "label": "PostgreSQL Database",
