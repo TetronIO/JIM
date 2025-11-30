@@ -136,6 +136,12 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 }
 ```
 
+**Debugging Failing Tests:**
+- Claude Code cannot interactively debug with breakpoints like an IDE
+- To diagnose issues, add temporary `Console.WriteLine()` statements to trace execution and inspect variable values
+- Test output appears in the test results under "Standard Output Messages"
+- **IMPORTANT**: Remove all debug statements before committing
+
 ## Architecture Quick Reference
 
 **Metaverse Pattern:**
