@@ -15,7 +15,7 @@ public class SyncFullSyncTaskProcessor
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private List<ConnectedSystemObjectType>? _objectTypes;
-    
+
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
         ConnectedSystem connectedSystem,
@@ -33,7 +33,7 @@ public class SyncFullSyncTaskProcessor
     public async Task PerformFullSyncAsync()
     {
         Log.Verbose("PerformFullSyncAsync: Starting");
-        
+
         // what needs to happen:
         // - confirm pending exports
         // - establish new joins to existing Metaverse Objects
@@ -43,7 +43,7 @@ public class SyncFullSyncTaskProcessor
         // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
 
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing");
-        
+
         // how many objects are we processing? that = CSO count + Pending Export Object count.
         // update the activity with this info so a progress bar can be shown.
         var totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
@@ -52,13 +52,13 @@ public class SyncFullSyncTaskProcessor
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityAsync(_activity);
-        
+
         // get all the active sync rules for this system
         var activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
-        
+
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
-        
+
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe.
         // it also enables us to update the Activity with progress info as we go, allowing the UI to be updated and keep users informed.
         const int pageSize = 200;
@@ -75,7 +75,7 @@ public class SyncFullSyncTaskProcessor
                     Log.Information("PerformFullSyncAsync: Cancellation requested. Stopping CSO enumeration.");
                     return;
                 }
-                
+
                 // what kind of result do we want? we want to see:
                 // - mvo joins (list)
                 // - mvo projections (list)
@@ -83,23 +83,23 @@ public class SyncFullSyncTaskProcessor
                 // - mvo deletions (list)
                 // - mvo updates (list)
                 // - mvo objects not updated (count)
-                
+
                 // todo: record changes to MV objects and other Connected Systems via Pending Export objects on the Activity Run Profile Execution.
-                // todo: work out how a preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
-                // thinking about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
+                // todo: work out how a sync-preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
+                // I have thought about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
                 // so the same code stack can be used.
-                
+
                 await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
-                
+
                 _activity.ObjectsProcessed++;
                 await _jim.Activities.UpdateActivityAsync(_activity);
             }
         }
-        
+
         // TODO: work out if CSO changes have been persisted. Is a dedicated db update call needed?
         // ensure the activity and any pending db updates are applied.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
-        
+
         await ResolveReferencesAsync();
     }
 
@@ -109,15 +109,15 @@ public class SyncFullSyncTaskProcessor
     private async Task ProcessConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         Log.Verbose($"ProcessConnectedSystemObjectAsync: Performing a full sync on Connected System Object: {connectedSystemObject}.");
-        
-        // we'll track all results to MVO and CSOs, both good and bad, using an Activity Run Profile Execution Item. 
+
+        // we'll track all results to MVO and CSOs, both good and bad, using an Activity Run Profile Execution Item.
         var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-        
+
         try
         {
             await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
             await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
-            
+
             // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
             // this requires that we have sync rules defined.
             if (activeSyncRules.Count > 0 && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
@@ -130,7 +130,7 @@ public class SyncFullSyncTaskProcessor
             runProfileExecutionItem.ErrorMessage = e.Message;
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
-            
+
             // still perform system logging.
             Log.Error(e, $"ProcessConnectedSystemObjectAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing {connectedSystemObject}.");
         }
@@ -152,7 +152,7 @@ public class SyncFullSyncTaskProcessor
     /// </summary>
     private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
-        if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete) 
+        if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
             return;
 
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Executing for: {connectedSystemObject}.");
@@ -170,7 +170,7 @@ public class SyncFullSyncTaskProcessor
             await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
             return;
         }
-        
+
         // todo: joiner, determine Metaverse and onward CSO impact.
         throw new NotImplementedException("Deleting joined CSOs is not yet supported.");
     }
@@ -185,10 +185,10 @@ public class SyncFullSyncTaskProcessor
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
-        
+
         if (activeSyncRules.Count == 0)
             return;
-        
+
         // do we need to join, or project the CSO to the Metaverse?
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -196,7 +196,7 @@ public class SyncFullSyncTaskProcessor
             // inspect sync rules to determine if we have any join or projection requirements.
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
             await AttemptJoinAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
-            
+
             // did we encounter an error whilst attempting a join? stop processing the CSO if so.
             if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                 return;
@@ -219,11 +219,11 @@ public class SyncFullSyncTaskProcessor
                 // evaluate inbound attribute flow rules
                 ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
             }
-            
+
             // have we created a new MVO that needs persisting?
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
                 await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
-            
+
             // should we persist MVO changes before moving on to onwards CSO updates?
             // is there value in working out if we need to persist the MVO? i.e. is there a performance hit in letting EF work it out for every MVO?
             // todo: process onward-CSO updates
@@ -240,25 +240,25 @@ public class SyncFullSyncTaskProcessor
     /// <exception cref="InvalidDataException">Will be thrown if an unsupported join state is found preventing processing.</exception>
     private async Task AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
-        // enumerate all sync rules that have matching rules. first to match wins. 
+        // enumerate all sync rules that have matching rules. first to match wins.
         // for more deterministic results, admins should make sure an object only matches to a single sync rule
         // at any given moment to ensure the single sync rule matching rule priority order is law.
         foreach (var matchingSyncRule in activeSyncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
         {
-            // object matching rules are ordered. respect the ordering. 
+            // object matching rules are ordered. respect the ordering.
             foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
             {
                 // use this rule to see if we have a matching MVO to join with.
                 var mvo = await _jim.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, matchingSyncRule.MetaverseObjectType, matchingRule);
-                if (mvo == null) 
+                if (mvo == null)
                     continue;
-                
+
                 // mvo must not already be joined to a connected system object in this connected system. joins are 1:1.
                 var existingCsoJoins = mvo.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
 
                 if (existingCsoJoins.Count > 1)
                     throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
-                    
+
                 if (existingCsoJoins.Count == 1)
                 {
                     runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
@@ -268,7 +268,7 @@ public class SyncFullSyncTaskProcessor
                     _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                     return;
                 }
-                    
+
                 // establish join! then return as first rule to match, wins.
                 connectedSystemObject.MetaverseObject = mvo;
                 connectedSystemObject.MetaverseObjectId = mvo.Id;
@@ -277,7 +277,7 @@ public class SyncFullSyncTaskProcessor
                 mvo.ConnectedSystemObjects.Add(connectedSystemObject);
                 return;
             }
-            
+
             // have we joined yet? stop enumerating if so.
             if (connectedSystemObject.MetaverseObject != null)
                 return;
@@ -300,9 +300,9 @@ public class SyncFullSyncTaskProcessor
             sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
             sr.ConnectedSystemObjectType.Id == connectedSystemObject.TypeId);
 
-        if (projectionSyncRule == null) 
+        if (projectionSyncRule == null)
             return;
-        
+
         // create the MVO using type from the Sync Rule.
         var mvo = new MetaverseObject
         {
@@ -314,7 +314,7 @@ public class SyncFullSyncTaskProcessor
         connectedSystemObject.MetaverseObjectId = mvo.Id;
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         connectedSystemObject.DateJoined = DateTime.UtcNow;
-        
+
         // do not flow attributes at this point. let that happen separately, so we don't re-process sync rules later.
     }
 
@@ -336,12 +336,12 @@ public class SyncFullSyncTaskProcessor
 
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
-        
+
         foreach (var syncRuleMapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
         {
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
-            
+
             SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes);
         }
     }
@@ -354,9 +354,9 @@ public class SyncFullSyncTaskProcessor
     /// <param name="connectedSystemObjectAttributeValue">The source for the values on the Metaverse Object Attribute Value.</param>
     private void SetMetaverseObjectAttributeValue(
         MetaverseObject metaverseObject, MetaverseAttribute metaverseAttribute, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue)
-    {    
+    {
         // TODO: review for evolution to handle update/delete scenarios
-        
+
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             MetaverseObject = metaverseObject,
@@ -375,7 +375,7 @@ public class SyncFullSyncTaskProcessor
 
     /// <summary>
     /// As part of updating or creating reference Metaverse Attribute Values from Connected System Object Attribute Values, references would have been staged
-    /// as unresolved, pointing to the Connected System Object. This converts those CSO unresolved references to MVO references. 
+    /// as unresolved, pointing to the Connected System Object. This converts those CSO unresolved references to MVO references.
     /// </summary>
     private async Task ResolveReferencesAsync()
     {
@@ -383,7 +383,7 @@ public class SyncFullSyncTaskProcessor
         // get the joined Metaverse Object and add it to the Metaverse Object Attribute Value
         // remove the unresolved reference value.
         // update the Metaverse Object Attribute Value.
-        
+
         // TODO: "Is this still needed? We're assigning MVO references from CSO reference values on sync rule processing."
     }
 }
