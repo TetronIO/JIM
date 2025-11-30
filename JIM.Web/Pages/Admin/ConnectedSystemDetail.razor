@@ -310,6 +310,17 @@
                     }
 
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Typo="Typo.subtitle1" Class="mb-3">Object Type Settings</MudText>
+                        <MudSwitch
+                            @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
+                            Color="@Color.Primary"
+                            Label="Remove contributed attributes when objects are obsoleted" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            When enabled, attribute values contributed by objects of this type will be removed from the Metaverse when the source object is deleted or no longer present in the connected system.
+                        </MudText>
+                    </MudPaper>
+
+                    <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText>
                             Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.
                         </MudText>

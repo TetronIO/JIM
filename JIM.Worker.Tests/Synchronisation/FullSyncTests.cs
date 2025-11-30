@@ -610,48 +610,27 @@ public class FullSyncTests
     }
 
     /// <summary>
-    /// Tests that attempting to delete a joined CSO throws NotImplementedException as this functionality is pending.
-    /// This test documents the current limitation and should be updated when MVO deletion logic is implemented.
+    /// Tests that when a joined CSO is obsoleted, the CSO-MVO join is broken before the CSO is deleted.
     /// </summary>
     [Test]
-    public async Task CsoObsoleteDeletionForJoinedCsoThrowsNotImplementedTestAsync()
+    public async Task CsoObsoleteDeletionForJoinedCsoBreaksJoinTestAsync()
     {
-        // get a stub import sync rule with object matching
-        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
-
-        // add object matching rule to ensure CSO is joined to MVO
-        var objectMatchingRule = new SyncRuleMapping
-        {
-            Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
-            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
-                .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
-        };
-        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
-        {
-            Id = 1,
-            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
-            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER").
-                Attributes.Single(q=>q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
-        });
-        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
-
         // manually join the first CSO to the first MVO to set up the test scenario
-        ConnectedSystemObjectsData[0].MetaverseObject = MetaverseObjectsData[0];
-        ConnectedSystemObjectsData[0].MetaverseObjectId = MetaverseObjectsData[0].Id;
-        ConnectedSystemObjectsData[0].JoinType = ConnectedSystemObjectJoinType.Joined;
-        ConnectedSystemObjectsData[0].DateJoined = DateTime.UtcNow;
-        MetaverseObjectsData[0].ConnectedSystemObjects.Add(ConnectedSystemObjectsData[0]);
+        var cso = ConnectedSystemObjectsData[0];
+        var mvo = MetaverseObjectsData[0];
+        cso.MetaverseObject = mvo;
+        cso.MetaverseObjectId = mvo.Id;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = DateTime.UtcNow;
+        mvo.ConnectedSystemObjects.Add(cso);
 
         // verify the CSO is now joined to an MVO
-        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to be joined to an MVO.");
+        Assert.That(cso.MetaverseObject, Is.Not.Null, "Expected CSO to be joined to an MVO.");
 
         // mark the joined CSO as obsolete (simulating it was not present in the import)
-        ConnectedSystemObjectsData[0].Status = ConnectedSystemObjectStatus.Obsolete;
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
 
-        // verify that attempting to process this logs NotImplementedException error
+        // run full sync
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
@@ -659,11 +638,14 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify error was logged in activity
-        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
-        var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(q => q.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError);
-        Assert.That(errorItem, Is.Not.Null, "Expected an error item to be logged.");
-        Assert.That(errorItem.ErrorMessage, Does.Contain("not yet supported"), "Expected error message about deletion not being supported.");
+        // verify CSO-MVO join was broken
+        Assert.That(cso.MetaverseObject, Is.Null, "Expected CSO-MVO join to be broken.");
+        Assert.That(cso.MetaverseObjectId, Is.Null, "Expected CSO.MetaverseObjectId to be null.");
+        Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "Expected CSO join type to be NotJoined.");
+
+        // verify the MVO no longer references the CSO
+        Assert.That(mvo.ConnectedSystemObjects.Contains(cso), Is.False,
+            "Expected MVO to no longer reference the obsoleted CSO.");
     }
 
     /// <summary>
@@ -777,4 +759,168 @@ public class FullSyncTests
 
     // todo: MVO changes are persisted as expected (requires understanding persistence layer)
     // todo: Onward updates/exports as a result of MVO changes (export scenario)
+
+    /// <summary>
+    /// Tests that when a joined CSO is obsoleted and RemoveContributedAttributesOnObsoletion is true (default),
+    /// the MVO attributes contributed by that CSO are added to PendingAttributeValueRemovals,
+    /// the CSO-MVO join is broken, and the CSO is deleted.
+    /// </summary>
+    [Test]
+    public async Task CsoObsoleteWithRemoveContributedAttributesEnabledTestAsync()
+    {
+        // manually join the first CSO to the first MVO
+        var cso = ConnectedSystemObjectsData[0];
+
+        // enable RemoveContributedAttributesOnObsoletion on the CSO's type (this is the default)
+        // (we must use the CSO's Type property directly, not the ConnectedSystemObjectTypesData,
+        // because they are different instances created by separate calls to GetConnectedSystemObjectTypeData())
+        cso.Type.RemoveContributedAttributesOnObsoletion = true;
+
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        var mvo = MetaverseObjectsData[0];
+        cso.MetaverseObject = mvo;
+        cso.MetaverseObjectId = mvo.Id;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = DateTime.UtcNow;
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        // clear existing attribute values and add specific ones contributed by this connected system
+        var connectedSystem = ConnectedSystemsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var displayNameAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+        var employeeNumberAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeNumber);
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameAttr,
+            AttributeId = displayNameAttr.Id,
+            StringValue = "Joe Bloggs",
+            ContributedBySystem = connectedSystem
+        });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeNumberAttr,
+            AttributeId = employeeNumberAttr.Id,
+            IntValue = 123,
+            ContributedBySystem = connectedSystem
+        });
+
+        // verify setup
+        Assert.That(cso.MetaverseObject, Is.Not.Null, "Expected CSO to be joined to an MVO.");
+        Assert.That(mvo.AttributeValues.Count, Is.EqualTo(2), "Expected MVO to have 2 attribute values.");
+        Assert.That(mvo.AttributeValues.All(av => av.ContributedBySystem?.Id == connectedSystem.Id), Is.True,
+            "Expected all MVO attribute values to be contributed by the connected system.");
+
+        // mark the joined CSO as obsolete
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+
+        // run full sync
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify that the MVO has pending attribute value removals for the attributes contributed by this system
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Not.Empty,
+            "Expected pending attribute value removals when RemoveContributedAttributesOnObsoletion is enabled.");
+        Assert.That(mvo.PendingAttributeValueRemovals.Count, Is.EqualTo(2),
+            "Expected 2 pending attribute value removals (DisplayName and EmployeeNumber).");
+
+        // verify the CSO-MVO join was broken
+        Assert.That(cso.MetaverseObject, Is.Null, "Expected CSO-MVO join to be broken.");
+        Assert.That(cso.MetaverseObjectId, Is.Null, "Expected CSO.MetaverseObjectId to be null.");
+
+        // verify the MVO still exists (not deleted) but no longer references this CSO
+        Assert.That(mvo.ConnectedSystemObjects.Contains(cso), Is.False,
+            "Expected MVO to no longer reference the obsoleted CSO.");
+    }
+
+    /// <summary>
+    /// Tests that when a joined CSO is obsoleted and RemoveContributedAttributesOnObsoletion is false,
+    /// the MVO attributes remain (no PendingAttributeValueRemovals added),
+    /// the CSO-MVO join is broken, and the CSO is deleted.
+    /// </summary>
+    [Test]
+    public async Task CsoObsoleteWithRemoveContributedAttributesDisabledTestAsync()
+    {
+        // manually join the first CSO to the first MVO
+        var cso = ConnectedSystemObjectsData[0];
+
+        // disable RemoveContributedAttributesOnObsoletion on the CSO's type
+        // (we must use the CSO's Type property directly, not the ConnectedSystemObjectTypesData,
+        // because they are different instances created by separate calls to GetConnectedSystemObjectTypeData())
+        cso.Type.RemoveContributedAttributesOnObsoletion = false;
+
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        var mvo = MetaverseObjectsData[0];
+        cso.MetaverseObject = mvo;
+        cso.MetaverseObjectId = mvo.Id;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = DateTime.UtcNow;
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        // clear existing attribute values and add specific ones contributed by this connected system
+        var connectedSystem = ConnectedSystemsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var displayNameAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+        var employeeNumberAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeNumber);
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameAttr,
+            AttributeId = displayNameAttr.Id,
+            StringValue = "Joe Bloggs",
+            ContributedBySystem = connectedSystem
+        });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeNumberAttr,
+            AttributeId = employeeNumberAttr.Id,
+            IntValue = 123,
+            ContributedBySystem = connectedSystem
+        });
+
+        // verify setup
+        Assert.That(cso.MetaverseObject, Is.Not.Null, "Expected CSO to be joined to an MVO.");
+        Assert.That(mvo.AttributeValues.Count, Is.EqualTo(2), "Expected MVO to have 2 attribute values.");
+        Assert.That(mvo.AttributeValues.All(av => av.ContributedBySystem?.Id == connectedSystem.Id), Is.True,
+            "Expected all MVO attribute values to be contributed by the connected system.");
+
+        // mark the joined CSO as obsolete
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+
+        // run full sync
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify that no pending attribute value removals were created (attributes are retained)
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty,
+            "Expected no pending attribute value removals when RemoveContributedAttributesOnObsoletion is disabled.");
+
+        // verify the MVO attribute values are still present
+        Assert.That(mvo.AttributeValues.Count, Is.EqualTo(2),
+            "Expected MVO attribute values to remain when RemoveContributedAttributesOnObsoletion is disabled.");
+
+        // verify the CSO-MVO join was broken
+        Assert.That(cso.MetaverseObject, Is.Null, "Expected CSO-MVO join to be broken.");
+        Assert.That(cso.MetaverseObjectId, Is.Null, "Expected CSO.MetaverseObjectId to be null.");
+
+        // verify the MVO still exists (not deleted) but no longer references this CSO
+        Assert.That(mvo.ConnectedSystemObjects.Contains(cso), Is.False,
+            "Expected MVO to no longer reference the obsoleted CSO.");
+    }
 }

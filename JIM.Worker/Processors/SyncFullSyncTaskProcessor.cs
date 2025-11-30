@@ -157,22 +157,42 @@ public class SyncFullSyncTaskProcessor
 
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Executing for: {connectedSystemObject}.");
 
-        // - if not joined, delete the cso
-        // - if joined:
-        //   - if the metaverse object should be deleted (determined by mv object deletion rules):
-        //     - should any other connected system objects be deleted?
-        //   - if the metaverse object shouldn't be deleted:
-        //     - should any cso-contributed mvo attributes be removed?
-
         if (connectedSystemObject.MetaverseObject == null)
         {
-            // not a joiner, delete the CSO.
+            // Not joined, just delete the CSO.
             await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
             return;
         }
 
-        // todo: joiner, determine Metaverse and onward CSO impact.
-        throw new NotImplementedException("Deleting joined CSOs is not yet supported.");
+        // CSO is joined to an MVO - handle the obsoletion
+        var mvo = connectedSystemObject.MetaverseObject;
+        var connectedSystemId = connectedSystemObject.ConnectedSystemId;
+
+        // Check if we should remove contributed attributes based on the object type setting
+        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
+        {
+            // Find all MVO attribute values contributed by this connected system and mark them for removal
+            var contributedAttributes = mvo.AttributeValues
+                .Where(av => av.ContributedBySystem?.Id == connectedSystemId)
+                .ToList();
+
+            foreach (var attributeValue in contributedAttributes)
+            {
+                mvo.PendingAttributeValueRemovals.Add(attributeValue);
+                Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Marking attribute '{attributeValue.Attribute?.Name}' for removal from MVO {mvo.Id}.");
+            }
+        }
+
+        // Break the CSO-MVO join
+        mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
+        connectedSystemObject.MetaverseObject = null;
+        connectedSystemObject.MetaverseObjectId = null;
+        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+        connectedSystemObject.DateJoined = null;
+        Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Broke join between CSO {connectedSystemObject.Id} and MVO {mvo.Id}.");
+
+        // Delete the CSO
+        await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
     }
 
     /// <summary>
