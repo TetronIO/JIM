@@ -47,7 +47,10 @@
         // Utilities
         "humao.rest-client",
         "eamodio.gitlens",
-        "usernamehw.errorlens"
+        "usernamehw.errorlens",
+
+        // CSV viewing and editing
+        "mechatroner.rainbow-csv"
       ],
 
       // VS Code settings
