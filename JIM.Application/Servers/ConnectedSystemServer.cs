@@ -972,6 +972,15 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
     }
+
+    /// <summary>
+    /// Deletes a Pending Export object.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to delete.</param>
+    public async Task DeletePendingExportAsync(PendingExport pendingExport)
+    {
+        await Application.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+    }
     #endregion
 
     #region Sync Rules

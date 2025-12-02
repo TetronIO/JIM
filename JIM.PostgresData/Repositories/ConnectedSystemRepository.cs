@@ -715,6 +715,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.PendingExports.CountAsync(pe => pe.ConnectedSystemId == connectedSystemId);
     }
+
+    public async Task DeletePendingExportAsync(PendingExport pendingExport)
+    {
+        Repository.Database.PendingExports.Remove(pendingExport);
+        await Repository.Database.SaveChangesAsync();
+    }
     #endregion
 
     #region Sync Rules

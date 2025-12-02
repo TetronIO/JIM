@@ -107,46 +107,88 @@ public class FullSyncTests
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
     }
     
-    // [Test]
-    // public async Task PendingExportTestSuccessAsync()
-    // {
-    //      // set up the Pending Export objects mock. this is specific to this test
-    //      var pendingExportObjects = new List<PendingExport>
-    //      {
-    //          new()
-    //          {
-    //              Id = Guid.NewGuid(),
-    //              ConnectedSystemId = 1,
-    //              Status = PendingExportStatus.Pending,
-    //              ChangeType = PendingExportChangeType.Create,
-    //              AttributeValueChanges = new()
-    //              {
-    //                  new()
-    //                  {
-    //                      Id = Guid.NewGuid(),
-    //                      ChangeType = PendingExportAttributeChangeType.Add,
-    //                      AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
-    //                      StringValue = "James McGill"
-    //                  },
-    //                  
-    //              }
-    //          }
-    //     };
-    //     
-    //     // mock up a connector that will return testable data
-    //     
-    //     // now execute Jim functionality we want to test...
-    //     
-    //     // confirm the results persisted to the mocked db context
-    //
-    //     // validate the first user (who is a manager)
-    //
-    //     // validate the second user (who is a direct-report)
-    //     
-    //     // validate second user manager reference.
-    //
-    //     Assert.Fail("Not implemented yet. Doesn't need to be done until export scenario worked on.");
-    // }
+    /// <summary>
+    /// Tests that a PendingExport is deleted when the CSO state is confirmed to match the pending changes.
+    /// This happens during Full Sync when we verify that exported changes have been successfully applied.
+    /// </summary>
+    [Test]
+    public async Task PendingExportDeletedWhenCsoStateMatchesTestAsync()
+    {
+        // get the first CSO that we'll have a pending export for
+        var cso = ConnectedSystemObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+
+        // get the connected system object type attributes we'll use
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+        var displayNameAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+        var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
+
+        // create a pending export for updating this CSO with attribute changes
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystem = connectedSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name"
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+                    Attribute = employeeNumberAttr,
+                    IntValue = 999
+                }
+            }
+        };
+
+        // add the pending export to our mock data
+        PendingExportsData.Add(pendingExport);
+
+        // update the CSO to have the exact values that are in the pending export
+        // (simulating that the export was successfully applied)
+        var csoDisplayNameValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+        if (csoDisplayNameValue != null)
+            csoDisplayNameValue.StringValue = "Updated Name";
+
+        var csoEmployeeNumberValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
+        if (csoEmployeeNumberValue != null)
+            csoEmployeeNumberValue.IntValue = 999;
+
+        // verify setup
+        Assert.That(PendingExportsData.Count, Is.EqualTo(1), "Expected one pending export before sync.");
+        Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME).StringValue,
+            Is.EqualTo("Updated Name"), "Expected CSO to have the updated display name.");
+        Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER).IntValue,
+            Is.EqualTo(999), "Expected CSO to have the updated employee number.");
+
+        // setup mock to handle pending export deletion
+        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
+            (PendingExport entity) => {
+                PendingExportsData.Remove(entity);
+            });
+
+        // run full sync
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the pending export was deleted because the CSO state matches
+        Assert.That(PendingExportsData.Count, Is.EqualTo(0),
+            "Expected pending export to be deleted when CSO state matches the pending changes.");
+    }
     
     /// <summary>
     /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a sync rule using a text data type attribute. 
