@@ -1325,4 +1325,503 @@ public class FullSyncTests
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Type.Name, Is.EqualTo("User"),
             "Expected projected MVO type to be 'User' from the first sync rule.");
     }
+
+    /// <summary>
+    /// Tests that MVO attributes are updated when CSO attribute values change on an existing join.
+    /// The old MVO value should be added to PendingAttributeValueRemovals and the new value to PendingAttributeValueAdditions.
+    /// </summary>
+    [Test]
+    public async Task MvoAttributeUpdatedOnExistingJoinTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // add object matching rule to join CSO to existing MVO
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // add attribute flow rule for DisplayName
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        var displayNameMapping = new SyncRuleMapping
+        {
+            Id = 100,
+            Type = SyncRuleMappingType.AttributeFlow,
+            AttributeFlowSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
+        };
+        displayNameMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1000,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+            Order = 1
+        });
+        importSyncRule.AttributeFlowRules.Add(displayNameMapping);
+
+        // get the existing MVO and its current DisplayName value
+        var existingMvo = MetaverseObjectsData[0];
+        var existingMvoDisplayName = existingMvo.AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockMetaverseAttributeName.DisplayName);
+        Assert.That(existingMvoDisplayName, Is.Not.Null, "Expected existing MVO to have a DisplayName attribute.");
+        var originalDisplayNameValue = existingMvoDisplayName.StringValue;
+        Assert.That(originalDisplayNameValue, Is.Not.Null.And.Not.Empty, "Expected existing MVO DisplayName to have a value.");
+
+        // change the CSO DisplayName to a different value
+        var csoDisplayName = ConnectedSystemObjectsData[0].AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+        Assert.That(csoDisplayName, Is.Not.Null, "Expected CSO to have a DISPLAY_NAME attribute.");
+        var newDisplayNameValue = "Updated Display Name";
+        csoDisplayName.StringValue = newDisplayNameValue;
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the CSO joined to the existing MVO
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(existingMvo.Id), "Expected CSO to join to the existing MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected JoinType to be Joined.");
+
+        // verify a pending removal was created for the old DisplayName value
+        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
+        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for old DisplayName value.");
+        Assert.That(pendingRemoval.First().StringValue, Is.EqualTo(originalDisplayNameValue),
+            "Expected pending removal to contain the original DisplayName value.");
+
+        // verify a pending addition was created for the new DisplayName value
+        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
+        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for new DisplayName value.");
+        Assert.That(pendingAddition.First().StringValue, Is.EqualTo(newDisplayNameValue),
+            "Expected pending addition to contain the new DisplayName value.");
+    }
+
+    /// <summary>
+    /// Tests that MVO attributes are updated when a new join is established between a CSO and MVO.
+    /// CSO attribute values should flow to MVO when join is first created.
+    /// </summary>
+    [Test]
+    public async Task MvoAttributeFlowOnNewJoinTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // add object matching rule to join CSO to existing MVO
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // add attribute flow rule for EmployeeStartDate (DateTime type)
+        // Choose an attribute that exists on CSO but NOT on the MVO to verify it gets added
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        var startDateMapping = new SyncRuleMapping
+        {
+            Id = 101,
+            Type = SyncRuleMappingType.AttributeFlow,
+            AttributeFlowSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeStartDate),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeStartDate
+        };
+        startDateMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1001,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.START_DATE,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.START_DATE),
+            Order = 1
+        });
+        importSyncRule.AttributeFlowRules.Add(startDateMapping);
+
+        // verify MVO does NOT have EmployeeStartDate before sync
+        var existingMvo = MetaverseObjectsData[0];
+        var existingStartDate = existingMvo.AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockMetaverseAttributeName.EmployeeStartDate);
+        Assert.That(existingStartDate, Is.Null, "Expected MVO to NOT have EmployeeStartDate before sync.");
+
+        // get the CSO StartDate value that should flow to MVO
+        var csoStartDate = ConnectedSystemObjectsData[0].AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockSourceSystemAttributeNames.START_DATE);
+        Assert.That(csoStartDate, Is.Not.Null, "Expected CSO to have a START_DATE attribute.");
+        Assert.That(csoStartDate.DateTimeValue, Is.Not.Null, "Expected CSO START_DATE to have a value.");
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the CSO joined to the existing MVO
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(existingMvo.Id), "Expected CSO to join to the existing MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected JoinType to be Joined.");
+
+        // verify a pending addition was created for EmployeeStartDate (new attribute flowing to MVO)
+        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.EmployeeStartDate).ToList();
+        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for EmployeeStartDate value.");
+        Assert.That(pendingAddition.First().DateTimeValue, Is.EqualTo(csoStartDate.DateTimeValue),
+            "Expected pending addition to contain the CSO START_DATE value.");
+    }
+
+    /// <summary>
+    /// Tests that no pending changes are created when CSO attribute values match MVO attribute values (idempotency).
+    /// This verifies that Full Sync doesn't create unnecessary pending changes when values are already in sync.
+    /// </summary>
+    [Test]
+    public async Task NoPendingChangesWhenValuesMatchTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // add object matching rule to join CSO to existing MVO
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // add attribute flow rule for DisplayName
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        var displayNameMapping = new SyncRuleMapping
+        {
+            Id = 100,
+            Type = SyncRuleMappingType.AttributeFlow,
+            AttributeFlowSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
+        };
+        displayNameMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1000,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+            Order = 1
+        });
+        importSyncRule.AttributeFlowRules.Add(displayNameMapping);
+
+        // get the existing MVO and its current DisplayName value
+        var existingMvo = MetaverseObjectsData[0];
+        var existingMvoDisplayName = existingMvo.AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockMetaverseAttributeName.DisplayName);
+        Assert.That(existingMvoDisplayName, Is.Not.Null, "Expected existing MVO to have a DisplayName attribute.");
+
+        // set CSO DisplayName to MATCH the MVO DisplayName (same value)
+        var csoDisplayName = ConnectedSystemObjectsData[0].AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+        Assert.That(csoDisplayName, Is.Not.Null, "Expected CSO to have a DISPLAY_NAME attribute.");
+        csoDisplayName.StringValue = existingMvoDisplayName.StringValue; // Set to same value
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the CSO joined to the existing MVO
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected JoinType to be Joined.");
+
+        // verify NO pending removals for DisplayName (values match, no change needed)
+        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
+        Assert.That(pendingRemoval, Is.Empty, "Expected no pending removal when values match.");
+
+        // verify NO pending additions for DisplayName (values match, no change needed)
+        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
+        Assert.That(pendingAddition, Is.Empty, "Expected no pending addition when values match.");
+    }
+
+    /// <summary>
+    /// Tests that MVO Number attribute is updated when CSO Number attribute value changes on an existing join.
+    /// </summary>
+    [Test]
+    public async Task MvoNumberAttributeUpdatedOnExistingJoinTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // add object matching rule to join CSO to existing MVO
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // add attribute flow rule for EmployeeNumber (Number type)
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        var employeeNumberMapping = new SyncRuleMapping
+        {
+            Id = 102,
+            Type = SyncRuleMappingType.AttributeFlow,
+            AttributeFlowSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeNumber),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeNumber
+        };
+        employeeNumberMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1002,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER),
+            Order = 1
+        });
+        importSyncRule.AttributeFlowRules.Add(employeeNumberMapping);
+
+        // get the existing MVO and its current EmployeeNumber value
+        var existingMvo = MetaverseObjectsData[0];
+        var existingMvoEmployeeNumber = existingMvo.AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber);
+        Assert.That(existingMvoEmployeeNumber, Is.Not.Null, "Expected existing MVO to have an EmployeeNumber attribute.");
+        var originalEmployeeNumberValue = existingMvoEmployeeNumber.IntValue;
+        Assert.That(originalEmployeeNumberValue, Is.Not.Null, "Expected existing MVO EmployeeNumber to have a value.");
+
+        // change the CSO EmployeeNumber to a different value
+        var csoEmployeeNumber = ConnectedSystemObjectsData[0].AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
+        Assert.That(csoEmployeeNumber, Is.Not.Null, "Expected CSO to have an EMPLOYEE_NUMBER attribute.");
+        var newEmployeeNumberValue = 99999;
+        csoEmployeeNumber.IntValue = newEmployeeNumberValue;
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify a pending removal was created for the old EmployeeNumber value
+        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
+        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for old EmployeeNumber value.");
+        Assert.That(pendingRemoval.First().IntValue, Is.EqualTo(originalEmployeeNumberValue),
+            "Expected pending removal to contain the original EmployeeNumber value.");
+
+        // verify a pending addition was created for the new EmployeeNumber value
+        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
+        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for new EmployeeNumber value.");
+        Assert.That(pendingAddition.First().IntValue, Is.EqualTo(newEmployeeNumberValue),
+            "Expected pending addition to contain the new EmployeeNumber value.");
+    }
+
+    /// <summary>
+    /// Tests that MVO Guid attribute is updated when CSO Guid attribute value changes on an existing join.
+    /// </summary>
+    [Test]
+    public async Task MvoGuidAttributeUpdatedOnExistingJoinTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // add object matching rule to join CSO to existing MVO
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // add attribute flow rule for HrId (Guid type)
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        var hrIdMapping = new SyncRuleMapping
+        {
+            Id = 103,
+            Type = SyncRuleMappingType.AttributeFlow,
+            AttributeFlowSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.HrId),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.HrId
+        };
+        hrIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1003,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
+            Order = 1
+        });
+        importSyncRule.AttributeFlowRules.Add(hrIdMapping);
+
+        // get the existing MVO and its current HrId value
+        var existingMvo = MetaverseObjectsData[0];
+        var existingMvoHrId = existingMvo.AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockMetaverseAttributeName.HrId);
+        Assert.That(existingMvoHrId, Is.Not.Null, "Expected existing MVO to have an HrId attribute.");
+        var originalHrIdValue = existingMvoHrId.GuidValue;
+        Assert.That(originalHrIdValue, Is.Not.Null, "Expected existing MVO HrId to have a value.");
+
+        // change the CSO HrId to a different value
+        var csoHrId = ConnectedSystemObjectsData[0].AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockSourceSystemAttributeNames.HR_ID);
+        Assert.That(csoHrId, Is.Not.Null, "Expected CSO to have an HR_ID attribute.");
+        var newHrIdValue = Guid.NewGuid();
+        csoHrId.GuidValue = newHrIdValue;
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify a pending removal was created for the old HrId value
+        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.HrId).ToList();
+        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for old HrId value.");
+        Assert.That(pendingRemoval.First().GuidValue, Is.EqualTo(originalHrIdValue),
+            "Expected pending removal to contain the original HrId value.");
+
+        // verify a pending addition was created for the new HrId value
+        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.HrId).ToList();
+        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for new HrId value.");
+        Assert.That(pendingAddition.First().GuidValue, Is.EqualTo(newHrIdValue),
+            "Expected pending addition to contain the new HrId value.");
+    }
+
+    /// <summary>
+    /// Tests that MVO Number attribute is removed when CSO Number attribute is deleted.
+    /// </summary>
+    [Test]
+    public async Task MvoNumberAttributeRemovedWhenCsoAttributeDeletedTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // add object matching rule to join CSO to existing MVO
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // add attribute flow rule for EmployeeNumber
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        var employeeNumberMapping = new SyncRuleMapping
+        {
+            Id = 102,
+            Type = SyncRuleMappingType.AttributeFlow,
+            AttributeFlowSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeNumber),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeNumber
+        };
+        employeeNumberMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1002,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER),
+            Order = 1
+        });
+        importSyncRule.AttributeFlowRules.Add(employeeNumberMapping);
+
+        // verify MVO has EmployeeNumber before sync
+        var existingMvo = MetaverseObjectsData[0];
+        var existingMvoEmployeeNumber = existingMvo.AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber);
+        Assert.That(existingMvoEmployeeNumber, Is.Not.Null, "Expected existing MVO to have an EmployeeNumber attribute.");
+
+        // remove the EmployeeNumber attribute from the CSO (simulating a delete)
+        var csoEmployeeNumber = ConnectedSystemObjectsData[0].AttributeValues.FirstOrDefault(a => a.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
+        if (csoEmployeeNumber != null)
+            ConnectedSystemObjectsData[0].AttributeValues.Remove(csoEmployeeNumber);
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify a pending removal was created for EmployeeNumber
+        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+            av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
+        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for EmployeeNumber attribute value.");
+    }
 }
