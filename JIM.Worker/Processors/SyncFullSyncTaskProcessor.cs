@@ -3,6 +3,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Worker.Processors;
@@ -252,28 +253,11 @@ public class SyncFullSyncTaskProcessor
         if (pendingChange.DateTimeValue.HasValue && csoValue.DateTimeValue != pendingChange.DateTimeValue)
             return false;
 
-        if (pendingChange.ByteValue != null && !ByteArraysEqual(csoValue.ByteValue, pendingChange.ByteValue))
+        if (pendingChange.ByteValue != null && !Utilities.Utilities.AreByteArraysTheSame(csoValue.ByteValue, pendingChange.ByteValue))
             return false;
 
         if (pendingChange.UnresolvedReferenceValue != null && csoValue.UnresolvedReferenceValue != pendingChange.UnresolvedReferenceValue)
             return false;
-
-        return true;
-    }
-
-    /// <summary>
-    /// Compares two byte arrays for equality.
-    /// </summary>
-    private bool ByteArraysEqual(byte[]? a, byte[]? b)
-    {
-        if (a == null && b == null) return true;
-        if (a == null || b == null) return false;
-        if (a.Length != b.Length) return false;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            if (a[i] != b[i]) return false;
-        }
 
         return true;
     }

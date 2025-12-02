@@ -20,6 +20,13 @@ public static class Utilities
         return array1.SequenceEqual(array2);
     }
 
+    public static bool AreByteArraysTheSame(byte[]? array1, byte[]? array2)
+    {
+        if (array1 == null && array2 == null) return true;
+        if (array1 == null || array2 == null) return false;
+        return AreByteArraysTheSame((ReadOnlySpan<byte>)array1, (ReadOnlySpan<byte>)array2);
+    }
+
     public static string GetMetaverseObjectHref(MetaverseObject metaverseObject)
     {
         return $"/t/{metaverseObject.Type.Name.ToLower()}/v/{metaverseObject.Id}";
