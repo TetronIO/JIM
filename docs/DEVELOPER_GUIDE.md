@@ -465,6 +465,8 @@ docker compose exec jim.web dotnet ef database update
 
 The JIM File Connector imports identity data from CSV files. Because JIM runs in Docker containers, files must be accessible via Docker volumes.
 
+> **📝 Quick Start for Development**: Test data files from `test/Data/` are automatically available via symlink at `/var/connector-files/test-data/` in the devcontainer. See [FILE_CONNECTOR_TEST_DATA.md](FILE_CONNECTOR_TEST_DATA.md) for details.
+
 ### Understanding Docker Volumes
 
 Docker volumes bridge your host filesystem to the container. The File Connector expects files at a **container path** (e.g., `/var/connector-files/Users.csv`), which maps to a **host path** on your machine.

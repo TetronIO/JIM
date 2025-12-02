@@ -603,13 +603,13 @@
                     <MudTextField T="string" @bind-Value="_newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
 
                     <!-- would like to make this conditional, but the connector definition needs to state if it's file-based or not. this can be determined for custom connectors, but not built-in as there are no files for those. -->
-                    <MudTextField 
-                        T="string" 
-                        @bind-Value="_newRunProfile.FilePath" 
-                        Label="File Path" 
-                        Variant="Variant.Outlined" 
-                        Class="mt-3" 
-                        HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/Users.csv" />
+                    <MudTextField
+                        T="string"
+                        @bind-Value="_newRunProfile.FilePath"
+                        Label="File Path"
+                        Variant="Variant.Outlined"
+                        Class="mt-3"
+                        HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
 
                     <MudSelect 
                         T="ConnectedSystemRunType" 

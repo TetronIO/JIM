@@ -126,7 +126,23 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 7. Create useful shell aliases
+# 7. Create connector-files directory with symlink to test data
+print_step "Setting up connector-files directory..."
+mkdir -p connector-files
+
+# Create symlink to test/Data directory (dynamic - new files appear automatically)
+if [ ! -L connector-files/test-data ]; then
+    if [ -d "test/Data" ]; then
+        ln -s "$(pwd)/test/Data" connector-files/test-data
+        print_success "Symlink created: connector-files/test-data -> test/Data"
+    else
+        print_warning "test/Data directory not found, skipping symlink"
+    fi
+else
+    print_success "Symlink already exists: connector-files/test-data"
+fi
+
+# 8. Create useful shell aliases
 print_step "Creating shell aliases..."
 cat >> ~/.zshrc << 'EOF'
 
