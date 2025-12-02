@@ -27,10 +27,11 @@ print_step "Installing .NET Entity Framework Core tools..."
 # Clean up any corrupted tool state first, then install fresh
 # This handles cases where the tool cache becomes corrupted after container rebuilds
 rm -rf ~/.dotnet/tools/dotnet-ef ~/.dotnet/tools/.store/dotnet-ef 2>/dev/null || true
-if dotnet tool install --global dotnet-ef; then
-    print_success "dotnet-ef installed globally"
+# Use explicit version to avoid "Settings file not found" errors with latest package
+if dotnet tool install --global dotnet-ef --version 9.0.0; then
+    print_success "dotnet-ef 9.0.0 installed globally"
 else
-    print_warning "dotnet-ef installation failed - you may need to install manually"
+    print_warning "dotnet-ef installation failed - you may need to install manually: dotnet tool install --global dotnet-ef --version 9.0.0"
 fi
 
 # Add .NET tools to PATH

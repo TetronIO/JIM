@@ -307,8 +307,54 @@ public class SyncFullSyncTaskProcessor
         connectedSystemObject.DateJoined = null;
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Broke join between CSO {connectedSystemObject.Id} and MVO {mvo.Id}.");
 
+        // Check if this was the last connector and handle MVO deletion based on DeletionRule
+        if (mvo.ConnectedSystemObjects.Count == 0)
+        {
+            await ProcessMvoDeletionRuleAsync(mvo, runProfileExecutionItem);
+        }
+
         // Delete the CSO
         await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+    }
+
+    /// <summary>
+    /// Processes the MVO deletion rule when the last connector is disconnected.
+    /// </summary>
+    private async Task ProcessMvoDeletionRuleAsync(MetaverseObject mvo, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    {
+        if (mvo.Type == null)
+        {
+            Log.Warning($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has no Type set. Cannot determine deletion rule.");
+            return;
+        }
+
+        switch (mvo.Type.DeletionRule)
+        {
+            case MetaverseObjectDeletionRule.Manual:
+                // No automatic deletion - MVO remains intact
+                Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has DeletionRule=Manual. No automatic deletion.");
+                break;
+
+            case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                // Check if there's a grace period configured
+                if (mvo.Type.DeletionGracePeriodDays.HasValue && mvo.Type.DeletionGracePeriodDays.Value > 0)
+                {
+                    // Schedule deletion for the future
+                    mvo.ScheduledDeletionDate = DateTime.UtcNow.AddDays(mvo.Type.DeletionGracePeriodDays.Value);
+                    Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} scheduled for deletion on {mvo.ScheduledDeletionDate}.");
+                }
+                else
+                {
+                    // Delete immediately
+                    Log.Information($"ProcessMvoDeletionRuleAsync: Deleting MVO {mvo.Id} immediately (no grace period).");
+                    await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+                }
+                break;
+
+            default:
+                Log.Warning($"ProcessMvoDeletionRuleAsync: Unknown DeletionRule {mvo.Type.DeletionRule} for MVO {mvo.Id}.");
+                break;
+        }
     }
 
     /// <summary>
@@ -411,6 +457,13 @@ public class SyncFullSyncTaskProcessor
                 connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
                 connectedSystemObject.DateJoined = DateTime.UtcNow;
                 mvo.ConnectedSystemObjects.Add(connectedSystemObject);
+
+                // If the MVO was scheduled for deletion (reconnection scenario), clear the scheduled deletion
+                if (mvo.ScheduledDeletionDate.HasValue)
+                {
+                    Log.Information($"AttemptJoinAsync: Clearing ScheduledDeletionDate for MVO {mvo.Id} as connector has reconnected.");
+                    mvo.ScheduledDeletionDate = null;
+                }
                 return;
             }
 

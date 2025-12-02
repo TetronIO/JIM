@@ -90,6 +90,11 @@ public class MetaverseServer
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }
 
+    public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+    {
+        await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
+    }
+
     public async Task<int> GetMetaverseObjectCountAsync()
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectCountAsync();
