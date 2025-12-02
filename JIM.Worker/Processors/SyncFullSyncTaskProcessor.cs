@@ -142,8 +142,140 @@ public class SyncFullSyncTaskProcessor
     /// </summary>
     private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
-        // todo: all of it! skipping for now.
         Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
+
+        // get all pending exports for this connected system
+        var pendingExports = await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id);
+
+        // find any pending exports that are for this specific CSO (Update or Delete operations)
+        var pendingExportsForThisCso = pendingExports
+            .Where(pe => pe.ConnectedSystemObject?.Id == connectedSystemObject.Id)
+            .ToList();
+
+        if (pendingExportsForThisCso.Count == 0)
+        {
+            Log.Verbose($"ProcessPendingExportAsync: No pending exports found for CSO {connectedSystemObject.Id}.");
+            return;
+        }
+
+        Log.Verbose($"ProcessPendingExportAsync: Found {pendingExportsForThisCso.Count} pending export(s) for CSO {connectedSystemObject.Id}.");
+
+        foreach (var pendingExport in pendingExportsForThisCso)
+        {
+            // track which attribute changes succeeded and which failed
+            var successfulChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
+            var failedChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
+
+            foreach (var attributeChange in pendingExport.AttributeValueChanges)
+            {
+                // find the corresponding attribute value on the CSO
+                var csoAttributeValue = connectedSystemObject.AttributeValues
+                    .FirstOrDefault(av => av.AttributeId == attributeChange.AttributeId);
+
+                // check if the attribute change matches the CSO's current state
+                var changeMatches = attributeChange.ChangeType switch
+                {
+                    JIM.Models.Transactional.PendingExportAttributeChangeType.Add or
+                    JIM.Models.Transactional.PendingExportAttributeChangeType.Update =>
+                        csoAttributeValue != null && AttributeValuesMatch(csoAttributeValue, attributeChange),
+
+                    JIM.Models.Transactional.PendingExportAttributeChangeType.Remove or
+                    JIM.Models.Transactional.PendingExportAttributeChangeType.RemoveAll =>
+                        csoAttributeValue == null || string.IsNullOrEmpty(csoAttributeValue.StringValue),
+
+                    _ => false
+                };
+
+                if (changeMatches)
+                {
+                    successfulChanges.Add(attributeChange);
+                    Log.Verbose($"ProcessPendingExportAsync: Attribute change for {attributeChange.AttributeId} confirmed on CSO.");
+                }
+                else
+                {
+                    failedChanges.Add(attributeChange);
+                    Log.Verbose($"ProcessPendingExportAsync: Attribute change for {attributeChange.AttributeId} does not match CSO state.");
+                }
+            }
+
+            // if all changes have been confirmed, delete the pending export
+            if (failedChanges.Count == 0)
+            {
+                Log.Information($"ProcessPendingExportAsync: All changes confirmed for pending export {pendingExport.Id}. Deleting.");
+                await _jim.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+            }
+            else if (successfulChanges.Count > 0)
+            {
+                // partial success: remove successful attribute changes, keep failed ones
+                Log.Information($"ProcessPendingExportAsync: Partial success for pending export {pendingExport.Id}. " +
+                    $"{successfulChanges.Count} succeeded, {failedChanges.Count} failed. Updating pending export.");
+
+                // remove the successful attribute changes from the pending export
+                foreach (var successfulChange in successfulChanges)
+                {
+                    pendingExport.AttributeValueChanges.Remove(successfulChange);
+                }
+
+                // increment error count and update status
+                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
+
+                await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+            }
+            else
+            {
+                // complete failure: all attribute changes failed
+                Log.Warning($"ProcessPendingExportAsync: Complete failure for pending export {pendingExport.Id}. " +
+                    $"All {failedChanges.Count} attribute changes failed. Incrementing error count.");
+
+                // increment error count and update status
+                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
+
+                await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks if a CSO attribute value matches a pending export attribute change.
+    /// </summary>
+    private bool AttributeValuesMatch(ConnectedSystemObjectAttributeValue csoValue, JIM.Models.Transactional.PendingExportAttributeValueChange pendingChange)
+    {
+        // compare based on the data type
+        if (pendingChange.StringValue != null && csoValue.StringValue != pendingChange.StringValue)
+            return false;
+
+        if (pendingChange.IntValue.HasValue && csoValue.IntValue != pendingChange.IntValue)
+            return false;
+
+        if (pendingChange.DateTimeValue.HasValue && csoValue.DateTimeValue != pendingChange.DateTimeValue)
+            return false;
+
+        if (pendingChange.ByteValue != null && !ByteArraysEqual(csoValue.ByteValue, pendingChange.ByteValue))
+            return false;
+
+        if (pendingChange.UnresolvedReferenceValue != null && csoValue.UnresolvedReferenceValue != pendingChange.UnresolvedReferenceValue)
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Compares two byte arrays for equality.
+    /// </summary>
+    private bool ByteArraysEqual(byte[]? a, byte[]? b)
+    {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        if (a.Length != b.Length) return false;
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i]) return false;
+        }
+
+        return true;
     }
 
     /// <summary>

@@ -34,6 +34,19 @@ public interface IConnectedSystemRepository
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId);
 
     /// <summary>
+    /// Deletes a Pending Export object.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to delete.</param>
+    public Task DeletePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Updates a Pending Export object.
+    /// Used when removing successfully applied attribute changes and updating error tracking.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to update.</param>
+    public Task UpdatePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
     /// Includes Attributes.
     /// </summary>
