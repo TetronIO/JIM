@@ -189,7 +189,109 @@ public class FullSyncTests
         Assert.That(PendingExportsData.Count, Is.EqualTo(0),
             "Expected pending export to be deleted when CSO state matches the pending changes.");
     }
-    
+
+    /// <summary>
+    /// Tests that a PendingExport is NOT deleted when only some attributes match.
+    /// This occurs when an export is only partially successful, requiring retry on the next sync run.
+    /// </summary>
+    [Test]
+    public async Task PendingExportKeptWhenCsoStatePartiallyMatchesTestAsync()
+    {
+        // get the first CSO that we'll have a pending export for
+        var cso = ConnectedSystemObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+
+        // get the connected system object type attributes we'll use
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+        var displayNameAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+        var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
+        var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
+
+        // create a pending export with 3 attribute changes
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystem = connectedSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name"
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
+                    Attribute = employeeNumberAttr,
+                    IntValue = 999
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
+                    Attribute = roleAttr,
+                    StringValue = "Senior Manager"
+                }
+            }
+        };
+
+        // add the pending export to our mock data
+        PendingExportsData.Add(pendingExport);
+
+        // update the CSO with only 2 of the 3 pending changes (simulating partial export success)
+        var csoDisplayNameValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+        if (csoDisplayNameValue != null)
+            csoDisplayNameValue.StringValue = "Updated Name";
+
+        var csoEmployeeNumberValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
+        if (csoEmployeeNumberValue != null)
+            csoEmployeeNumberValue.IntValue = 999;
+
+        // Role is NOT updated - this simulates an export failure for this attribute
+        var csoRoleValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.ROLE);
+        if (csoRoleValue != null)
+            csoRoleValue.StringValue = "Manager"; // Different from pending export value
+
+        // verify setup
+        Assert.That(PendingExportsData.Count, Is.EqualTo(1), "Expected one pending export before sync.");
+        Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME).StringValue,
+            Is.EqualTo("Updated Name"), "Expected CSO to have the updated display name.");
+        Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER).IntValue,
+            Is.EqualTo(999), "Expected CSO to have the updated employee number.");
+        Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.ROLE).StringValue,
+            Is.Not.EqualTo("Senior Manager"), "Expected CSO Role to NOT match the pending export value.");
+
+        // setup mock to handle pending export deletion (shouldn't be called)
+        var deleteCallCount = 0;
+        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
+            (PendingExport entity) => {
+                deleteCallCount++;
+                PendingExportsData.Remove(entity);
+            });
+
+        // run full sync
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the pending export was NOT deleted because not all attributes matched
+        Assert.That(PendingExportsData.Count, Is.EqualTo(1),
+            "Expected pending export to be kept when CSO state only partially matches the pending changes.");
+        Assert.That(deleteCallCount, Is.EqualTo(0),
+            "Expected Delete to not be called when pending export doesn't fully match.");
+    }
+
     /// <summary>
     /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a sync rule using a text data type attribute. 
     /// </summary>
