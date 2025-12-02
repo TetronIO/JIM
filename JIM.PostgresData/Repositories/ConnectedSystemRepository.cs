@@ -721,6 +721,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.PendingExports.Remove(pendingExport);
         await Repository.Database.SaveChangesAsync();
     }
+
+    public async Task UpdatePendingExportAsync(PendingExport pendingExport)
+    {
+        Repository.Database.PendingExports.Update(pendingExport);
+        await Repository.Database.SaveChangesAsync();
+    }
     #endregion
 
     #region Sync Rules

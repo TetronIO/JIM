@@ -162,8 +162,9 @@ public class SyncFullSyncTaskProcessor
 
         foreach (var pendingExport in pendingExportsForThisCso)
         {
-            // check if all the pending export attribute changes are now visible on the CSO
-            var allChangesApplied = true;
+            // track which attribute changes succeeded and which failed
+            var successfulChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
+            var failedChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
 
             foreach (var attributeChange in pendingExport.AttributeValueChanges)
             {
@@ -185,23 +186,53 @@ public class SyncFullSyncTaskProcessor
                     _ => false
                 };
 
-                if (!changeMatches)
+                if (changeMatches)
                 {
-                    allChangesApplied = false;
+                    successfulChanges.Add(attributeChange);
+                    Log.Verbose($"ProcessPendingExportAsync: Attribute change for {attributeChange.AttributeId} confirmed on CSO.");
+                }
+                else
+                {
+                    failedChanges.Add(attributeChange);
                     Log.Verbose($"ProcessPendingExportAsync: Attribute change for {attributeChange.AttributeId} does not match CSO state.");
-                    break;
                 }
             }
 
             // if all changes have been confirmed, delete the pending export
-            if (allChangesApplied)
+            if (failedChanges.Count == 0)
             {
                 Log.Information($"ProcessPendingExportAsync: All changes confirmed for pending export {pendingExport.Id}. Deleting.");
                 await _jim.ConnectedSystems.DeletePendingExportAsync(pendingExport);
             }
+            else if (successfulChanges.Count > 0)
+            {
+                // partial success: remove successful attribute changes, keep failed ones
+                Log.Information($"ProcessPendingExportAsync: Partial success for pending export {pendingExport.Id}. " +
+                    $"{successfulChanges.Count} succeeded, {failedChanges.Count} failed. Updating pending export.");
+
+                // remove the successful attribute changes from the pending export
+                foreach (var successfulChange in successfulChanges)
+                {
+                    pendingExport.AttributeValueChanges.Remove(successfulChange);
+                }
+
+                // increment error count and update status
+                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
+
+                await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+            }
             else
             {
-                Log.Verbose($"ProcessPendingExportAsync: Not all changes confirmed for pending export {pendingExport.Id}. Keeping.");
+                // complete failure: all attribute changes failed
+                Log.Warning($"ProcessPendingExportAsync: Complete failure for pending export {pendingExport.Id}. " +
+                    $"All {failedChanges.Count} attribute changes failed. Incrementing error count.");
+
+                // increment error count and update status
+                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
+
+                await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
             }
         }
     }

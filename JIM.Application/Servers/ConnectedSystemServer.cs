@@ -981,6 +981,16 @@ public class ConnectedSystemServer
     {
         await Application.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
     }
+
+    /// <summary>
+    /// Updates a Pending Export object.
+    /// Used when removing successfully applied attribute changes and updating error tracking.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to update.</param>
+    public async Task UpdatePendingExportAsync(PendingExport pendingExport)
+    {
+        await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+    }
     #endregion
 
     #region Sync Rules
