@@ -1153,4 +1153,176 @@ public class FullSyncTests
         Assert.That(mvo.ConnectedSystemObjects.Contains(cso), Is.False,
             "Expected MVO to no longer reference the obsoleted CSO.");
     }
+
+    /// <summary>
+    /// Tests that join takes precedence over projection when both are enabled and a matching MVO exists.
+    /// </summary>
+    [Test]
+    public async Task JoinTakesPrecedenceOverProjectionTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // enable both projection AND object matching rules
+        importSyncRule.ProjectToMetaverse = true;
+
+        // add object matching rule to join CSO to existing MVO
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 1,
+            Type = SyncRuleMappingType.ObjectMatching,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the CSO joined to existing MVO rather than projecting a new one
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(MetaverseObjectsData[0].Id), "Expected CSO to join to existing MVO, not project a new one.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected JoinType to be Joined, not Projected.");
+        Assert.That(ConnectedSystemObjectsData[0].DateJoined, Is.Not.Null, "Expected CSO to have a DateJoined value.");
+
+        // verify the MVO references the CSO
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects, Is.Not.Empty, "Expected MVO to have CSO reference after join.");
+        Assert.That(MetaverseObjectsData[0].ConnectedSystemObjects.Contains(ConnectedSystemObjectsData[0]), Is.True, "Expected MVO to reference the joined CSO.");
+    }
+
+    /// <summary>
+    /// Tests that projection does not occur when ProjectToMetaverse is false.
+    /// </summary>
+    [Test]
+    public async Task ProjectionDisabledPreventsProjectionTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // explicitly disable projection
+        importSyncRule.ProjectToMetaverse = false;
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify CSO did not project (no MVO created/joined)
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Null, "Expected CSO to not have projected when ProjectToMetaverse is false.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "Expected JoinType to remain NotJoined.");
+    }
+
+    /// <summary>
+    /// Tests that projection does not occur when ProjectToMetaverse is null (not set).
+    /// </summary>
+    [Test]
+    public async Task ProjectionNullPreventsProjectionTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // ensure projection is null (not set)
+        importSyncRule.ProjectToMetaverse = null;
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify CSO did not project (no MVO created/joined)
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Null, "Expected CSO to not have projected when ProjectToMetaverse is null.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "Expected JoinType to remain NotJoined.");
+    }
+
+    /// <summary>
+    /// Tests that projection does not occur when the sync rule is disabled.
+    /// </summary>
+    [Test]
+    public async Task DisabledSyncRulePreventsProjectionTestAsync()
+    {
+        // get a stub import sync rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+
+        // enable projection but disable the sync rule
+        importSyncRule.ProjectToMetaverse = true;
+        importSyncRule.Enabled = false;
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify CSO did not project (sync rule is disabled)
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Null, "Expected CSO to not have projected when sync rule is disabled.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "Expected JoinType to remain NotJoined.");
+    }
+
+    /// <summary>
+    /// Tests that when multiple sync rules have projection enabled for the same object type, the first one wins.
+    /// </summary>
+    [Test]
+    public async Task FirstSyncRuleToProjectWinsTestAsync()
+    {
+        // get the two user import sync rules and make them both have projection enabled
+        var importSyncRule1 = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule1.ProjectToMetaverse = true;
+
+        // create a second import sync rule for the same CSO type but with a different MVO type
+        var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        var importSyncRule2 = new SyncRule
+        {
+            Id = 100,
+            ConnectedSystemId = 1,
+            Name = "Second User Import Sync Rule",
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = csUserType.Id,
+            ConnectedSystemObjectType = csUserType,
+            MetaverseObjectTypeId = mvGroupType.Id,
+            MetaverseObjectType = mvGroupType,
+            ProjectToMetaverse = true
+        };
+        SyncRulesData.Add(importSyncRule2);
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the CSO projected and used the first sync rule's MVO type (User, not Group)
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have projected.");
+        Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Projected), "Expected JoinType to be Projected.");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Type.Id, Is.EqualTo(importSyncRule1.MetaverseObjectType.Id),
+            "Expected projected MVO to use the first sync rule's MVO type (User), not the second (Group).");
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Type.Name, Is.EqualTo("User"),
+            "Expected projected MVO type to be 'User' from the first sync rule.");
+    }
 }
