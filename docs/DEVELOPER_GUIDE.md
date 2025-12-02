@@ -478,7 +478,7 @@ Docker volumes bridge your host filesystem to the container. The File Connector 
 | **macOS** | `~/temp/jim-connector-files/` | `/var/connector-files/` |
 | **Codespaces** | `/tmp/jim-connector-files/` | `/var/connector-files/` |
 
-These mappings are defined in the respective `docker-compose.override.*.yml` files.
+These mappings are already pre-configured in the respective `docker-compose.override.*.yml` files - no additional Docker volume commands are required. The `jim-stack` alias automatically uses the correct override file for your environment.
 
 ### Setup Steps
 
