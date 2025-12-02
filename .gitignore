@@ -446,3 +446,6 @@ env
 .claude/
 # But allow spec-kit commands to be committed
 !.claude/commands/
+
+# Local connector files directory (contains symlinks to test data)
+connector-files/
