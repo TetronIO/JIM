@@ -461,6 +461,110 @@ Apply migrations on first run:
 docker compose exec jim.web dotnet ef database update
 ```
 
+## File Connector Setup
+
+The JIM File Connector imports identity data from CSV files. Because JIM runs in Docker containers, files must be accessible via Docker volumes.
+
+> **📝 Quick Start for Development**: Test data files from `test/Data/` are automatically available via symlink at `/var/connector-files/test-data/` in the devcontainer. See [FILE_CONNECTOR_TEST_DATA.md](FILE_CONNECTOR_TEST_DATA.md) for details.
+
+### Understanding Docker Volumes
+
+Docker volumes bridge your host filesystem to the container. The File Connector expects files at a **container path** (e.g., `/var/connector-files/Users.csv`), which maps to a **host path** on your machine.
+
+### Volume Configuration by Environment
+
+| Environment | Host Path | Container Path |
+|-------------|-----------|----------------|
+| **Windows** | `c:/temp/jim-connector-files/` | `/var/connector-files/` |
+| **Linux** | `~/temp/jim-connector-files/` | `/var/connector-files/` |
+| **macOS** | `~/temp/jim-connector-files/` | `/var/connector-files/` |
+| **Codespaces** | `/tmp/jim-connector-files/` | `/var/connector-files/` |
+
+These mappings are already pre-configured in the respective `docker-compose.override.*.yml` files - no additional Docker volume commands are required. The `jim-stack` alias automatically uses the correct override file for your environment.
+
+### Setup Steps
+
+1. **Create the host directory** (if it doesn't exist):
+   ```bash
+   # For Codespaces:
+   mkdir -p /tmp/jim-connector-files
+
+   # For Linux/macOS:
+   mkdir -p ~/temp/jim-connector-files
+
+   # For Windows (PowerShell):
+   New-Item -ItemType Directory -Force -Path "c:\temp\jim-connector-files"
+   ```
+
+2. **Place your CSV file in the host directory**:
+   ```bash
+   # Example: copy a file to the connector files directory
+   cp /path/to/your/Users.csv /tmp/jim-connector-files/
+   ```
+
+3. **Restart the Docker stack** (if already running) to pick up the volume mount:
+   ```bash
+   jim-stack-down && jim-stack
+   ```
+
+4. **In the JIM UI**, enter the **container path** for "Example File Path":
+   ```
+   /var/connector-files/Users.csv
+   ```
+
+### File Connector Settings
+
+When creating a Connected System with the File Connector:
+
+| Setting | Description | Example |
+|---------|-------------|---------|
+| **Example File Path** | Container path to CSV file for schema discovery | `/var/connector-files/Users.csv` |
+| **Object Type Column** | Column containing object type (optional) | `Type` |
+| **Object Type** | Fixed object type if file contains single type (optional) | `User` |
+| **Delimiter** | CSV delimiter character | `,` (default) |
+| **Culture** | Culture for parsing (optional) | `en-gb` |
+
+### Schema Discovery
+
+When you retrieve the schema, the File Connector:
+1. Opens the CSV file at the "Example File Path"
+2. Reads column headers as attribute names
+3. Inspects up to 50 rows to detect data types (Text, Number, Boolean, Guid, DateTime)
+4. Detects multi-valued attributes (duplicate column names)
+
+### Run Profile Configuration
+
+When creating a Run Profile for the File Connector:
+- **File Path**: Container path to the file to import (can differ from Example File Path)
+- The connector reads this file during import operations
+
+### Troubleshooting
+
+**"File path not provided, the path couldn't be accessed, or the file doesn't exist"**
+- Verify the file exists in your host directory
+- Check the Docker stack is running with volume mounts: `docker compose ps`
+- Ensure you're using the container path (`/var/connector-files/...`), not the host path
+- Restart the stack if you added files after starting: `jim-stack-down && jim-stack`
+
+**File not found during import**
+- The Run Profile's File Path must also use the container path
+- Verify the file exists and has read permissions
+
+### Network Share Access (Advanced)
+
+For accessing network shares (e.g., Windows file shares), you can mount them into the host directory:
+
+```bash
+# Linux example - mount CIFS/SMB share
+sudo mkdir -p /mnt/jim_share
+sudo mount -t cifs //server/share /mnt/jim_share -o username=user,password=pass
+
+# Then symlink or copy to the connector files directory
+ln -s /mnt/jim_share/Users.csv /tmp/jim-connector-files/Users.csv
+```
+
+For production deployments, consider using Docker volume drivers or bind mounts to network storage.
+
 ## Common Development Tasks
 
 > **Note**: All `dotnet` commands below work out of the box in Codespaces. Use shell aliases like `jim-build`, `jim-test`, and `jim-migrate` for convenience.
@@ -550,6 +654,6 @@ docker compose exec jim.web dotnet ef database update
 
 ---
 
-**Last Updated**: 2025-11-18
-**Version**: 1.0
+**Last Updated**: 2025-12-01
+**Version**: 1.1
 **Applies to**: JIM v1.x (NET 9.0)

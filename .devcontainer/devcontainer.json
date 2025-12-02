@@ -47,7 +47,10 @@
         // Utilities
         "humao.rest-client",
         "eamodio.gitlens",
-        "usernamehw.errorlens"
+        "usernamehw.errorlens",
+
+        // CSV viewing and editing
+        "mechatroner.rainbow-csv"
       ],
 
       // VS Code settings
@@ -88,7 +91,10 @@
           "synchronisation",
           "serialiser",
           "initialise"
-        ]
+        ],
+
+        // Port forwarding - use localhost instead of 127.0.0.1 for Entra ID compatibility
+        "remote.localPortHost": "localhost"
       }
     }
   },
@@ -97,10 +103,10 @@
   "forwardPorts": [
     5432,  // PostgreSQL
     8080,  // Adminer
-    5203,  // JIM.Api (HTTP)
-    7203,  // JIM.Api (HTTPS)
-    5000,  // JIM.Web (HTTP)
-    7000   // JIM.Web (HTTPS)
+    5202,  // JIM.Api (HTTP)
+    5203,  // JIM.Api (HTTPS)
+    5200,  // JIM.Web (HTTP)
+    5201   // JIM.Web (HTTPS)
   ],
 
   // Port labels and auto-forward behaviour
@@ -113,19 +119,19 @@
       "label": "Adminer (Database UI)",
       "onAutoForward": "notify"
     },
-    "5203": {
+    "5202": {
       "label": "JIM API (HTTP)",
       "onAutoForward": "notify"
     },
-    "7203": {
+    "5203": {
       "label": "JIM API (HTTPS)",
       "onAutoForward": "openPreview"
     },
-    "5000": {
+    "5200": {
       "label": "JIM Web (HTTP)",
       "onAutoForward": "notify"
     },
-    "7000": {
+    "5201": {
       "label": "JIM Web (HTTPS)",
       "onAutoForward": "openBrowser"
     }

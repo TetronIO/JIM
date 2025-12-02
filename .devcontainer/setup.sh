@@ -24,16 +24,13 @@ print_warning() {
 
 # 1. Install .NET EF Core tools
 print_step "Installing .NET Entity Framework Core tools..."
-if ! dotnet tool list -g | grep -q dotnet-ef; then
-    dotnet tool install --global dotnet-ef
+# Clean up any corrupted tool state first, then install fresh
+# This handles cases where the tool cache becomes corrupted after container rebuilds
+rm -rf ~/.dotnet/tools/dotnet-ef ~/.dotnet/tools/.store/dotnet-ef 2>/dev/null || true
+if dotnet tool install --global dotnet-ef; then
     print_success "dotnet-ef installed globally"
 else
-    # Try to update, but don't fail if it errors (can happen in some environments)
-    if dotnet tool update --global dotnet-ef 2>/dev/null; then
-        print_success "dotnet-ef updated to latest version"
-    else
-        print_warning "dotnet-ef update skipped (already installed)"
-    fi
+    print_warning "dotnet-ef installation failed - you may need to install manually"
 fi
 
 # Add .NET tools to PATH
@@ -129,7 +126,23 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 7. Create useful shell aliases
+# 7. Create connector-files directory with symlink to test data
+print_step "Setting up connector-files directory..."
+mkdir -p connector-files
+
+# Create symlink to test/Data directory (dynamic - new files appear automatically)
+if [ ! -L connector-files/test-data ]; then
+    if [ -d "test/Data" ]; then
+        ln -s "$(pwd)/test/Data" connector-files/test-data
+        print_success "Symlink created: connector-files/test-data -> test/Data"
+    else
+        print_warning "test/Data directory not found, skipping symlink"
+    fi
+else
+    print_success "Symlink already exists: connector-files/test-data"
+fi
+
+# 8. Create useful shell aliases
 print_step "Creating shell aliases..."
 cat >> ~/.zshrc << 'EOF'
 

@@ -18,6 +18,13 @@ public class ConnectedSystemObjectType
     /// </summary>
     public bool Selected { get; set; }
 
+    /// <summary>
+    /// Controls whether Metaverse Object attribute values contributed by a Connected System Object of this type
+    /// should be removed when the CSO is obsoleted. When true, attributes contributed by the CSO
+    /// will be added to PendingAttributeValueRemovals. When false, attributes remain on the MVO.
+    /// </summary>
+    public bool RemoveContributedAttributesOnObsoletion { get; set; } = true;
+
     public override string ToString()
     {
         return Name;
