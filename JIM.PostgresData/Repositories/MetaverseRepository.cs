@@ -471,7 +471,17 @@ public class MetaverseRepository : IMetaverseRepository
         // no match
         return null;
     }
-    
+
+    /// <summary>
+    /// Deletes a Metaverse Object from the database.
+    /// </summary>
+    /// <param name="metaverseObject">The Metaverse Object to delete.</param>
+    public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+    {
+        Repository.Database.MetaverseObjects.Remove(metaverseObject);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         return predefinedSearch.Attributes

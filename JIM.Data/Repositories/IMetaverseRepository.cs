@@ -63,6 +63,12 @@ public interface IMetaverseRepository
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
     /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the sync rule mapping criteria.</exception>
     public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, SyncRuleMapping syncRuleMapping);
+
+    /// <summary>
+    /// Deletes a Metaverse Object from the database.
+    /// </summary>
+    /// <param name="metaverseObject">The Metaverse Object to delete.</param>
+    public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
     #endregion
 
     #region attributes

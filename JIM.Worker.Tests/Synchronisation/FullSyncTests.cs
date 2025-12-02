@@ -1824,4 +1824,314 @@ public class FullSyncTests
             av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
         Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for EmployeeNumber attribute value.");
     }
+
+    #region MVO Deletion Rules Tests
+
+    /// <summary>
+    /// Tests that when the DeletionRule is Manual (default), the MVO is NOT deleted
+    /// when the last CSO is disconnected.
+    /// </summary>
+    [Test]
+    public async Task MvoNotDeletedWhenDeletionRuleIsManualTestAsync()
+    {
+        // set up: MVO with DeletionRule = Manual (default)
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.Manual;
+
+        // create MVO joined to a single CSO
+        var cso = ConnectedSystemObjectsData[0];
+        var mvo = MetaverseObjectsData[0];
+        cso.MetaverseObject = mvo;
+        cso.MetaverseObjectId = mvo.Id;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = DateTime.UtcNow;
+        mvo.ConnectedSystemObjects.Add(cso);
+        mvo.Type = mvoType;
+
+        // mark CSO as obsolete to trigger disconnection
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+
+        var initialMvoCount = MetaverseObjectsData.Count;
+
+        // setup mock to handle CSO deletion
+        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
+            (ConnectedSystemObject entity) => {
+                ConnectedSystemObjectsData.Remove(entity);
+            });
+
+        // setup mock for MVO deletion (should NOT be called)
+        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
+            (MetaverseObject entity) => {
+                MetaverseObjectsData.Remove(entity);
+            });
+
+        // run sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify MVO was NOT deleted
+        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when DeletionRule is Manual.");
+        Assert.That(mvo.ScheduledDeletionDate, Is.Null, "Expected no scheduled deletion date when DeletionRule is Manual.");
+    }
+
+    /// <summary>
+    /// Tests that when the DeletionRule is WhenLastConnectorDisconnected and there's no grace period,
+    /// the MVO is deleted immediately when the last CSO is disconnected.
+    /// </summary>
+    [Test]
+    public async Task MvoDeletedImmediatelyWhenLastConnectorDisconnectedTestAsync()
+    {
+        // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, no grace period
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvoType.DeletionGracePeriodDays = null;
+
+        // create MVO joined to a single CSO
+        var cso = ConnectedSystemObjectsData[0];
+        var mvo = MetaverseObjectsData[0];
+        cso.MetaverseObject = mvo;
+        cso.MetaverseObjectId = mvo.Id;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = DateTime.UtcNow;
+        mvo.ConnectedSystemObjects.Add(cso);
+        mvo.Type = mvoType;
+
+        // mark CSO as obsolete to trigger disconnection
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+
+        var initialMvoCount = MetaverseObjectsData.Count;
+        var mvoId = mvo.Id;
+
+        // setup mock to handle CSO deletion
+        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
+            (ConnectedSystemObject entity) => {
+                ConnectedSystemObjectsData.Remove(entity);
+            });
+
+        // setup mock for MVO deletion
+        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
+            (MetaverseObject entity) => {
+                MetaverseObjectsData.Remove(entity);
+            });
+
+        // run sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify MVO was deleted
+        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount - 1), "Expected MVO to be deleted when last connector disconnected.");
+        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.False, "Expected specific MVO to be deleted.");
+    }
+
+    /// <summary>
+    /// Tests that when the DeletionRule is WhenLastConnectorDisconnected with a grace period,
+    /// the MVO is NOT deleted immediately but has its ScheduledDeletionDate set.
+    /// </summary>
+    [Test]
+    public async Task MvoScheduledForDeletionWithGracePeriodTestAsync()
+    {
+        // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, 30-day grace period
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvoType.DeletionGracePeriodDays = 30;
+
+        // create MVO joined to a single CSO
+        var cso = ConnectedSystemObjectsData[0];
+        var mvo = MetaverseObjectsData[0];
+        cso.MetaverseObject = mvo;
+        cso.MetaverseObjectId = mvo.Id;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = DateTime.UtcNow;
+        mvo.ConnectedSystemObjects.Add(cso);
+        mvo.Type = mvoType;
+        mvo.ScheduledDeletionDate = null;
+
+        // mark CSO as obsolete to trigger disconnection
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+
+        var initialMvoCount = MetaverseObjectsData.Count;
+        var beforeSync = DateTime.UtcNow;
+
+        // setup mock to handle CSO deletion
+        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
+            (ConnectedSystemObject entity) => {
+                ConnectedSystemObjectsData.Remove(entity);
+            });
+
+        // setup mock for MVO deletion (should NOT be called due to grace period)
+        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
+            (MetaverseObject entity) => {
+                MetaverseObjectsData.Remove(entity);
+            });
+
+        // run sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify MVO was NOT deleted (grace period)
+        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during grace period.");
+
+        // verify ScheduledDeletionDate was set approximately 30 days from now
+        Assert.That(mvo.ScheduledDeletionDate, Is.Not.Null, "Expected ScheduledDeletionDate to be set.");
+        var expectedDeletionDate = beforeSync.AddDays(30);
+        Assert.That(mvo.ScheduledDeletionDate!.Value, Is.EqualTo(expectedDeletionDate).Within(TimeSpan.FromMinutes(1)),
+            "Expected ScheduledDeletionDate to be approximately 30 days in the future.");
+    }
+
+    /// <summary>
+    /// Tests that when a MVO has multiple CSOs joined and one is disconnected,
+    /// the MVO is NOT deleted (still has other connectors).
+    /// </summary>
+    [Test]
+    public async Task MvoNotDeletedWhenOtherConnectorsRemainTestAsync()
+    {
+        // set up: MVO with DeletionRule = WhenLastConnectorDisconnected
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvoType.DeletionGracePeriodDays = null;
+
+        // create MVO joined to TWO CSOs
+        var cso1 = ConnectedSystemObjectsData[0];
+        var cso2 = ConnectedSystemObjectsData[1];
+        var mvo = MetaverseObjectsData[0];
+
+        cso1.MetaverseObject = mvo;
+        cso1.MetaverseObjectId = mvo.Id;
+        cso1.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso1.DateJoined = DateTime.UtcNow;
+
+        cso2.MetaverseObject = mvo;
+        cso2.MetaverseObjectId = mvo.Id;
+        cso2.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso2.DateJoined = DateTime.UtcNow;
+
+        mvo.ConnectedSystemObjects.Add(cso1);
+        mvo.ConnectedSystemObjects.Add(cso2);
+        mvo.Type = mvoType;
+
+        // mark only first CSO as obsolete
+        cso1.Status = ConnectedSystemObjectStatus.Obsolete;
+        cso2.Status = ConnectedSystemObjectStatus.Normal;
+
+        var initialMvoCount = MetaverseObjectsData.Count;
+
+        // setup mock to handle CSO deletion
+        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
+            (ConnectedSystemObject entity) => {
+                ConnectedSystemObjectsData.Remove(entity);
+            });
+
+        // setup mock for MVO deletion (should NOT be called)
+        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
+            (MetaverseObject entity) => {
+                MetaverseObjectsData.Remove(entity);
+            });
+
+        // run sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify MVO was NOT deleted (still has cso2 connected)
+        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when other connectors exist.");
+        Assert.That(mvo.ScheduledDeletionDate, Is.Null, "Expected no scheduled deletion date when connectors remain.");
+        Assert.That(mvo.ConnectedSystemObjects.Count, Is.EqualTo(1), "Expected MVO to have one remaining CSO.");
+    }
+
+    // NOTE: A test for "MVO deleted when scheduled deletion date passed" is not included here
+    // because the current sync implementation only processes objects via CSO iteration.
+    // MVOs with no connectors are not visited during sync. Processing scheduled MVO deletions
+    // would require a separate background job or additional sync phase - tracked as future work.
+
+    /// <summary>
+    /// Tests that when a connector reconnects to an MVO that was scheduled for deletion,
+    /// the ScheduledDeletionDate is cleared.
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionClearedWhenConnectorReconnectsTestAsync()
+    {
+        // set up: MVO with scheduled deletion date (simulating previous disconnection)
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvoType.DeletionGracePeriodDays = 30;
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvoType;
+        mvo.ScheduledDeletionDate = DateTime.UtcNow.AddDays(29); // scheduled deletion in future
+        mvo.ConnectedSystemObjects.Clear();
+
+        // CSO that will join to the MVO (not yet joined)
+        var cso = ConnectedSystemObjectsData[0];
+        cso.MetaverseObject = null;
+        cso.MetaverseObjectId = null;
+        cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+        cso.Status = ConnectedSystemObjectStatus.Normal;
+
+        // set up sync rule with object matching rule to cause a join
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule.Direction = SyncRuleDirection.Import;
+        importSyncRule.Enabled = true;
+        importSyncRule.MetaverseObjectTypeId = mvoType.Id;
+        importSyncRule.MetaverseObjectType = mvoType;
+
+        // set up HR_ID attribute for joining (match CSO HR_ID to MVO HR ID)
+        var mvoHrIdAttr = mvoType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.HrId);
+        var csoHrIdValue = cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.HR_ID).GuidValue;
+
+        // set matching MVO attribute value
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = mvoHrIdAttr,
+            AttributeId = mvoHrIdAttr.Id,
+            GuidValue = csoHrIdValue
+        });
+
+        // configure object matching rule
+        var csotAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+            .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID);
+        importSyncRule.ObjectMatchingRules.Clear();
+        var objectMatchingRule = new SyncRuleMapping
+        {
+            Id = 100,
+            ObjectMatchingSynchronisationRule = importSyncRule,
+            TargetMetaverseAttribute = mvoHrIdAttr,
+            TargetMetaverseAttributeId = mvoHrIdAttr.Id
+        };
+        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 100,
+            Order = 1,
+            ConnectedSystemAttribute = csotAttr,
+            ConnectedSystemAttributeId = csotAttr.Id
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // run sync (should join CSO to MVO)
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify CSO joined to MVO
+        Assert.That(cso.MetaverseObject, Is.EqualTo(mvo), "Expected CSO to join to MVO.");
+
+        // verify ScheduledDeletionDate was cleared
+        Assert.That(mvo.ScheduledDeletionDate, Is.Null, "Expected ScheduledDeletionDate to be cleared when connector reconnected.");
+    }
+
+    #endregion
 }

@@ -22,6 +22,13 @@ public class MetaverseObject
     public MetaverseObjectStatus Status { get; set; } = MetaverseObjectStatus.Normal;
 
     /// <summary>
+    /// When set, indicates the date on which this object is scheduled to be deleted.
+    /// Used in conjunction with MetaverseObjectType.DeletionRule and DeletionGracePeriodDays.
+    /// If null, the object is not scheduled for deletion.
+    /// </summary>
+    public DateTime? ScheduledDeletionDate { get; set; }
+
+    /// <summary>
     /// Concurrency token using PostgreSQL's xmin system column.
     /// </summary>
     public uint xmin { get; set; }
