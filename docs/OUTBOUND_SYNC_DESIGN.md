@@ -98,7 +98,7 @@ A) **Use existing `JoinType` enum** - `Projected` and `Provisioned` values exist
 B) **Add explicit `ProvisionedByJim` flag to CSO**
    - More explicit, but redundant with JoinType
 
-**Decision**: Option A - leverage existing `JoinType.Provisioned` value.
+**✅ DECISION: Option A** - Leverage existing `JoinType.Provisioned` value.
 
 **MVP Behaviour**:
 - Only delete CSOs where `JoinType = Provisioned`
@@ -159,7 +159,7 @@ B) **Change versioning** - Track change version numbers, only sync newer changes
 
 C) **Sync direction flags** - Mark certain systems as import-only or export-only
 
-**Decision**: Option A - leverage existing `ContributedBySystem` on attribute values.
+**✅ DECISION: Option A** - Leverage existing `ContributedBySystem` on attribute values.
 
 **Implementation:**
 
@@ -203,7 +203,9 @@ B) **Only provisioned CSOs** - Only CSOs with `JoinType = Provisioned`
 C) **Configurable per sync rule** - Export rule specifies whether deletions propagate
    - Maximum flexibility but more complex
 
-**Recommendation**: Option B for MVP, with Option C as future enhancement.
+**✅ DECISION: Option B** - Only provisioned CSOs for MVP, with Option C as future enhancement (Issue #126).
+
+**Rationale**: This aligns with Q2 decision - JIM only deletes what it created. Configurable behaviour deferred to post-MVP.
 
 ---
 
