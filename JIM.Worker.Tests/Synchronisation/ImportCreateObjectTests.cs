@@ -364,7 +364,38 @@ public class ImportCreateObjectTests
     }
     
     // todo: test activity/run profile execution item/change object creation
-    // todo: test connectivity error handling and logging scenario(s)
+
+    /// <summary>
+    /// Tests that when the connector throws an exception during import (simulating connectivity errors),
+    /// the exception propagates up and can be handled by the caller (Worker).
+    /// </summary>
+    [Test]
+    public void FullImportConnectorExceptionPropagatesAsync()
+    {
+        // set up the Connected System Objects mock
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // mock up a connector that will throw an exception to simulate a connectivity error
+        var mockFileConnector = new MockFileConnector
+        {
+            TestExceptionToThrow = new InvalidOperationException("Simulated connectivity error: Unable to connect to remote system")
+        };
+
+        // assert that the exception propagates up
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+            var activity = ActivitiesData.First();
+            var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
+            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem!, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+            await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        });
+
+        // no CSOs should have been created
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created when connector throws an exception.");
+    }
 
     /// <summary>
     /// Tests that when an imported object has duplicate attribute names, the error is
