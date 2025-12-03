@@ -364,6 +364,149 @@ public class ImportCreateObjectTests
     }
     
     // todo: test activity/run profile execution item/change object creation
-    // todo: test object error handling and logging scenario(s)
     // todo: test connectivity error handling and logging scenario(s)
+
+    /// <summary>
+    /// Tests that when an imported object has duplicate attribute names, the error is
+    /// recorded in the activity run profile execution item with the appropriate error type.
+    /// </summary>
+    [Test]
+    public async Task FullImportDuplicateAttributeErrorTestAsync()
+    {
+        // set up the Connected System Objects mock
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid();
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // mock up a connector that will return an object with duplicate attributes
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Jane Smith" },
+                    Type = AttributeDataType.Text
+                },
+                // Duplicate attribute - same name as above (case-insensitive)
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString().ToLower(),
+                    StringValues = new List<string> { "Jane A. Smith" },
+                    Type = AttributeDataType.Text
+                }
+            }
+        });
+
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // no CSOs should have been created due to the error
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate attribute error.");
+
+        // verify the error was recorded in the activity
+        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
+        var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes);
+        Assert.That(errorItem, Is.Not.Null, "Expected an error item for duplicate imported attributes.");
+        Assert.That(errorItem.ErrorMessage, Does.Contain("DISPLAY_NAME"), "Expected the error message to mention the duplicate attribute name.");
+
+        Assert.Pass();
+    }
+
+    /// <summary>
+    /// Tests that when an imported object has an unexpected attribute (not in the schema),
+    /// the error is recorded in the activity run profile execution item.
+    /// </summary>
+    [Test]
+    public async Task FullImportUnexpectedAttributeErrorTestAsync()
+    {
+        // set up the Connected System Objects mock
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid();
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // mock up a connector that will return an object with an attribute not in the schema
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Jane Smith" },
+                    Type = AttributeDataType.Text
+                },
+                // This attribute does not exist in the schema
+                new ()
+                {
+                    Name = "ATTRIBUTE_NOT_IN_SCHEMA",
+                    StringValues = new List<string> { "Some value" },
+                    Type = AttributeDataType.Text
+                }
+            }
+        });
+
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // no CSOs should have been created due to the error
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to unexpected attribute error.");
+
+        // verify the error was recorded in the activity
+        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
+        var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute);
+        Assert.That(errorItem, Is.Not.Null, "Expected an error item for unexpected attribute.");
+        Assert.That(errorItem.ErrorMessage, Does.Contain("ATTRIBUTE_NOT_IN_SCHEMA"), "Expected the error message to mention the unexpected attribute name.");
+
+        Assert.Pass();
+    }
 }
