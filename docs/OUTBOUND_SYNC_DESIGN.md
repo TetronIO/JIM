@@ -127,24 +127,24 @@ This is an edge case that only occurs when a connected system has **both import 
 ┌─────────────────────────────────────────────────────────────────┐
 │  Sync Rules for AD:                                             │
 │                                                                 │
-│  Import Rule: ad.title → mvo.title                             │
-│  Export Rule: mvo.title → ad.title                             │
+│  Import Rule: ad.title → mvo.title                              │
+│  Export Rule: mvo.title → ad.title                              │
 │                                                                 │
 │  WITHOUT prevention:                                            │
-│  1. Admin changes title in AD to "Senior Engineer"             │
-│  2. Import: ad.title → mvo.title                               │
-│  3. Export eval: mvo.title changed → PendingExport to AD       │
-│  4. Export: writes same value back to AD (wasteful)            │
-│  5. Next import: may detect "change" → loop continues          │
+│  1. Admin changes title in AD to "Senior Engineer"              │
+│  2. Import: ad.title → mvo.title                                │
+│  3. Export eval: mvo.title changed → PendingExport to AD        │
+│  4. Export: writes same value back to AD (wasteful)             │
+│  5. Next import: may detect "change" → loop continues           │
 │                                                                 │
 │  WITH prevention (Option A):                                    │
-│  1. Admin changes title in AD to "Senior Engineer"             │
-│  2. Import: ad.title → mvo.title                               │
-│     mvo.title.ContributedBySystem = AD  ← tracked!             │
+│  1. Admin changes title in AD to "Senior Engineer"              │
+│  2. Import: ad.title → mvo.title                                │
+│     mvo.title.ContributedBySystem = AD  ← tracked!              │
 │  3. Export eval for AD:                                         │
-│     ContributedBySystem (AD) == TargetSystem (AD) → SKIP       │
+│     ContributedBySystem (AD) == TargetSystem (AD) → SKIP        │
 │  4. Export eval for other systems:                              │
-│     ContributedBySystem (AD) != TargetSystem → create export   │
+│     ContributedBySystem (AD) != TargetSystem → create export    │
 │  5. No circular sync, no wasted exports                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
