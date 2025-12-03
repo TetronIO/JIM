@@ -205,31 +205,31 @@ Event-Based synchronisation enables near-real-time identity propagation, where c
 The decision to evaluate exports **immediately when MVO changes** (Q1 Option A) creates an architecture that naturally supports both sync modes:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    UNIFIED SYNC ARCHITECTURE                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  INBOUND TRIGGER              PROCESSING              EXPORT EXECUTION   │
-│  ───────────────              ──────────              ────────────────   │
-│                                                                          │
-│  ┌─────────────┐                                                        │
-│  │ Scheduled   │──┐                                                      │
-│  │ Full/Delta  │  │                                                      │
-│  └─────────────┘  │         ┌──────────────┐      ┌─────────────────┐   │
-│                   ├────────▶│   Inbound    │─────▶│ Pending Exports │   │
-│  ┌─────────────┐  │         │   Sync       │      │    Created      │   │
-│  │ Webhook/    │  │         │  (Same code) │      └────────┬────────┘   │
-│  │ Notification│──┤         └──────────────┘               │            │
-│  └─────────────┘  │                                        │            │
-│                   │                               ┌────────┴────────┐   │
-│  ┌─────────────┐  │                               │                 │   │
-│  │ SCIM Push   │──┤                               ▼                 ▼   │
-│  │             │──┘                        ┌───────────┐     ┌──────────┐│
-│  └─────────────┘                           │ Scheduled │     │Immediate ││
-│                                            │   Batch   │     │ Execute  ││
-│                                            └───────────┘     └──────────┘│
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    UNIFIED SYNC ARCHITECTURE                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  INBOUND TRIGGER              PROCESSING              EXPORT EXECUTION      │
+│  ───────────────              ──────────              ────────────────      │
+│                                                                             │
+│  ┌─────────────┐                                                            │
+│  │ Scheduled   │──┐                                                         │
+│  │ Full/Delta  │  │                                                         │
+│  └─────────────┘  │         ┌──────────────┐      ┌─────────────────┐       │
+│                   ├────────▶│   Inbound    │─────▶│ Pending Exports │       │
+│  ┌─────────────┐  │         │   Sync       │      │    Created      │       │
+│  │ Webhook/    │  │         │  (Same code) │      └────────┬────────┘       │
+│  │ Notification│──┤         └──────────────┘               │                │
+│  └─────────────┘  │                                        │                │
+│                   │                               ┌────────┴────────┐       │
+│  ┌─────────────┐  │                               │                 │       │
+│  │ SCIM Push   │──┤                               ▼                 ▼       │
+│  │             │──┘                         ┌───────────┐     ┌───────────┐ │
+│  └─────────────┘                            │ Scheduled │     │ Immediate │ │
+│                                             │   Batch   │     │ Execute   │ │
+│                                             └───────────┘     └───────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Sync Mode Comparison
@@ -302,23 +302,23 @@ Q1 Option A (evaluate exports immediately) creates challenges when:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    EVALUATION vs EXECUTION                               │
+│                    EVALUATION vs EXECUTION                              │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
+│                                                                         │
 │  PHASE 1: EXPORT EVALUATION (Q1 Decision)                               │
 │  ─────────────────────────────────────────                              │
 │  ✓ Can be parallel                                                      │
 │  ✓ No dependency concerns                                               │
 │  ✓ Just creates PendingExport records                                   │
-│  ✓ References stored as MVO IDs (not target system IDs)                │
-│                                                                          │
+│  ✓ References stored as MVO IDs (not target system IDs)                 │
+│                                                                         │
 │  PHASE 2: EXPORT EXECUTION (Separate concern)                           │
 │  ─────────────────────────────────────────────                          │
 │  → Dependency graph evaluation happens HERE                             │
 │  → Ordering/sequencing happens HERE                                     │
 │  → Reference resolution (MVO ID → target system ID) happens HERE        │
 │  → Can be batched, ordered, multi-pass                                  │
-│                                                                          │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -344,32 +344,32 @@ For scheduled export runs processing many pending exports:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    SCHEDULED BATCH EXPORT                                │
+│                    SCHEDULED BATCH EXPORT                               │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
+│                                                                         │
 │  Input: Collection of PendingExports for target system                  │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ PASS 1: Structural Changes (Parallel)                           │   │
-│  │                                                                  │   │
-│  │ • Create new objects (without reference attributes)              │   │
-│  │ • Delete objects                                                 │   │
-│  │ • Update non-reference attributes                                │   │
-│  │                                                                  │   │
-│  │ Output: All objects exist in target system                       │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │ PASS 1: Structural Changes (Parallel)                           │    │
+│  │                                                                 │    │
+│  │ • Create new objects (without reference attributes)             │    │
+│  │ • Delete objects                                                │    │
+│  │ • Update non-reference attributes                               │    │
+│  │                                                                 │    │
+│  │ Output: All objects exist in target system                      │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
 │                              │                                          │
 │                              ▼                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ PASS 2: Reference Resolution (Parallel)                         │   │
-│  │                                                                  │   │
-│  │ • Resolve MVO references → Target system IDs (e.g., AD DN)      │   │
-│  │ • Update manager attributes                                      │   │
-│  │ • Update group memberships                                       │   │
-│  │                                                                  │   │
-│  │ Output: All references populated                                 │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │ PASS 2: Reference Resolution (Parallel)                         │    │
+│  │                                                                 │    │
+│  │ • Resolve MVO references → Target system IDs (e.g., AD DN)      │    │
+│  │ • Update manager attributes                                     │    │
+│  │ • Update group memberships                                      │    │
+│  │                                                                 │    │
+│  │ Output: All references populated                                │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -406,22 +406,22 @@ For immediate export of a single object (e.g., after SCIM push):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    EVENT-BASED SINGLE OBJECT                             │
+│                    EVENT-BASED SINGLE OBJECT                            │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
+│                                                                         │
 │  SCIM Push: Alice (manager=Bob)                                         │
-│         │                                                                │
-│         ▼                                                                │
+│         │                                                               │
+│         ▼                                                               │
 │  Create MVO for Alice, manager = MVO:Bob                                │
-│         │                                                                │
-│         ▼                                                                │
+│         │                                                               │
+│         ▼                                                               │
 │  Create PendingExport for Alice to AD                                   │
 │  (manager stored as MVO ID)                                             │
-│         │                                                                │
-│         ▼                                                                │
-│  Immediate Export Execution                                              │
-│         │                                                                │
-│    ┌────┴─────────────────────────────────────┐                        │
+│         │                                                               │
+│         ▼                                                               │
+│  Immediate Export Execution                                             │
+│         │                                                               │
+│    ┌────┴─────────────────────────────────────┐                         │
 │    │                                          │                         │
 │    ▼                                          ▼                         │
 │  Bob EXISTS in AD                      Bob NOT in AD yet                │
@@ -437,7 +437,7 @@ For immediate export of a single object (e.g., after SCIM push):
 │                                               ▼                         │
 │                                         When Bob exported later,        │
 │                                         update Alice.manager            │
-│                                                                          │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -610,7 +610,7 @@ Outbound sync should be triggered by:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PENDING EXPORT LIFECYCLE                      │
+│                    PENDING EXPORT LIFECYCLE                     │
 └─────────────────────────────────────────────────────────────────┘
 
   MVO Change Detected

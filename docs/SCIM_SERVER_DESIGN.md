@@ -53,9 +53,9 @@ Traditional JIM connectors **pull** data from systems. A SCIM server **receives*
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    JIM INBOUND DATA SOURCES                              │
+│                    JIM INBOUND DATA SOURCES                             │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
+│                                                                         │
 │  ┌─────────────────────┐          ┌─────────────────────┐               │
 │  │  Traditional        │          │  SCIM Server        │               │
 │  │  Connectors         │          │  (Push-Based)       │               │
@@ -69,16 +69,16 @@ Traditional JIM connectors **pull** data from systems. A SCIM server **receives*
 │  └──────────┬──────────┘          └──────────┬──────────┘               │
 │             │                                │                          │
 │             │    ┌───────────────────────────┘                          │
-│             │    │                                                       │
-│             ▼    ▼                                                       │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                                                                   │   │
-│  │                    Unified Inbound Sync Engine                    │   │
-│  │                                                                   │   │
-│  │   StagingObject → Join/Project → MVO Update → Pending Exports    │   │
-│  │                                                                   │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                          │
+│             │    │                                                      │
+│             ▼    ▼                                                      │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                                                                 │    │
+│  │                    Unified Inbound Sync Engine                  │    │
+│  │                                                                 │    │
+│  │   StagingObject → Join/Project → MVO Update → Pending Exports   │    │
+│  │                                                                 │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -309,61 +309,61 @@ public class ScimAuthenticator : IScimAuthenticator
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    SCIM USER CREATION FLOW                               │
+│                    SCIM USER CREATION FLOW                              │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  1. HTTP Request Received                                                │
+│                                                                         │
+│  1. HTTP Request Received                                               │
 │     POST /scim/v2/{systemId}/Users                                      │
-│     Authorization: Bearer xxx                                            │
+│     Authorization: Bearer xxx                                           │
 │     Body: { "userName": "jsmith", "displayName": "John Smith", ... }    │
-│                                                                          │
-│  2. Load Connected System                                                │
+│                                                                         │
+│  2. Load Connected System                                               │
 │     ┌─────────────────────────────────────────────────────────────┐     │
 │     │ system = repository.ConnectedSystems.Get(systemId)          │     │
 │     │ if (system.ConnectorType != "ScimServer") return 404        │     │
 │     └─────────────────────────────────────────────────────────────┘     │
-│                                                                          │
-│  3. Authenticate Request                                                 │
+│                                                                         │
+│  3. Authenticate Request                                                │
 │     ┌─────────────────────────────────────────────────────────────┐     │
 │     │ if (!authenticator.Authenticate(system, request))           │     │
 │     │     return 401 Unauthorized                                 │     │
 │     └─────────────────────────────────────────────────────────────┘     │
-│                                                                          │
+│                                                                         │
 │  4. Map SCIM User → StagingObject                                       │
 │     ┌─────────────────────────────────────────────────────────────┐     │
 │     │ stagingObject = new StagingObject                           │     │
 │     │ {                                                           │     │
-│     │     ExternalId = scimUser.Id ?? Guid.NewGuid(),            │     │
+│     │     ExternalId = scimUser.Id ?? Guid.NewGuid(),             │     │
 │     │     ObjectType = "User",                                    │     │
 │     │     Attributes = MapScimAttributes(scimUser)                │     │
 │     │ }                                                           │     │
 │     └─────────────────────────────────────────────────────────────┘     │
-│                                                                          │
-│  5. Process Through Inbound Sync Engine                                  │
+│                                                                         │
+│  5. Process Through Inbound Sync Engine                                 │
 │     ┌─────────────────────────────────────────────────────────────┐     │
 │     │ // Same code path as scheduled import!                      │     │
 │     │ result = await syncEngine.ProcessInboundObjectAsync(        │     │
 │     │     connectedSystem: system,                                │     │
 │     │     stagingObject: stagingObject,                           │     │
-│     │     syncRules: system.SyncRules.Where(r => r.IsImport)     │     │
+│     │     syncRules: system.SyncRules.Where(r => r.IsImport)      │     │
 │     │ )                                                           │     │
 │     └─────────────────────────────────────────────────────────────┘     │
-│                                                                          │
-│  6. Sync Engine Does:                                                    │
+│                                                                         │
+│  6. Sync Engine Does:                                                   │
 │     ├── Find/create CSO for this external ID                            │
 │     ├── Evaluate join rules → find/create MVO                           │
-│     ├── Apply attribute flow rules                                       │
-│     ├── Update MVO attributes                                            │
+│     ├── Apply attribute flow rules                                      │
+│     ├── Update MVO attributes                                           │
 │     └── Create Pending Exports (per Option A decision)                  │
-│                                                                          │
-│  7. Return SCIM Response                                                 │
+│                                                                         │
+│  7. Return SCIM Response                                                │
 │     ┌─────────────────────────────────────────────────────────────┐     │
 │     │ return Created(                                             │     │
-│     │     $"/scim/v2/{systemId}/Users/{cso.ExternalId}",         │     │
+│     │     $"/scim/v2/{systemId}/Users/{cso.ExternalId}",          │     │
 │     │     MapToScimUser(cso)                                      │     │
 │     │ )                                                           │     │
 │     └─────────────────────────────────────────────────────────────┘     │
-│                                                                          │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
