@@ -473,16 +473,7 @@ public class ImportUpdateObjectMvaTests
         
         Assert.Pass();
     }
-    
-    // todo: create a test for when the object ids are not system-unique, but object-type unique, we have two types and two objects with the same external id value
-    // and reference one of them in a group. i.e. overlapping external id values, but differentiated by object type. Expecting this to fail.
-    // i.e.
-    // group1.externalid = 1
-    // group1.member.unresolvedreference = 1
-    // user1.externalid = 1
-    // will the group member resolve to the group, or the user? it could be either. how do we know what object type is being referenced?
-    // not an issue whilst all ids in use on objects and in references are system-unique.
-    
+
     [Test]
     public async Task FullImportUpdateRemoveIntMvaTestAsync()
     {
