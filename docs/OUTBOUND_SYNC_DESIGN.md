@@ -1,8 +1,8 @@
 # Outbound Sync Design Document
 
-> **Status**: Draft - For Discussion
+> **Status**: Design Decisions In Progress
 > **Issue**: #121
-> **Last Updated**: 2025-12-02
+> **Last Updated**: 2025-12-03
 
 ## Overview
 
@@ -14,12 +14,13 @@ This document explores the design considerations for outbound synchronisation - 
 
 1. [Core Concepts](#core-concepts)
 2. [Design Questions](#design-questions)
-3. [Triggers for Outbound Sync](#triggers-for-outbound-sync)
-4. [Pending Export Lifecycle](#pending-export-lifecycle)
-5. [Provisioning vs Export](#provisioning-vs-export)
-6. [Edge Cases & Challenges](#edge-cases--challenges)
-7. [Innovation Opportunities](#innovation-opportunities)
-8. [Proposed Implementation Approach](#proposed-implementation-approach)
+3. [Event-Based Sync Roadmap](#event-based-sync-roadmap)
+4. [Triggers for Outbound Sync](#triggers-for-outbound-sync)
+5. [Pending Export Lifecycle](#pending-export-lifecycle)
+6. [Provisioning vs Export](#provisioning-vs-export)
+7. [Edge Cases & Challenges](#edge-cases--challenges)
+8. [Innovation Opportunities](#innovation-opportunities)
+9. [Proposed Implementation Approach](#proposed-implementation-approach)
 
 ---
 
@@ -56,19 +57,27 @@ These questions need to be answered before implementation:
 
 **Options:**
 
-A) **Immediately during inbound sync** - As soon as MVO is updated, evaluate export rules
-   - Pros: Single pass, changes flow immediately
+A) **Immediately when MVO changes** - As soon as MVO is updated, evaluate export rules and create Pending Exports
+   - Pros: Single pass, changes flow immediately, enables event-based sync
    - Cons: Could slow down import, complex transaction management
 
 B) **As a separate phase after inbound sync** - Process all MVO changes, then evaluate exports
    - Pros: Cleaner separation, easier to debug
-   - Cons: Two passes over data
+   - Cons: Two passes over data, doesn't support real-time sync well
 
 C) **As a separate run profile** - Dedicated "Export Sync" that evaluates MVO changes
    - Pros: Maximum control, can run independently
    - Cons: Requires tracking which MVOs have pending outbound evaluation
 
-**Recommendation**: Option A or B - immediate/phased within same sync run. This matches user expectations that a sync run processes changes end-to-end.
+**✅ DECISION: Option A** - Evaluate and create Pending Exports immediately when MVO changes.
+
+**Rationale:**
+1. **Performance** - Work is distributed across time as changes occur, avoiding "thundering herd" during sync runs
+2. **Event-Based Enablement** - This architecture naturally supports both scheduled and event-based sync modes (see [Event-Based Sync Roadmap](#event-based-sync-roadmap))
+3. **Parallelisation** - Modern async/parallel processing fits naturally; each MVO change can spawn parallel export evaluations
+4. **Decoupling** - The Pending Export table becomes a queue that decouples "what needs to happen" from "when it happens"
+
+The export *execution* remains a separate concern - can be immediate, scheduled, or hybrid per-system.
 
 ---
 
@@ -178,6 +187,102 @@ B) **Priority-based** - Highest priority source value is exported
 C) **Manual override flag** - Admin changes are marked and preserved
 
 **Recommendation**: Option A for MVP (simple), with #91 (attribute priority) addressing this more fully later.
+
+---
+
+## Event-Based Sync Roadmap
+
+> **Status**: Future Enhancement
+> **Prerequisites**: Outbound sync MVP complete
+
+### Overview
+
+Event-Based synchronisation enables near-real-time identity propagation, where changes in source systems are detected and processed immediately rather than waiting for scheduled sync runs. Some organisations have cross-domain identity change replication SLAs measured in seconds, which necessitates event-based rather than schedule-based sync.
+
+### Why Option A Enables Event-Based Sync
+
+The decision to evaluate exports **immediately when MVO changes** (Q1 Option A) creates an architecture that naturally supports both sync modes:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    UNIFIED SYNC ARCHITECTURE                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  INBOUND TRIGGER              PROCESSING              EXPORT EXECUTION   │
+│  ───────────────              ──────────              ────────────────   │
+│                                                                          │
+│  ┌─────────────┐                                                        │
+│  │ Scheduled   │──┐                                                      │
+│  │ Full/Delta  │  │                                                      │
+│  └─────────────┘  │         ┌──────────────┐      ┌─────────────────┐   │
+│                   ├────────▶│   Inbound    │─────▶│ Pending Exports │   │
+│  ┌─────────────┐  │         │   Sync       │      │    Created      │   │
+│  │ Webhook/    │  │         │  (Same code) │      └────────┬────────┘   │
+│  │ Notification│──┤         └──────────────┘               │            │
+│  └─────────────┘  │                                        │            │
+│                   │                               ┌────────┴────────┐   │
+│  ┌─────────────┐  │                               │                 │   │
+│  │ SCIM Push   │──┤                               ▼                 ▼   │
+│  │             │──┘                        ┌───────────┐     ┌──────────┐│
+│  └─────────────┘                           │ Scheduled │     │Immediate ││
+│                                            │   Batch   │     │ Execute  ││
+│                                            └───────────┘     └──────────┘│
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Sync Mode Comparison
+
+| Aspect | Schedule-Based | Event-Based |
+|--------|---------------|-------------|
+| **Inbound Trigger** | Scheduled job polls/queries source | Webhook, notification, or push (e.g., SCIM) |
+| **Inbound Processing** | Same code path | Same code path |
+| **Pending Export Creation** | Same (immediate on MVO change) | Same (immediate on MVO change) |
+| **Export Execution** | Scheduled batch job | Immediate after inbound completes |
+| **Latency** | Minutes to hours | Seconds |
+| **Use Case** | Bulk sync, batch processing | Real-time provisioning, SLA-driven |
+
+### Implementation Approach
+
+Because Q1 Option A separates *export evaluation* from *export execution*, supporting event-based sync becomes a configuration choice rather than an architectural change:
+
+#### Phase 1: Add Export Execution Mode (Minimal)
+```csharp
+public enum ExportExecutionMode
+{
+    Scheduled,    // Pending exports processed by scheduled job
+    Immediate,    // Pending exports processed immediately after creation
+    Hybrid        // Per-system configuration
+}
+```
+
+#### Phase 2: Per-System Configuration
+```csharp
+// On ConnectedSystem or SyncRule
+public ExportExecutionMode ExportMode { get; set; }
+```
+
+#### Phase 3: Inbound Event Receivers
+- Webhook endpoints for systems that push notifications
+- SCIM 2.0 server endpoints (see separate design)
+- Polling enhancement for near-real-time detection
+
+### Work Estimate for Event-Based Support
+
+| Task | Effort | Dependency |
+|------|--------|------------|
+| Add `ExportExecutionMode` enum and configuration | Small | Outbound sync MVP |
+| Implement immediate export execution path | Medium | Outbound sync MVP |
+| SCIM 2.0 server endpoints | Large | See SCIM design |
+| Webhook receiver framework | Medium | None |
+| Connector-specific notification handlers | Per-connector | Webhook framework |
+
+### Benefits of This Architecture
+
+1. **No Architectural Lock-in** - Schedule-based and event-based use the same core sync engine
+2. **Gradual Migration** - Can run hybrid (some systems scheduled, others event-based)
+3. **Performance** - Event-based naturally distributes load over time
+4. **Simplicity** - Same code paths, different triggers
 
 ---
 
