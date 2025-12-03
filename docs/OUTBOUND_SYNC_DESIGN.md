@@ -218,9 +218,9 @@ Allowing admins to see what would be exported before committing is valuable for:
 
 **Options:**
 
-A) **Preview mode on sync run** - Run sync but don't persist exports, show what would happen
-B) **Pending Export approval workflow** - Create exports but require approval before execution
-C) **Both** - Preview during development, approval for production changes
+- A) **Preview mode on sync run** - Run sync but don't persist exports, show what would happen
+- B) **Pending Export approval workflow** - Create exports but require approval before execution
+- C) **Both** - Preview during development, approval for production changes
 
 **Recommendation**: Consider Option B for MVP - it's simpler than full preview and provides a safety net.
 
@@ -232,9 +232,9 @@ When a connector fails to apply an export (network error, permission denied, etc
 
 **Options:**
 
-A) **Retry with backoff** - Automatically retry failed exports
-B) **Error and manual intervention** - Mark as failed, require admin action
-C) **Dead letter queue** - Move to separate queue after N failures
+- A) **Retry with backoff** - Automatically retry failed exports
+- B) **Error and manual intervention** - Mark as failed, require admin action
+- C) **Dead letter queue** - Move to separate queue after N failures
 
 **Current implementation**: `PendingExport.ErrorCount` exists, incremented on partial failures.
 
@@ -253,9 +253,9 @@ When an MVO has attributes from multiple sources, which value gets exported?
 
 **Options:**
 
-A) **Current MVO value wins** - Export whatever is currently on the MVO
-B) **Priority-based** - Highest priority source value is exported
-C) **Manual override flag** - Admin changes are marked and preserved
+- A) **Current MVO value wins** - Export whatever is currently on the MVO
+- B) **Priority-based** - Highest priority source value is exported
+- C) **Manual override flag** - Admin changes are marked and preserved
 
 **Recommendation**: Option A for MVP (simple), with #91 (attribute priority) addressing this more fully later.
 
