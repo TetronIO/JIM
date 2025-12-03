@@ -148,6 +148,9 @@ print_step "Creating shell aliases..."
 cat >> ~/.zshrc << 'EOF'
 
 # JIM Development Aliases
+# Unset GITHUB_TOKEN to allow gh CLI to use its own authentication with project scopes
+unset GITHUB_TOKEN
+
 alias jim-build='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'

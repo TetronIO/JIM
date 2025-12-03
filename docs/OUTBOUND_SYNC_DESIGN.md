@@ -98,7 +98,18 @@ A) **Use existing `JoinType` enum** - `Projected` and `Provisioned` values exist
 B) **Add explicit `ProvisionedByJim` flag to CSO**
    - More explicit, but redundant with JoinType
 
-**Recommendation**: Option A - leverage existing `JoinType.Provisioned` value.
+**Decision**: Option A - leverage existing `JoinType.Provisioned` value.
+
+**MVP Behaviour**:
+- Only delete CSOs where `JoinType = Provisioned`
+- CSOs with `JoinType = Joined` will have their join broken but no delete export created
+- This is the safest default - JIM only deletes what it created
+
+**Post-MVP Enhancement** (Issue #126):
+- Add configurable `CsoDeletionBehaviour` enum: `ProvisionedOnly`, `AllJoined`, `DisconnectOnly`
+- Allow per-sync-rule configuration of deletion behaviour
+- Consider "disable before delete" pattern for AD accounts
+- Consider scope fallout behaviour (what happens when object falls out of sync rule scope)
 
 ---
 
