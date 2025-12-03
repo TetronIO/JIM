@@ -473,16 +473,7 @@ public class ImportUpdateObjectMvaTests
         
         Assert.Pass();
     }
-    
-    // todo: create a test for when the object ids are not system-unique, but object-type unique, we have two types and two objects with the same external id value
-    // and reference one of them in a group. i.e. overlapping external id values, but differentiated by object type. Expecting this to fail.
-    // i.e.
-    // group1.externalid = 1
-    // group1.member.unresolvedreference = 1
-    // user1.externalid = 1
-    // will the group member resolve to the group, or the user? it could be either. how do we know what object type is being referenced?
-    // not an issue whilst all ids in use on objects and in references are system-unique.
-    
+
     [Test]
     public async Task FullImportUpdateRemoveIntMvaTestAsync()
     {
@@ -1035,9 +1026,130 @@ public class ImportUpdateObjectMvaTests
         
         Assert.Pass();
     }
-    
+
+    /// <summary>
+    /// Tests that when two objects of different types have the same external ID value,
+    /// and a reference tries to resolve to that value, the system throws an exception
+    /// because SingleOrDefault cannot determine which object is the target.
+    ///
+    /// This documents the current behaviour: external IDs must be system-unique, not just
+    /// object-type unique, for reference resolution to work correctly.
+    /// </summary>
+    [Test]
+    public void FullImportOverlappingExternalIdThrowsExceptionTestAsync()
+    {
+        // clear any existing data and set up fresh
+        ConnectedSystemObjectsData.Clear();
+
+        // define a shared external ID value that will be used by both a user and a group
+        var sharedExternalId = Guid.NewGuid();
+
+        // get object types
+        var userObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_USER", StringComparison.InvariantCultureIgnoreCase));
+        var groupObjectType = ConnectedSystemObjectTypesData.Single(q => q.Name.Equals("SOURCE_GROUP", StringComparison.InvariantCultureIgnoreCase));
+
+        // create a user with the shared external ID
+        var user = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            ConnectedSystem = ConnectedSystemsData.First(),
+            Type = userObjectType,
+            ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
+        };
+        user.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = sharedExternalId, // same as group!
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.HR_ID.ToString()),
+                ConnectedSystemObject = user
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Test User",
+                Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = user
+            }
+        };
+        ConnectedSystemObjectsData.Add(user);
+
+        // create a group with the same shared external ID value
+        var group = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            ConnectedSystem = ConnectedSystemsData.First(),
+            Type = groupObjectType,
+            ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.GROUP_UID
+        };
+        group.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = sharedExternalId, // same as user!
+                Attribute = groupObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.GROUP_UID.ToString()),
+                ConnectedSystemObject = group
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = "Test Group",
+                Attribute = groupObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = group
+            }
+        };
+        ConnectedSystemObjectsData.Add(group);
+
+        // import a second group that references the shared external ID
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "SOURCE_GROUP",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.GROUP_UID.ToString(),
+                    GuidValues = new List<Guid> { Guid.NewGuid() }, // new group's unique ID
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "New Group With Ambiguous Reference" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.MEMBER.ToString(),
+                    ReferenceValues = new List<string>
+                    {
+                        sharedExternalId.ToString() // this ID matches both the user and the group!
+                    },
+                    Type = AttributeDataType.Reference
+                }
+            }
+        });
+
+        // The import should throw an InvalidOperationException because SingleOrDefault
+        // will find two CSOs with the same external ID value (user and group)
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+            var activity = ActivitiesData.First();
+            var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
+            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem!, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+            await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        }, "Expected InvalidOperationException when resolving a reference that matches multiple CSOs with the same external ID value.");
+    }
+
     // todo: test activity/run profile execution item/change object creation
-    
+
     #region private methods
     private void InitialiseConnectedSystemObjectsData()
     {

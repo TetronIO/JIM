@@ -2751,9 +2751,196 @@ public class ImportUpdateObjectSvaTests
         
         Assert.Pass();
     }
-    
+
+    [Test]
+    public async Task FullImportUpdateByteAddSvaTestAsync()
+    {
+        InitialiseConnectedSystemObjectsData();
+
+        // mock up a connector that will return updates for our existing connected system objects above.
+        // changes: PROFILE_PICTURE_BYTES is being added to cso2 for the first time.
+        var newProfilePicture = Convert.FromHexString(TestConstants.IMAGE_2_HEX);
+        var mockFileConnector = new MockFileConnector();
+
+        // cso1 - no changes, just maintaining existing state
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
+                    DateTimeValue = TestConstants.CS_OBJECT_1_START_DATE,
+                    Type = AttributeDataType.DateTime
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_1_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "jane.smith@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.ROLE.ToString(),
+                    StringValues = new List<string> { "Manager" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.PROFILE_PICTURE_BYTES.ToString(),
+                    ByteValues = new List<byte[]> { Convert.FromHexString(TestConstants.IMAGE_1_HEX) },
+                    Type = AttributeDataType.Binary
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
+                    BoolValue = false,
+                    Type = AttributeDataType.Boolean
+                }
+            }
+        });
+
+        // cso2 - adding PROFILE_PICTURE_BYTES for the first time
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Create,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 2 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_2_HR_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.START_DATE.ToString(),
+                    DateTimeValue = TestConstants.CS_OBJECT_2_START_DATE,
+                    Type = AttributeDataType.DateTime
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { TestConstants.CS_OBJECT_2_DISPLAY_NAME },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.EMAIL_ADDRESS.ToString(),
+                    StringValues = new List<string> { "joe.bloggs@phlebas.tetron.io" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.ROLE.ToString(),
+                    StringValues = new List<string> { "Developer" },
+                    Type = AttributeDataType.Text
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.MANAGER.ToString(),
+                    ReferenceValues = new List<string> { TestConstants.CS_OBJECT_1_HR_ID.ToString() },
+                    Type = AttributeDataType.Reference
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.CONTRACTED_WEEKLY_HOURS.ToString(),
+                    IntValues = new List<int> { 40 },
+                    Type = AttributeDataType.Number
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.LOCATION_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.LOCATION_1_ID },
+                    Type = AttributeDataType.Guid
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.END_DATE.ToString(),
+                    DateTimeValue = TestConstants.CS_OBJECT_2_END_DATE_1,
+                    Type = AttributeDataType.DateTime
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.LEAVER.ToString(),
+                    BoolValue = false,
+                    Type = AttributeDataType.Boolean
+                },
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.PROFILE_PICTURE_BYTES.ToString(),
+                    ByteValues = new List<byte[]> { newProfilePicture },
+                    Type = AttributeDataType.Binary
+                }
+            }
+        });
+
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // confirm the results persisted to the mocked db context
+        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+
+        // get the Connected System Object for the user we added the profile picture to
+        var cso2 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
+        Assert.That(cso2, Is.Not.EqualTo(null), "Expected to be able to retrieve the second CSO to validate.");
+
+        // verify the new PROFILE_PICTURE_BYTES attribute was added
+        var profilePictureAttribute = cso2.GetAttributeValue(MockSourceSystemAttributeNames.PROFILE_PICTURE_BYTES.ToString());
+        Assert.That(profilePictureAttribute, Is.Not.Null, "Expected PROFILE_PICTURE_BYTES attribute to be present.");
+        Assert.That(profilePictureAttribute.ByteValue, Is.Not.Null, "Expected ByteValue to be populated.");
+        Assert.That(profilePictureAttribute.ByteValue, Is.EqualTo(newProfilePicture), "Expected the profile picture bytes to match the imported value.");
+
+        Assert.Pass();
+    }
+
     // todo: test activity/run profile execution item/change object creation
-    
+
     #region private methods
     private void InitialiseConnectedSystemObjectsData()
     {
