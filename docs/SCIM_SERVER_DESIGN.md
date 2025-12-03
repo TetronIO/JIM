@@ -34,6 +34,12 @@ SCIM (System for Cross-domain Identity Management) is a standard protocol (RFC 7
 5. [Request Processing Flow](#request-processing-flow)
 6. [Schema Mapping](#schema-mapping)
 7. [Design Questions](#design-questions)
+   - [Q1: SCIM Resource IDs](#q1-how-do-we-handle-scim-resource-ids)
+   - [Q2: Filtering and Pagination](#q2-how-do-we-handle-scim-filtering-and-pagination)
+   - [Q3: Response Data Source](#q3-should-scim-responses-include-mvo-data-or-cso-data)
+   - [Q4: Groups with Members](#q4-how-do-we-handle-scim-groups-with-members)
+   - [Q5: Inter-Object Dependencies](#q5-how-does-scim-handle-inter-object-dependencies)
+   - [Q6: Bulk Operations](#q6-do-we-need-scim-bulk-operations)
 8. [Implementation Approach](#implementation-approach)
 9. [Edge Cases & Challenges](#edge-cases--challenges)
 
@@ -543,6 +549,129 @@ B) **Lenient** - Accept group, ignore unknown members
 C) **Deferred** - Store references, resolve during sync
 
 **Recommendation**: Option C - Store member references as-is, resolve during attribute flow to MVO.
+
+---
+
+### Q5: How does SCIM handle inter-object dependencies?
+
+SCIM is fundamentally **single-object-at-a-time** for mutations. The spec states:
+
+> "The SCIM protocol does not define any ordering guarantees for bulk operations"
+> — RFC 7644, Section 3.7
+
+**Who handles ordering?**
+
+| Scenario | Responsibility | How It Works |
+|----------|---------------|--------------|
+| **Single-object requests** | SCIM Client | Client creates dependencies first (e.g., Bob before Alice with manager=Bob) |
+| **Bulk requests** | SCIM Server (JIM) | Server can topologically sort using `bulkId` references |
+
+**For single-object requests (MVP):**
+
+```csharp
+[HttpPost("Users")]
+public async Task<IActionResult> CreateUser(Guid systemId, ScimUser user)
+{
+    if (user.Manager?.Value != null)
+    {
+        // Look up referenced CSO in THIS connected system
+        var managerCso = await _repository.ConnectedSystemObjects
+            .GetByExternalIdAsync(systemId, user.Manager.Value);
+
+        if (managerCso == null)
+        {
+            // SCIM spec: Return 400 Bad Request
+            return BadRequest(new ScimError
+            {
+                Status = 400,
+                ScimType = "invalidValue",
+                Detail = $"Manager '{user.Manager.Value}' not found"
+            });
+        }
+    }
+    // Continue processing...
+}
+```
+
+This is correct per SCIM spec - clients are expected to create dependencies first.
+
+---
+
+### Q6: Do we need SCIM Bulk operations?
+
+**Standard SCIM (most IdPs):**
+- Single-object operations (POST, PATCH, DELETE one at a time)
+- Client handles ordering
+- Optional Bulk endpoint (rarely used by clients)
+
+**Entra ID Inbound Provisioning API:**
+- Bulk-first approach with SCIM payloads
+- Uses `bulkId` for intra-batch references
+- Server handles dependency ordering
+
+```json
+{
+    "schemas": ["urn:ietf:params:scim:api:messages:2.0:BulkRequest"],
+    "Operations": [
+        {
+            "method": "POST",
+            "path": "/Users",
+            "bulkId": "user-bob",
+            "data": { "userName": "bob", ... }
+        },
+        {
+            "method": "POST",
+            "path": "/Users",
+            "bulkId": "user-alice",
+            "data": {
+                "userName": "alice",
+                "manager": { "value": "bulkId:user-bob" }
+            }
+        }
+    ]
+}
+```
+
+**Recommendation:**
+
+| Phase | Scope | Rationale |
+|-------|-------|-----------|
+| **MVP** | Single-object only | Most IdPs (Okta, OneLogin, Ping) use single-object |
+| **Post-MVP** | Add Bulk endpoint | Required for Entra ID API-driven provisioning |
+
+**Bulk implementation approach (post-MVP):**
+
+```csharp
+[HttpPost("Bulk")]
+public async Task<IActionResult> BulkOperation(Guid systemId, ScimBulkRequest request)
+{
+    // 1. Parse all operations
+    var operations = request.Operations;
+
+    // 2. Build dependency graph from bulkId references
+    var graph = BuildBulkIdDependencyGraph(operations);
+
+    // 3. Topological sort - dependencies first
+    var sorted = TopologicalSort(graph);
+
+    // 4. Execute in order, tracking bulkId → SCIM ID
+    var bulkIdToScimId = new Dictionary<string, string>();
+    var results = new List<ScimBulkOperationResult>();
+
+    foreach (var op in sorted)
+    {
+        ReplaceBulkIdReferences(op, bulkIdToScimId);
+        var result = await ExecuteOperationAsync(systemId, op);
+
+        if (op.BulkId != null)
+            bulkIdToScimId[op.BulkId] = result.ScimId;
+
+        results.Add(result);
+    }
+
+    return Ok(new ScimBulkResponse { Operations = results });
+}
+```
 
 ---
 

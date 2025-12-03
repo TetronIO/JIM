@@ -15,12 +15,13 @@ This document explores the design considerations for outbound synchronisation - 
 1. [Core Concepts](#core-concepts)
 2. [Design Questions](#design-questions)
 3. [Event-Based Sync Roadmap](#event-based-sync-roadmap)
-4. [Triggers for Outbound Sync](#triggers-for-outbound-sync)
-5. [Pending Export Lifecycle](#pending-export-lifecycle)
-6. [Provisioning vs Export](#provisioning-vs-export)
-7. [Edge Cases & Challenges](#edge-cases--challenges)
-8. [Innovation Opportunities](#innovation-opportunities)
-9. [Proposed Implementation Approach](#proposed-implementation-approach)
+4. [Export Execution Strategy](#export-execution-strategy)
+5. [Triggers for Outbound Sync](#triggers-for-outbound-sync)
+6. [Pending Export Lifecycle](#pending-export-lifecycle)
+7. [Provisioning vs Export](#provisioning-vs-export)
+8. [Edge Cases & Challenges](#edge-cases--challenges)
+9. [Innovation Opportunities](#innovation-opportunities)
+10. [Proposed Implementation Approach](#proposed-implementation-approach)
 
 ---
 
@@ -283,6 +284,295 @@ public ExportExecutionMode ExportMode { get; set; }
 2. **Gradual Migration** - Can run hybrid (some systems scheduled, others event-based)
 3. **Performance** - Event-based naturally distributes load over time
 4. **Simplicity** - Same code paths, different triggers
+
+---
+
+## Export Execution Strategy
+
+### The Challenge: Reference Attributes and Dependencies
+
+Q1 Option A (evaluate exports immediately) creates challenges when:
+- **Reference attributes** point to MVOs that don't exist in the target system yet
+- **Dependencies** between objects (manager→user, group→members) require sequencing
+- **Parallel processing** means we can't guarantee ordering during inbound sync
+
+**Key Insight**: Q1 Option A is about *when to evaluate and create Pending Exports*, not about *when/how to execute them*. This separation is our solution.
+
+### Two Distinct Phases
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    EVALUATION vs EXECUTION                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  PHASE 1: EXPORT EVALUATION (Q1 Decision)                               │
+│  ─────────────────────────────────────────                              │
+│  ✓ Can be parallel                                                      │
+│  ✓ No dependency concerns                                               │
+│  ✓ Just creates PendingExport records                                   │
+│  ✓ References stored as MVO IDs (not target system IDs)                │
+│                                                                          │
+│  PHASE 2: EXPORT EXECUTION (Separate concern)                           │
+│  ─────────────────────────────────────────────                          │
+│  → Dependency graph evaluation happens HERE                             │
+│  → Ordering/sequencing happens HERE                                     │
+│  → Reference resolution (MVO ID → target system ID) happens HERE        │
+│  → Can be batched, ordered, multi-pass                                  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Storing References as MVO IDs
+
+When creating a `PendingExport`, reference attributes store **MVO IDs**, not target system identifiers:
+
+```csharp
+// PendingExport stores MVO reference, not AD DN
+PendingExportAttributeValueChange {
+    AttributeName: "manager",
+    NewValue: "mvo:guid-of-bob"  // MVO reference, not "CN=Bob,OU=Users,DC=corp,DC=local"
+}
+```
+
+This decouples export *evaluation* from export *execution*, allowing references to be resolved at execution time when all dependencies are known.
+
+### Execution Strategy by Scenario
+
+#### Scenario 1: Scheduled Batch Export (Multi-Pass)
+
+For scheduled export runs processing many pending exports:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    SCHEDULED BATCH EXPORT                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Input: Collection of PendingExports for target system                  │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ PASS 1: Structural Changes (Parallel)                           │   │
+│  │                                                                  │   │
+│  │ • Create new objects (without reference attributes)              │   │
+│  │ • Delete objects                                                 │   │
+│  │ • Update non-reference attributes                                │   │
+│  │                                                                  │   │
+│  │ Output: All objects exist in target system                       │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                              │                                          │
+│                              ▼                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ PASS 2: Reference Resolution (Parallel)                         │   │
+│  │                                                                  │   │
+│  │ • Resolve MVO references → Target system IDs (e.g., AD DN)      │   │
+│  │ • Update manager attributes                                      │   │
+│  │ • Update group memberships                                       │   │
+│  │                                                                  │   │
+│  │ Output: All references populated                                 │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why Multi-Pass Works**:
+- Pass 1 can be fully parallel (no dependencies between creates)
+- Pass 2 can also be parallel (all objects exist after Pass 1)
+- Matches how products like MIM work (phases visible in Sync Manager)
+- Simple mental model: "create objects, then set references"
+
+**Implementation**:
+
+```csharp
+public async Task ExecutePendingExportsAsync(ConnectedSystem targetSystem)
+{
+    var pendingExports = await GetPendingExportsAsync(targetSystem.Id);
+
+    // Pass 1: Non-reference changes (parallel)
+    var pass1Tasks = pendingExports
+        .Where(e => e.ChangeType == Add || HasNonReferenceChanges(e))
+        .Select(e => ExecuteNonReferenceChangesAsync(e));
+    await Task.WhenAll(pass1Tasks);
+
+    // Pass 2: Reference attributes (parallel, all objects now exist)
+    var pass2Tasks = pendingExports
+        .Where(e => HasReferenceChanges(e))
+        .Select(e => ExecuteReferenceChangesAsync(e));
+    await Task.WhenAll(pass2Tasks);
+}
+```
+
+#### Scenario 2: Event-Based Single Object Export
+
+For immediate export of a single object (e.g., after SCIM push):
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    EVENT-BASED SINGLE OBJECT                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  SCIM Push: Alice (manager=Bob)                                         │
+│         │                                                                │
+│         ▼                                                                │
+│  Create MVO for Alice, manager = MVO:Bob                                │
+│         │                                                                │
+│         ▼                                                                │
+│  Create PendingExport for Alice to AD                                   │
+│  (manager stored as MVO ID)                                             │
+│         │                                                                │
+│         ▼                                                                │
+│  Immediate Export Execution                                              │
+│         │                                                                │
+│    ┌────┴─────────────────────────────────────┐                        │
+│    │                                          │                         │
+│    ▼                                          ▼                         │
+│  Bob EXISTS in AD                      Bob NOT in AD yet                │
+│    │                                          │                         │
+│    ▼                                          ▼                         │
+│  Export Alice with                      Export Alice with               │
+│  manager=Bob's DN                       manager=null                    │
+│                                               │                         │
+│                                               ▼                         │
+│                                         Create DeferredReference        │
+│                                         (Alice.manager → Bob)           │
+│                                               │                         │
+│                                               ▼                         │
+│                                         When Bob exported later,        │
+│                                         update Alice.manager            │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Recommended Approach: Export with Null, Update Later**
+
+```csharp
+public async Task ExecuteImmediateExportAsync(PendingExport export)
+{
+    var unresolvedRefs = new List<DeferredReference>();
+
+    foreach (var attr in export.AttributeChanges.Where(a => a.IsReference))
+    {
+        var targetCso = await FindCsoInTargetSystem(attr.MvoReferenceId, export.TargetSystemId);
+
+        if (targetCso != null)
+        {
+            // Reference exists - resolve it
+            attr.ResolvedValue = targetCso.ExternalId;
+        }
+        else
+        {
+            // Reference doesn't exist yet - defer it
+            attr.ResolvedValue = null;
+            unresolvedRefs.Add(new DeferredReference
+            {
+                SourceCsoId = export.CsoId,
+                AttributeName = attr.Name,
+                TargetMvoId = attr.MvoReferenceId
+            });
+        }
+    }
+
+    // Export object (with null for unresolved references)
+    await connector.ExportAsync(export);
+
+    // Track deferred references for later resolution
+    await SaveDeferredReferencesAsync(unresolvedRefs);
+}
+
+// Called when an MVO is exported to a target system
+public async Task ResolveDeferredReferencesAsync(Guid mvoId, ConnectedSystem targetSystem)
+{
+    var deferred = await GetDeferredReferencesAsync(mvoId, targetSystem.Id);
+
+    foreach (var reference in deferred)
+    {
+        // Now that target exists, update the reference
+        await UpdateReferenceAttributeAsync(reference);
+        await MarkDeferredReferenceResolvedAsync(reference);
+    }
+}
+```
+
+**Why This Works**:
+- User/object gets created immediately (main goal of event-based)
+- Reference updated automatically when dependency is exported
+- No blocking, no complex retry logic
+- Matches real-world behaviour (AD allows creating user without manager)
+
+### Reference Resolution
+
+```csharp
+public async Task<string> ResolveReferenceForTargetSystemAsync(
+    Guid mvoId,
+    ConnectedSystem targetSystem)
+{
+    // Find the CSO for this MVO in the target system
+    var cso = await _repository.ConnectedSystemObjects
+        .GetByMetaverseObjectIdAsync(mvoId, targetSystem.Id);
+
+    if (cso == null)
+        return null;  // Not yet exported to this system
+
+    // Return target system's identifier (e.g., AD DN)
+    return cso.ExternalId;
+}
+```
+
+### Handling Groups: Object Type Ordering
+
+Groups with members are complex because members must exist before being added:
+
+**Option 1: Process Object Types in Dependency Order**
+
+```csharp
+// Configure object type processing order per-system
+var objectTypeOrder = new[] { "User", "Group" };
+
+foreach (var objectType in objectTypeOrder)
+{
+    var exports = pendingExports.Where(e => e.ObjectType == objectType);
+
+    // Pass 1: Create objects
+    await CreateObjectsAsync(exports);
+
+    // Pass 2: Set references (including group members)
+    await SetReferencesAsync(exports);
+}
+```
+
+**Option 2: Separate Group Membership Pass**
+
+```
+Pass 1: Create users (no references)
+Pass 2: Create groups (no members)
+Pass 3: Set user references (manager)
+Pass 4: Add group members
+```
+
+### Summary: Dependency Handling by Scenario
+
+| Scenario | Who Handles Ordering | Reference Resolution | Approach |
+|----------|---------------------|---------------------|----------|
+| **Scheduled Batch** | JIM (multi-pass) | Pass 1: objects, Pass 2: references | Multi-pass parallel |
+| **Event-Based Single** | JIM (deferred) | Export now, update reference when available | Deferred references |
+| **SCIM Single Object** | Client (Okta, etc.) | Client creates dependencies first | Return 400 if missing |
+| **SCIM Bulk Request** | JIM (topological sort) | Resolve bulkId refs within batch | Topological sort |
+
+### Data Model Additions
+
+To support deferred references:
+
+```csharp
+public class DeferredReference
+{
+    public Guid Id { get; set; }
+    public Guid SourceCsoId { get; set; }           // CSO that has the reference
+    public string AttributeName { get; set; }        // e.g., "manager"
+    public Guid TargetMvoId { get; set; }           // MVO being referenced
+    public Guid TargetSystemId { get; set; }        // System where ref needs resolving
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+    public int RetryCount { get; set; }
+}
+```
 
 ---
 
