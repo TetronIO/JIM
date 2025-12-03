@@ -117,6 +117,38 @@ B) **Add explicit `ProvisionedByJim` flag to CSO**
 
 If System A updates MVO, and MVO updates System B, and System B also syncs back to MVO... we could get infinite loops.
 
+**When does this apply?**
+
+This is an edge case that only occurs when a connected system has **both import and export** flow defined for the same attribute. Most deployments have clear source/target separation (HR imports, AD exports), but bidirectional scenarios exist.
+
+**Example - AD with bidirectional title sync:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Sync Rules for AD:                                             │
+│                                                                 │
+│  Import Rule: ad.title → mvo.title                             │
+│  Export Rule: mvo.title → ad.title                             │
+│                                                                 │
+│  WITHOUT prevention:                                            │
+│  1. Admin changes title in AD to "Senior Engineer"             │
+│  2. Import: ad.title → mvo.title                               │
+│  3. Export eval: mvo.title changed → PendingExport to AD       │
+│  4. Export: writes same value back to AD (wasteful)            │
+│  5. Next import: may detect "change" → loop continues          │
+│                                                                 │
+│  WITH prevention (Option A):                                    │
+│  1. Admin changes title in AD to "Senior Engineer"             │
+│  2. Import: ad.title → mvo.title                               │
+│     mvo.title.ContributedBySystem = AD  ← tracked!             │
+│  3. Export eval for AD:                                         │
+│     ContributedBySystem (AD) == TargetSystem (AD) → SKIP       │
+│  4. Export eval for other systems:                              │
+│     ContributedBySystem (AD) != TargetSystem → create export   │
+│  5. No circular sync, no wasted exports                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 **Options:**
 
 A) **Source tracking** - Don't export changes back to the system that caused them
@@ -127,7 +159,32 @@ B) **Change versioning** - Track change version numbers, only sync newer changes
 
 C) **Sync direction flags** - Mark certain systems as import-only or export-only
 
-**Recommendation**: Option A - we already have `ContributedBySystem` on attribute values. Use this to prevent circular exports.
+**Decision**: Option A - leverage existing `ContributedBySystem` on attribute values.
+
+**Implementation:**
+
+```csharp
+public async Task EvaluateExportRulesAsync(MetaverseObject mvo, MetaverseObjectAttribute changedAttribute)
+{
+    var exportRules = await GetExportRulesForObjectType(mvo.ObjectType);
+
+    foreach (var rule in exportRules)
+    {
+        // Q3: Skip if this attribute came FROM the target system
+        if (changedAttribute.ContributedBySystem?.Id == rule.ConnectedSystem.Id)
+        {
+            _logger.Debug("Skipping export to {System} - it contributed this value",
+                rule.ConnectedSystem.Name);
+            continue;  // Don't export back to source
+        }
+
+        // Create pending export for this target system
+        await CreatePendingExportAsync(mvo, rule, changedAttribute);
+    }
+}
+```
+
+**Note**: For most deployments with clear source/target separation, this check will rarely trigger but provides safety for bidirectional scenarios.
 
 ---
 
