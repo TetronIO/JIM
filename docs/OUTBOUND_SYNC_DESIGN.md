@@ -218,11 +218,21 @@ Allowing admins to see what would be exported before committing is valuable for:
 
 **Options:**
 
-- A) **Preview mode on sync run** - Run sync but don't persist exports, show what would happen
-- B) **Pending Export approval workflow** - Create exports but require approval before execution
-- C) **Both** - Preview during development, approval for production changes
+A) **Preview mode on sync run** - Run sync but don't persist exports, show what would happen
+B) **Pending Export approval workflow** - Create exports but require approval before execution
+C) **Both** - Preview during development, approval for production changes
 
-**Recommendation**: Consider Option B for MVP - it's simpler than full preview and provides a safety net.
+**✅ DECISION: Option C** - Support both Preview and Preview + Sync modes.
+
+**Implementation:**
+
+The user selects the run mode when executing a sync:
+- **Preview Only** - Evaluates sync rules and shows what changes would be made, but does not persist any Pending Exports or execute changes
+- **Preview + Sync** - Evaluates sync rules, shows the preview, then persists Pending Exports and executes them
+
+This gives admins full control:
+- Use Preview Only when testing new sync rules or troubleshooting
+- Use Preview + Sync for normal operations with visibility into what's happening
 
 ---
 
@@ -238,7 +248,17 @@ When a connector fails to apply an export (network error, permission denied, etc
 
 **Current implementation**: `PendingExport.ErrorCount` exists, incremented on partial failures.
 
-**Recommendation**: Implement retry with configurable max attempts, then require manual intervention.
+**✅ DECISION: Option A + B** - Retry with configurable max attempts, then require manual intervention.
+
+**Implementation:**
+
+- Automatic retry with exponential backoff on transient failures
+- Configurable max retry attempts (default: 5)
+- After max retries exceeded, mark export as `Failed` and require manual intervention
+- Failed exports visible in dashboard with clear error details
+- Proactive notification system (future enhancement) to alert admins of persistent failures
+
+**Rationale**: Purely automatic retries (as seen in legacy systems) led to issues going unaddressed indefinitely, especially with poor notification capabilities and server-based management tools. Combining automatic retries with a definitive failure state ensures transient issues are handled automatically whilst persistent problems surface for admin attention.
 
 ---
 
@@ -257,7 +277,15 @@ When an MVO has attributes from multiple sources, which value gets exported?
 - B) **Priority-based** - Highest priority source value is exported
 - C) **Manual override flag** - Admin changes are marked and preserved
 
-**Recommendation**: Option A for MVP (simple), with #91 (attribute priority) addressing this more fully later.
+**✅ DECISION: Option A** - Export the current MVO value.
+
+**Rationale**: This is not a separate decision for outbound sync - it's a natural consequence of the architecture:
+
+1. **Inbound sync** determines which source value "wins" via attribute priority (Issue #91)
+2. The winning value is applied to the MVO
+3. **Outbound sync** exports whatever is currently on the MVO
+
+The MVO is the single source of truth. Attribute priority is an inbound concern; outbound sync simply exports the authoritative MVO value. There's no additional complexity needed here.
 
 ---
 
