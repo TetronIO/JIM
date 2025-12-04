@@ -986,10 +986,10 @@ Based on the design decisions above, this is the implementation plan for outboun
 ```
 Phase 1 (Models) ──────────────────────────────────────────┐
                                                            │
-Phase 2 (Evaluation) ─────────────────────────────────────┤
+Phase 2 (Evaluation) ──────────────────────────────────────┤
      │                                                     │
      ▼                                                     │
-Phase 3 (Execution) ──────────────────────────────────────┤
+Phase 3 (Execution) ───────────────────────────────────────┤
      │                                                     │
      ├──────────────┐                                      │
      ▼              ▼                                      ▼
