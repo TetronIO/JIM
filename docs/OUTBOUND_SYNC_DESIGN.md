@@ -744,7 +744,7 @@ Outbound sync should be triggered by:
     │
     │  Full Sync confirms CSO matches
     ▼
-┌────────┐
+┌─────────┐
 │Confirmed│ → Deleted
 │& Deleted│
 └─────────┘
