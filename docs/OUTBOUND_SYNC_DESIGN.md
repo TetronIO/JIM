@@ -1,6 +1,6 @@
 # Outbound Sync Design Document
 
-> **Status**: Design Decisions In Progress
+> **Status**: Implementation Ready
 > **Issue**: #121
 > **Last Updated**: 2025-12-03
 
@@ -21,7 +21,7 @@ This document explores the design considerations for outbound synchronisation - 
 7. [Provisioning vs Export](#provisioning-vs-export)
 8. [Edge Cases & Challenges](#edge-cases--challenges)
 9. [Innovation Opportunities](#innovation-opportunities)
-10. [Proposed Implementation Approach](#proposed-implementation-approach)
+10. [Implementation Plan](#implementation-plan)
 
 ---
 
@@ -867,32 +867,149 @@ Show relationships between:
 
 ---
 
-## Proposed Implementation Approach
+## Implementation Plan
 
-### Phase 1: Core Infrastructure
-1. Add method to detect MVO changes needing export
-2. Implement export rule evaluation
-3. Create Pending Export records from evaluation
+Based on the design decisions above, this is the implementation plan for outbound sync MVP.
 
-### Phase 2: Export Execution
-4. Implement Export run profile processor
-5. Call connector export methods
-6. Handle success/failure/retry
+### Phase 1: Core Models & Infrastructure
 
-### Phase 3: Provisioning
-7. Implement CSO creation logic
-8. External ID generation (basic)
-9. Track `JoinType = Provisioned`
+**Goal**: Set up the data model foundations for outbound sync.
 
-### Phase 4: Deprovisioning
-10. Detect MVO deletion
-11. Create delete exports for provisioned CSOs
-12. Execute delete via connector
+- [ ] **1.1 Add enums to `PendingExportEnums.cs`**
+  - `PendingExportStatus`: Pending, Executing, Failed, Exported
+  - `SyncRunMode`: PreviewOnly, PreviewAndSync
 
-### Phase 5: Polish
-13. Reference attribute handling
-14. Better error handling
-15. UI for pending export management
+- [ ] **1.2 Enhance `PendingExport.cs`**
+  - Add retry tracking: `MaxRetries`, `LastAttemptedAt`, `NextRetryAt`, `LastErrorMessage`
+  - Add MVO reference: `SourceMetaverseObjectId`
+  - Add flag: `HasUnresolvedReferences`
+
+- [ ] **1.3 Create `DeferredReference.cs`** (new model)
+  - Tracks references that couldn't be resolved during export
+  - Fields: `SourceCsoId`, `AttributeName`, `TargetMvoId`, `TargetSystemId`, `CreatedAt`, `ResolvedAt`
+
+- [ ] **1.4 Create `ExportPreviewResult.cs`** (new model)
+  - Holds preview results for Q5 Preview mode
+  - Fields: `ProposedExports`, `ObjectsToCreate/Update/Delete`, `Warnings`, `Errors`
+
+- [ ] **1.5 Update DbContext and create migration**
+  - Add `DbSet<DeferredReference>`
+  - Update PendingExport entity configuration
+  - Run: `dotnet ef migrations add AddOutboundSyncModels --project JIM.PostgresData`
+
+### Phase 2: Export Evaluation
+
+**Goal**: Implement Q1 decision - create PendingExports immediately when MVO changes.
+
+- [ ] **2.1 Create `ExportEvaluationServer.cs`** (new service in `JIM.Application/Servers/`)
+  - `EvaluateExportRulesAsync(mvo, changedAttributes)` - main entry point
+  - `IsMvoInScopeForExportRule(mvo, exportRule)` - scope checking
+  - `EvaluateAttributeForExport(...)` - implements Q3 circular sync prevention
+  - `EvaluateMvoDeletionAsync(mvo)` - implements Q4 (only Provisioned CSOs)
+  - `CreateProvisioningExport(...)` - implements Q2 (sets JoinType.Provisioned)
+
+- [ ] **2.2 Create `ScopingCriteriaEvaluator.cs`** (utility in `JIM.Worker/Processors/`)
+  - Evaluate if MVO matches sync rule scoping criteria groups
+  - Handle AND/OR logic for criteria groups
+
+- [ ] **2.3 Create `OutboundSyncRuleMappingProcessor.cs`** (new processor)
+  - Mirror of `SyncRuleMappingProcessor.cs` but for export direction
+  - Maps MVO attributes → CSO attributes based on sync rule mappings
+
+- [ ] **2.4 Hook into `SyncFullSyncTaskProcessor.cs`**
+  - After MVO changes are applied, call `EvaluateOutboundExportsAsync()`
+  - Pass the source system to enable Q3 circular sync prevention
+
+### Phase 3: Export Execution
+
+**Goal**: Process PendingExports via connectors using two-pass approach.
+
+- [ ] **3.1 Create `ExportExecutionServer.cs`** (new service in `JIM.Application/Servers/`)
+  - `ExecutePendingExportsAsync(targetSystem, activity)` - main entry point
+  - `ExecuteStructuralChangesAsync(...)` - Pass 1: creates/updates/deletes without references
+  - `ExecuteReferenceChangesAsync(...)` - Pass 2: resolves and applies reference attributes
+  - `ResolveReferenceForTargetSystemAsync(mvoId, targetSystem)` - MVO ID → target system ID
+
+- [ ] **3.2 Create `SyncExportTaskProcessor.cs`** (new processor in `JIM.Worker/Processors/`)
+  - Process Export run profile type
+  - Order exports by object type dependencies (Users before Groups)
+  - Call connector export methods
+
+- [ ] **3.3 Add repository methods**
+  - `IConnectedSystemRepository`: `CreatePendingExportAsync`, `GetExecutablePendingExportsAsync`, `GetCsoByMvoIdAsync`
+  - `IConnectedSystemRepository`: Deferred reference CRUD operations
+  - Implement in `PostgresData/Repositories/ConnectedSystemRepository.cs`
+
+### Phase 4: Preview Mode
+
+**Goal**: Implement Q5 decision - Preview Only and Preview + Sync modes.
+
+- [ ] **4.1 Create `ExportPreviewServer.cs`** (new service)
+  - `PreviewExportsForMvoAsync(mvo)` - preview for single object
+  - `PreviewExportsForSystemAsync(systemId)` - preview all pending exports
+  - `PreviewFullSyncAsync(system, runMode)` - preview full sync run
+
+- [ ] **4.2 Add `SyncRunMode` parameter to sync processors**
+  - Update `SyncFullSyncTaskProcessor` constructor
+  - When `PreviewOnly`, evaluate but don't persist or execute
+
+### Phase 5: Error Handling & Retry
+
+**Goal**: Implement Q6 decision - retry with backoff, then manual intervention.
+
+- [ ] **5.1 Create `ExportRetryService.cs`** (new service)
+  - `HandleExportFailureAsync(pendingExport, exception)` - determine if retry
+  - `CalculateNextRetryTime(errorCount)` - exponential backoff
+  - `MarkExportAsFailedAsync(pendingExport)` - mark for manual intervention
+  - `GetFailedExportsAsync()` - for admin dashboard
+  - `ResetFailedExportAsync(pendingExport)` - manual retry
+
+- [ ] **5.2 Update export processor with retry wrapper**
+  - Try/catch around export execution
+  - Call retry service on failure
+
+### Phase 6: Wire Up & Test
+
+**Goal**: Register services and write comprehensive tests.
+
+- [ ] **6.1 Update `JimApplication.cs`**
+  - Add `ExportEvaluation`, `ExportExecution`, `ExportPreview`, `ExportRetry` servers
+
+- [ ] **6.2 Write unit tests**
+  - `ExportEvaluationTests.cs` - export rule evaluation, scoping, Q3 circular prevention
+  - `ExportExecutionTests.cs` - two-pass execution, reference resolution, deferred refs
+  - `ScopingCriteriaTests.cs` - AND/OR logic, comparison types
+  - `ExportRetryTests.cs` - backoff calculation, max retries, failure marking
+
+### Implementation Dependencies
+
+```
+Phase 1 (Models) ──────────────────────────────────────────┐
+                                                           │
+Phase 2 (Evaluation) ─────────────────────────────────────┤
+     │                                                     │
+     ▼                                                     │
+Phase 3 (Execution) ──────────────────────────────────────┤
+     │                                                     │
+     ├──────────────┐                                      │
+     ▼              ▼                                      ▼
+Phase 4         Phase 5                              Phase 6
+(Preview)       (Retry)                              (Wire Up)
+```
+
+### Key Files Reference
+
+| New File | Location | Purpose |
+|----------|----------|---------|
+| `ExportEvaluationServer.cs` | `JIM.Application/Servers/` | Evaluates export rules, creates PendingExports |
+| `ExportExecutionServer.cs` | `JIM.Application/Servers/` | Executes exports via connectors |
+| `ExportPreviewServer.cs` | `JIM.Application/Servers/` | Generates previews without persisting |
+| `ExportRetryService.cs` | `JIM.Application/Servers/` | Handles retry logic and failure states |
+| `SyncExportTaskProcessor.cs` | `JIM.Worker/Processors/` | Processes Export run profile |
+| `OutboundSyncRuleMappingProcessor.cs` | `JIM.Worker/Processors/` | Maps MVO→CSO attributes |
+| `ScopingCriteriaEvaluator.cs` | `JIM.Worker/Processors/` | Evaluates scoping criteria |
+| `DeferredReference.cs` | `JIM.Models/Transactional/` | Tracks unresolved references |
+| `ExportPreviewResult.cs` | `JIM.Models/Transactional/` | Preview results container |
 
 ---
 
