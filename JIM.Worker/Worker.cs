@@ -192,11 +192,16 @@ public class Worker : BackgroundService
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaImport:
-                                                        case ConnectedSystemRunType.Export:
                                                         case ConnectedSystemRunType.FullSynchronisation:
                                                             var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(taskJim, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
                                                             break;
+                                                        case ConnectedSystemRunType.Export:
+                                                        {
+                                                            var syncExportTaskProcessor = new SyncExportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            await syncExportTaskProcessor.PerformExportAsync();
+                                                            break;
+                                                        }
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
                                                             Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
                                                             break;

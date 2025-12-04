@@ -12,6 +12,7 @@ public class JimApplication
     public ConnectedSystemServer ConnectedSystems { get; }
     public DataGenerationServer DataGeneration { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
+    public ExportExecutionServer ExportExecution { get; }
     public MetaverseServer Metaverse { get; }
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
@@ -24,6 +25,7 @@ public class JimApplication
         ConnectedSystems = new ConnectedSystemServer(this);
         DataGeneration = new DataGenerationServer(this);
         ExportEvaluation = new ExportEvaluationServer(this);
+        ExportExecution = new ExportExecutionServer(this);
         Metaverse = new MetaverseServer(this);
         Repository = dataRepository;
         Search = new SearchServer(this);
