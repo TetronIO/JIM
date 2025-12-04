@@ -1,4 +1,5 @@
-﻿using JIM.Models.Staging;
+﻿using JIM.Models.Core;
+using JIM.Models.Staging;
 namespace JIM.Models.Transactional;
 
 public class PendingExport
@@ -45,5 +46,52 @@ public class PendingExport
     /// <summary>
     /// How many times have we encountered an error whilst trying to export this change?
     /// </summary>
-    public int? ErrorCount { get; set; }
+    public int ErrorCount { get; set; }
+
+    #region Retry Tracking (Q6 Decision)
+
+    /// <summary>
+    /// Maximum number of retry attempts before marking as Failed.
+    /// Default is 5 as per Q6 decision.
+    /// </summary>
+    public int MaxRetries { get; set; } = 5;
+
+    /// <summary>
+    /// When was the last export attempt made?
+    /// </summary>
+    public DateTime? LastAttemptedAt { get; set; }
+
+    /// <summary>
+    /// When should the next retry be attempted? Calculated using exponential backoff.
+    /// </summary>
+    public DateTime? NextRetryAt { get; set; }
+
+    /// <summary>
+    /// The error message from the last failed attempt.
+    /// </summary>
+    public string? LastErrorMessage { get; set; }
+
+    #endregion
+
+    #region MVO Tracking (Q1 Decision)
+
+    /// <summary>
+    /// The Metaverse Object that triggered this export.
+    /// Used for tracking and reference resolution.
+    /// </summary>
+    public MetaverseObject? SourceMetaverseObject { get; set; }
+    public Guid? SourceMetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// Indicates whether this export has reference attributes that couldn't be resolved
+    /// because the target objects don't yet exist in the target connected system.
+    /// </summary>
+    public bool HasUnresolvedReferences { get; set; }
+
+    #endregion
+
+    /// <summary>
+    /// When this pending export was created.
+    /// </summary>
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

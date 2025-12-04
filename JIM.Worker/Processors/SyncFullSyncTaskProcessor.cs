@@ -218,7 +218,7 @@ public class SyncFullSyncTaskProcessor
                 }
 
                 // increment error count and update status
-                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
                 await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
@@ -230,7 +230,7 @@ public class SyncFullSyncTaskProcessor
                     $"All {failedChanges.Count} attribute changes failed. Incrementing error count.");
 
                 // increment error count and update status
-                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
                 await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);

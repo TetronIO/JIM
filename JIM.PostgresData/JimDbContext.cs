@@ -49,6 +49,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<MetaverseObjectChangeAttribute> MetaverseObjectChangeAttributes { get; set; } = null!;
     public virtual DbSet<MetaverseObjectChangeAttributeValue> MetaverseObjectChangeAttributeValues { get; set; } = null!;
     public virtual DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
+    public virtual DbSet<DeferredReference> DeferredReferences { get; set; } = null!;
     public virtual DbSet<PendingExport> PendingExports { get; set; } = null!;
     public virtual DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
     public virtual DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
@@ -169,5 +170,35 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObject>()
             .Property(e => e.xmin)
             .IsRowVersion();
+
+        // PendingExport: relationship to source MVO (Q1 decision)
+        modelBuilder.Entity<PendingExport>()
+            .HasOne(pe => pe.SourceMetaverseObject)
+            .WithMany()
+            .HasForeignKey(pe => pe.SourceMetaverseObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // DeferredReference: relationships for reference resolution
+        modelBuilder.Entity<DeferredReference>()
+            .HasOne(dr => dr.SourceCso)
+            .WithMany()
+            .HasForeignKey(dr => dr.SourceCsoId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<DeferredReference>()
+            .HasOne(dr => dr.TargetMvo)
+            .WithMany()
+            .HasForeignKey(dr => dr.TargetMvoId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<DeferredReference>()
+            .HasOne(dr => dr.TargetSystem)
+            .WithMany()
+            .HasForeignKey(dr => dr.TargetSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Index for efficient deferred reference lookup
+        modelBuilder.Entity<DeferredReference>()
+            .HasIndex(dr => new { dr.TargetMvoId, dr.TargetSystemId });
     }
 }
