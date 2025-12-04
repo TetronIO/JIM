@@ -727,6 +727,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.PendingExports.Update(pendingExport);
         await Repository.Database.SaveChangesAsync();
     }
+
+    public async Task CreatePendingExportAsync(PendingExport pendingExport)
+    {
+        await Repository.Database.PendingExports.AddAsync(pendingExport);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.MetaverseObjectId == metaverseObjectId)
+            .ToListAsync();
+    }
+
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .FirstOrDefaultAsync(cso => cso.MetaverseObjectId == metaverseObjectId && cso.ConnectedSystemId == connectedSystemId);
+    }
     #endregion
 
     #region Sync Rules
