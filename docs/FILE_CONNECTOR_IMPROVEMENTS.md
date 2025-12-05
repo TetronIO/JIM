@@ -148,37 +148,96 @@ User,bwilson,Delete,,,
 | Timestamped Files | Checkbox | false | Append timestamp to filename (e.g., `export_20240115_143022.csv`) |
 | Separate Files Per Object Type | Checkbox | false | Create one file per object type (e.g., `User.csv`, `Group.csv`) |
 | Include Full State | Checkbox | false | Include all attribute values, not just changed attributes |
+| Auto-Confirm Exports | Checkbox | true | Automatically confirm exports after file is written (no return file required) |
 | Multi-Value Delimiter | String | `\|` | Delimiter for multi-valued attributes (reuse existing setting) |
 
 ### Export Confirmation
 
-JIM uses **reconciliation-based confirmation**:
+**Default behaviour (Auto-Confirm enabled):**
+
+File-based exports are typically one-way integrations where no feedback mechanism exists. When "Auto-Confirm Exports" is enabled (default), PendingExports are deleted (confirmed) immediately after the CSV file is successfully written.
+
+**Alternative (Auto-Confirm disabled):**
+
+If disabled, JIM uses reconciliation-based confirmation:
 
 1. FileConnector writes CSV with pending exports
-2. External system processes the file (out of band)
-3. On next Full Sync, JIM compares `PendingExport` changes against actual CSO values
+2. External system processes the file and writes changes back to a file JIM can import
+3. On next Full Import + Sync, JIM compares `PendingExport` changes against actual CSO values
 4. When changes match, `PendingExport` is deleted (confirmed)
-5. Partial matches remove confirmed changes while retaining unconfirmed ones
 
-**Rationale:** This approach requires no connector-side confirmation logic and gracefully handles manual changes or partial application.
+This is useful for bidirectional file integrations but requires the external system to provide feedback.
+
+**Note:** Some legacy systems work around this by re-importing the exported file. JIM's auto-confirm setting eliminates this workaround.
+
+### Auto-Confirm Implementation
+
+Auto-confirm requires a new capability interface so the worker knows when to delete PendingExports immediately after export:
+
+**New interface:** `IConnectorCapabilities.SupportsAutoConfirmExport`
+
+```csharp
+// In IConnectorCapabilities
+bool SupportsAutoConfirmExport { get; }
+```
+
+**Worker logic (ExportExecutionServer):**
+
+```csharp
+// After successful connector.Export() call
+if (connector is IConnectorCapabilities caps && caps.SupportsAutoConfirmExport)
+{
+    // Check the connector's setting
+    var autoConfirmSetting = connectedSystem.SettingValues
+        .SingleOrDefault(s => s.Setting.Name == "Auto-Confirm Exports");
+    var autoConfirm = autoConfirmSetting?.CheckboxValue ?? true; // default true
+
+    if (autoConfirm)
+    {
+        await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
+        continue;
+    }
+}
+
+// Fall through to existing behaviour
+export.Status = PendingExportStatus.Exported;
+await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+```
+
+**FileConnector implementation:**
+
+```csharp
+public bool SupportsAutoConfirmExport => true;
+```
+
+This approach:
+- Keeps the decision at the connector level (capability interface)
+- Allows per-deployment configuration via settings
+- Is backward compatible - connectors without the capability use existing behaviour
+- Any future connector can opt-in by implementing the capability
 
 ### Implementation Tasks
 
-- [ ] **4.3.1** Add export settings to `FileConnector.GetSettings()`
-- [ ] **4.3.2** Create `FileConnectorExport.cs` class
-- [ ] **4.3.3** Implement `IConnectorExportUsingFiles.Export()` method
-- [ ] **4.3.4** Handle timestamped filename generation
-- [ ] **4.3.5** Handle separate files per object type
-- [ ] **4.3.6** Handle full state vs changes-only export
-- [ ] **4.3.7** Set `SupportsExport = true` in capabilities
-- [ ] **4.3.8** Add unit tests for export functionality
-- [ ] **4.3.9** Add integration test with mock pending exports
+- [ ] **4.3.1** Add `SupportsAutoConfirmExport` to `IConnectorCapabilities` interface
+- [ ] **4.3.2** Update `ExportExecutionServer` to check capability and setting
+- [ ] **4.3.3** Add export settings to `FileConnector.GetSettings()`
+- [ ] **4.3.4** Create `FileConnectorExport.cs` class
+- [ ] **4.3.5** Implement `IConnectorExportUsingFiles.Export()` method
+- [ ] **4.3.6** Handle timestamped filename generation
+- [ ] **4.3.7** Handle separate files per object type
+- [ ] **4.3.8** Handle full state vs changes-only export
+- [ ] **4.3.9** Set `SupportsExport = true` and `SupportsAutoConfirmExport = true` in capabilities
+- [ ] **4.3.10** Add unit tests for export functionality
+- [ ] **4.3.11** Add integration test with mock pending exports
+- [ ] **4.3.12** Add test for auto-confirm behaviour in worker
 
 ### Files to Modify/Create
 
 | File | Changes |
 |------|---------|
-| `JIM.Connectors/File/FileConnector.cs` | Add export settings, implement interface, set capability |
+| `JIM.Models/Interfaces/IConnectorCapabilities.cs` | Add `SupportsAutoConfirmExport` property |
+| `JIM.Worker/Servers/ExportExecutionServer.cs` | Check capability and setting after export |
+| `JIM.Connectors/File/FileConnector.cs` | Add export settings, implement interface, set capabilities |
 | `JIM.Connectors/File/FileConnectorExport.cs` | New file - export logic |
 | `JIM.Worker.Tests/Connectors/FileConnectorExportTests.cs` | New file - export tests |
 
