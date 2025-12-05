@@ -1,14 +1,16 @@
 ﻿using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IDisposable
 {
     private LdapConnection? _connection;
+    private bool _disposed;
 
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
@@ -20,8 +22,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     #region IConnectorCapability members
     public bool SupportsFullImport => true;
-    public bool SupportsDeltaImport => false;
-    public bool SupportsExport => false;
+    public bool SupportsDeltaImport => true;
+    public bool SupportsExport => true;
     public bool SupportsPartitions => true;
     public bool SupportsPartitionContainers => true;
     public bool SupportsSecondaryExternalId => true;
@@ -34,12 +36,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
     private readonly string _settingDirectoryServerPort = "Port";
-    //private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
+    // TODO: Add LDAPS support - see Phase 5 in docs/LDAP_CONNECTOR_IMPROVEMENTS.md
+    // private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
     private readonly string _settingUsername = "Username";
     private readonly string _settingPassword = "Password";
     private readonly string _settingAuthType = "Authentication Type";
+    private readonly string _settingSearchTimeout = "Search Timeout";
     private readonly string _settingCreateContainersAsNeeded = "Create containers as needed?";
+
+    // Export settings
+    private readonly string _settingDeleteBehaviour = "Delete Behaviour";
+    private readonly string _settingDisableAttribute = "Disable Attribute";
 
     public List<ConnectorSetting> GetSettings()
     {
@@ -49,7 +57,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = "Directory Server Info", Description = "Enter Active Directory domain controller, or LDAP server details below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
             new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultIntValue = 389, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
-            //new() { Name = _settingUseSecureConnection, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+            // TODO: Add LDAPS setting here when implementing secure connection support
             new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
             new() { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
@@ -59,8 +67,16 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
             new() { Name = _settingAuthType, Required = true, Description = "What type of authentication is required for this credential?", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.SETTING_AUTH_TYPE_SIMPLE, LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM }},
 
+            new() { Name = "Import Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingSearchTimeout, Required = false, Description = "Maximum time in seconds to wait for LDAP search results. Default is 300 (5 minutes).", DefaultIntValue = 300, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+
             new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
-            new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
+            new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
+
+            // Export settings
+            new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, Category = ConnectedSystemSettingCategory.Export },
+            new() { Name = _settingDisableAttribute, Required = false, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String }
         };
     }
 
@@ -102,7 +118,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get schema with");
 
-        var ldapConnectorSchema = new LdapConnectorSchema(_connection);
+        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger);
         var schema = await ldapConnectorSchema.GetSchemaAsync();
         CloseImportConnection();
         return schema;
@@ -116,8 +132,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get partitions with");
 
-        var ldapConnectorSchema = new LdapConnectorPartitions(_connection);
-        var partitions = await ldapConnectorSchema.GetPartitionsAsync();
+        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger);
+        var partitions = await ldapConnectorPartitions.GetPartitionsAsync();
         CloseImportConnection();
         return partitions;
     }
@@ -156,8 +172,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         _connection = new LdapConnection(identifier, credential, authTypeEnumValue);
         _connection.SessionOptions.ProtocolVersion = 3;
-        //_connection.SessionOptions.SecureSocketLayer = false; // experimental. might use later when support for encrypted connections has been tested.
-        //_connection.SessionOptions.VerifyServerCertificate += delegate { return true; }; // experimental, as above.
+        // TODO: Enable SSL options when LDAPS support is implemented (Phase 5)
+        // _connection.SessionOptions.SecureSocketLayer = true;
+        // _connection.SessionOptions.VerifyServerCertificate += (connection, certificate) => true; // Accept all certs - make configurable
         _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. consider wrapping this in a time-limited, cancellable task instead
         _connection.Bind();
     }
@@ -184,7 +201,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 return Task.FromResult(import.GetFullImportObjects());
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
-                throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");
+                return Task.FromResult(import.GetDeltaImportObjects());
             case ConnectedSystemRunType.FullSynchronisation:
             case ConnectedSystemRunType.DeltaSynchronisation:
             case ConnectedSystemRunType.Export:
@@ -196,6 +213,36 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public void CloseImportConnection()
     {
         _connection?.Dispose();
+    }
+    #endregion
+
+    #region IConnectorExportUsingCalls members
+    private IList<ConnectedSystemSettingValue>? _exportSettings;
+
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings)
+    {
+        _exportSettings = settings;
+
+        // Reuse the same connection logic as import
+        OpenImportConnection(settings.ToList(), Log.Logger);
+    }
+
+    public void Export(IList<PendingExport> pendingExports)
+    {
+        if (_connection == null)
+            throw new InvalidOperationException("Must call OpenExportConnection() before Export()!");
+
+        if (_exportSettings == null)
+            throw new InvalidOperationException("Export settings not available. Call OpenExportConnection() first.");
+
+        var export = new LdapConnectorExport(_connection, _exportSettings, Log.Logger);
+        export.Execute(pendingExports);
+    }
+
+    public void CloseExportConnection()
+    {
+        _exportSettings = null;
+        CloseImportConnection();
     }
     #endregion
 
@@ -227,6 +274,27 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 Exception = ex
             };
         }
+    }
+    #endregion
+
+    #region IDisposable members
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _connection?.Dispose();
+            _connection = null;
+        }
+
+        _disposed = true;
     }
     #endregion
 }
