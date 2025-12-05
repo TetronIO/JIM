@@ -82,6 +82,33 @@ public class FileConnectorTests
         Assert.That(guidAttr.Type, Is.EqualTo(AttributeDataType.Guid));
     }
 
+    [Test]
+    public async Task GetSchemaAsync_WithObjectTypeColumn_DiscoversDifferentTypesAsync()
+    {
+        // Arrange
+        var filePath = Path.Combine(_testFilesPath, "mixed_object_types.csv");
+        var settingValues = CreateSettingValuesWithObjectTypeColumn(filePath, "ObjectType");
+
+        // Act
+        var schema = await _connector.GetSchemaAsync(settingValues, _logger);
+
+        // Assert
+        Assert.That(schema, Is.Not.Null);
+        Assert.That(schema.ObjectTypes, Has.Count.EqualTo(2)); // User and Group
+
+        var objectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToList();
+        Assert.That(objectTypeNames, Does.Contain("User"));
+        Assert.That(objectTypeNames, Does.Contain("Group"));
+
+        // Both object types should have the same attributes (minus the object type column)
+        foreach (var objectType in schema.ObjectTypes)
+        {
+            Assert.That(objectType.Attributes.Select(a => a.Name), Does.Contain("Id"));
+            Assert.That(objectType.Attributes.Select(a => a.Name), Does.Contain("Name"));
+            Assert.That(objectType.Attributes.Select(a => a.Name), Does.Contain("Email"));
+        }
+    }
+
     #endregion
 
     #region ImportAsync Tests
@@ -149,6 +176,47 @@ public class FileConnectorTests
     }
 
     [Test]
+    public async Task ImportAsync_WithStopOnFirstError_StopsAfterFirstErrorAsync()
+    {
+        // Arrange - file has 3 rows, each with an error in a different column
+        var filePath = Path.Combine(_testFilesPath, "multiple_errors.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User", stopOnFirstError: true);
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert - should only have 1 object (the first one with the error), not all 3
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
+        Assert.That(result.ImportObjects[0].ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
+    }
+
+    [Test]
+    public async Task ImportAsync_WithoutStopOnFirstError_ProcessesAllRowsAsync()
+    {
+        // Arrange - same file but without stop on first error
+        var filePath = Path.Combine(_testFilesPath, "multiple_errors.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User", stopOnFirstError: false);
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert - should have all 3 objects, each with errors
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+    }
+
+    [Test]
     public void ImportAsync_WithMissingFile_ThrowsException()
     {
         // Arrange
@@ -189,6 +257,46 @@ public class FileConnectorTests
         Assert.That(nameAttr.StringValues[0], Is.EqualTo("John Smith"));
     }
 
+    [Test]
+    public async Task ImportAsync_WithMultiValuedAttributes_ParsesPipeDelimitedValuesAsync()
+    {
+        // Arrange
+        var filePath = Path.Combine(_testFilesPath, "multivalued_attrs.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedAttrs(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(2));
+
+        // First object should have 3 tags and 3 scores
+        var firstObject = result.ImportObjects[0];
+        var tagsAttr = firstObject.Attributes.Single(a => a.Name == "Tags");
+        Assert.That(tagsAttr.StringValues, Has.Count.EqualTo(3));
+        Assert.That(tagsAttr.StringValues, Does.Contain("admin"));
+        Assert.That(tagsAttr.StringValues, Does.Contain("user"));
+        Assert.That(tagsAttr.StringValues, Does.Contain("developer"));
+
+        var scoresAttr = firstObject.Attributes.Single(a => a.Name == "Scores");
+        Assert.That(scoresAttr.IntValues, Has.Count.EqualTo(3));
+        Assert.That(scoresAttr.IntValues, Does.Contain(85));
+        Assert.That(scoresAttr.IntValues, Does.Contain(90));
+        Assert.That(scoresAttr.IntValues, Does.Contain(78));
+
+        // Second object should have 1 tag and 1 score
+        var secondObject = result.ImportObjects[1];
+        var tagsAttr2 = secondObject.Attributes.Single(a => a.Name == "Tags");
+        Assert.That(tagsAttr2.StringValues, Has.Count.EqualTo(1));
+        Assert.That(tagsAttr2.StringValues[0], Is.EqualTo("user"));
+    }
+
     #endregion
 
     #region ValidateSettingValues Tests
@@ -226,7 +334,7 @@ public class FileConnectorTests
 
     #region Helper Methods
 
-    private List<ConnectedSystemSettingValue> CreateSettingValues(string filePath, string objectType, string delimiter = ",")
+    private List<ConnectedSystemSettingValue> CreateSettingValues(string filePath, string objectType, string delimiter = ",", bool stopOnFirstError = false)
     {
         return new List<ConnectedSystemSettingValue>
         {
@@ -279,11 +387,21 @@ public class FileConnectorTests
                     Type = ConnectedSystemSettingType.String
                 },
                 StringValue = null
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Stop On First Error",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.CheckBox
+                },
+                CheckboxValue = stopOnFirstError
             }
         };
     }
 
-    private ConnectedSystem CreateConnectedSystem(string filePath, string objectTypeName, string delimiter = ",")
+    private ConnectedSystem CreateConnectedSystem(string filePath, string objectTypeName, string delimiter = ",", bool stopOnFirstError = false)
     {
         var objectType = new ConnectedSystemObjectType
         {
@@ -305,7 +423,99 @@ public class FileConnectorTests
             Id = 1,
             Name = "Test File Connector",
             ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
-            SettingValues = CreateSettingValues(filePath, objectTypeName, delimiter)
+            SettingValues = CreateSettingValues(filePath, objectTypeName, delimiter, stopOnFirstError)
+        };
+    }
+
+    private List<ConnectedSystemSettingValue> CreateSettingValuesWithObjectTypeColumn(string filePath, string objectTypeColumn, string delimiter = ",")
+    {
+        return new List<ConnectedSystemSettingValue>
+        {
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Example File Path",
+                    Required = true,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = filePath
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Object Type",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = null // Not using predefined object type
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Object Type Column",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = objectTypeColumn // Using column-based object type
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Delimiter",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = delimiter
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Culture",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = null
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Stop On First Error",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.CheckBox
+                },
+                CheckboxValue = false
+            }
+        };
+    }
+
+    private ConnectedSystem CreateConnectedSystemWithMultiValuedAttrs(string filePath, string objectTypeName)
+    {
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = objectTypeName,
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 3, Name = "Tags", Type = AttributeDataType.Text, Selected = true, AttributePlurality = AttributePlurality.MultiValued },
+                new() { Id = 4, Name = "Scores", Type = AttributeDataType.Number, Selected = true, AttributePlurality = AttributePlurality.MultiValued }
+            }
+        };
+
+        return new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = CreateSettingValues(filePath, objectTypeName)
         };
     }
 

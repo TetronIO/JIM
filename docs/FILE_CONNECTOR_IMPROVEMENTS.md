@@ -101,11 +101,11 @@ These are documented limitations, not bugs:
 - [x] **2.8** Add test: `ValidateSettingValues_WithMissingFile_ReturnsError`
 - [x] **2.9** Add test: `ValidateSettingValues_WithValidFile_ReturnsNoErrors` (bonus)
 
-### Phase 3: Enhancements (Priority: Medium)
+### Phase 3: Enhancements (Priority: Medium) ✅
 
-- [ ] **3.1** Add "stop on first error" configuration option (TODO at line 70)
-- [ ] **3.2** Implement multi-valued attribute support (comma-separated in cells)
-- [ ] **3.3** Implement column-based object type detection
+- [x] **3.1** Add "Stop On First Error" checkbox setting to stop import on first error
+- [x] **3.2** Implement multi-valued attribute support (pipe `|` delimited values in cells)
+- [x] **3.3** Implement column-based object type detection in GetSchemaAsync
 
 ### Phase 4: Future Features (Priority: Low)
 
@@ -207,10 +207,10 @@ public class FileConnectorTests
 - [x] Error scenario tested (invalid number records error, not crash)
 - [x] Test data files committed (4 CSV files)
 
-### Phase 3 Complete When:
-- [ ] "Stop on first error" setting available
-- [ ] Multi-valued attributes parse correctly
-- [ ] Column-based object types work
+### Phase 3 Complete When: ✅
+- [x] "Stop on first error" setting available (CheckBox setting in General category)
+- [x] Multi-valued attributes parse correctly (pipe `|` delimited)
+- [x] Column-based object types work (discovers types from specified column)
 
 ---
 

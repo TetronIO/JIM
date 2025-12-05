@@ -36,6 +36,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private const string SettingObjectType = "Object Type";
     private const string SettingCulture = "Culture";
     private const string SettingDelimiter = "Delimiter";
+    private const string SettingStopOnFirstError = "Stop On First Error";
 
     public List<ConnectorSetting> GetSettings()
     {
@@ -45,7 +46,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String }
+            new() { Name = SettingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
         };
     }
 
@@ -115,8 +117,37 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 schema.ObjectTypes.Add(schemaObjectType);
                 break;
             }
-            case FileConnectorObjectTypeSpecifier.ColumnBasedObjectType:
-                throw new NotSupportedException("Column-based object types are not yet supported");
+            case FileConnectorObjectTypeSpecifier.ColumnBasedObjectType when !string.IsNullOrEmpty(objectTypeInfo.ObjectTypeColumnName):
+            {
+                // Read through the file to discover unique object types from the specified column
+                var objectTypeColumnName = objectTypeInfo.ObjectTypeColumnName;
+                if (!columnNames.Contains(objectTypeColumnName, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Object type column '{objectTypeColumnName}' not found in file headers.");
+
+                var discoveredObjectTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                while (await reader.CsvReader.ReadAsync())
+                {
+                    var objectTypeName = reader.CsvReader.GetField(objectTypeColumnName);
+                    if (!string.IsNullOrEmpty(objectTypeName))
+                        discoveredObjectTypes.Add(objectTypeName);
+                }
+
+                if (discoveredObjectTypes.Count == 0)
+                    throw new InvalidOperationException($"No object types found in column '{objectTypeColumnName}'.");
+
+                foreach (var typeName in discoveredObjectTypes.OrderBy(t => t))
+                {
+                    var schemaObjectType = new ConnectorSchemaObjectType(typeName);
+                    schema.ObjectTypes.Add(schemaObjectType);
+                }
+
+                // Reset the reader position for attribute type inference
+                reader.Dispose();
+                reader = GetCsvReader(exampleFilePath.StringValue, settingValues, logger);
+                await reader.CsvReader.ReadAsync();
+                reader.CsvReader.ReadHeader();
+                break;
+            }
             default:
                 throw new ArgumentOutOfRangeException();
         }
@@ -198,7 +229,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         var reader = GetCsvReader(runProfile.FilePath, connectedSystem.SettingValues, logger);
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
-        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, logger, cancellationToken);
+        var stopOnFirstError = GetStopOnFirstErrorSetting(connectedSystem.SettingValues);
+        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, logger, cancellationToken);
             
         switch (runProfile.RunType)
         {
@@ -274,6 +306,15 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
 
         return info;
+    }
+
+    /// <summary>
+    /// Helper to retrieve the "Stop On First Error" setting value.
+    /// </summary>
+    private static bool GetStopOnFirstErrorSetting(IReadOnlyCollection<ConnectedSystemSettingValue> settingValues)
+    {
+        var setting = settingValues.SingleOrDefault(q => q.Setting.Name == SettingStopOnFirstError);
+        return setting?.CheckboxValue ?? false;
     }
     #endregion
 }
