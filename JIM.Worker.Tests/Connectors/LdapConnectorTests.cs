@@ -52,9 +52,9 @@ public class LdapConnectorTests
     }
 
     [Test]
-    public void SupportsDeltaImport_ReturnsFalse()
+    public void SupportsDeltaImport_ReturnsTrue()
     {
-        Assert.That(_connector.SupportsDeltaImport, Is.False);
+        Assert.That(_connector.SupportsDeltaImport, Is.True);
     }
 
     [Test]

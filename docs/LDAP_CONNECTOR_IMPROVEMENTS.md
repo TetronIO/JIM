@@ -288,7 +288,12 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 
 ### Phase 5: Enhancements (Priority: Future)
 
-- [ ] **5.1** Implement delta import using USN/changelog
+- [x] **5.1** Implement delta import using USN/changelog
+  - AD: Uses `uSNChanged` attribute filter with `HighestCommittedUSN` watermark
+  - Non-AD: Uses changelog-based tracking with `changeNumber` watermark
+  - Updated `LdapConnectorRootDse` to track both USN and changelog positions
+  - Added `GetDeltaImportObjects()`, `GetDeltaResultsUsingUsn()`, `GetDeltaResultsUsingChangelog()` methods
+  - Added `GetEntryAttributeLongValue()` utility for 64-bit USN values
 - [ ] **5.2** Add LDAPS (secure connection) support
 - [ ] **5.3** Add connection pooling for better performance
 - [ ] **5.4** Add retry logic for transient failures

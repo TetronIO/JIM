@@ -91,6 +91,15 @@ internal static class LdapConnectorUtilities
         return int.Parse(stringValue);
     }
 
+    internal static long? GetEntryAttributeLongValue(SearchResultEntry entry, string attributeName)
+    {
+        if (entry == null) return null;
+        if (!entry.Attributes.Contains(attributeName)) return null;
+        if (entry.Attributes[attributeName].Count != 1) return null;
+        var stringValue = (string)entry.Attributes[attributeName][0];
+        return long.Parse(stringValue);
+    }
+
     internal static SearchResultEntry? GetSchemaEntry(LdapConnection connection, string schemaRootDn, string query)
     {
         var request = new SearchRequest(schemaRootDn, query, SearchScope.OneLevel);

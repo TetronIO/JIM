@@ -22,7 +22,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     #region IConnectorCapability members
     public bool SupportsFullImport => true;
-    public bool SupportsDeltaImport => false;
+    public bool SupportsDeltaImport => true;
     public bool SupportsExport => true;
     public bool SupportsPartitions => true;
     public bool SupportsPartitionContainers => true;
@@ -201,7 +201,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 return Task.FromResult(import.GetFullImportObjects());
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
-                throw new NotSupportedException("Delta Imports are not yet currently supported by this Connector");
+                return Task.FromResult(import.GetDeltaImportObjects());
             case ConnectedSystemRunType.FullSynchronisation:
             case ConnectedSystemRunType.DeltaSynchronisation:
             case ConnectedSystemRunType.Export:

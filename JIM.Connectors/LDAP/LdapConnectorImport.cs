@@ -21,6 +21,8 @@ internal class LdapConnectorImport
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
     private readonly TimeSpan _searchTimeout;
+    private LdapConnectorRootDse? _previousRootDse;
+    private LdapConnectorRootDse? _currentRootDse;
 
     internal LdapConnectorImport(
         ConnectedSystem connectedSystem,
@@ -68,14 +70,11 @@ internal class LdapConnectorImport
             // initial-page call. we have no paging tokens to use (yet) to resume a query
 
             // get information about the directory we're connected to
-            var rootDseInfo = GetRootDseInformation();
+            _currentRootDse = GetRootDseInformation();
 
             // Serialise the rootDSE info to JSON for persistence
-            result.PersistedConnectorData = JsonSerializer.Serialize(rootDseInfo);
-
-            // TODO: Delta import support (Phase 5) - track USN/changelog for incremental sync
-            // Will need to persist HighestCommittedUSN (AD) or LastChangeNumber (changelog directories)
-            // and only import changes beyond the stored value on subsequent delta imports.
+            // This captures the current USN/changelog position for use in future delta imports
+            result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
         }
 
         // enumerate all selected partitions
@@ -107,6 +106,94 @@ internal class LdapConnectorImport
         // this implementation ends up performing paging per selected container, which might confuse the user if they have a lot of selected containers and end up
         // getting more results back per pass than they expect. Consider refactoring the interface between JIM.Service and the connector, so it is executed once per selected container
         // so the connector always returns a page of results to the JIM.Service (a page of results per container).
+
+        return result;
+    }
+
+    internal ConnectedSystemImportResult GetDeltaImportObjects()
+    {
+        _logger.Verbose("GetDeltaImportObjects: Started");
+
+        if (_connectedSystem.Partitions == null)
+            throw new ArgumentException("_connectedSystem.Partitions is null. Cannot continue.");
+        if (_connectedSystem.ObjectTypes == null)
+            throw new ArgumentException("_connectedSystem.ObjectTypes is null. Cannot continue.");
+
+        var result = new ConnectedSystemImportResult();
+
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetDeltaImportObjects: Cancellation requested. Stopping");
+            return result;
+        }
+
+        // Try to deserialise the previous run's RootDSE info to get the watermark
+        if (string.IsNullOrEmpty(_persistedConnectorData))
+        {
+            _logger.Warning("GetDeltaImportObjects: No persisted connector data available. A full import must be run first before delta imports.");
+            throw new InvalidOperationException("No persisted connector data available. Run a full import first to establish a baseline.");
+        }
+
+        _previousRootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(_persistedConnectorData);
+        if (_previousRootDse == null)
+        {
+            _logger.Warning("GetDeltaImportObjects: Could not deserialise persisted connector data.");
+            throw new InvalidOperationException("Could not deserialise persisted connector data. Run a full import to re-establish baseline.");
+        }
+
+        if (_paginationTokens.Count == 0)
+        {
+            // Initial page - get the current RootDSE info
+            _currentRootDse = GetRootDseInformation();
+            result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
+        }
+
+        // Determine which delta strategy to use
+        if (_previousRootDse.IsActiveDirectory)
+        {
+            if (!_previousRootDse.HighestCommittedUsn.HasValue)
+            {
+                throw new InvalidOperationException("Previous USN watermark not available. Run a full import first.");
+            }
+
+            _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Previous USN: {PreviousUsn}",
+                _previousRootDse.HighestCommittedUsn);
+
+            // For AD, query objects where uSNChanged > previous HighestCommittedUSN
+            foreach (var selectedPartition in _connectedSystem.Partitions.Where(p => p.Selected))
+            {
+                foreach (var selectedContainer in ConnectedSystemUtilities.GetAllSelectedContainers(selectedPartition))
+                {
+                    foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
+                    {
+                        if (_cancellationToken.IsCancellationRequested)
+                        {
+                            _logger.Debug("GetDeltaImportObjects: Cancellation requested. Stopping");
+                            return result;
+                        }
+
+                        var paginationTokenName = LdapConnectorUtilities.GetPaginationTokenName(selectedContainer, selectedObjectType);
+                        var paginationToken = _paginationTokens.SingleOrDefault(pt => pt.Name == paginationTokenName);
+                        var lastRunsCookie = paginationToken?.ByteValue;
+
+                        GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // For changelog-based directories
+            if (!_previousRootDse.LastChangeNumber.HasValue)
+            {
+                throw new InvalidOperationException("Previous changelog number not available. Run a full import first.");
+            }
+
+            _logger.Debug("GetDeltaImportObjects: Using changelog-based delta import. Previous ChangeNumber: {PreviousChange}",
+                _previousRootDse.LastChangeNumber);
+
+            GetDeltaResultsUsingChangelog(result, _previousRootDse.LastChangeNumber.Value);
+        }
 
         return result;
     }
@@ -163,7 +250,7 @@ internal class LdapConnectorImport
         request.Attributes.AddRange(new[] {
             "DNSHostName",
             "HighestCommittedUSN",
-            "LastChangeNumber"
+            "supportedCapabilities"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -178,13 +265,28 @@ internal class LdapConnectorImport
             throw new InvalidOperationException("GetRootDseInformation: No entries returned from rootDSE query");
 
         var rootDseEntry = response.Entries[0];
+
+        // Check if this is Active Directory by looking for AD capability OIDs
+        var capabilities = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
+        var isActiveDirectory = capabilities != null &&
+            (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
+             capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
+
         var rootDse = new LdapConnectorRootDse
         {
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
-            HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeIntValue(rootDseEntry, "HighestCommittedUSN")
+            HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
+            IsActiveDirectory = isActiveDirectory
         };
 
-        _logger.Verbose("GetRootDseInformation: Got info");
+        // For non-AD directories, try to get the last change number from the changelog
+        if (!isActiveDirectory)
+        {
+            rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
+        }
+
+        _logger.Verbose("GetRootDseInformation: Got info. IsActiveDirectory={IsAd}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
+            rootDse.IsActiveDirectory, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
         return rootDse;
     }
 
@@ -233,12 +335,184 @@ internal class LdapConnectorImport
             return;
         }
 
-        connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries));
+        connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.Create));
         stopwatch.Stop();
         _logger.Debug($"GetFisoResults: Executed for object type '{connectedSystemObjectType.Name}' within container '{connectedSystemContainer.Name}' in {stopwatch.Elapsed}");
     }
 
-    private IEnumerable<ConnectedSystemImportObject> ConvertLdapResults(SearchResultEntryCollection searchResults)
+    /// <summary>
+    /// Gets delta results for Active Directory using USN-based change tracking.
+    /// Queries for objects where uSNChanged is greater than the previous watermark.
+    /// </summary>
+    private void GetDeltaResultsUsingUsn(ConnectedSystemImportResult result, ConnectedSystemContainer container, ConnectedSystemObjectType objectType, long previousUsn, byte[]? lastRunsCookie)
+    {
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetDeltaResultsUsingUsn: Cancellation requested. Stopping");
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        // Build filter for objects changed since last USN, of the specified object type
+        // uSNChanged is a 64-bit integer stored as a string
+        var ldapFilter = $"(&(objectClass={objectType.Name})(uSNChanged>={previousUsn + 1}))";
+
+        // Build attribute list
+        var attributes = objectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
+        attributes.AddRange(objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
+        attributes.Add("objectClass");
+        attributes.Add("uSNChanged"); // Include USN for debugging/auditing
+        attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
+        var queryAttributes = attributes.Distinct().ToArray();
+
+        var searchRequest = new SearchRequest(container.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
+        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize);
+        if (lastRunsCookie is { Length: > 0 })
+            pageResultRequestControl.Cookie = lastRunsCookie;
+
+        searchRequest.Controls.Add(pageResultRequestControl);
+
+        var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+
+        // Handle pagination
+        if (searchResponse.Controls != null &&
+            searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl &&
+            pageResultResponseControl.Cookie.Length > 0)
+        {
+            var tokenName = LdapConnectorUtilities.GetPaginationTokenName(container, objectType);
+            result.PaginationTokens.Add(new ConnectedSystemPaginationToken(tokenName, pageResultResponseControl.Cookie));
+        }
+
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetDeltaResultsUsingUsn: Cancellation requested after search. Stopping");
+            return;
+        }
+
+        // For delta imports, changed objects are marked as Update (JIM will determine if they're actually new)
+        result.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.Update));
+
+        stopwatch.Stop();
+        _logger.Debug("GetDeltaResultsUsingUsn: Found {Count} changed objects for type '{ObjectType}' in container '{Container}' (USN > {Usn}) in {Elapsed}",
+            searchResponse.Entries.Count, objectType.Name, container.Name, previousUsn, stopwatch.Elapsed);
+    }
+
+    /// <summary>
+    /// Gets delta results for changelog-based directories (e.g., OpenLDAP, Oracle Directory).
+    /// Queries the cn=changelog container for changes since the last change number.
+    /// </summary>
+    private void GetDeltaResultsUsingChangelog(ConnectedSystemImportResult result, int previousChangeNumber)
+    {
+        _logger.Debug("GetDeltaResultsUsingChangelog: Querying for changes since changeNumber {PreviousChange}", previousChangeNumber);
+
+        var ldapFilter = $"(&(!(cn=changelog))(changeNumber>{previousChangeNumber}))";
+        var ldapRequest = new SearchRequest("cn=changelog", ldapFilter, SearchScope.Subtree,
+            "changeNumber", "changeType", "targetDN", "changes");
+
+        try
+        {
+            var ldapResponse = (SearchResponse)_connection.SendRequest(ldapRequest, _searchTimeout);
+
+            if (ldapResponse == null || ldapResponse.ResultCode != ResultCode.Success)
+            {
+                _logger.Warning("GetDeltaResultsUsingChangelog: Failed to query changelog. ResultCode: {ResultCode}",
+                    ldapResponse?.ResultCode);
+                return;
+            }
+
+            _logger.Debug("GetDeltaResultsUsingChangelog: Found {Count} changelog entries", ldapResponse.Entries.Count);
+
+            foreach (SearchResultEntry changeEntry in ldapResponse.Entries)
+            {
+                if (_cancellationToken.IsCancellationRequested)
+                {
+                    _logger.Debug("GetDeltaResultsUsingChangelog: Cancellation requested. Stopping");
+                    return;
+                }
+
+                var changeType = LdapConnectorUtilities.GetEntryAttributeStringValue(changeEntry, "changeType");
+                var targetDn = LdapConnectorUtilities.GetEntryAttributeStringValue(changeEntry, "targetDN");
+
+                if (string.IsNullOrEmpty(targetDn))
+                    continue;
+
+                // Map changelog changeType to ObjectChangeType
+                var objectChangeType = changeType?.ToLowerInvariant() switch
+                {
+                    "add" => ObjectChangeType.Create,
+                    "modify" => ObjectChangeType.Update,
+                    "delete" => ObjectChangeType.Delete,
+                    "modrdn" or "moddn" => ObjectChangeType.Update,
+                    _ => ObjectChangeType.Update
+                };
+
+                // For deletes, we can create a minimal import object
+                if (objectChangeType == ObjectChangeType.Delete)
+                {
+                    var deleteObject = new ConnectedSystemImportObject
+                    {
+                        ChangeType = ObjectChangeType.Delete,
+                        // Note: For deletes, we need the DN as the identifier
+                        // The synchronisation engine will need to match this to existing objects
+                    };
+                    result.ImportObjects.Add(deleteObject);
+                }
+                else
+                {
+                    // For adds/modifies, we need to fetch the current state of the object
+                    var currentObject = GetObjectByDn(targetDn, objectChangeType);
+                    if (currentObject != null)
+                    {
+                        result.ImportObjects.Add(currentObject);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "GetDeltaResultsUsingChangelog: Error querying changelog");
+        }
+    }
+
+    /// <summary>
+    /// Fetches a single object by its DN for changelog-based delta imports.
+    /// </summary>
+    private ConnectedSystemImportObject? GetObjectByDn(string dn, ObjectChangeType changeType)
+    {
+        if (_connectedSystem.ObjectTypes == null)
+            return null;
+
+        try
+        {
+            // Get all selected attributes across all object types
+            var allAttributes = _connectedSystem.ObjectTypes
+                .Where(ot => ot.Selected)
+                .SelectMany(ot => ot.Attributes.Where(a => a.Selected || a.IsExternalId).Select(a => a.Name))
+                .Distinct()
+                .ToList();
+            allAttributes.Add("objectClass");
+
+            var searchRequest = new SearchRequest(dn, "(objectClass=*)", SearchScope.Base, allAttributes.ToArray());
+            var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+
+            if (searchResponse.Entries.Count == 0)
+            {
+                _logger.Verbose("GetObjectByDn: Object not found at DN {Dn}", dn);
+                return null;
+            }
+
+            var results = ConvertLdapResults(searchResponse.Entries, changeType).ToList();
+            return results.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "GetObjectByDn: Error fetching object at DN {Dn}", dn);
+            return null;
+        }
+    }
+
+    private IEnumerable<ConnectedSystemImportObject> ConvertLdapResults(SearchResultEntryCollection searchResults, ObjectChangeType changeType)
     {
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("_connectedSystem.ObjectTypes is null. Cannot continue.");
@@ -254,11 +528,10 @@ internal class LdapConnectorImport
                 return importObjects;
             }
 
-            // start to build the object that will represent the object in the connected system. we will pass this back to JIM 
-            // TODO: expand this to support the UPDATE scenario
+            // start to build the object that will represent the object in the connected system. we will pass this back to JIM
             var importObject = new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create
+                ChangeType = changeType
             };
 
             // work out what JIM object type this result is
