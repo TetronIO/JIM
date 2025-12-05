@@ -382,7 +382,7 @@ public class FileConnectorImportTests
             {
                 Setting = new ConnectorDefinitionSetting
                 {
-                    Name = "Example File Path",
+                    Name = "Import File Path",
                     Required = true,
                     Type = ConnectedSystemSettingType.String
                 },
@@ -485,7 +485,7 @@ public class FileConnectorImportTests
             {
                 Setting = new ConnectorDefinitionSetting
                 {
-                    Name = "Example File Path",
+                    Name = "Import File Path",
                     Required = true,
                     Type = ConnectedSystemSettingType.String
                 },

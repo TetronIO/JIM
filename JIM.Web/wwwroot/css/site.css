@@ -86,3 +86,25 @@ html, body {
 .jim-nav-menu .mud-navmenu-list .mud-nav-link-text {
     font-weight: 400;
 }
+
+/* Improve contrast for form helper text (WCAG AA compliance) */
+.mud-input-helper-text {
+    color: var(--mud-palette-text-secondary);
+    opacity: 0.9;
+}
+
+/* Improve contrast for input labels */
+.mud-input-label {
+    color: var(--mud-palette-text-primary);
+    font-weight: 500;
+}
+
+/* Ensure outlined input labels are readable */
+.mud-input-label-outlined {
+    color: var(--mud-palette-text-primary);
+}
+
+/* Checkbox/switch description text - ensure adequate contrast */
+.mud-text-secondary {
+    opacity: 0.85;
+}

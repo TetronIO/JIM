@@ -33,7 +33,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     #region IConnectorSettings members
     // using member variables for the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
-    private const string SettingExampleFilePath = "Example File Path";
+    private const string SettingImportFilePath = "Import File Path";
     private const string SettingObjectTypeColumn = "Object Type Column";
     private const string SettingObjectType = "Object Type";
     private const string SettingCulture = "Culture";
@@ -53,20 +53,22 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return new List<ConnectorSetting>
         {
             // Import settings
-            new() { Name = SettingExampleFilePath, Required = true, Description = "Supply the path to the example file in the container. The container path is determined by the Docker Volume configuration item. i.e. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = SettingMultiValueDelimiter, Required = false, Description = "Character used to separate multiple values within a single field. Defaults to pipe (|) which is the MIM/FIM convention.", DefaultStringValue = "|", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingImportFilePath, Required = true, Description = "Path to the CSV file to import. The container path is determined by the Docker Volume configuration. e.g. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
 
             // Export settings
-            new() { Name = SettingExportFilePath, Required = false, Description = "Directory path where export files will be written. i.e. /var/connector-files/exports/", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingTimestampedFiles, Required = false, Description = "Append timestamp to export filename (e.g., export_20240115_143022.csv).", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = SettingSeparateFilesByObjectType, Required = false, Description = "Create separate export files per object type (e.g., User.csv, Group.csv).", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = SettingIncludeFullState, Required = false, Description = "Include all attribute values in exports, not just changed attributes.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = SettingAutoConfirmExports, Required = false, Description = "Automatically confirm exports after file is written. Disable for bidirectional integrations that provide feedback.", DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
+            new() { Name = SettingExportFilePath, Required = false, Description = "Directory path where export files will be written. i.e. /var/connector-files/exports/", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingTimestampedFiles, Required = false, Description = "Append timestamp to export filename (e.g., export_20240115_143022.csv).", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = SettingSeparateFilesByObjectType, Required = false, Description = "Create separate export files per object type (e.g., User.csv, Group.csv).", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = SettingIncludeFullState, Required = false, Description = "Include all attribute values in exports, not just changed attributes.", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = SettingAutoConfirmExports, Required = false, Description = "Automatically confirm exports after file is written. Disable for bidirectional integrations that provide feedback.", DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
+
+            // Shared settings (used by both import and export)
+            new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue = ",", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingMultiValueDelimiter, Required = false, Description = "Character used to separate multiple values within a single field. Defaults to pipe (|) which is the MIM/FIM convention.", DefaultStringValue = "|", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String }
         };
     }
 
@@ -86,7 +88,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
 
         // test that we can access the file
-        var filePathSettingValue = settingValues.Single(q => q.Setting.Name == SettingExampleFilePath);
+        var filePathSettingValue = settingValues.Single(q => q.Setting.Name == SettingImportFilePath);
         if (!string.IsNullOrEmpty(filePathSettingValue.StringValue) && System.IO.File.Exists(filePathSettingValue.StringValue))
             return response;
         
@@ -108,16 +110,16 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// </summary>
     public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
-        var exampleFilePath = settingValues.SingleOrDefault(q => q.Setting.Name == SettingExampleFilePath);
-        if (exampleFilePath == null || string.IsNullOrEmpty(exampleFilePath.StringValue))
-            throw new InvalidSettingValuesException($"Missing setting value for {SettingExampleFilePath}.");
+        var importFilePath = settingValues.SingleOrDefault(q => q.Setting.Name == SettingImportFilePath);
+        if (importFilePath == null || string.IsNullOrEmpty(importFilePath.StringValue))
+            throw new InvalidSettingValuesException($"Missing setting value for {SettingImportFilePath}.");
 
         var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectTypeColumn);
         var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectType);
         if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
             throw new InvalidSettingValuesException($"Either a {SettingObjectTypeColumn} or {SettingObjectType} need a setting value specifying.");
 
-        var reader = GetCsvReader(exampleFilePath.StringValue, settingValues, logger);
+        var reader = GetCsvReader(importFilePath.StringValue, settingValues, logger);
         await reader.CsvReader.ReadAsync();
         reader.CsvReader.ReadHeader();
         var columnNames = reader.CsvReader.HeaderRecord;
@@ -162,7 +164,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
                 // Reset the reader position for attribute type inference
                 reader.Dispose();
-                reader = GetCsvReader(exampleFilePath.StringValue, settingValues, logger);
+                reader = GetCsvReader(importFilePath.StringValue, settingValues, logger);
                 await reader.CsvReader.ReadAsync();
                 reader.CsvReader.ReadHeader();
                 break;

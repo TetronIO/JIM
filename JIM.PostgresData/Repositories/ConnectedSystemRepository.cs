@@ -46,7 +46,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
     {
-        return await Repository.Database.ConnectorDefinitions.Include(x => x.Files).SingleOrDefaultAsync(cd => cd.Name.Equals(name));
+        return await Repository.Database.ConnectorDefinitions
+            .Include(x => x.Files)
+            .Include(x => x.Settings)
+            .SingleOrDefaultAsync(cd => cd.Name.Equals(name));
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)

@@ -39,6 +39,8 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply migrations
 - `jim-stack` - Start full Docker stack (all services containerized)
+- `jim-stack-build` - Rebuild and start Docker stack (use after code changes)
+- `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop full Docker stack
 
 **Docker (Manual Commands):**

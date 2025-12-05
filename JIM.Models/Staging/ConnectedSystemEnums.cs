@@ -32,7 +32,9 @@ public enum ConnectedSystemSettingCategory
     Connectivity,
     General,
     Capabilities,
-    Schema
+    Schema,
+    Import,
+    Export
 }
 
 public enum ConnectedSystemSettingType
