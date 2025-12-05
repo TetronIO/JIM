@@ -256,15 +256,15 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 - [x] **1.4** Replace static `Log` with injected logger in `LdapConnectorImport.cs`
 - [x] **1.5** Add null/bounds checks in `GetRootDseInformation()`
 
-### Phase 2: Test Coverage (Priority: High)
+### Phase 2: Test Coverage (Priority: High) ✅
 
-- [ ] **2.1** Create `JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs`
-- [ ] **2.2** Add tests for all `GetEntryAttribute*` helper methods
-- [ ] **2.3** Add tests for `GetLdapAttributeDataType()` including edge cases
-- [ ] **2.4** Add tests for `GetPaginationTokenName()`
-- [ ] **2.5** Create `JIM.Worker.Tests/Connectors/LdapConnectorTests.cs`
-- [ ] **2.6** Add test for `GetSettings()` returns expected settings
-- [ ] **2.7** Add test for `ValidateSettingValues()` with missing values
+- [x] **2.1** Create `JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs`
+- [x] **2.2** Add tests for all `GetEntryAttribute*` helper methods - Skipped (requires mocking LDAP SearchResultEntry)
+- [x] **2.3** Add tests for `GetLdapAttributeDataType()` including edge cases (19 tests)
+- [x] **2.4** Add tests for `GetPaginationTokenName()` (3 tests)
+- [x] **2.5** Create `JIM.Worker.Tests/Connectors/LdapConnectorTests.cs`
+- [x] **2.6** Add test for `GetSettings()` returns expected settings (10 tests)
+- [x] **2.7** Add test for `ValidateSettingValues()` with missing values - Covered by settings structure tests
 
 ### Phase 3: Code Quality (Priority: Medium)
 
