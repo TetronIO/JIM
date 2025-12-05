@@ -35,7 +35,11 @@ html, body {
 
 .jim-drawer {
     border-right: 1px solid var(--mud-palette-lines-default);
-    min-height: 100vh;
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    overflow-y: auto;
 }
 
 .jim-drawer-logo img {
@@ -94,25 +98,25 @@ html, body {
 .mud-input-label-outlined,
 .mud-input-label-filled {
     color: var(--mud-palette-text-primary) !important;
-    opacity: 0.9 !important;
+    opacity: 1 !important;
     font-weight: 500;
 }
 
 /* Helper text below inputs - needs adequate contrast */
 .mud-input-helper-text {
-    color: var(--mud-palette-text-secondary) !important;
-    opacity: 0.85 !important;
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 0.8 !important;
 }
 
 /* Switch/checkbox label text */
 .mud-switch .mud-switch-label,
 .mud-checkbox .mud-checkbox-label {
     color: var(--mud-palette-text-primary) !important;
-    opacity: 0.9 !important;
+    opacity: 1 !important;
 }
 
 /* Description text below switches/checkboxes */
 .mud-text-secondary {
-    color: var(--mud-palette-text-secondary) !important;
-    opacity: 0.85 !important;
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 0.8 !important;
 }
