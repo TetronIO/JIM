@@ -6,9 +6,10 @@ using System.DirectoryServices.Protocols;
 using System.Net;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IDisposable
 {
     private LdapConnection? _connection;
+    private bool _disposed;
 
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
@@ -102,7 +103,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get schema with");
 
-        var ldapConnectorSchema = new LdapConnectorSchema(_connection);
+        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger);
         var schema = await ldapConnectorSchema.GetSchemaAsync();
         CloseImportConnection();
         return schema;
@@ -116,8 +117,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get partitions with");
 
-        var ldapConnectorSchema = new LdapConnectorPartitions(_connection);
-        var partitions = await ldapConnectorSchema.GetPartitionsAsync();
+        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger);
+        var partitions = await ldapConnectorPartitions.GetPartitionsAsync();
         CloseImportConnection();
         return partitions;
     }
@@ -227,6 +228,27 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 Exception = ex
             };
         }
+    }
+    #endregion
+
+    #region IDisposable members
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _connection?.Dispose();
+            _connection = null;
+        }
+
+        _disposed = true;
     }
     #endregion
 }

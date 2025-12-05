@@ -248,13 +248,13 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 
 ## Improvement Plan
 
-### Phase 1: Critical Fixes (Priority: Immediate)
+### Phase 1: Critical Fixes (Priority: Immediate) ✅
 
-- [ ] **1.1** Implement `IDisposable` on `LdapConnector` with proper cleanup
-- [ ] **1.2** Replace `Console.WriteLine` with logger in `LdapConnectorSchema.cs`
-- [ ] **1.3** Replace `Console.WriteLine` with logger in `LdapConnectorPartitions.cs`
-- [ ] **1.4** Replace static `Log` with injected logger in `LdapConnectorImport.cs`
-- [ ] **1.5** Add null/bounds checks in `GetRootDseInformation()`
+- [x] **1.1** Implement `IDisposable` on `LdapConnector` with proper cleanup
+- [x] **1.2** Replace `Console.WriteLine` with logger in `LdapConnectorSchema.cs`
+- [x] **1.3** Replace `Console.WriteLine` with logger in `LdapConnectorPartitions.cs`
+- [x] **1.4** Replace static `Log` with injected logger in `LdapConnectorImport.cs`
+- [x] **1.5** Add null/bounds checks in `GetRootDseInformation()`
 
 ### Phase 2: Test Coverage (Priority: High)
 
@@ -440,13 +440,13 @@ new()
 
 ## Acceptance Criteria
 
-### Phase 1 Complete When:
-- [ ] `LdapConnector` implements `IDisposable`
-- [ ] No `Console.WriteLine` calls remain
-- [ ] No static `Log` references remain
-- [ ] Null checks added to `GetRootDseInformation()`
-- [ ] Build passes with no new warnings
-- [ ] All existing tests pass
+### Phase 1 Complete When: ✅
+- [x] `LdapConnector` implements `IDisposable`
+- [x] No `Console.WriteLine` calls remain
+- [x] No static `Log` references remain
+- [x] Null checks added to `GetRootDseInformation()`
+- [x] Build passes with no new warnings
+- [x] All existing tests pass
 
 ### Phase 2 Complete When:
 - [ ] `LdapConnectorUtilities` has >80% test coverage

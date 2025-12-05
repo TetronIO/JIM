@@ -1,16 +1,19 @@
 ﻿using CPI.DirectoryServices;
 using JIM.Models.Staging;
+using Serilog;
 using System.DirectoryServices.Protocols;
 namespace JIM.Connectors.LDAP;
 
 internal class LdapConnectorPartitions
 {
     private readonly LdapConnection _connection;
+    private readonly ILogger _logger;
     private string _partitionsDn = null!;
 
-    internal LdapConnectorPartitions(LdapConnection ldapConnection) 
+    internal LdapConnectorPartitions(LdapConnection ldapConnection, ILogger logger)
     {
         _connection = ldapConnection;
+        _logger = logger;
     }
 
     internal async Task<List<ConnectorPartition>> GetPartitionsAsync()
@@ -99,13 +102,13 @@ internal class LdapConnectorPartitions
 
         if (response.ResultCode != ResultCode.Success)
         {
-            Console.WriteLine($"GetConfigurationNamingContext: No success. Result code: {response.ResultCode}");
+            _logger.Warning("GetConfigurationNamingContext: No success. Result code: {ResultCode}", response.ResultCode);
             return null;
         }
 
         if (response.Entries.Count == 0)
         {
-            Console.WriteLine("GetConfigurationNamingContext: Didn't get any results!");
+            _logger.Warning("GetConfigurationNamingContext: Didn't get any results!");
             return null;
         }
 

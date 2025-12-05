@@ -7,12 +7,14 @@ namespace JIM.Connectors.LDAP;
 internal class LdapConnectorSchema
 {
     private readonly LdapConnection _connection;
+    private readonly ILogger _logger;
     private readonly ConnectorSchema _schema;
     private string _schemaNamingContext = null!;
 
-    internal LdapConnectorSchema(LdapConnection ldapConnection)
+    internal LdapConnectorSchema(LdapConnection ldapConnection, ILogger logger)
     {
         _connection = ldapConnection;
+        _logger = logger;
         _schema = new ConnectorSchema();
     }
 
@@ -175,7 +177,7 @@ internal class LdapConnectorSchema
         if (!bool.TryParse(isSingleValuedRawValue, out var isSingleValued))
         {
             isSingleValued = true;
-            Log.Verbose($"GetSchemaAttribute: Could not establish if SVA/MVA for attribute {attributeName}. Assuming SVA. Raw value: '{isSingleValuedRawValue}'");
+            _logger.Verbose("GetSchemaAttribute: Could not establish if SVA/MVA for attribute {AttributeName}. Assuming SVA. Raw value: '{RawValue}'", attributeName, isSingleValuedRawValue);
         }
 
         var attributePlurality = isSingleValued ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
@@ -244,13 +246,13 @@ internal class LdapConnectorSchema
 
         if (response.ResultCode != ResultCode.Success)
         {
-            Console.WriteLine($"GetSchemaNamingContext: No success. Result code: {response.ResultCode}");
+            _logger.Warning("GetSchemaNamingContext: No success. Result code: {ResultCode}", response.ResultCode);
             return null;
         }
 
         if (response.Entries.Count == 0)
         {
-            Console.WriteLine("GetSchemaNamingContext: Didn't get any results!");
+            _logger.Warning("GetSchemaNamingContext: Didn't get any results!");
             return null;
         }
 

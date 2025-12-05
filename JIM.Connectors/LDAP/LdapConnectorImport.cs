@@ -167,6 +167,16 @@ internal class LdapConnectorImport
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
+
+        if (response == null)
+            throw new InvalidOperationException("GetRootDseInformation: LDAP response was null");
+
+        if (response.ResultCode != ResultCode.Success)
+            throw new InvalidOperationException($"GetRootDseInformation: LDAP request failed with result code {response.ResultCode}");
+
+        if (response.Entries.Count == 0)
+            throw new InvalidOperationException("GetRootDseInformation: No entries returned from rootDSE query");
+
         var rootDseEntry = response.Entries[0];
         var rootDse = new LdapConnectorRootDse
         {
@@ -174,7 +184,7 @@ internal class LdapConnectorImport
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeIntValue(rootDseEntry, "HighestCommittedUSN")
         };
 
-        Log.Verbose("LDAPConnector > GetRootDseInformation: Got info");
+        _logger.Verbose("GetRootDseInformation: Got info");
         return rootDse;
     }
 
