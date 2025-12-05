@@ -402,7 +402,7 @@ The decision to evaluate exports **immediately when MVO changes** (Q1 Option A) 
 │  │ Scheduled   │──┐                                                         │
 │  │ Full/Delta  │  │                                                         │
 │  └─────────────┘  │         ┌──────────────┐      ┌─────────────────┐       │
-│                   ├────────▶│   Inbound    │─────▶│ Pending Exports │       │
+│                   ├────────▶│   Inbound   │─────▶│ Pending Exports │       │
 │  ┌─────────────┐  │         │   Sync       │      │    Created      │       │
 │  │ Webhook/    │  │         │  (Same code) │      └────────┬────────┘       │
 │  │ Notification│──┤         └──────────────┘               │                │
