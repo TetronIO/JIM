@@ -6,7 +6,7 @@ using Serilog;
 namespace JIM.Worker.Tests.Connectors;
 
 [TestFixture]
-public class FileConnectorTests
+public class FileConnectorImportTests
 {
     private FileConnector _connector = null!;
     private string _testFilesPath = null!;

@@ -111,7 +111,7 @@ These are documented limitations, not bugs:
 
 - [ ] **4.1** Implement delta import support - *Deferred to backlog, see [#129](https://github.com/TetronIO/JIM/issues/129)*
 - [x] **4.2** ~~Consider separating int/double type inference~~ - *Won't implement: Integer-only Number type sufficient for IDAM use cases*
-- [ ] **4.3** Implement export capability - **MVP Scope** (see design below)
+- [x] **4.3** Implement export capability - **MVP Scope** (see design below)
 
 ---
 
@@ -218,17 +218,17 @@ This approach:
 
 ### Implementation Tasks
 
-- [ ] **4.3.1** Add `SupportsAutoConfirmExport` to `IConnectorCapabilities` interface
-- [ ] **4.3.2** Update `ExportExecutionServer` to check capability and setting
-- [ ] **4.3.3** Add export settings to `FileConnector.GetSettings()`
-- [ ] **4.3.4** Create `FileConnectorExport.cs` class
-- [ ] **4.3.5** Implement `IConnectorExportUsingFiles.Export()` method
-- [ ] **4.3.6** Handle timestamped filename generation
-- [ ] **4.3.7** Handle separate files per object type
-- [ ] **4.3.8** Handle full state vs changes-only export
-- [ ] **4.3.9** Set `SupportsExport = true` and `SupportsAutoConfirmExport = true` in capabilities
-- [ ] **4.3.10** Add unit tests for export functionality
-- [ ] **4.3.11** Add integration test with mock pending exports
+- [x] **4.3.1** Add `SupportsAutoConfirmExport` to `IConnectorCapabilities` interface
+- [x] **4.3.2** Update `ExportExecutionServer` to check capability and setting
+- [x] **4.3.3** Add export settings to `FileConnector.GetSettings()`
+- [x] **4.3.4** Create `FileConnectorExport.cs` class
+- [x] **4.3.5** Implement `IConnectorExportUsingFiles.Export()` method
+- [x] **4.3.6** Handle timestamped filename generation
+- [x] **4.3.7** Handle separate files per object type
+- [x] **4.3.8** Handle full state vs changes-only export
+- [x] **4.3.9** Set `SupportsExport = true` and `SupportsAutoConfirmExport = true` in capabilities
+- [x] **4.3.10** Add unit tests for export functionality
+- [x] **4.3.11** Add integration test with mock pending exports
 - [ ] **4.3.12** Add test for auto-confirm behaviour in worker
 
 ### Files to Modify/Create

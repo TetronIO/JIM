@@ -52,4 +52,12 @@ public interface IConnectorCapabilities
     /// schema, this probably doesn't make sense to allow, but for systems where the schema is inferred, i.e. in CSVs, then it does.
     /// </summary>
     public bool SupportsUserSelectedAttributeTypes {  get; }
+
+    /// <summary>
+    /// Does the Connector support auto-confirming exports? When true, the connector can provide an "Auto-Confirm Exports"
+    /// setting that, when enabled, causes PendingExports to be deleted (confirmed) immediately after a successful export
+    /// rather than waiting for reconciliation via the next import cycle.
+    /// This is useful for one-way file exports where no feedback mechanism exists.
+    /// </summary>
+    public bool SupportsAutoConfirmExport { get; }
 }

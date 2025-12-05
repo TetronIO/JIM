@@ -654,7 +654,8 @@ internal class SeedingServer
             SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
             SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
             SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
-            SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes
+            SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes,
+            SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport
         };
 
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
