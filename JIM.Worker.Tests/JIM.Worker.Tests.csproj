@@ -28,8 +28,15 @@
 
     <ItemGroup>
       <ProjectReference Include="..\JIM.Application\JIM.Application.csproj" />
+      <ProjectReference Include="..\JIM.Connectors\JIM.Connectors.csproj" />
       <ProjectReference Include="..\JIM.PostgresData\JIM.PostgresData.csproj" />
       <ProjectReference Include="..\JIM.Worker\JIM.Worker.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Update="TestData\Csv\*.csv">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
 </Project>
