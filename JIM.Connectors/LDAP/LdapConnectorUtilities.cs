@@ -111,7 +111,7 @@ internal static class LdapConnectorUtilities
         {
             1 or 10 => AttributeDataType.Boolean,
             2 or 65 => AttributeDataType.Number,
-            3 => AttributeDataType.Binary,
+            3 or 4 => AttributeDataType.Binary, // 3 = Binary, 4 = OctetString (photo, objectSid, logonHours)
             6 or 18 or 19 or 20 or 22 or 27 or 64 => AttributeDataType.Text,
             23 or 24 => AttributeDataType.DateTime,
             127 => AttributeDataType.Reference,

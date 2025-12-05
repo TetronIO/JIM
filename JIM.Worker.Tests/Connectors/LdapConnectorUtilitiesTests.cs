@@ -46,6 +46,14 @@ public class LdapConnectorUtilitiesTests
     }
 
     [Test]
+    public void GetLdapAttributeDataType_OmSyntax4_ReturnsBinary()
+    {
+        // omSyntax 4 = OctetString (photo, objectSid, logonHours)
+        var result = LdapConnectorUtilities.GetLdapAttributeDataType(4);
+        Assert.That(result, Is.EqualTo(AttributeDataType.Binary));
+    }
+
+    [Test]
     public void GetLdapAttributeDataType_OmSyntax6_ReturnsText()
     {
         var result = LdapConnectorUtilities.GetLdapAttributeDataType(6);

@@ -10,6 +10,9 @@ namespace JIM.Connectors.LDAP;
 
 internal class LdapConnectorImport
 {
+    private const int DefaultSearchTimeoutSeconds = 300; // 5 minutes
+    private const string SearchTimeoutSettingName = "Search Timeout";
+
     private readonly CancellationToken _cancellationToken;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
@@ -17,6 +20,7 @@ internal class LdapConnectorImport
     private readonly LdapConnection _connection;
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
+    private readonly TimeSpan _searchTimeout;
 
     internal LdapConnectorImport(
         ConnectedSystem connectedSystem,
@@ -34,6 +38,12 @@ internal class LdapConnectorImport
         _persistedConnectorData = persistedConnectorData;
         _logger = logger;
         _cancellationToken = cancellationToken;
+
+        // Get search timeout from settings, defaulting to 5 minutes
+        var searchTimeoutSetting = connectedSystem.SettingValues
+            .SingleOrDefault(s => s.Setting.Name == SearchTimeoutSettingName);
+        var searchTimeoutSeconds = searchTimeoutSetting?.IntValue ?? DefaultSearchTimeoutSeconds;
+        _searchTimeout = TimeSpan.FromSeconds(searchTimeoutSeconds);
     }
 
     internal ConnectedSystemImportResult GetFullImportObjects()
@@ -60,22 +70,12 @@ internal class LdapConnectorImport
             // get information about the directory we're connected to
             var rootDseInfo = GetRootDseInformation();
 
-            // serialise the info to json for persistence
-            // todo: this will need to change to support delta imports. there will need to be checks done and the connector data
-            // only persisted in certain situations (see JIM Processes flowcharts)
+            // Serialise the rootDSE info to JSON for persistence
             result.PersistedConnectorData = JsonSerializer.Serialize(rootDseInfo);
 
-            // if directory supports USNs (ADDS/ADLDS) then persist hostname and highestcommmittedusn info
-            // else if directory supports changelog, then persist hostname and last change number
-
-            // we use the persisted connector data property to store the last known change number in the directory.
-            // this enables us to perform a delta-import later on by only importing changes beyond this current value.
-            // note: we only want to do this on the initial call into here to avoid the situation where we miss changes
-            // made after our initial LDAP query but whilst processing subsequent pages.
-            //if (string.IsNullOrEmpty(_persistedConnectorData))
-            //    result.PersistedConnectorData = QueryDirectoryForLastChangeNumber(0).ToString();
-            //else
-            //    result.PersistedConnectorData = QueryDirectoryForLastChangeNumber(int.Parse(_persistedConnectorData)).ToString();
+            // TODO: Delta import support (Phase 5) - track USN/changelog for incremental sync
+            // Will need to persist HighestCommittedUSN (AD) or LastChangeNumber (changelog directories)
+            // and only import changes beyond the stored value on subsequent delta imports.
         }
 
         // enumerate all selected partitions
@@ -218,7 +218,7 @@ internal class LdapConnectorImport
             pageResultRequestControl.Cookie = lastRunsCookie;
 
         searchRequest.Controls.Add(pageResultRequestControl);
-        var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, TimeSpan.FromMinutes(5)); // might want to make this configurable
+        var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
 
         // if there's more results, keep track of the paging cookie so we can keep requesting subsequent pages
         if (searchResponse.Controls != null && searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl && pageResultResponseControl.Cookie.Length > 0)
@@ -263,7 +263,7 @@ internal class LdapConnectorImport
 
             // work out what JIM object type this result is
             var objectClasses = (string[])searchResult.Attributes["objectclass"].GetValues(typeof(string));
-            var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => objectClasses.Any(oc => oc.Equals(ot.Name, StringComparison.CurrentCultureIgnoreCase)));
+            var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => objectClasses.Any(oc => oc.Equals(ot.Name, StringComparison.OrdinalIgnoreCase)));
             if (objectType == null)
             {
                 importObject.ErrorType = ConnectedSystemImportObjectError.CouldNotDetermineObjectType;
@@ -280,7 +280,7 @@ internal class LdapConnectorImport
             foreach (string attributeName in searchResult.Attributes.AttributeNames)
             {
                 // get the schema attribute for this search result attribute, so we can work out what type it is
-                var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase));
+                var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
                 if (schemaAttribute == null)
                 {
                     importObject.ErrorType = ConnectedSystemImportObjectError.ConfigurationError;

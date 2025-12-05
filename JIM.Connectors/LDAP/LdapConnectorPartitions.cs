@@ -36,9 +36,7 @@ internal class LdapConnectorPartitions
                 {
                     Id = entry.DistinguishedName,
                     Name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname") ?? entry.DistinguishedName,
-                    //DnsNames = GetEntryAttributeStringValues(entry, "dnsroot"),
-                    //NetbiosName = GetEntryAttributeStringValue(entry, "netbiosname"),
-                    Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags") != "3", // domain
+                    Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags") != LdapConnectorConstants.SYSTEM_FLAGS_DOMAIN_PARTITION,
                 };
 
                 partition.Containers = GetPartitionContainers(partition);
@@ -66,7 +64,7 @@ internal class LdapConnectorPartitions
         var entries = response.Entries.Cast<SearchResultEntry>().ToList();
 
         // move top-level containers to the new list
-        var topLevelContainers = entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(partition.Name, StringComparison.CurrentCultureIgnoreCase)).ToList();
+        var topLevelContainers = entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(partition.Name, StringComparison.OrdinalIgnoreCase)).ToList();
         entries.RemoveAll(q => topLevelContainers.Contains(q));
         var containers = topLevelContainers.Select(topLevelContainer => new ConnectorContainer(topLevelContainer.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(topLevelContainer, "name") ?? topLevelContainer.DistinguishedName)).ToList();
 
@@ -83,7 +81,7 @@ internal class LdapConnectorPartitions
 
     private static void ProcessContainerNodeForHierarchyRecursively(List<SearchResultEntry> entries, ConnectorContainer containerToLookForChildrenFor, ref int entriesProcessedCounter)
     {
-        foreach (var entry in entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(containerToLookForChildrenFor.Id, StringComparison.CurrentCultureIgnoreCase)))
+        foreach (var entry in entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(containerToLookForChildrenFor.Id, StringComparison.OrdinalIgnoreCase)))
         {
             var newChildContainer = new ConnectorContainer(entry.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? entry.DistinguishedName);
             containerToLookForChildrenFor.ChildContainers.Add(newChildContainer);

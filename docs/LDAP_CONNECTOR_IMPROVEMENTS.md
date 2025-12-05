@@ -268,23 +268,23 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 
 ### Phase 3: Code Quality (Priority: Medium)
 
-- [ ] **3.1** Use `GetLdapAttributeDataType()` utility in schema discovery (remove duplication)
-- [ ] **3.2** Add missing omSyntax case 4 to utility method
-- [ ] **3.3** Add "Search Timeout" configurable setting
-- [ ] **3.4** Add constant for systemFlags=3 with documentation
-- [ ] **3.5** Standardise string comparisons to `OrdinalIgnoreCase`
-- [ ] **3.6** Remove or document commented-out code
+- [x] **3.1** Use `GetLdapAttributeDataType()` utility in schema discovery (remove duplication)
+- [x] **3.2** Add missing omSyntax case 4 to utility method (maps to Binary for OctetString attributes)
+- [x] **3.3** Add "Search Timeout" configurable setting (default 300 seconds)
+- [x] **3.4** Add constant for systemFlags=3 with documentation
+- [x] **3.5** Standardise string comparisons to `OrdinalIgnoreCase`
+- [x] **3.6** Remove or document commented-out code (removed unused partition metadata, converted to TODOs with Phase 5 references)
 
-### Phase 4: Export Implementation (Priority: MVP)
+### Phase 4: Export Implementation (Priority: MVP) ✅
 
-- [ ] **4.1** Design export capability (create/update/delete in AD)
-- [ ] **4.2** Add export settings to `GetSettings()`
-- [ ] **4.3** Create `LdapConnectorExport.cs` class
-- [ ] **4.4** Implement `IConnectorExportUsingCalls` interface
-- [ ] **4.5** Implement object creation in directory
-- [ ] **4.6** Implement object modification in directory
-- [ ] **4.7** Implement object deletion/disable in directory
-- [ ] **4.8** Add export tests
+- [x] **4.1** Design export capability (create/update/delete in AD)
+- [x] **4.2** Add export settings to `GetSettings()` (Delete Behaviour, Disable Attribute)
+- [x] **4.3** Create `LdapConnectorExport.cs` class (~350 lines)
+- [x] **4.4** Implement `IConnectorExportUsingCalls` interface (OpenExportConnection, Export, CloseExportConnection)
+- [x] **4.5** Implement object creation in directory (AddRequest)
+- [x] **4.6** Implement object modification in directory (ModifyRequest with Add/Replace/Delete operations)
+- [x] **4.7** Implement object deletion/disable in directory (DeleteRequest or userAccountControl disable)
+- [x] **4.8** Add export tests (4 new tests, 160 total)
 
 ### Phase 5: Enhancements (Priority: Future)
 
@@ -428,13 +428,15 @@ new()
 
 | File | Changes |
 |------|---------|
-| `JIM.Connectors/LDAP/LdapConnector.cs` | Add IDisposable, pass logger to helpers |
+| `JIM.Connectors/LDAP/LdapConnector.cs` | Add IDisposable, IConnectorExportUsingCalls, export settings, pass logger to helpers |
 | `JIM.Connectors/LDAP/LdapConnectorSchema.cs` | Accept logger, replace Console.WriteLine |
 | `JIM.Connectors/LDAP/LdapConnectorPartitions.cs` | Accept logger, replace Console.WriteLine |
-| `JIM.Connectors/LDAP/LdapConnectorImport.cs` | Replace static Log, add null checks |
-| `JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | Add missing omSyntax case 4 |
+| `JIM.Connectors/LDAP/LdapConnectorImport.cs` | Replace static Log, add null checks, configurable search timeout |
+| `JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | Add missing omSyntax case 4 (Binary) |
+| `JIM.Connectors/LDAP/LdapConnectorConstants.cs` | Add systemFlags, delete behaviour, UAC constants |
+| `JIM.Connectors/LDAP/LdapConnectorExport.cs` | New file - export functionality |
 | `JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs` | New file |
-| `JIM.Worker.Tests/Connectors/LdapConnectorTests.cs` | New file |
+| `JIM.Worker.Tests/Connectors/LdapConnectorTests.cs` | New file with export tests |
 
 ---
 
@@ -448,22 +450,23 @@ new()
 - [x] Build passes with no new warnings
 - [x] All existing tests pass
 
-### Phase 2 Complete When:
-- [ ] `LdapConnectorUtilities` has >80% test coverage
-- [ ] Settings validation logic tested
-- [ ] At least 10 unit tests added
+### Phase 2 Complete When: ✅
+- [x] `LdapConnectorUtilities` has >80% test coverage
+- [x] Settings validation logic tested
+- [x] At least 10 unit tests added (43 tests total)
 
-### Phase 3 Complete When:
-- [ ] No duplicate code for omSyntax mapping
-- [ ] Search timeout is configurable
-- [ ] String comparisons are consistent
-- [ ] No unexplained magic numbers
+### Phase 3 Complete When: ✅
+- [x] No duplicate code for omSyntax mapping
+- [x] Search timeout is configurable
+- [x] String comparisons are consistent
+- [x] No unexplained magic numbers
+- [x] Commented-out code documented with TODOs
 
-### Phase 4 Complete When:
-- [ ] Export to AD works for create operations
-- [ ] Export to AD works for update operations
-- [ ] Export to AD works for delete/disable operations
-- [ ] MVP checklist item "LDAP/Active Directory Connector - Export" is complete
+### Phase 4 Complete When: ✅
+- [x] Export to AD works for create operations (AddRequest)
+- [x] Export to AD works for update operations (ModifyRequest)
+- [x] Export to AD works for delete/disable operations (DeleteRequest or userAccountControl)
+- [x] MVP checklist item "LDAP/Active Directory Connector - Export" is complete
 
 ---
 

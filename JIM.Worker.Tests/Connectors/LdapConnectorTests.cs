@@ -58,10 +58,9 @@ public class LdapConnectorTests
     }
 
     [Test]
-    public void SupportsExport_ReturnsFalse()
+    public void SupportsExport_ReturnsTrue()
     {
-        // Export is not yet implemented
-        Assert.That(_connector.SupportsExport, Is.False);
+        Assert.That(_connector.SupportsExport, Is.True);
     }
 
     [Test]
@@ -198,6 +197,71 @@ public class LdapConnectorTests
         Assert.That(createContainersSetting, Is.Not.Null);
         Assert.That(createContainersSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.CheckBox));
         Assert.That(createContainersSetting.DefaultCheckboxValue, Is.False);
+    }
+
+    [Test]
+    public void GetSettings_ContainsSearchTimeoutSetting()
+    {
+        var settings = _connector.GetSettings();
+        var searchTimeoutSetting = settings.FirstOrDefault(s => s.Name == "Search Timeout");
+
+        Assert.That(searchTimeoutSetting, Is.Not.Null);
+        Assert.That(searchTimeoutSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.Integer));
+        Assert.That(searchTimeoutSetting.DefaultIntValue, Is.EqualTo(300)); // 5 minutes default
+        Assert.That(searchTimeoutSetting.Required, Is.False);
+        Assert.That(searchTimeoutSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.General));
+    }
+
+    #endregion
+
+    #region Export settings tests
+
+    [Test]
+    public void GetSettings_ContainsDeleteBehaviourSetting()
+    {
+        var settings = _connector.GetSettings();
+        var deleteBehaviourSetting = settings.FirstOrDefault(s => s.Name == "Delete Behaviour");
+
+        Assert.That(deleteBehaviourSetting, Is.Not.Null);
+        Assert.That(deleteBehaviourSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
+        Assert.That(deleteBehaviourSetting.DropDownValues, Does.Contain("Delete"));
+        Assert.That(deleteBehaviourSetting.DropDownValues, Does.Contain("Disable"));
+        Assert.That(deleteBehaviourSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Export));
+    }
+
+    [Test]
+    public void GetSettings_ContainsDisableAttributeSetting()
+    {
+        var settings = _connector.GetSettings();
+        var disableAttributeSetting = settings.FirstOrDefault(s => s.Name == "Disable Attribute");
+
+        Assert.That(disableAttributeSetting, Is.Not.Null);
+        Assert.That(disableAttributeSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.String));
+        Assert.That(disableAttributeSetting.DefaultStringValue, Is.EqualTo("userAccountControl"));
+        Assert.That(disableAttributeSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Export));
+    }
+
+    [Test]
+    public void GetSettings_ContainsExportCategorySettings()
+    {
+        var settings = _connector.GetSettings();
+        var exportSettings = settings.Where(s => s.Category == ConnectedSystemSettingCategory.Export).ToList();
+
+        Assert.That(exportSettings, Is.Not.Empty);
+        Assert.That(exportSettings.Count, Is.GreaterThanOrEqualTo(3)); // Heading + Delete Behaviour + Disable Attribute
+    }
+
+    #endregion
+
+    #region IConnectorExportUsingCalls tests
+
+    [Test]
+    public void Export_WithoutOpenExportConnection_ThrowsInvalidOperationException()
+    {
+        var pendingExports = new List<JIM.Models.Transactional.PendingExport>();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => _connector.Export(pendingExports));
+        Assert.That(exception.Message, Does.Contain("OpenExportConnection"));
     }
 
     #endregion

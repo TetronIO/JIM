@@ -50,11 +50,11 @@ internal class LdapConnectorSchema
                 {
                     // make a recommendation on what unique identifier attribute(s) to use
                     // for AD/ADLDS:
-                    var objectGuidSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("objectguid", StringComparison.CurrentCultureIgnoreCase));
+                    var objectGuidSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("objectguid", StringComparison.OrdinalIgnoreCase));
                     objectType.RecommendedExternalIdAttribute = objectGuidSchemaAttribute;
 
                     // say what the secondary external identifier needs to be for LDAP systems
-                    var dnSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("distinguishedname", StringComparison.CurrentCultureIgnoreCase));
+                    var dnSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("distinguishedname", StringComparison.OrdinalIgnoreCase));
                     objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
                         
                     // override the object type for distinguishedName, we want to handle it as a string, not a reference type
@@ -182,43 +182,20 @@ internal class LdapConnectorSchema
 
         var attributePlurality = isSingleValued ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
 
-        // work out what data-type the attribute is
+        // work out what data-type the attribute is using the shared utility method
         var omSyntax = LdapConnectorUtilities.GetEntryAttributeIntValue(attributeEntry, "omsyntax");
         var attributeDataType = AttributeDataType.Text;
 
         if (omSyntax.HasValue)
         {
-            // https://social.technet.microsoft.com/wiki/contents/articles/52570.active-directory-syntaxes-of-attributes.aspx
-            switch (omSyntax)
+            try
             {
-                case 1:
-                case 10:
-                    attributeDataType = AttributeDataType.Boolean;
-                    break;
-                case 2:
-                case 65:
-                    attributeDataType = AttributeDataType.Number;
-                    break;
-                case 3:
-                    attributeDataType = AttributeDataType.Binary;
-                    break;
-                case 4:
-                case 6:
-                case 18:
-                case 19:
-                case 20:
-                case 22:
-                case 27:
-                case 64:
-                    attributeDataType = AttributeDataType.Text;
-                    break;
-                case 23:
-                case 24:
-                    attributeDataType = AttributeDataType.DateTime;
-                    break;
-                case 127:
-                    attributeDataType = AttributeDataType.Reference;
-                    break;
+                attributeDataType = LdapConnectorUtilities.GetLdapAttributeDataType(omSyntax.Value);
+            }
+            catch (InvalidDataException)
+            {
+                // Unsupported omSyntax - default to Text
+                _logger.Warning("GetSchemaAttribute: Unsupported omSyntax {OmSyntax} for attribute {AttributeName}. Defaulting to Text.", omSyntax.Value, attributeName);
             }
         }
 
