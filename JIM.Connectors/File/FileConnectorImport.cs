@@ -11,6 +11,7 @@ internal class FileConnectorImport
     private readonly FileConnectorReader _reader;
     private readonly FileConnectorObjectTypeInfo _objectTypeInfo;
     private readonly bool _stopOnFirstError;
+    private readonly string _multiValueDelimiter;
     private readonly ILogger _logger;
 
     internal FileConnectorImport(
@@ -18,6 +19,7 @@ internal class FileConnectorImport
         FileConnectorReader reader,
         FileConnectorObjectTypeInfo objectTypeInfo,
         bool stopOnFirstError,
+        string multiValueDelimiter,
         ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -25,6 +27,7 @@ internal class FileConnectorImport
         _reader = reader;
         _objectTypeInfo = objectTypeInfo;
         _stopOnFirstError = stopOnFirstError;
+        _multiValueDelimiter = multiValueDelimiter;
         _logger = logger;
         _cancellationToken = cancellationToken;
     }
@@ -109,8 +112,8 @@ internal class FileConnectorImport
                         {
                             if (isMultiValued)
                             {
-                                // Split by pipe character for multi-valued text attributes
-                                var values = stringValue.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                // Split by configured delimiter for multi-valued text attributes
+                                var values = stringValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                                 importObjectAttribute.StringValues.AddRange(values);
                             }
                             else
@@ -124,7 +127,7 @@ internal class FileConnectorImport
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (isMultiValued && !string.IsNullOrEmpty(fieldValue))
                         {
-                            var values = fieldValue.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                             foreach (var value in values)
                             {
                                 if (int.TryParse(value, out var intValue))
@@ -151,7 +154,7 @@ internal class FileConnectorImport
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
                         if (isMultiValued && !string.IsNullOrEmpty(fieldValue))
                         {
-                            var values = fieldValue.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                             foreach (var value in values)
                             {
                                 if (Guid.TryParse(value, out var guidValue))
@@ -172,7 +175,7 @@ internal class FileConnectorImport
                         {
                             if (isMultiValued)
                             {
-                                var values = referenceValue.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                var values = referenceValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                                 importObjectAttribute.ReferenceValues.AddRange(values);
                             }
                             else

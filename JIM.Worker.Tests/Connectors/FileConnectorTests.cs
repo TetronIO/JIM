@@ -297,6 +297,46 @@ public class FileConnectorTests
         Assert.That(tagsAttr2.StringValues[0], Is.EqualTo("user"));
     }
 
+    [Test]
+    public async Task ImportAsync_WithCustomMultiValueDelimiter_ParsesCorrectlyAsync()
+    {
+        // Arrange - file uses semicolon as multi-value delimiter
+        var filePath = Path.Combine(_testFilesPath, "multivalued_semicolon.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedAttrs(filePath, "User", multiValueDelimiter: ";");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(2));
+
+        // First object should have 3 tags and 3 scores (semicolon delimited)
+        var firstObject = result.ImportObjects[0];
+        var tagsAttr = firstObject.Attributes.Single(a => a.Name == "Tags");
+        Assert.That(tagsAttr.StringValues, Has.Count.EqualTo(3));
+        Assert.That(tagsAttr.StringValues, Does.Contain("admin"));
+        Assert.That(tagsAttr.StringValues, Does.Contain("user"));
+        Assert.That(tagsAttr.StringValues, Does.Contain("developer"));
+
+        var scoresAttr = firstObject.Attributes.Single(a => a.Name == "Scores");
+        Assert.That(scoresAttr.IntValues, Has.Count.EqualTo(3));
+        Assert.That(scoresAttr.IntValues, Does.Contain(85));
+        Assert.That(scoresAttr.IntValues, Does.Contain(90));
+        Assert.That(scoresAttr.IntValues, Does.Contain(78));
+
+        // Second object should have 1 tag and 1 score
+        var secondObject = result.ImportObjects[1];
+        var tagsAttr2 = secondObject.Attributes.Single(a => a.Name == "Tags");
+        Assert.That(tagsAttr2.StringValues, Has.Count.EqualTo(1));
+        Assert.That(tagsAttr2.StringValues[0], Is.EqualTo("user"));
+    }
+
     #endregion
 
     #region ValidateSettingValues Tests
@@ -334,7 +374,7 @@ public class FileConnectorTests
 
     #region Helper Methods
 
-    private List<ConnectedSystemSettingValue> CreateSettingValues(string filePath, string objectType, string delimiter = ",", bool stopOnFirstError = false)
+    private List<ConnectedSystemSettingValue> CreateSettingValues(string filePath, string objectType, string delimiter = ",", bool stopOnFirstError = false, string multiValueDelimiter = "|")
     {
         return new List<ConnectedSystemSettingValue>
         {
@@ -397,11 +437,21 @@ public class FileConnectorTests
                     Type = ConnectedSystemSettingType.CheckBox
                 },
                 CheckboxValue = stopOnFirstError
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Multi-Value Delimiter",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = multiValueDelimiter
             }
         };
     }
 
-    private ConnectedSystem CreateConnectedSystem(string filePath, string objectTypeName, string delimiter = ",", bool stopOnFirstError = false)
+    private ConnectedSystem CreateConnectedSystem(string filePath, string objectTypeName, string delimiter = ",", bool stopOnFirstError = false, string multiValueDelimiter = "|")
     {
         var objectType = new ConnectedSystemObjectType
         {
@@ -423,7 +473,7 @@ public class FileConnectorTests
             Id = 1,
             Name = "Test File Connector",
             ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
-            SettingValues = CreateSettingValues(filePath, objectTypeName, delimiter, stopOnFirstError)
+            SettingValues = CreateSettingValues(filePath, objectTypeName, delimiter, stopOnFirstError, multiValueDelimiter)
         };
     }
 
@@ -490,11 +540,21 @@ public class FileConnectorTests
                     Type = ConnectedSystemSettingType.CheckBox
                 },
                 CheckboxValue = false
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Multi-Value Delimiter",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = "|"
             }
         };
     }
 
-    private ConnectedSystem CreateConnectedSystemWithMultiValuedAttrs(string filePath, string objectTypeName)
+    private ConnectedSystem CreateConnectedSystemWithMultiValuedAttrs(string filePath, string objectTypeName, string multiValueDelimiter = "|")
     {
         var objectType = new ConnectedSystemObjectType
         {
@@ -515,7 +575,7 @@ public class FileConnectorTests
             Id = 1,
             Name = "Test File Connector",
             ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
-            SettingValues = CreateSettingValues(filePath, objectTypeName)
+            SettingValues = CreateSettingValues(filePath, objectTypeName, multiValueDelimiter: multiValueDelimiter)
         };
     }
 

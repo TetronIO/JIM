@@ -37,6 +37,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private const string SettingCulture = "Culture";
     private const string SettingDelimiter = "Delimiter";
     private const string SettingStopOnFirstError = "Stop On First Error";
+    private const string SettingMultiValueDelimiter = "Multi-Value Delimiter";
 
     public List<ConnectorSetting> GetSettings()
     {
@@ -47,7 +48,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue=",", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox }
+            new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = SettingMultiValueDelimiter, Required = false, Description = "Character used to separate multiple values within a single field. Defaults to pipe (|) which is the MIM/FIM convention.", DefaultStringValue = "|", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.String }
         };
     }
 
@@ -230,7 +232,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var reader = GetCsvReader(runProfile.FilePath, connectedSystem.SettingValues, logger);
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
         var stopOnFirstError = GetStopOnFirstErrorSetting(connectedSystem.SettingValues);
-        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, logger, cancellationToken);
+        var multiValueDelimiter = GetMultiValueDelimiterSetting(connectedSystem.SettingValues);
+        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, multiValueDelimiter, logger, cancellationToken);
             
         switch (runProfile.RunType)
         {
@@ -315,6 +318,15 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     {
         var setting = settingValues.SingleOrDefault(q => q.Setting.Name == SettingStopOnFirstError);
         return setting?.CheckboxValue ?? false;
+    }
+
+    /// <summary>
+    /// Helper to retrieve the "Multi-Value Delimiter" setting value.
+    /// </summary>
+    private static string GetMultiValueDelimiterSetting(IReadOnlyCollection<ConnectedSystemSettingValue> settingValues)
+    {
+        var setting = settingValues.SingleOrDefault(q => q.Setting.Name == SettingMultiValueDelimiter);
+        return !string.IsNullOrEmpty(setting?.StringValue) ? setting.StringValue : "|";
     }
     #endregion
 }
