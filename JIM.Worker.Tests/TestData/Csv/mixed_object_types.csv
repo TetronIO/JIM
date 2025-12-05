@@ -1,0 +1,5 @@
+ObjectType,Id,Name,Email
+User,1,John Smith,john@example.com
+Group,100,Admins,admins@example.com
+User,2,Jane Doe,jane@example.com
+Group,101,Users,users@example.com

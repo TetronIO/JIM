@@ -40,12 +40,13 @@ public class JimApplication
     /// Ensures that JIM is fully deployed and seeded, i.e. database migrations have been performed
     /// and data needed to run the service has been created.
     /// Only the primary JIM application instance should run this task on startup. Secondary app instances
-    /// must not run it, or conflicts are likely to occur. 
+    /// must not run it, or conflicts are likely to occur.
     /// </summary>
     public async Task InitialiseDatabaseAsync()
     {
         await Repository.InitialiseDatabaseAsync();
         await Seeding.SeedAsync();
+        await Seeding.SyncBuiltInConnectorDefinitionsAsync();
         await Repository.InitialisationCompleteAsync();
     }
 

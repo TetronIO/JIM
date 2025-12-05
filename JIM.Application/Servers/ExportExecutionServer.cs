@@ -454,14 +454,30 @@ public class ExportExecutionServer
             // File-based export - execute all at once (file connectors typically batch internally)
             connector.Export(connectedSystem.SettingValues, pendingExports);
 
-            // For file-based exports, we can't know immediate success
-            // The pending exports will be confirmed on the next import
+            // Check if the connector supports auto-confirm and the setting is enabled
+            var autoConfirm = false;
+            if (connector is IConnectorCapabilities caps && caps.SupportsAutoConfirmExport)
+            {
+                var autoConfirmSetting = connectedSystem.SettingValues
+                    .SingleOrDefault(s => s.Setting.Name == "Auto-Confirm Exports");
+                autoConfirm = autoConfirmSetting?.CheckboxValue ?? true; // default true when capability exists
+            }
+
             // Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc)
             foreach (var export in pendingExports)
             {
-                export.Status = PendingExportStatus.Exported;
-                export.LastAttemptedAt = DateTime.UtcNow;
-                await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+                if (autoConfirm)
+                {
+                    // Auto-confirm: delete the pending export immediately (confirmed)
+                    await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
+                }
+                else
+                {
+                    // Standard behaviour: mark as exported, will be confirmed on next import
+                    export.Status = PendingExportStatus.Exported;
+                    export.LastAttemptedAt = DateTime.UtcNow;
+                    await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+                }
             }
 
             result.SuccessCount = pendingExports.Count;

@@ -1,0 +1,3 @@
+TextColumn,NumberColumn,BoolColumn,DateColumn,GuidColumn
+Hello World,42,true,2023-06-15,a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Test String,123,false,2024-01-01,11111111-2222-3333-4444-555555555555

@@ -35,7 +35,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] LDAP/Active Directory Connector - Import
 - [ ] LDAP/Active Directory Connector - Export (create, update, delete)
 - [x] File Connector - Import
-- [ ] File Connector - Export
+- [x] File Connector - Export
 
 ### 2. Inbound Synchronisation (Source → Metaverse)
 
@@ -153,14 +153,14 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 | Category | Complete | Total | Status |
 |----------|----------|-------|--------|
-| Connectors | 6 | 8 | 75% |
+| Connectors | 7 | 8 | 88% |
 | Inbound Sync | 14 | 15 | 93% |
 | Outbound Sync | 2 | 10 | 20% |
 | Scheduling | 4 | 6 | 67% |
 | Admin UI | 10 | 14 | 71% |
 | Security | 2 | 5 | 40% |
 | Operations | 4 | 6 | 67% |
-| **Overall** | **42** | **64** | **~66%** |
+| **Overall** | **43** | **64** | **~67%** |
 
 ---
 

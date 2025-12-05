@@ -27,6 +27,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsSecondaryExternalId => true;
     public bool SupportsUserSelectedExternalId => false;
     public bool SupportsUserSelectedAttributeTypes => false;
+    public bool SupportsAutoConfirmExport => false;
     #endregion
 
     #region IConnectorSettings members

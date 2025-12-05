@@ -74,5 +74,12 @@ public class ConnectorDefinition : IConnectorCapabilities
     /// Some connectors require the user to be able to specify the data type for the attribute, where the system is unknown, or where auto-detection is performed but cannot guarantee accuracy.
     /// </summary>
     public bool SupportsUserSelectedAttributeTypes { get; set; }
+
+    /// <summary>
+    /// Does the Connector support auto-confirming exports? When true, the connector can provide an "Auto-Confirm Exports"
+    /// setting that, when enabled, causes PendingExports to be deleted (confirmed) immediately after a successful export
+    /// rather than waiting for reconciliation via the next import cycle.
+    /// </summary>
+    public bool SupportsAutoConfirmExport { get; set; }
     #endregion
 }
