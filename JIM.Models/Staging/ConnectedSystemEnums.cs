@@ -63,7 +63,11 @@ public enum ConnectedSystemImportObjectError
     /// <summary>
     /// There's been an issue with the configuration of JIM and import cannot complete.
     /// </summary>
-    ConfigurationError
+    ConfigurationError,
+    /// <summary>
+    /// An attribute value could not be parsed to the expected type (e.g., invalid number, date, or GUID format).
+    /// </summary>
+    AttributeValueError
 }
 
 public enum ConnectedSystemRunType

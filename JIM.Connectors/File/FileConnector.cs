@@ -50,7 +50,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     }
 
     /// <summary>
-    /// Validates LdapConnector setting values using custom business logic.
+    /// Validates FileConnector setting values using custom business logic.
     /// </summary>
     public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {

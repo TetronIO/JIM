@@ -96,37 +96,53 @@ internal class FileConnectorImport
                     Type = attribute.Type
                 };
 
-                if (attribute.Type == AttributeDataType.Text)
+                try
                 {
-                    var stringValue = _reader.CsvReader.GetField(attribute.Name);
-                    if (!string.IsNullOrEmpty(stringValue))
-                        importObjectAttribute.StringValues.Add(stringValue);
+                    if (attribute.Type == AttributeDataType.Text)
+                    {
+                        var stringValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (!string.IsNullOrEmpty(stringValue))
+                            importObjectAttribute.StringValues.Add(stringValue);
+                    }
+                    else if (attribute.Type == AttributeDataType.Number)
+                    {
+                        importObjectAttribute.IntValues.Add(_reader.CsvReader.GetField<int>(attribute.Name));
+                    }
+                    else if (attribute.Type == AttributeDataType.DateTime)
+                    {
+                        importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
+                    }
+                    else if (attribute.Type == AttributeDataType.Boolean)
+                    {
+                        importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
+                    }
+                    else if (attribute.Type == AttributeDataType.Guid)
+                    {
+                        importObjectAttribute.GuidValues.Add(_reader.CsvReader.GetField<Guid>(attribute.Name));
+                    }
+                    else if (attribute.Type == AttributeDataType.Reference)
+                    {
+                        var referenceValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (!string.IsNullOrEmpty(referenceValue))
+                            importObjectAttribute.ReferenceValues.Add(referenceValue);
+                    }
+                    else
+                    {
+                        throw new NotSupportedException($"FileConnector does not support attribute data type '{attribute.Type}'.");
+                    }
                 }
-                else if (attribute.Type == AttributeDataType.Number)
+                catch (Exception ex) when (ex is not NotSupportedException)
                 {
-                    importObjectAttribute.IntValues.Add(_reader.CsvReader.GetField<int>(attribute.Name));
-                }
-                else if (attribute.Type == AttributeDataType.DateTime)
-                {
-                    importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
-                }
-                else if (attribute.Type == AttributeDataType.Boolean)
-                {
-                    importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
-                }
-                else if (attribute.Type == AttributeDataType.Guid)
-                {
-                    importObjectAttribute.GuidValues.Add(_reader.CsvReader.GetField<Guid>(attribute.Name));
-                }
-                else if (attribute.Type == AttributeDataType.Reference)
-                {
-                    var referenceValue = _reader.CsvReader.GetField(attribute.Name);
-                    if (!string.IsNullOrEmpty(referenceValue))
-                        importObjectAttribute.ReferenceValues.Add(referenceValue);
-                }
-                else
-                {
-                    throw new NotSupportedException($"FileConnector does not support attribute data type '{attribute.Type}'.");
+                    // Record the error but continue processing other attributes and rows
+                    var rowNumber = _reader.CsvReader.Context.Parser?.Row ?? 0;
+                    var rawValue = _reader.CsvReader.GetField(attribute.Name);
+                    _logger.Warning(ex, "Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
+                        attribute.Name, attribute.Type, rowNumber, rawValue);
+
+                    importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
+                    importObject.ErrorMessage = $"Failed to parse '{attribute.Name}' as {attribute.Type}: {ex.Message}";
+                    // Continue processing - the attribute will be skipped but the object can still be imported with other attributes
+                    continue;
                 }
 
                 importObject.Attributes.Add(importObjectAttribute);
