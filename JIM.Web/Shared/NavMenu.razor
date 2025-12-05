@@ -1,25 +1,28 @@
-﻿<MudNavMenu Color="Color.Primary" Class="pt-3 pb-3">
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+@inject NavigationManager NavigationManager
+@implements IDisposable
 
-    <MudNavGroup Title="Users" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!DrawerOpen)">
+<MudNavMenu Color="Color.Primary" Class="pt-3 pb-3 jim-nav-menu">
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home" Class="jim-nav-top-level">Home</MudNavLink>
+
+    <MudNavGroup Title="Users" @bind-Expanded="_usersExpanded" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Class="jim-nowrap">All Users</MudNavLink>
         <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix">People</MudNavLink>
         <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap">Service Principals</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Groups" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Groups" HideExpandIcon="@(!DrawerOpen)">
+    <MudNavGroup Title="Groups" @bind-Expanded="_groupsExpanded" Icon="@Icons.Material.Filled.Groups" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Class="jim-nowrap">All Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap">Security Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap">Distribution Groups</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Activity" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)">
+    <MudNavGroup Title="Activity" @bind-Expanded="_activityExpanded" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/activity" Match="NavLinkMatch.All">Activity</MudNavLink>
         <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All" Class="jim-nowrap">My Activity</MudNavLink>
     </MudNavGroup>
 
     <AuthorizeView Roles="Administrators">
-        <MudNavGroup Title="Dashboard" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)">
+        <MudNavGroup Title="Dashboard" @bind-Expanded="_dashboardExpanded" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All">Daily</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All">Weekly</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All">Monthly</MudNavLink>
@@ -28,7 +31,7 @@
     </AuthorizeView>
 
     <AuthorizeView Roles="Administrators">
-        <MudNavGroup Title="Admin" Expanded="@DrawerOpen" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)">
+        <MudNavGroup Title="Admin" @bind-Expanded="_adminExpanded" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix">Operations</MudNavLink>
             <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.All" Class="jim-nowrap">Connected Systems</MudNavLink>
             <MudNavLink Href="/admin/connected-systems/sync-rules" Match="NavLinkMatch.All" Class="jim-nowrap">Synchronisation Rules</MudNavLink>
@@ -41,11 +44,87 @@
 </MudNavMenu>
 
 @code {
-    [Parameter] 
-    [EditorRequired] 
+    [Parameter]
+    [EditorRequired]
     public bool DrawerOpen { get; set; }
+
+    private string _currentUrl = string.Empty;
+    private bool _previousDrawerOpen;
+
+    // Track expanded state for each nav group
+    private bool _usersExpanded;
+    private bool _groupsExpanded;
+    private bool _activityExpanded;
+    private bool _dashboardExpanded;
+    private bool _adminExpanded;
+
+    protected override void OnInitialized()
+    {
+        _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).ToLowerInvariant();
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
 
     protected override void OnParametersSet()
     {
+        // When drawer closes, collapse all groups
+        // When drawer opens, expand only the active group
+        if (DrawerOpen != _previousDrawerOpen)
+        {
+            _previousDrawerOpen = DrawerOpen;
+
+            if (DrawerOpen)
+            {
+                // Drawer just opened - expand only the active group
+                _usersExpanded = IsGroupActive("users");
+                _groupsExpanded = IsGroupActive("groups");
+                _activityExpanded = IsGroupActive("activity");
+                _dashboardExpanded = IsGroupActive("dashboard");
+                _adminExpanded = IsGroupActive("admin");
+            }
+            else
+            {
+                // Drawer just closed - collapse all
+                _usersExpanded = false;
+                _groupsExpanded = false;
+                _activityExpanded = false;
+                _dashboardExpanded = false;
+                _adminExpanded = false;
+            }
+        }
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _currentUrl = NavigationManager.ToBaseRelativePath(e.Location).ToLowerInvariant();
+
+        // When navigating, ensure the active group is expanded (but preserve other manually expanded groups)
+        if (DrawerOpen)
+        {
+            _usersExpanded |= IsGroupActive("users");
+            _groupsExpanded |= IsGroupActive("groups");
+            _activityExpanded |= IsGroupActive("activity");
+            _dashboardExpanded |= IsGroupActive("dashboard");
+            _adminExpanded |= IsGroupActive("admin");
+        }
+
+        StateHasChanged();
+    }
+
+    private bool IsGroupActive(string groupKey)
+    {
+        return groupKey switch
+        {
+            "users" => _currentUrl.StartsWith("t/users"),
+            "groups" => _currentUrl.StartsWith("t/groups"),
+            "activity" => _currentUrl.StartsWith("activity"),
+            "dashboard" => _currentUrl.StartsWith("dashboard"),
+            "admin" => _currentUrl.StartsWith("admin"),
+            _ => false
+        };
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }

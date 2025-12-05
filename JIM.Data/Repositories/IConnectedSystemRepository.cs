@@ -47,6 +47,27 @@ public interface IConnectedSystemRepository
     public Task UpdatePendingExportAsync(PendingExport pendingExport);
 
     /// <summary>
+    /// Creates a new Pending Export object.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to create.</param>
+    public Task CreatePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Gets all Connected System Objects that are joined to a specific Metaverse Object.
+    /// Used for evaluating MVO deletion exports.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID to find joined CSOs for.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
+    /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
+    /// Used for finding existing CSOs during export evaluation.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID.</param>
+    /// <param name="connectedSystemId">The Connected System ID.</param>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
+
+    /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
     /// Includes Attributes.
     /// </summary>

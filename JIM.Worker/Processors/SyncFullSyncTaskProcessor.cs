@@ -218,7 +218,7 @@ public class SyncFullSyncTaskProcessor
                 }
 
                 // increment error count and update status
-                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
                 await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
@@ -230,7 +230,7 @@ public class SyncFullSyncTaskProcessor
                     $"All {failedChanges.Count} attribute changes failed. Incrementing error count.");
 
                 // increment error count and update status
-                pendingExport.ErrorCount = (pendingExport.ErrorCount ?? 0) + 1;
+                pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
                 await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
@@ -406,9 +406,41 @@ public class SyncFullSyncTaskProcessor
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
                 await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
 
-            // should we persist MVO changes before moving on to onwards CSO updates?
-            // is there value in working out if we need to persist the MVO? i.e. is there a performance hit in letting EF work it out for every MVO?
-            // todo: process onward-CSO updates
+            // Q1 Decision: Evaluate export rules immediately when MVO changes
+            // This creates PendingExports for any other connected systems that need to be updated
+            await EvaluateOutboundExportsAsync(connectedSystemObject.MetaverseObject);
+        }
+    }
+
+    /// <summary>
+    /// Evaluates export rules for an MVO that has changed during inbound sync.
+    /// Creates PendingExports for any connected systems that need to be updated.
+    /// Implements Q1 decision: evaluate exports immediately when MVO changes.
+    /// </summary>
+    private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo)
+    {
+        // Get the changed attributes from the MVO's pending changes
+        var changedAttributes = mvo.PendingAttributeValueAdditions.ToList();
+
+        if (changedAttributes.Count == 0 && mvo.PendingAttributeValueRemovals.Count == 0)
+        {
+            // No attribute changes to export
+            return;
+        }
+
+        // Include removals in changed attributes for export consideration
+        changedAttributes.AddRange(mvo.PendingAttributeValueRemovals);
+
+        // Evaluate export rules, passing the current connected system for Q3 circular prevention
+        var pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
+            mvo,
+            changedAttributes,
+            _connectedSystem);
+
+        if (pendingExports.Count > 0)
+        {
+            Log.Information("EvaluateOutboundExportsAsync: Created {Count} pending exports for MVO {MvoId}",
+                pendingExports.Count, mvo.Id);
         }
     }
 

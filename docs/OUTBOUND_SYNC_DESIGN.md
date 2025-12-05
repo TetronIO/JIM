@@ -2,7 +2,7 @@
 
 > **Status**: Implementation Ready
 > **Issue**: #121
-> **Last Updated**: 2025-12-03
+> **Last Updated**: 2025-12-04
 
 ## Overview
 
@@ -289,6 +289,94 @@ The MVO is the single source of truth. Attribute priority is an inbound concern;
 
 ---
 
+### Q8: Parallelism and Concurrency Strategy
+
+**Context:**
+
+Parallelism is a critical architectural concern that affects performance, reliability, and complexity. Common pitfalls observed in identity management systems include:
+
+- **Single-threaded sync** becoming a significant bottleneck, requiring hours to complete large sync runs
+- **Parallel sync operations** causing table deadlocks and data corruption when not properly isolated
+- These industry lessons inform a cautious approach to parallelism in JIM
+
+**The Problem with Premature Parallelism:**
+
+EF Core's `DbContext` is **not thread-safe**. Using constructs like `Task.WhenAll()` or `SemaphoreSlim` with parallel database operations can cause:
+- Race conditions and data corruption
+- Deadlocks when multiple threads access the same tables
+- Non-deterministic behaviour that's difficult to debug
+
+**Current Decision: Sequential Operations with Feature Flags for Future Enhancement**
+
+All database operations in export evaluation and execution are currently **sequential**. This is intentional:
+
+```csharp
+// Sequential - Safe for EF Core DbContext
+foreach (var export in batch)
+{
+    export.Status = PendingExportStatus.Executing;
+    await Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+}
+```
+
+Not this (unsafe):
+```csharp
+// Parallel - UNSAFE for EF Core DbContext
+await Task.WhenAll(batch.Select(async export =>
+{
+    export.Status = PendingExportStatus.Executing;
+    await Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+}));
+```
+
+**Where Parallelism May Be Safe (Future Enhancement):**
+
+1. **Connector operations** - The actual call to external systems (AD, SCIM endpoints) could potentially run in parallel if:
+   - Each connector instance has its own connection
+   - The target system supports concurrent requests
+   - Proper rate limiting is implemented
+
+2. **Export evaluation** - Evaluating export rules against MVOs could be parallel if:
+   - Using separate DbContext instances per thread
+   - Implementing proper transaction isolation
+   - Using read-only operations where possible
+
+3. **Multi-system exports** - Exporting to different connected systems in parallel could be safe since they're independent
+
+**Feature Flag Approach:**
+
+Any future parallelism should be introduced behind feature flags:
+
+```csharp
+public class ExportExecutionOptions
+{
+    // All default to false (sequential) until proven safe
+    public bool EnableParallelConnectorCalls { get; set; } = false;
+    public bool EnableParallelExportEvaluation { get; set; } = false;
+    public bool EnableParallelMultiSystemExport { get; set; } = false;
+    public int MaxDegreeOfParallelism { get; set; } = 1;
+}
+```
+
+This allows:
+- Easy A/B testing of performance improvements
+- Quick rollback if issues are discovered
+- Gradual rollout to production environments
+- Clear documentation of what parallelism is enabled
+
+**Why Not Now?**
+
+1. **Correctness over performance** - Get the feature working correctly first
+2. **Unknown bottleneck** - We don't know yet whether schedule-based or event-based sync will be more popular, which affects optimal parallelism strategy
+3. **Complexity cost** - Parallel code is harder to debug and maintain
+4. **Connector responsibility** - High-performance connector operations are the connector's responsibility (post-MVP)
+
+**✅ DECISION: Sequential operations for MVP, parallelism via feature flags post-MVP.**
+
+See code comments referencing "Q8" in `ExportExecutionServer.cs` for implementation details.
+
+---
+
 ## Event-Based Sync Roadmap
 
 > **Status**: Future Enhancement
@@ -474,7 +562,7 @@ For scheduled export runs processing many pending exports:
 **Why Multi-Pass Works**:
 - Pass 1 can be fully parallel (no dependencies between creates)
 - Pass 2 can also be parallel (all objects exist after Pass 1)
-- Matches how products like MIM work (phases visible in Sync Manager)
+- Matches how traditional ILM products work (multi-phase sync runs)
 - Simple mental model: "create objects, then set references"
 
 **Implementation**:
@@ -824,7 +912,7 @@ Large reorganisation affecting many objects:
 Areas where JIM could improve on legacy ILM tools:
 
 ### 1. Simplified Sync Rule Configuration
-MIM requires complex XML and code for sync rules. JIM could offer:
+Legacy ILM tools often require complex XML and code for sync rules. JIM could offer:
 - Visual rule builder
 - Common patterns as templates
 - Plain-language rule descriptions
@@ -986,10 +1074,10 @@ Based on the design decisions above, this is the implementation plan for outboun
 ```
 Phase 1 (Models) ──────────────────────────────────────────┐
                                                            │
-Phase 2 (Evaluation) ─────────────────────────────────────┤
+Phase 2 (Evaluation) ──────────────────────────────────────┤
      │                                                     │
      ▼                                                     │
-Phase 3 (Execution) ──────────────────────────────────────┤
+Phase 3 (Execution) ───────────────────────────────────────┤
      │                                                     │
      ├──────────────┐                                      │
      ▼              ▼                                      ▼
