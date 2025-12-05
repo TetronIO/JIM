@@ -35,6 +35,7 @@ html, body {
 
 .jim-drawer {
     border-right: 1px solid var(--mud-palette-lines-default);
+    min-height: 100vh;
 }
 
 .jim-drawer-logo img {
@@ -66,4 +67,22 @@ html, body {
 
 .jim-nowrap {
     white-space: nowrap;
+}
+
+/* Navigation menu styling - top-level items */
+.jim-nav-menu > .jim-nav-top-level > .mud-nav-link-text,
+.jim-nav-menu > .jim-nav-top-level > button > .mud-nav-link-text {
+    font-weight: 600;
+    color: var(--mud-palette-primary);
+}
+
+/* Ensure icon colour matches for top-level items */
+.jim-nav-menu > .jim-nav-top-level > .mud-nav-link-icon,
+.jim-nav-menu > .jim-nav-top-level > button > .mud-icon-root {
+    color: var(--mud-palette-primary);
+}
+
+/* Child nav items - keep default styling (lighter weight, secondary colour) */
+.jim-nav-menu .mud-navmenu-list .mud-nav-link-text {
+    font-weight: 400;
 }
