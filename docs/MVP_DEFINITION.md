@@ -105,7 +105,8 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 5. Administration UI
 
 #### 5.1 Core Views
-- [x] Dashboard / Operations view
+- [ ] Dashboard (summary metrics, system health)
+- [x] Operations view (run activities, task status)
 - [x] Connected System list and detail
 - [x] Connector configuration
 - [x] Schema inspection
@@ -157,10 +158,10 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 | Inbound Sync | 14 | 15 | 93% |
 | Outbound Sync | 15 | 15 | 100% |
 | Scheduling | 4 | 6 | 67% |
-| Admin UI | 10 | 14 | 71% |
+| Admin UI | 10 | 15 | 67% |
 | Security | 2 | 5 | 40% |
 | Operations | 4 | 6 | 67% |
-| **Overall** | **59** | **71** | **~83%** |
+| **Overall** | **59** | **72** | **~82%** |
 
 ---
 
