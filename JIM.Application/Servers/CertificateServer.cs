@@ -1,5 +1,6 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using Serilog;
 using System.Security.Cryptography.X509Certificates;
 
@@ -354,14 +355,4 @@ public class CertificateServer
             return X509Certificate2.CreateFromPem(pemString);
         }
     }
-}
-
-/// <summary>
-/// Result of certificate validation.
-/// </summary>
-public class CertificateValidationResult
-{
-    public bool IsValid { get; set; }
-    public List<string> Errors { get; set; } = new();
-    public List<string> Warnings { get; set; } = new();
 }
