@@ -80,7 +80,9 @@ Activities have a nullable `ConnectedSystemId` FK. Options:
 | B. Null the FK | Set `ConnectedSystemId = NULL`, preserving history |
 | C. Block if recent activities | Only allow deletion if no activities in last N days |
 
-**Decision**: Option B - Preserve activity history by nulling the FK. Activities are immutable audit logs and must be kept. They still contain useful context via `TargetName` for the deleted system.
+**Decision**: Option B - Preserve activity history by nulling the FK. Activities are immutable audit logs and must be kept.
+
+**Implementation Requirement**: The `Activity.TargetName` property must always be populated when creating activities for Connected Systems. This ensures that even after the FK is nulled, the activity record retains the deleted system's name for audit purposes. This is existing behaviour that must be maintained - verify during implementation that all activity creation paths populate `TargetName`.
 
 **Future Enhancement - Activity Serialization** (Post-MVP):
 
