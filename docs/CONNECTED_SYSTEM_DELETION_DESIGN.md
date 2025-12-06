@@ -80,7 +80,23 @@ Activities have a nullable `ConnectedSystemId` FK. Options:
 | B. Null the FK | Set `ConnectedSystemId = NULL`, preserving history |
 | C. Block if recent activities | Only allow deletion if no activities in last N days |
 
-**Recommendation**: Option B - Preserve activity history by nulling the FK. Activities still contain useful audit information and can reference `TargetName` for the deleted system name.
+**Decision**: Option B - Preserve activity history by nulling the FK. Activities are immutable audit logs and must be kept. They still contain useful context via `TargetName` for the deleted system.
+
+**Future Enhancement - Activity Serialization** (Post-MVP):
+
+There is design intent to serialize deleted objects as JSON in the Activity record to preserve full context for audit purposes (e.g., when viewing activities for a deleted Connected System, admins can see what the system's settings and configuration were).
+
+However, for MVP, we will NOT serialize deleted CSOs because:
+1. **Volume concern**: Deleting large systems (10k-100k CSOs) would create enormous activity records
+2. **Storage impact**: Each deleted CSO could be serialized with all its attributes and values
+3. **Complexity**: Adds complexity to the deletion process without MVP benefit
+
+**Recommendation for MVP**: Simply null the ConnectedSystemId FK. Preserve activities for audit trail.
+
+**Future Work** (GitHub Issue #136): Implement selective activity serialization:
+- Only serialize system-level metadata (ConnectedSystem settings, schema)
+- Do NOT serialize individual CSOs (too much data)
+- Provide "Export deleted system configuration" feature for admins needing recovery info
 
 ### Q4: Should deletion be synchronous or async?
 
@@ -98,6 +114,8 @@ Activities have a nullable `ConnectedSystemId` FK. Options:
 
 ### Q5: How do we prevent sync operations during deletion?
 
+**Status**: Under consideration - awaiting final decision
+
 **Critical concern**: While deletion is in progress, sync operations (scheduled and event-based) could:
 - Create new CSOs for this system
 - Modify existing CSOs and their attribute values
@@ -113,7 +131,7 @@ Activities have a nullable `ConnectedSystemId` FK. Options:
 | C. Graceful drain | Stop accepting new syncs, wait for in-flight ops to complete (timeout), then delete | No abrupt interruption | Complex orchestration, timeouts |
 | **D. Hybrid approach** | Set "Deleting" status, immediately fail any new sync requests, wait for running tasks (with timeout), then proceed | Combines safety with responsiveness | Moderate complexity |
 
-**Recommendation**: Option D - Hybrid approach:
+**Proposed approach**: Option D - Hybrid approach (awaiting confirmation):
 
 1. **Atomic status change**: Set ConnectedSystem.Status = "Deleting"
 2. **Fail fast**: Any new sync requests for this system immediately fail with clear error
@@ -546,7 +564,11 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
 1. **Preview is default** - Show deletion impact preview before confirming (can be skipped)
 2. **Type name to confirm** - Require typing the system name for safety (like GitHub repo deletion)
 3. **Pending exports shown in preview** - Warn about pending exports but don't block deletion
-4. **Concurrency safety (Q5)** - Use hybrid approach: block with status change, wait for in-flight syncs (with timeout), rollback on failure
+4. **Q1: Handle MVO deletion** - Option D (Disconnect first, delete second) - preserves referential integrity and allows MVO rules to be evaluated in background
+5. **Q2: Handle Sync Rules** - Option B (Cascade delete) - sync rules are useless without the system; show count in confirmation
+6. **Q3: Handle Activities** - Option B (Null FK) - preserve immutable audit logs; activity serialization deferred to post-MVP enhancement (#136)
+7. **Q4: Deletion mode** - Option C (Auto-detect) - synchronous for <1000 CSOs, async background job for >=1000 CSOs
+8. **Q5: Concurrency safety** - Awaiting final decision (Option D - Hybrid approach proposed)
 
 ## Open Questions
 
