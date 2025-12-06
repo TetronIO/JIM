@@ -1,9 +1,9 @@
 # Connected System Deletion Design
 
-> **Status**: Draft
+> **Status**: Design Approved (Q5 pending)
 > **Created**: 2025-12-06
 > **GitHub Issue**: #135
-> **Related**: #134 (Attribute Impact Analysis - future enhancement)
+> **Related**: #134 (Attribute Impact Analysis), #136 (Activity Serialization)
 
 ## Problem Statement
 
@@ -52,7 +52,7 @@ ConnectedSystem
 | C. Admin chooses | Provide checkbox for "Evaluate MVO deletion rules" | Flexible | More complex UI; admin may not understand implications |
 | **D. Disconnect first, delete second** | Clear `MetaverseObjectId` on all CSOs first, then bulk delete | Maintains referential integrity; allows MVO rules to be evaluated in background | Requires two-phase operation |
 
-**Recommendation**: Option D - This gives us the best of both worlds:
+**Decision**: Option D - Disconnect first, delete second:
 - Bulk disconnect operation using raw SQL (fast)
 - MVO deletion rules can be evaluated in a background job if needed
 - No cascading sync operations during delete
@@ -68,7 +68,7 @@ ConnectedSystem
 | B. Cascade delete sync rules | Automatically delete all sync rules for this system |
 | C. Disable sync rules | Mark sync rules as disabled rather than deleting |
 
-**Recommendation**: Option B with confirmation - Cascade delete sync rules. They're useless without the system anyway. Show count in confirmation dialog.
+**Decision**: Option B - Cascade delete sync rules. They're useless without the system anyway. Show count in confirmation dialog.
 
 ### Q3: How do we handle Activities?
 
@@ -108,7 +108,7 @@ However, for MVP, we will NOT serialize deleted CSOs because:
 | B. Async only | Always queue as background job | Large systems |
 | C. Auto-detect | Sync for small, async for large | Best UX |
 
-**Recommendation**: Option C - Check CSO count:
+**Decision**: Option C - Auto-detect based on CSO count:
 - < 1,000 CSOs: Synchronous delete with progress indicator
 - >= 1,000 CSOs: Queue as background job, show in activities
 
