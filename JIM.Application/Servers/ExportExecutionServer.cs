@@ -1,3 +1,4 @@
+using JIM.Application.Services;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -285,6 +286,13 @@ public class ExportExecutionServer
     {
         try
         {
+            // Inject certificate provider for connectors that support it
+            if (connector is IConnectorCertificateAware certificateAwareConnector)
+            {
+                var certificateProvider = new CertificateProviderService(Application);
+                certificateAwareConnector.SetCertificateProvider(certificateProvider);
+            }
+
             // Open connection
             connector.OpenExportConnection(connectedSystem.SettingValues);
             Log.Debug("ExecuteUsingCallsWithBatchingAsync: Opened export connection for {SystemName}", connectedSystem.Name);

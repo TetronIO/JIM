@@ -1,4 +1,6 @@
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using Serilog;
 using System.Security.Cryptography.X509Certificates;
 
@@ -43,107 +45,206 @@ public class CertificateServer
     /// <summary>
     /// Adds a certificate from uploaded data (PEM or DER encoded).
     /// </summary>
-    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, string? notes = null, string? createdBy = null)
+    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, MetaverseObject? initiatedBy = null, string? notes = null)
     {
-        var x509Cert = ParseCertificate(certificateData);
-        var thumbprint = x509Cert.Thumbprint;
-
-        if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
-            throw new InvalidOperationException($"A certificate with thumbprint {thumbprint} already exists in the store.");
-
-        var certificate = new TrustedCertificate
+        var activity = new Activity
         {
-            Id = Guid.NewGuid(),
-            Name = name,
-            Thumbprint = thumbprint,
-            Subject = x509Cert.Subject,
-            Issuer = x509Cert.Issuer,
-            SerialNumber = x509Cert.SerialNumber,
-            ValidFrom = x509Cert.NotBefore.ToUniversalTime(),
-            ValidTo = x509Cert.NotAfter.ToUniversalTime(),
-            SourceType = CertificateSourceType.Uploaded,
-            CertificateData = certificateData,
-            FilePath = null,
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = createdBy,
-            Notes = notes
+            TargetName = name,
+            TargetType = ActivityTargetType.TrustedCertificate,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            Message = "Adding trusted certificate from uploaded data"
         };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from uploaded data", name, thumbprint);
-        return await Application.Repository.TrustedCertificates.CreateAsync(certificate);
+        try
+        {
+            var x509Cert = ParseCertificate(certificateData);
+            var thumbprint = x509Cert.Thumbprint;
+
+            if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
+                throw new InvalidOperationException($"A certificate with thumbprint {thumbprint} already exists in the store.");
+
+            var certificate = new TrustedCertificate
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                Thumbprint = thumbprint,
+                Subject = x509Cert.Subject,
+                Issuer = x509Cert.Issuer,
+                SerialNumber = x509Cert.SerialNumber,
+                ValidFrom = x509Cert.NotBefore.ToUniversalTime(),
+                ValidTo = x509Cert.NotAfter.ToUniversalTime(),
+                SourceType = CertificateSourceType.Uploaded,
+                CertificateData = certificateData,
+                FilePath = null,
+                IsEnabled = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = initiatedBy?.DisplayName,
+                Notes = notes
+            };
+
+            Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from uploaded data", name, thumbprint);
+            var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
+
+            activity.Message = $"Added trusted certificate '{name}' (Subject: {x509Cert.Subject})";
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
     /// Adds a certificate from a file path in the connector-files mount.
     /// </summary>
-    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, string? notes = null, string? createdBy = null)
+    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, MetaverseObject? initiatedBy = null, string? notes = null)
     {
-        // Validate the file path exists and load the certificate
-        if (!File.Exists(filePath))
-            throw new FileNotFoundException($"Certificate file not found: {filePath}");
-
-        var certificateData = await File.ReadAllBytesAsync(filePath);
-        var x509Cert = ParseCertificate(certificateData);
-        var thumbprint = x509Cert.Thumbprint;
-
-        if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
-            throw new InvalidOperationException($"A certificate with thumbprint {thumbprint} already exists in the store.");
-
-        var certificate = new TrustedCertificate
+        var activity = new Activity
         {
-            Id = Guid.NewGuid(),
-            Name = name,
-            Thumbprint = thumbprint,
-            Subject = x509Cert.Subject,
-            Issuer = x509Cert.Issuer,
-            SerialNumber = x509Cert.SerialNumber,
-            ValidFrom = x509Cert.NotBefore.ToUniversalTime(),
-            ValidTo = x509Cert.NotAfter.ToUniversalTime(),
-            SourceType = CertificateSourceType.FilePath,
-            CertificateData = null,
-            FilePath = filePath,
-            IsEnabled = true,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = createdBy,
-            Notes = notes
+            TargetName = name,
+            TargetType = ActivityTargetType.TrustedCertificate,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            Message = $"Adding trusted certificate from file path: {filePath}"
         };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from file path: {FilePath}", name, thumbprint, filePath);
-        return await Application.Repository.TrustedCertificates.CreateAsync(certificate);
+        try
+        {
+            // Validate the file path exists and load the certificate
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException($"Certificate file not found: {filePath}");
+
+            var certificateData = await File.ReadAllBytesAsync(filePath);
+            var x509Cert = ParseCertificate(certificateData);
+            var thumbprint = x509Cert.Thumbprint;
+
+            if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
+                throw new InvalidOperationException($"A certificate with thumbprint {thumbprint} already exists in the store.");
+
+            var certificate = new TrustedCertificate
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                Thumbprint = thumbprint,
+                Subject = x509Cert.Subject,
+                Issuer = x509Cert.Issuer,
+                SerialNumber = x509Cert.SerialNumber,
+                ValidFrom = x509Cert.NotBefore.ToUniversalTime(),
+                ValidTo = x509Cert.NotAfter.ToUniversalTime(),
+                SourceType = CertificateSourceType.FilePath,
+                CertificateData = null,
+                FilePath = filePath,
+                IsEnabled = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = initiatedBy?.DisplayName,
+                Notes = notes
+            };
+
+            Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from file path: {FilePath}", name, thumbprint, filePath);
+            var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
+
+            activity.Message = $"Added trusted certificate '{name}' from file (Subject: {x509Cert.Subject})";
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
     /// Updates a trusted certificate's editable properties (name, notes, enabled state).
     /// </summary>
-    public async Task UpdateAsync(Guid id, string? name = null, string? notes = null, bool? isEnabled = null)
+    public async Task UpdateAsync(Guid id, MetaverseObject? initiatedBy = null, string? name = null, string? notes = null, bool? isEnabled = null)
     {
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id)
             ?? throw new InvalidOperationException($"Certificate with ID {id} not found.");
 
-        if (name != null)
-            certificate.Name = name;
-        if (notes != null)
-            certificate.Notes = notes;
-        if (isEnabled.HasValue)
-            certificate.IsEnabled = isEnabled.Value;
+        var activity = new Activity
+        {
+            TargetName = certificate.Name,
+            TargetType = ActivityTargetType.TrustedCertificate,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            Message = $"Updating trusted certificate '{certificate.Name}'"
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        Log.Information("Updating trusted certificate '{Name}' (ID: {Id})", certificate.Name, id);
-        await Application.Repository.TrustedCertificates.UpdateAsync(certificate);
+        try
+        {
+            var changes = new List<string>();
+
+            if (name != null && name != certificate.Name)
+            {
+                changes.Add($"Name: '{certificate.Name}' → '{name}'");
+                certificate.Name = name;
+            }
+            if (notes != null && notes != certificate.Notes)
+            {
+                changes.Add("Notes updated");
+                certificate.Notes = notes;
+            }
+            if (isEnabled.HasValue && isEnabled.Value != certificate.IsEnabled)
+            {
+                changes.Add($"Enabled: {certificate.IsEnabled} → {isEnabled.Value}");
+                certificate.IsEnabled = isEnabled.Value;
+            }
+
+            Log.Information("Updating trusted certificate '{Name}' (ID: {Id})", certificate.Name, id);
+            await Application.Repository.TrustedCertificates.UpdateAsync(certificate);
+
+            activity.Message = changes.Count > 0
+                ? $"Updated trusted certificate: {string.Join(", ", changes)}"
+                : "No changes made to trusted certificate";
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
     /// Deletes a trusted certificate from the store.
     /// </summary>
-    public async Task DeleteAsync(Guid id)
+    public async Task DeleteAsync(Guid id, MetaverseObject? initiatedBy = null)
     {
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id);
-        if (certificate != null)
-        {
-            Log.Information("Deleting trusted certificate '{Name}' (ID: {Id})", certificate.Name, id);
-        }
+        var certificateName = certificate?.Name ?? $"Unknown (ID: {id})";
 
-        await Application.Repository.TrustedCertificates.DeleteAsync(id);
+        var activity = new Activity
+        {
+            TargetName = certificateName,
+            TargetType = ActivityTargetType.TrustedCertificate,
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            Message = $"Deleting trusted certificate '{certificateName}'"
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        try
+        {
+            if (certificate != null)
+            {
+                Log.Information("Deleting trusted certificate '{Name}' (ID: {Id})", certificate.Name, id);
+            }
+
+            await Application.Repository.TrustedCertificates.DeleteAsync(id);
+
+            activity.Message = $"Deleted trusted certificate '{certificateName}'";
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -254,14 +355,4 @@ public class CertificateServer
             return X509Certificate2.CreateFromPem(pemString);
         }
     }
-}
-
-/// <summary>
-/// Result of certificate validation.
-/// </summary>
-public class CertificateValidationResult
-{
-    public bool IsValid { get; set; }
-    public List<string> Errors { get; set; } = new();
-    public List<string> Warnings { get; set; } = new();
 }

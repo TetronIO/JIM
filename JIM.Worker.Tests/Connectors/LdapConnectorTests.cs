@@ -1,6 +1,9 @@
 using JIM.Connectors.LDAP;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using Moq;
 using NUnit.Framework;
+using System.Security.Cryptography.X509Certificates;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -238,6 +241,7 @@ public class LdapConnectorTests
         Assert.That(certValidationSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
         Assert.That(certValidationSetting.DropDownValues, Does.Contain("Full Validation"));
         Assert.That(certValidationSetting.DropDownValues, Does.Contain("Skip Validation (Not Recommended)"));
+        Assert.That(certValidationSetting.DropDownValues!.Count, Is.EqualTo(2));
         Assert.That(certValidationSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
     }
 
@@ -336,6 +340,55 @@ public class LdapConnectorTests
         connector.Dispose();
         connector.Dispose();
         connector.Dispose();
+    }
+
+    #endregion
+
+    #region IConnectorCertificateAware tests
+
+    [Test]
+    public void Connector_ImplementsIConnectorCertificateAware()
+    {
+        Assert.That(_connector, Is.InstanceOf<IConnectorCertificateAware>());
+    }
+
+    [Test]
+    public void SetCertificateProvider_WithNullProvider_DoesNotThrow()
+    {
+        var certificateAwareConnector = (IConnectorCertificateAware)_connector;
+
+        // Should not throw
+        Assert.DoesNotThrow(() => certificateAwareConnector.SetCertificateProvider(null));
+    }
+
+    [Test]
+    public void SetCertificateProvider_WithValidProvider_DoesNotThrow()
+    {
+        var mockProvider = new Mock<ICertificateProvider>();
+        mockProvider.Setup(p => p.GetTrustedCertificatesAsync())
+            .ReturnsAsync(new List<X509Certificate2>());
+
+        var certificateAwareConnector = (IConnectorCertificateAware)_connector;
+
+        // Should not throw
+        Assert.DoesNotThrow(() => certificateAwareConnector.SetCertificateProvider(mockProvider.Object));
+    }
+
+    [Test]
+    public void SetCertificateProvider_CanBeCalledMultipleTimes()
+    {
+        var mockProvider1 = new Mock<ICertificateProvider>();
+        var mockProvider2 = new Mock<ICertificateProvider>();
+
+        var certificateAwareConnector = (IConnectorCertificateAware)_connector;
+
+        // Should not throw when called multiple times
+        Assert.DoesNotThrow(() =>
+        {
+            certificateAwareConnector.SetCertificateProvider(mockProvider1.Object);
+            certificateAwareConnector.SetCertificateProvider(mockProvider2.Object);
+            certificateAwareConnector.SetCertificateProvider(null);
+        });
     }
 
     #endregion
