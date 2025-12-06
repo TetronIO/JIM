@@ -9,6 +9,7 @@ public class JimApplication
     internal IRepository Repository { get; }
     private SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
+    public CertificateServer Certificates { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
     public DataGenerationServer DataGeneration { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
@@ -22,6 +23,7 @@ public class JimApplication
     public JimApplication(IRepository dataRepository)
     {
         Activities = new ActivityServer(this);
+        Certificates = new CertificateServer(this);
         ConnectedSystems = new ConnectedSystemServer(this);
         DataGeneration = new DataGenerationServer(this);
         ExportEvaluation = new ExportEvaluationServer(this);
@@ -40,12 +42,13 @@ public class JimApplication
     /// Ensures that JIM is fully deployed and seeded, i.e. database migrations have been performed
     /// and data needed to run the service has been created.
     /// Only the primary JIM application instance should run this task on startup. Secondary app instances
-    /// must not run it, or conflicts are likely to occur. 
+    /// must not run it, or conflicts are likely to occur.
     /// </summary>
     public async Task InitialiseDatabaseAsync()
     {
         await Repository.InitialiseDatabaseAsync();
         await Seeding.SeedAsync();
+        await Seeding.SyncBuiltInConnectorDefinitionsAsync();
         await Repository.InitialisationCompleteAsync();
     }
 

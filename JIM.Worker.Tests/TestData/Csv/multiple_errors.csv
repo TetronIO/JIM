@@ -1,0 +1,4 @@
+Id,Name,Age,StartDate,IsActive
+abc,John Smith,30,2023-01-15,true
+2,Jane Doe,twenty-five,2023-03-20,true
+3,Bob Wilson,45,not-a-date,false

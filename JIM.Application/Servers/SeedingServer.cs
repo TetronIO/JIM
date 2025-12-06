@@ -556,6 +556,159 @@ internal class SeedingServer
         Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
     }
 
+    /// <summary>
+    /// Synchronises built-in connector definitions with the latest settings from the connector code.
+    /// This should be called on every application startup to ensure connector settings are up-to-date.
+    /// Unlike SeedAsync, this method updates existing connector definitions when their settings change.
+    /// </summary>
+    internal async Task SyncBuiltInConnectorDefinitionsAsync()
+    {
+        var stopwatch = new Stopwatch();
+        stopwatch.Start();
+        Log.Information("SyncBuiltInConnectorDefinitionsAsync: Starting built-in connector definition synchronisation...");
+
+        var connectors = new List<IConnector>
+        {
+            new LdapConnector(),
+            new FileConnector()
+        };
+
+        foreach (var connector in connectors)
+        {
+            await SyncConnectorDefinitionAsync(connector);
+        }
+
+        stopwatch.Stop();
+        Log.Information($"SyncBuiltInConnectorDefinitionsAsync: Completed in: {stopwatch.Elapsed}");
+    }
+
+    /// <summary>
+    /// Synchronises a single connector definition with the latest settings from the connector code.
+    /// Updates settings if they have changed (e.g., category, description, default values).
+    /// </summary>
+    private async Task SyncConnectorDefinitionAsync(IConnector connector)
+    {
+        var connectorCapabilities = (IConnectorCapabilities)connector;
+        var connectorSettings = (IConnectorSettings)connector;
+
+        var existingDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name);
+        if (existingDefinition == null)
+        {
+            Log.Debug($"SyncConnectorDefinitionAsync: Connector '{connector.Name}' not found in database, skipping sync (will be created during seeding)");
+            return;
+        }
+
+        var latestSettings = connectorSettings.GetSettings();
+        var hasChanges = false;
+
+        // First, remove any duplicate settings (settings with the same name)
+        // This can happen if a previous sync added settings without properly loading existing ones
+        var duplicateSettings = existingDefinition.Settings
+            .GroupBy(s => s.Name)
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g.Skip(1)) // Keep the first, remove the rest
+            .ToList();
+
+        foreach (var duplicate in duplicateSettings)
+        {
+            existingDefinition.Settings.Remove(duplicate);
+            hasChanges = true;
+            Log.Information($"SyncConnectorDefinitionAsync: Removed duplicate setting '{duplicate.Name}' from '{connector.Name}'");
+        }
+
+        // Update capability flags
+        if (existingDefinition.SupportsFullImport != connectorCapabilities.SupportsFullImport ||
+            existingDefinition.SupportsDeltaImport != connectorCapabilities.SupportsDeltaImport ||
+            existingDefinition.SupportsExport != connectorCapabilities.SupportsExport ||
+            existingDefinition.SupportsPartitions != connectorCapabilities.SupportsPartitions ||
+            existingDefinition.SupportsPartitionContainers != connectorCapabilities.SupportsPartitionContainers ||
+            existingDefinition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
+            existingDefinition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
+            existingDefinition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
+            existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport)
+        {
+            existingDefinition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
+            existingDefinition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
+            existingDefinition.SupportsExport = connectorCapabilities.SupportsExport;
+            existingDefinition.SupportsPartitions = connectorCapabilities.SupportsPartitions;
+            existingDefinition.SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers;
+            existingDefinition.SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId;
+            existingDefinition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
+            existingDefinition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
+            existingDefinition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
+            hasChanges = true;
+            Log.Information($"SyncConnectorDefinitionAsync: Updated capability flags for '{connector.Name}'");
+        }
+
+        // Sync settings - update existing and add new ones
+        foreach (var latestSetting in latestSettings)
+        {
+            var existingSetting = existingDefinition.Settings.FirstOrDefault(s => s.Name == latestSetting.Name);
+            if (existingSetting == null)
+            {
+                // Add new setting
+                existingDefinition.Settings.Add(new ConnectorDefinitionSetting
+                {
+                    Category = latestSetting.Category,
+                    DefaultCheckboxValue = latestSetting.DefaultCheckboxValue,
+                    DefaultStringValue = latestSetting.DefaultStringValue,
+                    DefaultIntValue = latestSetting.DefaultIntValue,
+                    Description = latestSetting.Description,
+                    DropDownValues = latestSetting.DropDownValues,
+                    Name = latestSetting.Name,
+                    Type = latestSetting.Type,
+                    Required = latestSetting.Required
+                });
+                hasChanges = true;
+                Log.Information($"SyncConnectorDefinitionAsync: Added new setting '{latestSetting.Name}' for '{connector.Name}'");
+            }
+            else
+            {
+                // Update existing setting if changed
+                if (existingSetting.Category != latestSetting.Category ||
+                    existingSetting.Description != latestSetting.Description ||
+                    existingSetting.Type != latestSetting.Type ||
+                    existingSetting.Required != latestSetting.Required ||
+                    existingSetting.DefaultCheckboxValue != latestSetting.DefaultCheckboxValue ||
+                    existingSetting.DefaultStringValue != latestSetting.DefaultStringValue ||
+                    existingSetting.DefaultIntValue != latestSetting.DefaultIntValue)
+                {
+                    existingSetting.Category = latestSetting.Category;
+                    existingSetting.Description = latestSetting.Description;
+                    existingSetting.Type = latestSetting.Type;
+                    existingSetting.Required = latestSetting.Required;
+                    existingSetting.DefaultCheckboxValue = latestSetting.DefaultCheckboxValue;
+                    existingSetting.DefaultStringValue = latestSetting.DefaultStringValue;
+                    existingSetting.DefaultIntValue = latestSetting.DefaultIntValue;
+                    hasChanges = true;
+                    Log.Information($"SyncConnectorDefinitionAsync: Updated setting '{latestSetting.Name}' for '{connector.Name}'");
+                }
+            }
+        }
+
+        // Remove settings that no longer exist in the connector
+        var settingsToRemove = existingDefinition.Settings
+            .Where(s => !latestSettings.Any(ls => ls.Name == s.Name))
+            .ToList();
+
+        foreach (var settingToRemove in settingsToRemove)
+        {
+            existingDefinition.Settings.Remove(settingToRemove);
+            hasChanges = true;
+            Log.Information($"SyncConnectorDefinitionAsync: Removed obsolete setting '{settingToRemove.Name}' from '{connector.Name}'");
+        }
+
+        if (hasChanges)
+        {
+            await Application.ConnectedSystems.UpdateConnectorDefinitionAsync(existingDefinition);
+            Log.Information($"SyncConnectorDefinitionAsync: Saved changes for '{connector.Name}'");
+        }
+        else
+        {
+            Log.Debug($"SyncConnectorDefinitionAsync: No changes detected for '{connector.Name}'");
+        }
+    }
+
     #region private methods
     private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> attributeList)
     {
@@ -654,7 +807,8 @@ internal class SeedingServer
             SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
             SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
             SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
-            SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes
+            SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes,
+            SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport
         };
 
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);

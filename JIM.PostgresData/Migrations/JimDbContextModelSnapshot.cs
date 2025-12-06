@@ -454,6 +454,67 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ServiceSettings");
                 });
 
+            modelBuilder.Entity("JIM.Models.Core.TrustedCertificate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("CertificateData")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SerialNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Thumbprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ValidFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ValidTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Thumbprint")
+                        .IsUnique();
+
+                    b.ToTable("TrustedCertificates");
+                });
+
             modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationObjectType", b =>
                 {
                     b.Property<int>("Id")
@@ -1695,6 +1756,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("SupportsAutoConfirmExport")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsDeltaImport")
                         .HasColumnType("boolean");

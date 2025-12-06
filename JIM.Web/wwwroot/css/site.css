@@ -35,6 +35,11 @@ html, body {
 
 .jim-drawer {
     border-right: 1px solid var(--mud-palette-lines-default);
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    overflow-y: auto;
 }
 
 .jim-drawer-logo img {
@@ -66,4 +71,52 @@ html, body {
 
 .jim-nowrap {
     white-space: nowrap;
+}
+
+/* Navigation menu styling - top-level items */
+.jim-nav-menu > .jim-nav-top-level > .mud-nav-link-text,
+.jim-nav-menu > .jim-nav-top-level > button > .mud-nav-link-text {
+    font-weight: 600;
+    color: var(--mud-palette-primary);
+}
+
+/* Ensure icon colour matches for top-level items */
+.jim-nav-menu > .jim-nav-top-level > .mud-nav-link-icon,
+.jim-nav-menu > .jim-nav-top-level > button > .mud-icon-root {
+    color: var(--mud-palette-primary);
+}
+
+/* Child nav items - keep default styling (lighter weight, secondary colour) */
+.jim-nav-menu .mud-navmenu-list .mud-nav-link-text {
+    font-weight: 400;
+}
+
+/* Improve contrast for form labels and helper text (WCAG AA compliance) */
+
+/* Input labels - ensure high contrast for readability */
+.mud-input-label,
+.mud-input-label-outlined,
+.mud-input-label-filled {
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 1 !important;
+    font-weight: 500;
+}
+
+/* Helper text below inputs - needs adequate contrast */
+.mud-input-helper-text {
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 0.8 !important;
+}
+
+/* Switch/checkbox label text */
+.mud-switch .mud-switch-label,
+.mud-checkbox .mud-checkbox-label {
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 1 !important;
+}
+
+/* Description text below switches/checkboxes */
+.mud-text-secondary {
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 0.8 !important;
 }

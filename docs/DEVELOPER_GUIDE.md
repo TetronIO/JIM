@@ -394,6 +394,8 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply EF Core migrations
 - `jim-stack` - Start full Docker stack (all services containerised)
+- `jim-stack-build` - Rebuild and start Docker stack (use after code changes)
+- `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop full Docker stack
 
 **Development Workflows**:
@@ -507,7 +509,7 @@ These mappings are already pre-configured in the respective `docker-compose.over
    jim-stack-down && jim-stack
    ```
 
-4. **In the JIM UI**, enter the **container path** for "Example File Path":
+4. **In the JIM UI**, enter the **container path** for "Import File Path":
    ```
    /var/connector-files/Users.csv
    ```
@@ -518,7 +520,7 @@ When creating a Connected System with the File Connector:
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| **Example File Path** | Container path to CSV file for schema discovery | `/var/connector-files/Users.csv` |
+| **Import File Path** | Container path to the CSV file to import | `/var/connector-files/Users.csv` |
 | **Object Type Column** | Column containing object type (optional) | `Type` |
 | **Object Type** | Fixed object type if file contains single type (optional) | `User` |
 | **Delimiter** | CSV delimiter character | `,` (default) |
@@ -527,7 +529,7 @@ When creating a Connected System with the File Connector:
 ### Schema Discovery
 
 When you retrieve the schema, the File Connector:
-1. Opens the CSV file at the "Example File Path"
+1. Opens the CSV file at the "Import File Path"
 2. Reads column headers as attribute names
 3. Inspects up to 50 rows to detect data types (Text, Number, Boolean, Guid, DateTime)
 4. Detects multi-valued attributes (duplicate column names)
@@ -535,8 +537,7 @@ When you retrieve the schema, the File Connector:
 ### Run Profile Configuration
 
 When creating a Run Profile for the File Connector:
-- **File Path**: Container path to the file to import (can differ from Example File Path)
-- The connector reads this file during import operations
+- The connector reads the file specified in "Import File Path" during import operations
 
 ### Troubleshooting
 

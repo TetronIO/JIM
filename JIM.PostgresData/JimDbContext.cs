@@ -65,6 +65,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
+    public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
     private readonly string _connectionString;
@@ -200,5 +201,10 @@ public class JimDbContext : DbContext
         // Index for efficient deferred reference lookup
         modelBuilder.Entity<DeferredReference>()
             .HasIndex(dr => new { dr.TargetMvoId, dr.TargetSystemId });
+
+        // TrustedCertificate: unique index on Thumbprint to prevent duplicates
+        modelBuilder.Entity<TrustedCertificate>()
+            .HasIndex(tc => tc.Thumbprint)
+            .IsUnique();
     }
 }

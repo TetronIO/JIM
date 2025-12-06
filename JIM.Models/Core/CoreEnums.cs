@@ -50,3 +50,19 @@ public enum MetaverseObjectDeletionRule
     /// </summary>
     WhenLastConnectorDisconnected = 1
 }
+
+/// <summary>
+/// Specifies how a trusted certificate was added to the certificate store.
+/// </summary>
+public enum CertificateSourceType
+{
+    /// <summary>
+    /// Certificate was uploaded and stored in the database.
+    /// </summary>
+    Uploaded = 0,
+
+    /// <summary>
+    /// Certificate is referenced by file path in the connector-files mount.
+    /// </summary>
+    FilePath = 1
+}

@@ -1,0 +1,518 @@
+@page "/admin/certificates"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Core.DTOs
+@using JIM.Web
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Trusted Certificates</PageTitle>
+<MudText Typo="Typo.h4">Trusted Certificates</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    Manage trusted CA certificates used by connectors for secure communications (LDAPS, HTTPS, etc.).
+    Certificates can be uploaded directly or referenced from the connector-files mount.
+</MudText>
+
+<MudPaper Elevation="0" Class="mt-5 pa-4" Outlined="true">
+    <MudText Typo="Typo.h6">Add Certificate</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+        Choose how to add a certificate to the store.
+    </MudText>
+    <MudButtonGroup Variant="Variant.Outlined" Class="mt-3" DropShadow="false">
+        <MudButton OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload">Upload Certificate</MudButton>
+        <MudButton OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder">Reference File Path</MudButton>
+    </MudButtonGroup>
+</MudPaper>
+
+<MudTable Items="@_certificates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
+          Filter="new Func<TrustedCertificate,bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Certificates</MudText>
+        <MudSpacer />
+        <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Actions</MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Subject)"><MudText Typo="Typo.button">Subject</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.SourceType)"><MudText Typo="Typo.button">Source</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.ValidTo)"><MudText Typo="Typo.button">Expires</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.IsEnabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context)">View Details</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete</MudMenuItem>
+            </MudMenu>
+        </MudTd>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Subject">
+            <MudTooltip Text="@context.Subject">
+                <MudText Typo="Typo.body2">@TruncateSubject(context.Subject)</MudText>
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Source">
+            @if (context.SourceType == CertificateSourceType.Uploaded)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">Uploaded</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">File Path</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Expires">
+            @if (context.IsExpired)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">Expired</MudChip>
+            }
+            else if (context.IsExpiringSoon)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.DaysUntilExpiry days</MudChip>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">@context.ValidTo.ToString("yyyy-MM-dd")</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            @if (context.IsEnabled)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">Enabled</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">Disabled</MudChip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No trusted certificates have been added yet.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@* Upload Certificate Dialog *@
+<MudDialog @bind-Visible="_uploadDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Upload" Class="mr-3" /> Upload Certificate
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField T="string" @bind-Value="_uploadName" Label="Name" Required="true"
+                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+                      HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
+        <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5">
+                    @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Supported formats: PEM (.pem, .crt) or DER (.cer, .der)
+        </MudText>
+        <MudTextField T="string" @bind-Value="_uploadNotes" Label="Notes" Lines="3"
+                      Variant="Variant.Outlined" Class="mt-5"
+                      HelperText="Optional notes about this certificate" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _uploadDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
+                   Disabled="@(string.IsNullOrWhiteSpace(_uploadName) || _uploadFile == null || _uploading)"
+                   OnClick="HandleUploadAsync">
+            @if (_uploading)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Uploading</MudText>
+            }
+            else
+            {
+                <MudText>Upload</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* File Path Dialog *@
+<MudDialog @bind-Visible="_filePathDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Folder" Class="mr-3" /> Reference Certificate File
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField T="string" @bind-Value="_filePathName" Label="Name" Required="true"
+                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+                      HelperText="A friendly name for this certificate" />
+        <MudTextField T="string" @bind-Value="_filePath" Label="File Path" Required="true"
+                      RequiredError="A file path is required" Variant="Variant.Outlined" Class="mt-5"
+                      HelperText="Full path to the certificate file (e.g., /var/connector-files/certs/root-ca.pem)" />
+        <MudTextField T="string" @bind-Value="_filePathNotes" Label="Notes" Lines="3"
+                      Variant="Variant.Outlined" Class="mt-5"
+                      HelperText="Optional notes about this certificate" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _filePathDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
+                   Disabled="@(string.IsNullOrWhiteSpace(_filePathName) || string.IsNullOrWhiteSpace(_filePath) || _addingFromPath)"
+                   OnClick="HandleAddFromPathAsync">
+            @if (_addingFromPath)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Adding</MudText>
+            }
+            else
+            {
+                <MudText>Add Certificate</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Details Dialog *@
+<MudDialog @bind-Visible="_detailsDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-3" /> Certificate Details
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedCertificate != null)
+        {
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudField Label="Name" Variant="Variant.Outlined">@_selectedCertificate.Name</MudField>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudField Label="Subject" Variant="Variant.Outlined">@_selectedCertificate.Subject</MudField>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudField Label="Issuer" Variant="Variant.Outlined">@_selectedCertificate.Issuer</MudField>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudField Label="Valid From" Variant="Variant.Outlined">@_selectedCertificate.ValidFrom.ToString("yyyy-MM-dd HH:mm:ss")</MudField>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudField Label="Valid To" Variant="Variant.Outlined">@_selectedCertificate.ValidTo.ToString("yyyy-MM-dd HH:mm:ss")</MudField>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudField Label="Thumbprint" Variant="Variant.Outlined">@_selectedCertificate.Thumbprint</MudField>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudField Label="Serial Number" Variant="Variant.Outlined">@_selectedCertificate.SerialNumber</MudField>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudField Label="Source Type" Variant="Variant.Outlined">@_selectedCertificate.SourceType</MudField>
+                </MudItem>
+                @if (_selectedCertificate.SourceType == CertificateSourceType.FilePath)
+                {
+                    <MudItem xs="12">
+                        <MudField Label="File Path" Variant="Variant.Outlined">@_selectedCertificate.FilePath</MudField>
+                    </MudItem>
+                }
+                <MudItem xs="6">
+                    <MudField Label="Created At" Variant="Variant.Outlined">@_selectedCertificate.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</MudField>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudField Label="Created By" Variant="Variant.Outlined">@(_selectedCertificate.CreatedBy ?? "-")</MudField>
+                </MudItem>
+                @if (!string.IsNullOrEmpty(_selectedCertificate.Notes))
+                {
+                    <MudItem xs="12">
+                        <MudField Label="Notes" Variant="Variant.Outlined">@_selectedCertificate.Notes</MudField>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _detailsDialogVisible = false" DropShadow="false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Edit Dialog *@
+<MudDialog @bind-Visible="_editDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Certificate
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true"
+                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3" />
+        <MudTextField T="string" @bind-Value="_editNotes" Label="Notes" Lines="3"
+                      Variant="Variant.Outlined" Class="mt-5" />
+        <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="Enabled" Class="mt-5" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
+                   Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)"
+                   OnClick="HandleSaveEditAsync">
+            @if (_saving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Saving</MudText>
+            }
+            else
+            {
+                <MudText>Save Changes</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private List<TrustedCertificate>? _certificates;
+    private string _searchString = "";
+    private bool _loading = true;
+
+    private readonly List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Admin", href: "/admin/operations"),
+        new("Certificates", href: null, disabled: true)
+    };
+
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
+
+    // Upload dialog
+    private bool _uploadDialogVisible;
+    private string _uploadName = "";
+    private IBrowserFile? _uploadFile;
+    private string _uploadNotes = "";
+    private bool _uploading;
+
+    // File path dialog
+    private bool _filePathDialogVisible;
+    private string _filePathName = "";
+    private string _filePath = "";
+    private string _filePathNotes = "";
+    private bool _addingFromPath;
+
+    // Details dialog
+    private bool _detailsDialogVisible;
+    private TrustedCertificate? _selectedCertificate;
+
+    // Edit dialog
+    private bool _editDialogVisible;
+    private TrustedCertificate? _editingCertificate;
+    private string _editName = "";
+    private string _editNotes = "";
+    private bool _editEnabled;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCertificatesAsync();
+    }
+
+    private async Task LoadCertificatesAsync()
+    {
+        _loading = true;
+        _certificates = await Jim.Certificates.GetAllAsync();
+        _loading = false;
+    }
+
+    private bool FilterFunc(TrustedCertificate element)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        if (element.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (element.Subject.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (element.Thumbprint.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    private static string TruncateSubject(string subject)
+    {
+        if (string.IsNullOrEmpty(subject))
+            return subject;
+
+        // Try to extract CN
+        var cnIndex = subject.IndexOf("CN=", StringComparison.OrdinalIgnoreCase);
+        if (cnIndex >= 0)
+        {
+            var cnEnd = subject.IndexOf(',', cnIndex);
+            if (cnEnd < 0) cnEnd = subject.Length;
+            var cn = subject.Substring(cnIndex + 3, cnEnd - cnIndex - 3);
+            return cn.Length > 40 ? cn[..37] + "..." : cn;
+        }
+
+        return subject.Length > 40 ? subject[..37] + "..." : subject;
+    }
+
+    private void ShowUploadDialog()
+    {
+        _uploadName = "";
+        _uploadFile = null;
+        _uploadNotes = "";
+        _uploadDialogVisible = true;
+    }
+
+    private void ShowFilePathDialog()
+    {
+        _filePathName = "";
+        _filePath = "";
+        _filePathNotes = "";
+        _filePathDialogVisible = true;
+    }
+
+    private void ShowDetailsDialog(TrustedCertificate certificate)
+    {
+        _selectedCertificate = certificate;
+        _detailsDialogVisible = true;
+    }
+
+    private void ShowEditDialog(TrustedCertificate certificate)
+    {
+        _editingCertificate = certificate;
+        _editName = certificate.Name;
+        _editNotes = certificate.Notes ?? "";
+        _editEnabled = certificate.IsEnabled;
+        _editDialogVisible = true;
+    }
+
+    private void HandleFileSelected(IBrowserFile file)
+    {
+        _uploadFile = file;
+    }
+
+    private async Task HandleUploadAsync()
+    {
+        if (_uploadFile == null || string.IsNullOrWhiteSpace(_uploadName))
+            return;
+
+        _uploading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Read file content
+            using var stream = _uploadFile.OpenReadStream(maxAllowedSize: 1024 * 1024); // 1MB max
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var certificateData = ms.ToArray();
+
+            // Get current user
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+            // Add certificate
+            await Jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes);
+
+            Snackbar.Add("Certificate uploaded successfully.", Severity.Success);
+            _uploadDialogVisible = false;
+            await LoadCertificatesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to upload certificate: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task HandleAddFromPathAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_filePathName) || string.IsNullOrWhiteSpace(_filePath))
+            return;
+
+        _addingFromPath = true;
+        StateHasChanged();
+
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            await Jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes);
+
+            Snackbar.Add("Certificate added successfully.", Severity.Success);
+            _filePathDialogVisible = false;
+            await LoadCertificatesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to add certificate: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _addingFromPath = false;
+        }
+    }
+
+    private async Task HandleSaveEditAsync()
+    {
+        if (_editingCertificate == null || string.IsNullOrWhiteSpace(_editName))
+            return;
+
+        _saving = true;
+        StateHasChanged();
+
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            await Jim.Certificates.UpdateAsync(
+                _editingCertificate.Id,
+                user,
+                _editName,
+                _editNotes,
+                _editEnabled);
+
+            Snackbar.Add("Certificate updated successfully.", Severity.Success);
+            _editDialogVisible = false;
+            await LoadCertificatesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to update certificate: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task HandleDeleteAsync(TrustedCertificate certificate)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Delete Certificate",
+            $"Are you sure you want to delete the certificate '{certificate.Name}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (result != true)
+            return;
+
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            await Jim.Certificates.DeleteAsync(certificate.Id, user);
+
+            Snackbar.Add("Certificate deleted successfully.", Severity.Success);
+            await LoadCertificatesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to delete certificate: {ex.Message}", Severity.Error);
+        }
+    }
+}

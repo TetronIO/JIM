@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="JIM.Worker.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="CSV\**" />
     <EmbeddedResource Remove="CSV\**" />
     <None Remove="CSV\**" />

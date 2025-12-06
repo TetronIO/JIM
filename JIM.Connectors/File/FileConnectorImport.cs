@@ -10,18 +10,24 @@ internal class FileConnectorImport
     private readonly ConnectedSystem _connectedSystem;
     private readonly FileConnectorReader _reader;
     private readonly FileConnectorObjectTypeInfo _objectTypeInfo;
+    private readonly bool _stopOnFirstError;
+    private readonly string _multiValueDelimiter;
     private readonly ILogger _logger;
 
     internal FileConnectorImport(
         ConnectedSystem connectedSystem,
         FileConnectorReader reader,
         FileConnectorObjectTypeInfo objectTypeInfo,
+        bool stopOnFirstError,
+        string multiValueDelimiter,
         ILogger logger,
         CancellationToken cancellationToken)
     {
         _connectedSystem = connectedSystem;
         _reader = reader;
         _objectTypeInfo = objectTypeInfo;
+        _stopOnFirstError = stopOnFirstError;
+        _multiValueDelimiter = multiValueDelimiter;
         _logger = logger;
         _cancellationToken = cancellationToken;
     }
@@ -67,10 +73,16 @@ internal class FileConnectorImport
             var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
             if (objectType == null)
             {
-                // TODO: add a connected system setting that allows for the run to be stopped at the first error received, to avoid generating huge numbers of activity items.
                 importObject.ErrorType = ConnectedSystemImportObjectError.CouldNotDetermineObjectType;
                 importObject.ErrorMessage = $"GetFullImportObjects: Couldn't match object type '{importObject.ObjectType}' to the one(s) selected in the schema.";
                 result.ImportObjects.Add(importObject);
+
+                if (_stopOnFirstError)
+                {
+                    _logger.Information("GetFullImportObjects: Stop on first error enabled. Stopping after object type error.");
+                    return FinaliseResult(result, stopwatch);
+                }
+
                 continue;
             }
 
@@ -83,50 +95,120 @@ internal class FileConnectorImport
             // enumerate the schema and extract the field from the csv row
             foreach (var attribute in objectType.Attributes.Where(q => q.Selected))
             {
-                if (attribute.AttributePlurality != AttributePlurality.SingleValued)
-                {
-                    // do not know how to read multi-value fields using CsvReader at the moment, despite mentions 
-                    // of it in the documentation, so cannot support MVAs for now.
-                    throw new NotSupportedException("Multi-valued attributes are not currently supported with this Connector.");
-                }
-
                 var importObjectAttribute = new ConnectedSystemImportObjectAttribute
                 {
                     Name = attribute.Name,
                     Type = attribute.Type
                 };
 
-                if (attribute.Type == AttributeDataType.Text)
+                var isMultiValued = attribute.AttributePlurality == AttributePlurality.MultiValued;
+
+                try
                 {
-                    var stringValue = _reader.CsvReader.GetField(attribute.Name);
-                    if (!string.IsNullOrEmpty(stringValue))
-                        importObjectAttribute.StringValues.Add(stringValue);
+                    if (attribute.Type == AttributeDataType.Text)
+                    {
+                        var stringValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (!string.IsNullOrEmpty(stringValue))
+                        {
+                            if (isMultiValued)
+                            {
+                                // Split by configured delimiter for multi-valued text attributes
+                                var values = stringValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                importObjectAttribute.StringValues.AddRange(values);
+                            }
+                            else
+                            {
+                                importObjectAttribute.StringValues.Add(stringValue);
+                            }
+                        }
+                    }
+                    else if (attribute.Type == AttributeDataType.Number)
+                    {
+                        var fieldValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (isMultiValued && !string.IsNullOrEmpty(fieldValue))
+                        {
+                            var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            foreach (var value in values)
+                            {
+                                if (int.TryParse(value, out var intValue))
+                                    importObjectAttribute.IntValues.Add(intValue);
+                                else
+                                    throw new FormatException($"Cannot parse '{value}' as integer");
+                            }
+                        }
+                        else
+                        {
+                            importObjectAttribute.IntValues.Add(_reader.CsvReader.GetField<int>(attribute.Name));
+                        }
+                    }
+                    else if (attribute.Type == AttributeDataType.DateTime)
+                    {
+                        importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
+                    }
+                    else if (attribute.Type == AttributeDataType.Boolean)
+                    {
+                        importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
+                    }
+                    else if (attribute.Type == AttributeDataType.Guid)
+                    {
+                        var fieldValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (isMultiValued && !string.IsNullOrEmpty(fieldValue))
+                        {
+                            var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            foreach (var value in values)
+                            {
+                                if (Guid.TryParse(value, out var guidValue))
+                                    importObjectAttribute.GuidValues.Add(guidValue);
+                                else
+                                    throw new FormatException($"Cannot parse '{value}' as GUID");
+                            }
+                        }
+                        else if (!string.IsNullOrEmpty(fieldValue))
+                        {
+                            importObjectAttribute.GuidValues.Add(_reader.CsvReader.GetField<Guid>(attribute.Name));
+                        }
+                    }
+                    else if (attribute.Type == AttributeDataType.Reference)
+                    {
+                        var referenceValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (!string.IsNullOrEmpty(referenceValue))
+                        {
+                            if (isMultiValued)
+                            {
+                                var values = referenceValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                importObjectAttribute.ReferenceValues.AddRange(values);
+                            }
+                            else
+                            {
+                                importObjectAttribute.ReferenceValues.Add(referenceValue);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        throw new NotSupportedException($"FileConnector does not support attribute data type '{attribute.Type}'.");
+                    }
                 }
-                else if (attribute.Type == AttributeDataType.Number)
+                catch (Exception ex) when (ex is not NotSupportedException)
                 {
-                    importObjectAttribute.IntValues.Add(_reader.CsvReader.GetField<int>(attribute.Name));
-                }
-                else if (attribute.Type == AttributeDataType.DateTime)
-                {
-                    importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
-                }
-                else if (attribute.Type == AttributeDataType.Boolean)
-                {
-                    importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
-                }
-                else if (attribute.Type == AttributeDataType.Guid)
-                {
-                    importObjectAttribute.GuidValues.Add(_reader.CsvReader.GetField<Guid>(attribute.Name));
-                }
-                else if (attribute.Type == AttributeDataType.Reference)
-                {
-                    var referenceValue = _reader.CsvReader.GetField(attribute.Name);
-                    if (!string.IsNullOrEmpty(referenceValue))
-                        importObjectAttribute.ReferenceValues.Add(referenceValue);
-                }
-                else
-                {
-                    throw new NotSupportedException($"FileConnector does not support attribute data type '{attribute.Type}'.");
+                    // Record the error but continue processing other attributes and rows (unless stopOnFirstError is enabled)
+                    var rowNumber = _reader.CsvReader.Context.Parser?.Row ?? 0;
+                    var rawValue = _reader.CsvReader.GetField(attribute.Name);
+                    _logger.Warning(ex, "Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
+                        attribute.Name, attribute.Type, rowNumber, rawValue);
+
+                    importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
+                    importObject.ErrorMessage = $"Failed to parse '{attribute.Name}' as {attribute.Type}: {ex.Message}";
+
+                    if (_stopOnFirstError)
+                    {
+                        _logger.Information("GetFullImportObjects: Stop on first error enabled. Stopping after attribute parse error.");
+                        result.ImportObjects.Add(importObject);
+                        return FinaliseResult(result, stopwatch);
+                    }
+
+                    // Continue processing - the attribute will be skipped but the object can still be imported with other attributes
+                    continue;
                 }
 
                 importObject.Attributes.Add(importObjectAttribute);
@@ -135,6 +217,14 @@ internal class FileConnectorImport
             result.ImportObjects.Add(importObject);
         }
 
+        return FinaliseResult(result, stopwatch);
+    }
+
+    /// <summary>
+    /// Helper to cleanly finalise the import result, stopping the timer and disposing the reader.
+    /// </summary>
+    private ConnectedSystemImportResult FinaliseResult(ConnectedSystemImportResult result, Stopwatch stopwatch)
+    {
         stopwatch.Stop();
         _reader.Dispose();
         _logger.Debug($"GetFullImportObjects: Executed in {stopwatch.Elapsed}");

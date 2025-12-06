@@ -40,7 +40,10 @@
                         var settingCategory = _settingCategories[i];
                         <MudText Typo="Typo.h5" Class="mt-5">@settingCategory.ToString()</MudText>
                         <MudPaper Class="pa-4 mt-5" Outlined="true">
-                            @foreach (var settingValue in _connectedSystem.SettingValues.Where(sv => sv.Setting.Category == settingCategory))
+                            @foreach (var settingValue in _connectedSystem.SettingValues
+                                .Where(sv => sv.Setting.Category == settingCategory)
+                                .OrderByDescending(sv => sv.Setting.Required)
+                                .ThenBy(sv => sv.Setting.Id))
                             {
                                 if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
                                 {
@@ -87,7 +90,13 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
-                                    <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" Class="mb-5" />
+                                    <div class="mb-5">
+                                        <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" />
+                                        @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">@settingValue.Setting.Description</MudText>
+                                        }
+                                    </div>
                                 }
                                 else if (settingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
                                 {
@@ -751,7 +760,13 @@
         ];
 
         // get a list of the distinct setting categories in use, so we can render them in category blocks
-        _settingCategories = _connectedSystem.SettingValues.Select(q => q.Setting.Category).Distinct().ToList();
+        // Filter out categories based on connector capabilities and order them logically
+        _settingCategories = _connectedSystem.SettingValues
+            .Select(q => q.Setting.Category)
+            .Distinct()
+            .Where(category => ShouldShowCategory(category))
+            .OrderBy(category => GetCategoryDisplayOrder(category))
+            .ToList();
 
         // to save us having to perform this comparison all over the view
         if (_connectedSystem.ConnectorDefinition is { SupportsPartitions: true, SupportsPartitionContainers: true })
@@ -778,6 +793,48 @@
             return true;
 
         return !_connectedSystem.SettingValuesValid;
+    }
+
+    /// <summary>
+    /// Determines whether a setting category should be displayed based on connector capabilities.
+    /// </summary>
+    private bool ShouldShowCategory(ConnectedSystemSettingCategory category)
+    {
+        if (_connectedSystem?.ConnectorDefinition == null)
+            return true;
+
+        return category switch
+        {
+            // Only show Import category if the connector supports full or delta import
+            ConnectedSystemSettingCategory.Import =>
+                _connectedSystem.ConnectorDefinition.SupportsFullImport ||
+                _connectedSystem.ConnectorDefinition.SupportsDeltaImport,
+
+            // Only show Export category if the connector supports export
+            ConnectedSystemSettingCategory.Export =>
+                _connectedSystem.ConnectorDefinition.SupportsExport,
+
+            // Always show other categories
+            _ => true
+        };
+    }
+
+    /// <summary>
+    /// Returns the display order for setting categories.
+    /// Order: Import, Export, General, Schema, Connectivity, Capabilities
+    /// </summary>
+    private static int GetCategoryDisplayOrder(ConnectedSystemSettingCategory category)
+    {
+        return category switch
+        {
+            ConnectedSystemSettingCategory.Import => 0,
+            ConnectedSystemSettingCategory.Export => 1,
+            ConnectedSystemSettingCategory.General => 2,
+            ConnectedSystemSettingCategory.Schema => 3,
+            ConnectedSystemSettingCategory.Connectivity => 4,
+            ConnectedSystemSettingCategory.Capabilities => 5,
+            _ => 99
+        };
     }
 
     private async Task HandleValidDetailsSubmitAsync()
