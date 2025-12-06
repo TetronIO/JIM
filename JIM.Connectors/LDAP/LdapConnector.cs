@@ -5,12 +5,15 @@ using JIM.Models.Transactional;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IDisposable
 {
     private LdapConnection? _connection;
     private bool _disposed;
+    private ICertificateProvider? _certificateProvider;
+    private List<X509Certificate2>? _trustedCertificates;
 
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
@@ -60,7 +63,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.", DefaultIntValue = LdapConnectorConstants.DEFAULT_LDAP_PORT, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingUseSecureConnection, Description = "Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = _settingCertificateValidation, Required = false, Description = "How to validate the server's SSL certificate.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.CERT_VALIDATION_FULL, LdapConnectorConstants.CERT_VALIDATION_SKIP }, Category = ConnectedSystemSettingCategory.Connectivity },
+            new() { Name = _settingCertificateValidation, Required = false, Description = "How to validate the server's SSL certificate. 'JIM Store' uses certificates from Admin > Certificates.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.CERT_VALIDATION_FULL, LdapConnectorConstants.CERT_VALIDATION_JIM_STORE, LdapConnectorConstants.CERT_VALIDATION_SKIP }, Category = ConnectedSystemSettingCategory.Connectivity },
             new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
             new() { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
@@ -170,12 +173,26 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername},{_settingPassword}, or {_settingAuthType}.");
 
         var useSsl = useSecureConnection?.CheckboxValue ?? false;
-        var skipCertValidation = certificateValidation?.StringValue == LdapConnectorConstants.CERT_VALIDATION_SKIP;
+        var certValidationMode = certificateValidation?.StringValue ?? LdapConnectorConstants.CERT_VALIDATION_FULL;
         var maxRetries = maxRetriesSetting?.IntValue ?? LdapConnectorConstants.DEFAULT_MAX_RETRIES;
         var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
 
-        logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
-            directoryServer.StringValue, directoryServerPort.IntValue, username.StringValue, authTypeSettingValue.StringValue, useSsl);
+        logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}, CertValidation: {CertValidation}",
+            directoryServer.StringValue, directoryServerPort.IntValue, username.StringValue, authTypeSettingValue.StringValue, useSsl, certValidationMode);
+
+        // If using JIM Store validation, load certificates now (before connection attempt)
+        if (useSsl && certValidationMode == LdapConnectorConstants.CERT_VALIDATION_JIM_STORE)
+        {
+            if (_certificateProvider == null)
+            {
+                logger.Warning("JIM Store certificate validation selected but no certificate provider available. Falling back to system validation.");
+            }
+            else
+            {
+                _trustedCertificates = _certificateProvider.GetTrustedCertificatesAsync().GetAwaiter().GetResult();
+                logger.Debug("Loaded {Count} trusted certificates from JIM Store", _trustedCertificates.Count);
+            }
+        }
 
         var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
         var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
@@ -199,11 +216,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             if (useSsl)
             {
                 _connection.SessionOptions.SecureSocketLayer = true;
-                if (skipCertValidation)
+
+                if (certValidationMode == LdapConnectorConstants.CERT_VALIDATION_SKIP)
                 {
                     logger.Warning("Certificate validation is disabled. This is not recommended for production environments.");
                     _connection.SessionOptions.VerifyServerCertificate = (connection, certificate) => true;
                 }
+                else if (certValidationMode == LdapConnectorConstants.CERT_VALIDATION_JIM_STORE && _trustedCertificates != null)
+                {
+                    logger.Debug("Using JIM Store for certificate validation");
+                    _connection.SessionOptions.VerifyServerCertificate = ValidateServerCertificateWithJimStore;
+                }
+                // else: use system default validation (CERT_VALIDATION_FULL)
             }
 
             _connection.Bind();
@@ -320,7 +344,75 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     }
     #endregion
 
+    #region IConnectorCertificateAware members
+    /// <summary>
+    /// Sets the certificate provider for JIM Store certificate validation.
+    /// </summary>
+    public void SetCertificateProvider(ICertificateProvider? certificateProvider)
+    {
+        _certificateProvider = certificateProvider;
+    }
+    #endregion
+
     #region private methods
+    /// <summary>
+    /// Validates a server certificate against the JIM certificate store.
+    /// Returns true if the server's certificate chain contains any certificate trusted by JIM.
+    /// </summary>
+    private bool ValidateServerCertificateWithJimStore(LdapConnection connection, X509Certificate certificate)
+    {
+        if (_trustedCertificates == null || _trustedCertificates.Count == 0)
+        {
+            Log.Warning("No trusted certificates loaded from JIM Store. Certificate validation will fail.");
+            return false;
+        }
+
+        try
+        {
+            var serverCert = new X509Certificate2(certificate);
+
+            // Build the certificate chain
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
+
+            // Add JIM trusted certificates to the extra store
+            foreach (var trustedCert in _trustedCertificates)
+            {
+                chain.ChainPolicy.ExtraStore.Add(trustedCert);
+            }
+
+            chain.Build(serverCert);
+
+            // Check if any certificate in the chain is trusted by JIM
+            foreach (var chainElement in chain.ChainElements)
+            {
+                var chainCertThumbprint = chainElement.Certificate.Thumbprint;
+                if (_trustedCertificates.Any(tc => tc.Thumbprint.Equals(chainCertThumbprint, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Log.Debug("Server certificate validated: chain contains trusted certificate with thumbprint {Thumbprint}", chainCertThumbprint);
+                    return true;
+                }
+            }
+
+            // Also check if the server certificate itself is directly trusted
+            if (_trustedCertificates.Any(tc => tc.Thumbprint.Equals(serverCert.Thumbprint, StringComparison.OrdinalIgnoreCase)))
+            {
+                Log.Debug("Server certificate directly trusted with thumbprint {Thumbprint}", serverCert.Thumbprint);
+                return true;
+            }
+
+            Log.Warning("Server certificate validation failed: no certificate in the chain is trusted by JIM Store. Server cert thumbprint: {Thumbprint}, Subject: {Subject}",
+                serverCert.Thumbprint, serverCert.Subject);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error validating server certificate against JIM Store");
+            return false;
+        }
+    }
+
     private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         try

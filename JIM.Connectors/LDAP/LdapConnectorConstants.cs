@@ -40,7 +40,8 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_LDAP_PORT = 389;
 
     // Certificate validation options
-    internal const string CERT_VALIDATION_FULL = "Full Validation";
+    internal const string CERT_VALIDATION_FULL = "Full Validation (System)";
+    internal const string CERT_VALIDATION_JIM_STORE = "Full Validation (JIM Store)";
     internal const string CERT_VALIDATION_SKIP = "Skip Validation (Not Recommended)";
 
     // Retry settings

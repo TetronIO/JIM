@@ -1,4 +1,5 @@
 ﻿using JIM.Application;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -65,6 +66,13 @@ public class SyncImportTaskProcessor
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
             {
+                // Inject certificate provider for connectors that support it
+                if (callBasedImportConnector is IConnectorCertificateAware certificateAwareConnector)
+                {
+                    var certificateProvider = new CertificateProviderService(_jim);
+                    certificateAwareConnector.SetCertificateProvider(certificateProvider);
+                }
+
                 callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
 
                 var initialPage = true;
