@@ -236,9 +236,9 @@ public class LdapConnectorTests
 
         Assert.That(certValidationSetting, Is.Not.Null);
         Assert.That(certValidationSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
-        Assert.That(certValidationSetting.DropDownValues, Does.Contain("Full Validation (System)"));
-        Assert.That(certValidationSetting.DropDownValues, Does.Contain("Full Validation (JIM Store)"));
+        Assert.That(certValidationSetting.DropDownValues, Does.Contain("Full Validation"));
         Assert.That(certValidationSetting.DropDownValues, Does.Contain("Skip Validation (Not Recommended)"));
+        Assert.That(certValidationSetting.DropDownValues!.Count, Is.EqualTo(2));
         Assert.That(certValidationSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
     }
 
