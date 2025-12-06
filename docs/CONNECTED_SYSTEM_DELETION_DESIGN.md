@@ -1,6 +1,6 @@
 # Connected System Deletion Design
 
-> **Status**: Design Approved (Q5 pending)
+> **Status**: Design Approved
 > **Created**: 2025-12-06
 > **GitHub Issue**: #135
 > **Related**: #134 (Attribute Impact Analysis), #136 (Activity Serialization)
@@ -116,8 +116,6 @@ However, for MVP, we will NOT serialize deleted CSOs because:
 
 ### Q5: How do we prevent sync operations during deletion?
 
-**Status**: Under consideration - awaiting final decision
-
 **Critical concern**: While deletion is in progress, sync operations (scheduled and event-based) could:
 - Create new CSOs for this system
 - Modify existing CSOs and their attribute values
@@ -131,84 +129,103 @@ However, for MVP, we will NOT serialize deleted CSOs because:
 | A. Don't block (status quo) | Ignore the risk | Simple implementation | Race conditions, data corruption |
 | B. Set "Deleting" status, block all sync ops | Mark system as Deleting, pause all sync queues for this system | Safe, prevents interference | Requires sync status checks, queued tasks need handling |
 | C. Graceful drain | Stop accepting new syncs, wait for in-flight ops to complete (timeout), then delete | No abrupt interruption | Complex orchestration, timeouts |
-| **D. Hybrid approach** | Set "Deleting" status, immediately fail any new sync requests, wait for running tasks (with timeout), then proceed | Combines safety with responsiveness | Moderate complexity |
+| D. Hybrid approach | Set "Deleting" status, immediately fail any new sync requests, wait for running tasks (with timeout), then proceed | Combines safety with responsiveness | Moderate complexity |
+| **E. Queue-based approach** | Set "Deleting" status, block new ops, queue deletion to run after any in-flight sync completes | No waiting/timeouts, clean task ordering | Slightly delayed deletion if sync running |
 
-**Proposed approach**: Option D - Hybrid approach (awaiting confirmation):
+**Decision**: Option E - Queue-based approach with status blocking:
 
-1. **Atomic status change**: Set ConnectedSystem.Status = "Deleting"
-2. **Fail fast**: Any new sync requests for this system immediately fail with clear error
-3. **In-flight waiting**: Query for running SynchronisationWorkerTask records for this system
-   - Wait up to 30 seconds for in-flight syncs to complete
-   - Optionally signal cancellation to running jobs
-4. **Validation before delete**: Verify no running tasks before proceeding with deletion
-5. **Rollback on error**: If sync operations won't stop, rollback the "Deleting" status to restore normal operation
+1. **Atomic status change**: Set `ConnectedSystem.Status = Deleting`
+2. **Block all new operations**:
+   - Scheduled syncs: Pause the schedule so it can't start new runs
+   - Event-based operations (e.g., SCIM requests): Fail immediately with clear error
+   - Manual sync requests: Reject with "system is being deleted" message
+3. **Handle in-flight sync**:
+   - If NO sync is currently running → proceed with deletion immediately
+   - If a sync IS running → queue the deletion as a worker task to execute after sync completes
+4. **Rollback on error**: If deletion fails, restore status to Active
+
+**Why this approach**:
+- No arbitrary timeouts or polling
+- Clean task ordering via existing worker queue
+- In-flight sync completes naturally without interruption
+- Deletion runs as soon as safely possible
 
 **Implementation Details:**
 
 ```csharp
-public async Task DeleteConnectedSystemAsync(
+public async Task<DeletionResult> RequestDeleteConnectedSystemAsync(
     int connectedSystemId,
     MetaverseObject? initiatedBy = null,
-    bool evaluateMvoDeletionRules = false,
-    int maxWaitForSyncCompletion = 30000) // 30 second timeout
+    bool evaluateMvoDeletionRules = false)
 {
-    // 1. Check for running tasks BEFORE we start
-    var runningTasks = await GetRunningTasksAsync(connectedSystemId);
-    if (runningTasks.Count > 0)
-        throw new InvalidOperationException($"Cannot delete: {runningTasks.Count} sync operations in progress");
+    var connectedSystem = await GetConnectedSystemAsync(connectedSystemId);
 
-    // 2. Atomically set status to "Deleting" to block new sync requests
+    // 1. Set status to "Deleting" to block new operations
     connectedSystem.Status = ConnectedSystemStatus.Deleting;
-    await Update(connectedSystem);
+    await UpdateAsync(connectedSystem);
 
-    try
+    // 2. Pause any scheduled sync (prevent new scheduled runs)
+    await PauseSyncScheduleAsync(connectedSystemId);
+
+    // 3. Check for running sync tasks
+    var runningTask = await GetRunningSyncTaskAsync(connectedSystemId);
+
+    if (runningTask == null)
     {
-        // 3. Wait for any in-flight operations to complete
-        var remaining = await WaitForSyncCompletionAsync(connectedSystemId, maxWaitForSyncCompletion);
-        if (remaining > 0)
-            throw new TimeoutException($"Still {remaining} sync operations running after timeout");
-
-        // 4. Proceed with deletion (same as before)
-        // ... deletion logic ...
+        // No sync running - delete immediately
+        await ExecuteDeletionAsync(connectedSystemId, evaluateMvoDeletionRules);
+        return DeletionResult.CompletedImmediately;
     }
-    catch
+    else
     {
-        // 5. Rollback status if something goes wrong
-        connectedSystem.Status = ConnectedSystemStatus.Active;
-        await Update(connectedSystem);
-        throw;
+        // Sync running - queue deletion to run after it completes
+        await QueueDeletionTaskAsync(connectedSystemId, evaluateMvoDeletionRules, afterTaskId: runningTask.Id);
+        return DeletionResult.QueuedAfterSync;
     }
 }
 ```
 
-**Sync Operation Checks** (in sync processors):
+**Blocking Checks** (in sync processors and API handlers):
 
 ```csharp
-// In SyncImportTaskProcessor, SyncExportTaskProcessor, etc.
-var connectedSystem = await GetConnectedSystemAsync(taskId);
+// In SyncImportTaskProcessor, SyncExportTaskProcessor, SCIM handlers, etc.
+var connectedSystem = await GetConnectedSystemAsync(systemId);
 if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
-    throw new InvalidOperationException($"Cannot sync: system is being deleted");
+    throw new InvalidOperationException($"Cannot perform operation: system '{connectedSystem.Name}' is being deleted");
 ```
 
 **Schema Change Required:**
 
-Add a new Status enum to ConnectedSystem (or use existing if available):
+Add a Status property to ConnectedSystem:
 ```csharp
 public enum ConnectedSystemStatus
 {
     Active = 0,
     Disabled = 1,
-    Deleting = 2  // NEW - transient state during deletion
+    Deleting = 2  // Transient state - blocks all operations
+}
+```
+
+**New Worker Task Required:**
+
+```csharp
+public class DeleteConnectedSystemWorkerTask : WorkerTask
+{
+    public int ConnectedSystemId { get; set; }
+    public bool EvaluateMvoDeletionRules { get; set; }
 }
 ```
 
 **Testing Requirements:**
 
-1. Verify sync ops are blocked when system is "Deleting"
-2. Verify deletion proceeds if no sync ops running
-3. Verify deletion fails with clear error if sync ops won't stop
-4. Verify status is rolled back if deletion fails
-5. Verify concurrent deletion attempts are safely handled
+1. Verify sync ops are blocked when system status is "Deleting"
+2. Verify SCIM/event requests fail with clear error when deleting
+3. Verify deletion proceeds immediately if no sync running
+4. Verify deletion is queued correctly if sync is running
+5. Verify queued deletion executes after sync completes
+6. Verify status is rolled back if deletion fails
+7. Verify scheduled syncs are paused and don't start during deletion
+8. Verify concurrent deletion requests are handled safely (idempotent)
 
 ## Proposed Implementation
 
@@ -388,20 +405,19 @@ Create EF Core migration to add the Status column:
 ### Phase 1: Core Deletion Logic
 
 ```csharp
-public async Task DeleteConnectedSystemAsync(
+public async Task<DeletionResult> RequestDeleteConnectedSystemAsync(
     int connectedSystemId,
     MetaverseObject? initiatedBy = null,
-    bool evaluateMvoDeletionRules = false,
-    int maxWaitForSyncCompletion = 30000) // 30 second timeout
+    bool evaluateMvoDeletionRules = false)
 {
-    // 1. Validate - check system exists, no running tasks
-    // 2. Create activity for audit trail
-    // 3. Handle concurrency (Q5):
-    //    a. Check for currently running tasks
-    //    b. Set status to "Deleting"
-    //    c. Wait for in-flight syncs with timeout
-    //    d. Verify no tasks remain
-    // 4. Delete in order (raw SQL for performance):
+    // 1. Validate - check system exists
+    // 2. Set status to "Deleting" to block new operations
+    // 3. Pause any scheduled sync for this system
+    // 4. Create activity for audit trail
+    // 5. Handle concurrency (Q5):
+    //    - If NO sync running → execute deletion immediately
+    //    - If sync IS running → queue DeleteConnectedSystemWorkerTask
+    // 6. Delete in order (raw SQL for performance):
     //    a. PendingExports
     //    b. CSO attribute values, changes, then CSOs
     //    c. Partitions, containers
@@ -411,8 +427,8 @@ public async Task DeleteConnectedSystemAsync(
     //    g. Setting values
     //    h. Null Activity FKs
     //    i. Connected System itself
-    // 5. Optionally queue MVO cleanup job
-    // 6. Handle errors - rollback status if deletion fails
+    // 7. Optionally queue MVO cleanup job
+    // 8. Handle errors - rollback status if deletion fails
 }
 ```
 
@@ -555,10 +571,13 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
    - Verify status is rolled back if deletion fails
 3. **Concurrency tests** (Q5):
    - Attempt sync operation while system is in "Deleting" state → should fail
-   - Simulate in-flight sync tasks, verify deletion waits
-   - Verify timeout occurs after 30 seconds if syncs don't complete
-   - Verify no orphaned status changes if deletion fails
-   - Concurrent deletion attempts → only one succeeds
+   - Verify SCIM/event requests fail with clear error when deleting
+   - Verify deletion proceeds immediately if no sync running
+   - Verify deletion is queued correctly if sync is running
+   - Verify queued deletion executes after sync completes
+   - Verify scheduled syncs are paused and don't start during deletion
+   - Verify status is rolled back if deletion fails
+   - Concurrent deletion requests → handled idempotently
 4. **Performance tests**: Delete system with 10k, 100k CSOs
 
 ## Design Decisions Made
@@ -570,14 +589,13 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
 5. **Q2: Handle Sync Rules** - Option B (Cascade delete) - sync rules are useless without the system; show count in confirmation
 6. **Q3: Handle Activities** - Option B (Null FK) - preserve immutable audit logs; activity serialization deferred to post-MVP enhancement ([#136](https://github.com/TetronIO/JIM/issues/136))
 7. **Q4: Deletion mode** - Option C (Auto-detect) - synchronous for <1000 CSOs, async background job for >=1000 CSOs
-8. **Q5: Concurrency safety** - Awaiting final decision (Option D - Hybrid approach proposed)
+8. **Q5: Concurrency safety** - Option E (Queue-based approach) - set "Deleting" status, block new ops, queue deletion after any running sync completes
 
 ## Open Questions
 
 1. Should we support "soft delete" (archive rather than delete)?
 2. Should the MVO impact analysis be optional in the preview (for very large systems where it might be slow)?
 3. Should we log/export a deletion manifest before deleting (for recovery purposes)?
-4. Should the 30-second timeout for in-flight syncs be configurable per environment? (Could be higher in slow/load-heavy environments)
 
 ---
 
