@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.0
-> **Last Updated**: 2025-12-02
-> **Status**: In Progress
+> **Version**: 1.1
+> **Last Updated**: 2025-12-06
+> **Status**: In Progress (~83% Complete)
 
 ## Overview
 
@@ -33,7 +33,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 #### 1.2 At Least One Production-Ready Connector
 - [x] LDAP/Active Directory Connector - Import
-- [ ] LDAP/Active Directory Connector - Export (create, update, delete)
+- [x] LDAP/Active Directory Connector - Export (create, update, delete)
 - [x] File Connector - Import
 - [x] File Connector - Export
 
@@ -67,25 +67,25 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 3. Outbound Synchronisation (Metaverse → Target)
 
 #### 3.1 Export Triggering (#121)
-- [ ] Detect MVO changes that require export
-- [ ] Create Pending Export for MVO attribute changes
-- [ ] Create Pending Export for new MVO (provisioning)
-- [ ] Create Pending Export for MVO deletion (deprovisioning)
-- [ ] Evaluate export sync rules to determine target CSO changes
+- [x] Detect MVO changes that require export
+- [x] Create Pending Export for MVO attribute changes
+- [x] Create Pending Export for new MVO (provisioning)
+- [x] Create Pending Export for MVO deletion (deprovisioning)
+- [x] Evaluate export sync rules to determine target CSO changes
 
 #### 3.2 Pending Export Management
 - [x] Pending Export data model
 - [x] Pending Export confirmation (verify export was applied)
-- [ ] Pending Export execution (send to connector)
-- [ ] Pending Export retry logic
-- [ ] Pending Export error handling
+- [x] Pending Export execution (send to connector)
+- [x] Pending Export retry logic
+- [x] Pending Export error handling
 
 #### 3.3 Export Execution
-- [ ] Export run profile processing
-- [ ] Connector export method invocation
-- [ ] Create object in target system
-- [ ] Update object in target system
-- [ ] Delete object in target system
+- [x] Export run profile processing
+- [x] Connector export method invocation
+- [x] Create object in target system
+- [x] Update object in target system
+- [x] Delete object in target system
 
 ### 4. Scheduling & Automation
 
@@ -153,35 +153,38 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 | Category | Complete | Total | Status |
 |----------|----------|-------|--------|
-| Connectors | 7 | 8 | 88% |
+| Connectors | 10 | 10 | 100% |
 | Inbound Sync | 14 | 15 | 93% |
-| Outbound Sync | 2 | 10 | 20% |
+| Outbound Sync | 15 | 15 | 100% |
 | Scheduling | 4 | 6 | 67% |
 | Admin UI | 10 | 14 | 71% |
 | Security | 2 | 5 | 40% |
 | Operations | 4 | 6 | 67% |
-| **Overall** | **43** | **64** | **~67%** |
+| **Overall** | **59** | **71** | **~83%** |
 
 ---
 
 ## Priority Order for Remaining Work
 
 ### Critical Path (Required for MVP)
-1. **Outbound Sync** (#121) - Without this, JIM cannot provision/update target systems
-2. **Export Execution** - Process pending exports via connectors
-3. **LDAP Connector Export** - Enable write operations to AD
-4. **Scheduler Service** - Automate run profile execution
+1. **Scheduler Service** - Automate run profile execution (4 items remaining)
 
 ### Important (Highly Desirable for MVP)
-5. Background job for scheduled MVO deletions (#120)
-6. Pending Export review UI (#25)
-7. API authentication (#8)
+2. Background job for scheduled MVO deletions (#120)
+3. Pending Export review UI (#25)
+4. API authentication (#8)
 
 ### Nice to Have (Can follow MVP)
-8. Full RBAC (#21)
-9. Change history (#14)
-10. Sync preview
-11. Delta sync support
+5. Full RBAC (#21)
+6. Change history (#14)
+7. Sync preview
+8. Delta sync support
+
+### Recently Completed ✓
+- ~~Outbound Sync (#121)~~ - Implemented in ExportEvaluationServer.cs
+- ~~Export Execution~~ - Implemented in ExportExecutionServer.cs
+- ~~LDAP Connector Export~~ - Implemented in LdapConnectorExport.cs
+- ~~Certificate Store~~ - Implemented for LDAPS trusted certificates
 
 ---
 
