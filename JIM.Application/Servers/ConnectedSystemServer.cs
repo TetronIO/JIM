@@ -8,6 +8,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Serilog;
@@ -183,6 +184,199 @@ public class ConnectedSystemServer
         foreach (var settingValue in connectedSystem.SettingValues)
             if (!string.IsNullOrEmpty(settingValue.StringValue))
                 settingValue.StringValue = settingValue.StringValue.Trim();
+    }
+    #endregion
+
+    #region Connected System Deletion
+    /// <summary>
+    /// Threshold for CSO count above which deletion runs as a background job.
+    /// </summary>
+    private const int BackgroundDeletionThreshold = 1000;
+
+    /// <summary>
+    /// Generates a preview of the impact of deleting a Connected System.
+    /// This allows administrators to understand what will be affected before confirming deletion.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <returns>A preview showing counts of affected objects and any warnings.</returns>
+    public async Task<ConnectedSystemDeletionPreview?> GetDeletionPreviewAsync(int connectedSystemId)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return null;
+
+        var preview = new ConnectedSystemDeletionPreview
+        {
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemName = connectedSystem.Name
+        };
+
+        // Get counts of related objects
+        preview.ConnectedSystemObjectCount = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        preview.SyncRuleCount = await Application.Repository.ConnectedSystems.GetSyncRuleCountAsync(connectedSystemId);
+        preview.RunProfileCount = await Application.Repository.ConnectedSystems.GetRunProfileCountAsync(connectedSystemId);
+        preview.PartitionCount = await Application.Repository.ConnectedSystems.GetPartitionCountAsync(connectedSystemId);
+        preview.ContainerCount = await Application.Repository.ConnectedSystems.GetContainerCountAsync(connectedSystemId);
+        preview.PendingExportCount = await Application.Repository.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
+        preview.ActivityCount = await Application.Repository.ConnectedSystems.GetActivityCountAsync(connectedSystemId);
+
+        // Get MVO impact counts
+        preview.JoinedMvoCount = await Application.Repository.ConnectedSystems.GetJoinedMvoCountAsync(connectedSystemId);
+
+        // Check for running sync operations
+        var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
+        preview.HasRunningSyncOperation = runningSyncTask != null;
+
+        // Determine if deletion will run as a background job
+        preview.WillRunAsBackgroundJob = preview.ConnectedSystemObjectCount > BackgroundDeletionThreshold;
+
+        // Estimate deletion time (rough estimate: ~100 CSOs per second for bulk delete)
+        var estimatedSeconds = preview.ConnectedSystemObjectCount / 100.0;
+        preview.EstimatedDeletionTime = TimeSpan.FromSeconds(Math.Max(1, estimatedSeconds));
+
+        // Add warnings
+        if (preview.HasRunningSyncOperation)
+            preview.Warnings.Add("A synchronisation operation is currently running. Deletion will be queued to run after it completes.");
+
+        if (preview.SyncRuleCount > 0)
+            preview.Warnings.Add($"{preview.SyncRuleCount} sync rule(s) will be permanently deleted.");
+
+        if (preview.JoinedMvoCount > 0)
+            preview.Warnings.Add($"{preview.JoinedMvoCount} Metaverse Object(s) are joined to CSOs in this system. They will be disconnected.");
+
+        if (preview.PendingExportCount > 0)
+            preview.Warnings.Add($"{preview.PendingExportCount} pending export(s) will be deleted.");
+
+        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+            preview.Warnings.Add("This Connected System is already being deleted.");
+
+        return preview;
+    }
+
+    /// <summary>
+    /// Deletes a Connected System and all its related data.
+    /// Implements the queue-based deletion approach:
+    /// 1. Sets status to Deleting (blocks new operations)
+    /// 2. If sync is running, queues deletion to run after sync completes
+    /// 3. Otherwise, executes deletion (sync or async based on CSO count)
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
+    /// <param name="initiatedBy">The user who initiated the deletion.</param>
+    /// <returns>The result of the deletion request.</returns>
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject initiatedBy)
+    {
+        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}",
+            connectedSystemId, initiatedBy?.DisplayName ?? "System");
+
+        // Get the Connected System
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} not found", connectedSystemId);
+            return ConnectedSystemDeletionResult.Failed($"Connected System with ID {connectedSystemId} not found.");
+        }
+
+        // Check if already being deleted
+        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} is already being deleted", connectedSystemId);
+            return ConnectedSystemDeletionResult.Failed("Connected System is already being deleted.");
+        }
+
+        // Set status to Deleting to block new operations
+        connectedSystem.Status = ConnectedSystemStatus.Deleting;
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
+
+        // Check for running sync operations
+        var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
+        if (runningSyncTask != null)
+        {
+            // Queue deletion to run after sync completes
+            Log.Information("DeleteAsync: Sync task {TaskId} is running for Connected System {CsId}. Queuing deletion.",
+                runningSyncTask.Id, connectedSystemId);
+
+            var deleteTask = initiatedBy != null
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: false)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: false);
+            await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+
+            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        // Get CSO count to determine sync vs async deletion
+        var csoCount = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+
+        if (csoCount > BackgroundDeletionThreshold)
+        {
+            // Large system - queue as background job
+            Log.Information("DeleteAsync: Connected System {Id} has {Count} CSOs (>{Threshold}). Queueing as background job.",
+                connectedSystemId, csoCount, BackgroundDeletionThreshold);
+
+            var deleteTask = initiatedBy != null
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: false)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: false);
+            await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        // Small system - execute synchronously
+        Log.Information("DeleteAsync: Connected System {Id} has {Count} CSOs (<={Threshold}). Executing synchronously.",
+            connectedSystemId, csoCount, BackgroundDeletionThreshold);
+
+        // Create activity for the synchronous deletion
+        // Note: We don't set ConnectedSystemId because the deletion will remove the Connected System,
+        // and we need to be able to complete/fail the activity after deletion.
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Delete
+            // ConnectedSystemId intentionally not set - the CS will be deleted before activity completes
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        try
+        {
+            // Perform the deletion
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
+
+            // Complete the activity
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            Log.Information("DeleteAsync: Connected System {Id} deleted successfully", connectedSystemId);
+            return ConnectedSystemDeletionResult.CompletedImmediately(activity.Id);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "DeleteAsync: Failed to delete Connected System {Id}", connectedSystemId);
+
+            // Build full error message including inner exceptions
+            var errorMessage = GetFullExceptionMessage(ex);
+
+            // Mark activity as failed
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+
+            // Reset status so deletion can be retried
+            connectedSystem.Status = ConnectedSystemStatus.Active;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
+            return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
+        }
+    }
+
+    /// <summary>
+    /// Executes the deletion of a Connected System. Called by the worker service for background deletions.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
+    public async Task ExecuteDeletionAsync(int connectedSystemId)
+    {
+        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}", connectedSystemId);
+
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
+
+        Log.Information("ExecuteDeletionAsync: Completed for Connected System {Id}", connectedSystemId);
     }
     #endregion
 
@@ -701,20 +895,41 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Causes all the connected system objects and pending export objects for a connected system to be deleted.
-    /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes to be sure of the intended state.
+    /// Causes all the connected system objects and their dependencies to be deleted for a connected system.
+    /// This includes: pending exports, CSO attribute values, change history, and disconnects CSOs from MVOs.
+    /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes.
     /// </summary>
-    /// <remarks>Only intended to be called by JIM.Service, i.e. this action should always be queued. That's why this method is lightweight and doesn't create it's own activity.</remarks>
+    /// <remarks>
+    /// Only intended to be called by JIM.Service, i.e. this action should always be queued.
+    /// That's why this method is lightweight and doesn't create its own activity.
+    /// Uses the shared DeleteAllConnectedSystemObjectsAndDependenciesAsync method with deleteChangeHistory=true
+    /// to remove all CSO-related data including change history (since objects will be re-imported).
+    /// </remarks>
     /// <param name="connectedSystemId">The unique identifier for the connected system to clear.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the Connected System is being deleted.</exception>
     public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId)
     {
-        // delete all pending export objects
-        Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all pending export objects for connected system id {connectedSystemId}.");
-        Application.Repository.ConnectedSystems.DeleteAllPendingExportObjects(connectedSystemId);
+        Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}", connectedSystemId);
 
-        // delete all connected system objects
-        Log.Verbose($"ClearConnectedSystemObjectsAsync: Deleting all connected system objects for connected system id {connectedSystemId}.");
-        await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAsync(connectedSystemId, true);
+        // Check for concurrency - don't clear if system is being deleted
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+        {
+            Log.Warning("ClearConnectedSystemObjectsAsync: Connected System {Id} not found", connectedSystemId);
+            throw new InvalidOperationException($"Connected System {connectedSystemId} not found.");
+        }
+
+        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        {
+            Log.Warning("ClearConnectedSystemObjectsAsync: Connected System {Id} is being deleted, cannot clear", connectedSystemId);
+            throw new InvalidOperationException($"Connected System {connectedSystemId} is being deleted and cannot be cleared.");
+        }
+
+        // Use the shared method that handles all CSO dependencies properly.
+        // deleteChangeHistory=true because we're clearing for re-import - the old change history is no longer relevant.
+        await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory: true);
+
+        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}", connectedSystemId);
 
         // todo: think about returning a status to the UI. perhaps return the job id and allow the job status to be polled/streamed?
     }
@@ -1090,6 +1305,25 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+    #endregion
+
+    #region Helpers
+    /// <summary>
+    /// Builds a full error message including all inner exceptions.
+    /// </summary>
+    private static string GetFullExceptionMessage(Exception ex)
+    {
+        var messages = new List<string>();
+        var current = ex;
+
+        while (current != null)
+        {
+            messages.Add(current.Message);
+            current = current.InnerException;
+        }
+
+        return string.Join(" --> ", messages);
     }
     #endregion
 }

@@ -3,6 +3,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
 namespace JIM.Data.Repositories;
@@ -158,8 +159,6 @@ public interface IConnectedSystemRepository
 
 
     public Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
-    public Task DeleteAllConnectedSystemObjectsAsync(int connectedSystemId, bool deleteAllConnectedSystemObjectChangeObjects);
-    public void DeleteAllPendingExportObjects(int connectedSystemId);
     public Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
     public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
     public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
@@ -168,4 +167,59 @@ public interface IConnectedSystemRepository
     public Task DeleteSyncRuleAsync(SyncRule syncRule);
 
     public Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute);
+
+    #region Connected System Deletion
+    /// <summary>
+    /// Deletes all Connected System Objects and their dependencies for a Connected System.
+    /// This is used by both ClearConnectedSystemObjects and DeleteConnectedSystem.
+    /// Does NOT delete the Connected System itself or its configuration (sync rules, run profiles, etc.).
+    /// </summary>
+    /// <param name="connectedSystemId">The ID of the Connected System.</param>
+    /// <param name="deleteChangeHistory">If true, deletes ConnectedSystemObjectChanges. If false, nulls the CSO FK.</param>
+    Task DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory);
+
+    /// <summary>
+    /// Deletes a Connected System and all its related data using bulk SQL operations for performance.
+    /// Should only be called after verifying no sync operations are running.
+    /// </summary>
+    /// <param name="connectedSystemId">The ID of the Connected System to delete.</param>
+    Task DeleteConnectedSystemAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the count of Sync Rules for a Connected System.
+    /// </summary>
+    Task<int> GetSyncRuleCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the count of Run Profiles for a Connected System.
+    /// </summary>
+    Task<int> GetRunProfileCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the count of Partitions for a Connected System.
+    /// </summary>
+    Task<int> GetPartitionCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the count of Containers for a Connected System.
+    /// </summary>
+    Task<int> GetContainerCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the count of Activities for a Connected System.
+    /// </summary>
+    Task<int> GetActivityCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the count of MVOs joined to CSOs for a Connected System.
+    /// </summary>
+    Task<int> GetJoinedMvoCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Checks if there is a running sync task for a Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System ID to check.</param>
+    /// <returns>The running task, or null if no task is running.</returns>
+    Task<SynchronisationWorkerTask?> GetRunningSyncTaskAsync(int connectedSystemId);
+    #endregion
 }

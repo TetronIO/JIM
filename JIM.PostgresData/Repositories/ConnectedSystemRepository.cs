@@ -5,9 +5,11 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 namespace JIM.PostgresData.Repositories;
 
 public class ConnectedSystemRepository : IConnectedSystemRepository
@@ -510,21 +512,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task DeleteAllConnectedSystemObjectsAsync(int connectedSystemId, bool deleteAllConnectedSystemObjectChangeObjects)
-    {
-        if (deleteAllConnectedSystemObjectChangeObjects)
-            await Repository.Database.Database.ExecuteSqlAsync($"DELETE FROM \"ConnectedSystemObjectChanges\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
-        
-        await Repository.Database.Database.ExecuteSqlAsync($"DELETE FROM \"ConnectedSystemObjects\" WHERE \"ConnectedSystemId\" = {connectedSystemId}");
-    }
-
-    public void DeleteAllPendingExportObjects(int connectedSystemId)
-    {
-        // it sounds like postgresql cascade delete might auto-delete dependent objects
-        var command = $"DELETE FROM \"PendingExports\" WHERE \"ConnectedSystemId\" = {connectedSystemId}";
-        Repository.Database.Database.ExecuteSqlRaw(command);
-    }
-    
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         // this is quite a weird way of querying. it's like this so that we can unit-test import synchronisation.
@@ -861,6 +848,254 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         Repository.Database.Remove(syncRule);
         await Repository.Database.SaveChangesAsync();
+    }
+    #endregion
+
+    #region Connected System Deletion
+    /// <summary>
+    /// Shared method for deleting CSOs and their immediate dependencies.
+    /// Used by both ClearConnectedSystemObjects and DeleteConnectedSystem.
+    /// </summary>
+    public async Task DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory)
+    {
+        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, deleteChangeHistory);
+
+        // 1. Delete PendingExportAttributeValueChanges (child of PendingExport)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges""
+              WHERE ""PendingExportId"" IN (SELECT ""Id"" FROM ""PendingExports"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 2. Delete PendingExports
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 3. Delete DeferredReferences for this system
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""DeferredReferences"" WHERE ""TargetSystemId"" = {0}",
+            connectedSystemId);
+
+        // 4. Disconnect CSOs from MVOs (clear MetaverseObjectId FK)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 5. Delete CSO attribute values
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemObjectAttributeValues""
+              WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 6. Handle ConnectedSystemObjectChanges based on deleteChangeHistory flag
+        if (deleteChangeHistory)
+        {
+            // Delete change attribute values first (child records)
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ConnectedSystemObjectChangeAttributeValues""
+                  WHERE ""ConnectedSystemObjectChangeAttributeId"" IN (
+                    SELECT ca.""Id"" FROM ""ConnectedSystemObjectChangeAttributes"" ca
+                    INNER JOIN ""ConnectedSystemObjectChanges"" c ON ca.""ConnectedSystemChangeId"" = c.""Id""
+                    WHERE c.""ConnectedSystemId"" = {0}
+                  )",
+                connectedSystemId);
+
+            // Delete change attributes
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ConnectedSystemObjectChangeAttributes""
+                  WHERE ""ConnectedSystemChangeId"" IN (
+                    SELECT ""Id"" FROM ""ConnectedSystemObjectChanges"" WHERE ""ConnectedSystemId"" = {0}
+                  )",
+                connectedSystemId);
+
+            // Delete the changes themselves
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ConnectedSystemObjectChanges"" WHERE ""ConnectedSystemId"" = {0}",
+                connectedSystemId);
+        }
+        else
+        {
+            // Null CSO FK on ConnectedSystemObjectChanges (preserve audit trail)
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystemObjectChanges"" SET ""ConnectedSystemObjectId"" = NULL
+                  WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
+                connectedSystemId);
+        }
+
+        // 7. Null CSO FK on ActivityRunProfileExecutionItems
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ActivityRunProfileExecutionItems"" SET ""ConnectedSystemObjectId"" = NULL
+              WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 8. Delete CSOs
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}", connectedSystemId);
+    }
+
+    public async Task DeleteConnectedSystemAsync(int connectedSystemId)
+    {
+        // Use raw SQL for bulk deletion - much faster than EF Core tracking
+        // Delete order follows dependency graph from design doc
+        Log.Information("DeleteConnectedSystemAsync: Starting bulk deletion for Connected System {Id}", connectedSystemId);
+
+        // 1. Delete all CSOs and their dependencies (preserving change history)
+        await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory: false);
+
+        // 2. Delete Containers (child of Partition)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemContainers""
+              WHERE ""PartitionId"" IN (SELECT ""Id"" FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 3. Delete Partitions
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 4. Delete Run Profiles
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 5. Delete SyncRuleMappingSourceParamValues (child of SyncRuleMappingSource)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRuleMappingSourceParamValues""
+              WHERE ""SyncRuleMappingSourceId"" IN (
+                SELECT sms.""Id"" FROM ""SyncRuleMappingSources"" sms
+                INNER JOIN ""SyncRuleMappings"" srm ON sms.""SyncRuleMappingId"" = srm.""Id""
+                INNER JOIN ""SyncRules"" sr ON srm.""AttributeFlowSynchronisationRuleId"" = sr.""Id""
+                WHERE sr.""ConnectedSystemId"" = {0}
+              )",
+            connectedSystemId);
+
+        // 6. Delete SyncRuleMappingSources (child of SyncRuleMapping)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRuleMappingSources""
+              WHERE ""SyncRuleMappingId"" IN (
+                SELECT srm.""Id"" FROM ""SyncRuleMappings"" srm
+                INNER JOIN ""SyncRules"" sr ON srm.""AttributeFlowSynchronisationRuleId"" = sr.""Id""
+                WHERE sr.""ConnectedSystemId"" = {0}
+              )",
+            connectedSystemId);
+
+        // 7. Delete SyncRuleMappings (attribute flow rules)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRuleMappings""
+              WHERE ""AttributeFlowSynchronisationRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})
+                 OR ""ObjectMatchingSynchronisationRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 8. Delete SyncRuleScopingCriteria (child of SyncRuleScopingCriteriaGroup)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRuleScopingCriteria""
+              WHERE ""SyncRuleScopingCriteriaGroupId"" IN (
+                SELECT scg.""Id"" FROM ""SyncRuleScopingCriteriaGroups"" scg
+                INNER JOIN ""SyncRules"" sr ON scg.""SyncRuleId"" = sr.""Id""
+                WHERE sr.""ConnectedSystemId"" = {0}
+              )",
+            connectedSystemId);
+
+        // 9. Delete SyncRuleScopingCriteriaGroups
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRuleScopingCriteriaGroups""
+              WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 10. Delete Sync Rules
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 11. Delete Object Type Attributes
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemAttributes""
+              WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 12. Delete Object Types
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 13. Delete Setting Values
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemSettingValues"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 14. Null Activity FKs (preserve audit trail)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""ConnectedSystemId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 15. Finally, delete the Connected System itself
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystems"" WHERE ""Id"" = {0}",
+            connectedSystemId);
+
+        Log.Information("DeleteConnectedSystemAsync: Completed bulk deletion for Connected System {Id}", connectedSystemId);
+    }
+
+    public async Task<int> GetSyncRuleCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.SyncRules.CountAsync(sr => sr.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<int> GetRunProfileCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemRunProfiles.CountAsync(rp => rp.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<int> GetPartitionCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemPartitions.CountAsync(p => p.ConnectedSystem.Id == connectedSystemId);
+    }
+
+    public async Task<int> GetContainerCountAsync(int connectedSystemId)
+    {
+        // Count containers that belong to this connected system either:
+        // 1. Directly via ConnectedSystem reference (top-level containers without partitions)
+        // 2. Via Partition reference (containers within a partition)
+        return await Repository.Database.ConnectedSystemContainers
+            .CountAsync(c =>
+                (c.ConnectedSystem != null && c.ConnectedSystem.Id == connectedSystemId) ||
+                (c.Partition != null && c.Partition.ConnectedSystem.Id == connectedSystemId));
+    }
+
+    public async Task<int> GetActivityCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.Activities.CountAsync(a => a.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<int> GetJoinedMvoCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId && cso.MetaverseObjectId != null)
+            .Select(cso => cso.MetaverseObjectId)
+            .Distinct()
+            .CountAsync();
+    }
+
+    public async Task<SynchronisationWorkerTask?> GetRunningSyncTaskAsync(int connectedSystemId)
+    {
+        // Get run profile IDs for this system
+        var runProfileIds = await Repository.Database.ConnectedSystemRunProfiles
+            .Where(rp => rp.ConnectedSystemId == connectedSystemId)
+            .Select(rp => rp.Id)
+            .ToListAsync();
+
+        if (runProfileIds.Count == 0)
+            return null;
+
+        // Check for running sync tasks
+        return await Repository.Database.SynchronisationWorkerTasks
+            .Where(t => runProfileIds.Contains(t.ConnectedSystemRunProfileId) &&
+                       (t.Status == WorkerTaskStatus.Queued || t.Status == WorkerTaskStatus.Processing))
+            .FirstOrDefaultAsync();
     }
     #endregion
 }

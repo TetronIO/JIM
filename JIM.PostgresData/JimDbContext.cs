@@ -39,6 +39,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<DataGenerationTemplateAttributeDependency> DataGenerationTemplateAttributeDependencies { get; set; } = null!;
     public virtual DbSet<DataGenerationTemplateAttributeWeightedValue> DataGenerationTemplateAttributeWeightedValues { get; set; } = null!;
     public virtual DbSet<DataGenerationTemplateWorkerTask> DataGenerationTemplateWorkerTasks { get; set; } = null!;
+    public virtual DbSet<DeleteConnectedSystemWorkerTask> DeleteConnectedSystemWorkerTasks { get; set; } = null!;
     public virtual DbSet<ExampleDataSet> ExampleDataSets { get; set; } = null!;
     public virtual DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
     public virtual DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; } = null!;

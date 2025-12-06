@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251206151437_AddConnectedSystemStatus")]
+    partial class AddConnectedSystemStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2144,25 +2147,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue("DataGenerationTemplateWorkerTask");
-                });
-
-            modelBuilder.Entity("JIM.Models.Tasking.DeleteConnectedSystemWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("EvaluateMvoDeletionRules")
-                        .HasColumnType("boolean");
-
-                    b.ToTable("WorkerTasks", t =>
-                        {
-                            t.Property("ConnectedSystemId")
-                                .HasColumnName("DeleteConnectedSystemWorkerTask_ConnectedSystemId");
-                        });
-
-                    b.HasDiscriminator().HasValue("DeleteConnectedSystemWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.SynchronisationWorkerTask", b =>

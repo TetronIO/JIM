@@ -87,6 +87,23 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
+            else if (workerTask is DeleteConnectedSystemWorkerTask deleteConnectedSystemTask)
+            {
+                // Connected System deletion requires tracking with an activity for audit purposes.
+                // The TargetName must be populated since the Connected System will be deleted.
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(deleteConnectedSystemTask.ConnectedSystemId);
+                var activity = new Activity
+                {
+                    TargetName = connectedSystem?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}",
+                    TargetType = ActivityTargetType.ConnectedSystem,
+                    TargetOperationType = ActivityTargetOperationType.Delete,
+                    ConnectedSystemId = deleteConnectedSystemTask.ConnectedSystemId,
+                };
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
+
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
+            }
 
             await Application.Repository.Tasking.CreateWorkerTaskAsync(workerTask);
         }

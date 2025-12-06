@@ -35,6 +35,10 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.ClearConnectedSystemObjectsTasks.Add(clearConnectedSystemObjectsTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
+                Repository.Database.DeleteConnectedSystemWorkerTasks.Add(deleteConnectedSystemTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             default:
                 throw new ArgumentException("workerTask was of an unexpected type: " + workerTask.GetType());
         }
@@ -220,6 +224,10 @@ public class TaskingRepository : ITaskingRepository
             case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
                 // use the name of the connected system
                 return db.ConnectedSystems.Single(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId).Name;
+            case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
+                // use the name of the connected system (may be null if already deleted)
+                var systemToDelete = db.ConnectedSystems.SingleOrDefault(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
+                return systemToDelete?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}";
             default:
                 return "Unknown WorkerTask type";
         }
@@ -232,6 +240,7 @@ public class TaskingRepository : ITaskingRepository
             DataGenerationTemplateWorkerTask => nameof(DataGenerationTemplateWorkerTask).SplitOnCapitalLetters(),
             SynchronisationWorkerTask => nameof(SynchronisationWorkerTask).SplitOnCapitalLetters(),
             ClearConnectedSystemObjectsWorkerTask => nameof(ClearConnectedSystemObjectsWorkerTask).SplitOnCapitalLetters(),
+            DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),
             _ => "Unknown Worker Task Type"
         };
     }

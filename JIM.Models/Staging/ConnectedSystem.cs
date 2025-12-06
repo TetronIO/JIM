@@ -16,6 +16,12 @@ public class ConnectedSystem
 
     public DateTime LastUpdated { get; set; }
 
+    /// <summary>
+    /// The operational status of the Connected System.
+    /// Used to block operations during deletion.
+    /// </summary>
+    public ConnectedSystemStatus Status { get; set; } = ConnectedSystemStatus.Active;
+
     public List<ConnectedSystemRunProfile>? RunProfiles { get; set; } = new();
 
     public List<ConnectedSystemObject> Objects { get; set; } = new();

@@ -17,14 +17,14 @@ namespace JIM.Api.Controllers
             _application = application;
         }
 
-        [HttpGet("/metaverse/object_types")]
+        [HttpGet("/metaverse/object-types")]
         public async Task<IEnumerable<MetaverseObjectType>> GetObjectTypesAsync(bool includeChildObjects)
         {
             _logger.LogTrace($"Someone requested the metaverse object types");
             return await _application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
         }
 
-        [HttpGet("/metaverse/object_types/{id}")]
+        [HttpGet("/metaverse/object-types/{id}")]
         public async Task<MetaverseObjectType?> GetObjectTypeAsync(int id, bool includeChildObjects)
         {
             _logger.LogTrace($"Someone requested an object type: {id}");

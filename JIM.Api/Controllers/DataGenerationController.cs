@@ -17,28 +17,28 @@ namespace JIM.Api.Controllers
             _application = application;
         }
 
-        [HttpGet("/data_generation/example_data_sets")]
+        [HttpGet("/data-generation/example-data-sets")]
         public async Task<IEnumerable<ExampleDataSet>> GetExampleDataSetsAsync()
         {
             _logger.LogTrace($"Someone requested the example data set");
             return await _application.DataGeneration.GetExampleDataSetsAsync();
         }
 
-        [HttpGet("/data_generation/templates")]
+        [HttpGet("/data-generation/templates")]
         public async Task<IEnumerable<DataGenerationTemplate>> GetTemplatesAsync()
         {
             _logger.LogTrace($"Someone requested the data generation templates");
             return await _application.DataGeneration.GetTemplatesAsync();
         }
 
-        [HttpGet("/data_generation/templates/{id}")]
+        [HttpGet("/data-generation/templates/{id}")]
         public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
         {
             _logger.LogTrace($"Someone requested a specific data generation template: {id}");
             return await _application.DataGeneration.GetTemplateAsync(id);
         }
 
-        [HttpPost("/data_generation/templates/{id}/execute")]
+        [HttpPost("/data-generation/templates/{id}/execute")]
         public async Task ExecuteTemplateAsync(int id, CancellationToken cancellationToken)
         {
             await _application.DataGeneration.ExecuteTemplateAsync(id, cancellationToken);

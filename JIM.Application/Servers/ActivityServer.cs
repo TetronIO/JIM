@@ -27,8 +27,12 @@ public class ActivityServer
 
         if (activity.TargetType == ActivityTargetType.ConnectedSystem)
         {
-            if (activity.ConnectedSystemId == null && activity.TargetOperationType != ActivityTargetOperationType.Create)
-                throw new InvalidDataException("Activity.ConnectedSystemId has not been set and must be for UPDATE and DELETE operations. Cannot continue.");
+            // ConnectedSystemId is required for UPDATE operations, but not for DELETE
+            // because the Connected System will be deleted before the activity completes
+            if (activity.ConnectedSystemId == null &&
+                activity.TargetOperationType != ActivityTargetOperationType.Create &&
+                activity.TargetOperationType != ActivityTargetOperationType.Delete)
+                throw new InvalidDataException("Activity.ConnectedSystemId has not been set and must be for UPDATE operations. Cannot continue.");
         }
 
         await Application.Repository.Activity.CreateActivityAsync(activity);
