@@ -214,6 +214,65 @@ public class LdapConnectorTests
 
     #endregion
 
+    #region LDAPS settings tests
+
+    [Test]
+    public void GetSettings_ContainsUseSecureConnectionSetting()
+    {
+        var settings = _connector.GetSettings();
+        var secureConnectionSetting = settings.FirstOrDefault(s => s.Name == "Use Secure Connection (LDAPS)?");
+
+        Assert.That(secureConnectionSetting, Is.Not.Null);
+        Assert.That(secureConnectionSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.CheckBox));
+        Assert.That(secureConnectionSetting.DefaultCheckboxValue, Is.False);
+        Assert.That(secureConnectionSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
+    }
+
+    [Test]
+    public void GetSettings_ContainsCertificateValidationSetting()
+    {
+        var settings = _connector.GetSettings();
+        var certValidationSetting = settings.FirstOrDefault(s => s.Name == "Certificate Validation");
+
+        Assert.That(certValidationSetting, Is.Not.Null);
+        Assert.That(certValidationSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
+        Assert.That(certValidationSetting.DropDownValues, Does.Contain("Full Validation"));
+        Assert.That(certValidationSetting.DropDownValues, Does.Contain("Skip Validation (Not Recommended)"));
+        Assert.That(certValidationSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
+    }
+
+    #endregion
+
+    #region Retry settings tests
+
+    [Test]
+    public void GetSettings_ContainsMaxRetriesSetting()
+    {
+        var settings = _connector.GetSettings();
+        var maxRetriesSetting = settings.FirstOrDefault(s => s.Name == "Maximum Retries");
+
+        Assert.That(maxRetriesSetting, Is.Not.Null);
+        Assert.That(maxRetriesSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.Integer));
+        Assert.That(maxRetriesSetting.DefaultIntValue, Is.EqualTo(3));
+        Assert.That(maxRetriesSetting.Required, Is.False);
+        Assert.That(maxRetriesSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.General));
+    }
+
+    [Test]
+    public void GetSettings_ContainsRetryDelaySetting()
+    {
+        var settings = _connector.GetSettings();
+        var retryDelaySetting = settings.FirstOrDefault(s => s.Name == "Retry Delay (ms)");
+
+        Assert.That(retryDelaySetting, Is.Not.Null);
+        Assert.That(retryDelaySetting!.Type, Is.EqualTo(ConnectedSystemSettingType.Integer));
+        Assert.That(retryDelaySetting.DefaultIntValue, Is.EqualTo(1000));
+        Assert.That(retryDelaySetting.Required, Is.False);
+        Assert.That(retryDelaySetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.General));
+    }
+
+    #endregion
+
     #region Export settings tests
 
     [Test]

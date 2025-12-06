@@ -17,6 +17,7 @@ public class PostgresDataRepository : IRepository
     public ISeedingRepository Seeding { get; }
     public IServiceSettingsRepository ServiceSettings { get; }
     public ITaskingRepository Tasking { get; }
+    public ITrustedCertificateRepository TrustedCertificates { get; }
 
     internal JimDbContext Database { get; }
 
@@ -36,6 +37,7 @@ public class PostgresDataRepository : IRepository
         Seeding = new SeedingRepository(this);
         ServiceSettings = new ServiceSettingsRepository(this);
         Tasking = new TaskingRepository(this);
+        TrustedCertificates = new TrustedCertificateRepository(this);
     }
 
     public async Task InitialiseDatabaseAsync()

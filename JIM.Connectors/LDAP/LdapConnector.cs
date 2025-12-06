@@ -36,14 +36,16 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
     private readonly string _settingDirectoryServerPort = "Port";
-    // TODO: Add LDAPS support - see Phase 5 in docs/LDAP_CONNECTOR_IMPROVEMENTS.md
-    // private readonly string _settingUseSecureConnection = "Use a Secure Connection?";
+    private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
+    private readonly string _settingCertificateValidation = "Certificate Validation";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
     private readonly string _settingUsername = "Username";
     private readonly string _settingPassword = "Password";
     private readonly string _settingAuthType = "Authentication Type";
     private readonly string _settingSearchTimeout = "Search Timeout";
     private readonly string _settingCreateContainersAsNeeded = "Create containers as needed?";
+    private readonly string _settingMaxRetries = "Maximum Retries";
+    private readonly string _settingRetryDelay = "Retry Delay (ms)";
 
     // Export settings
     private readonly string _settingDeleteBehaviour = "Delete Behaviour";
@@ -56,8 +58,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = "Directory Server", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new() { Name = "Directory Server Info", Description = "Enter Active Directory domain controller, or LDAP server details below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
             new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
-            new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on, i.e. 389", DefaultIntValue = 389, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
-            // TODO: Add LDAPS setting here when implementing secure connection support
+            new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.", DefaultIntValue = LdapConnectorConstants.DEFAULT_LDAP_PORT, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingUseSecureConnection, Description = "Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = _settingCertificateValidation, Required = false, Description = "How to validate the server's SSL certificate.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.CERT_VALIDATION_FULL, LdapConnectorConstants.CERT_VALIDATION_SKIP }, Category = ConnectedSystemSettingCategory.Connectivity },
             new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
             new() { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
@@ -69,6 +72,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             new() { Name = "Import Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingSearchTimeout, Required = false, Description = "Maximum time in seconds to wait for LDAP search results. Default is 300 (5 minutes).", DefaultIntValue = 300, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+
+            new() { Name = "Retry Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingMaxRetries, Required = false, Description = "Maximum number of retry attempts for transient failures. Default is 3.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MAX_RETRIES, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingRetryDelay, Required = false, Description = "Initial delay between retries in milliseconds. Uses exponential backoff. Default is 1000ms.", DefaultIntValue = LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
@@ -149,6 +156,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
         var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
         var authTypeSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingAuthType);
+        var useSecureConnection = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
+        var certificateValidation = settingValues.SingleOrDefault(q => q.Setting.Name == _settingCertificateValidation);
+        var maxRetriesSetting = settingValues.SingleOrDefault(q => q.Setting.Name == _settingMaxRetries);
+        var retryDelaySetting = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRetryDelay);
 
         if (username == null || string.IsNullOrEmpty(username.StringValue) ||
             password == null || string.IsNullOrEmpty(password.StringEncryptedValue) ||
@@ -158,7 +169,14 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             timeoutSeconds is not { IntValue: not null })
             throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername},{_settingPassword}, or {_settingAuthType}.");
 
-        logger.Debug($"OpenImportConnection() Trying to connect to '{directoryServer.StringValue}' on port '{directoryServerPort.IntValue}' with username '{username.StringValue}' via auth type {authTypeSettingValue.StringValue}.");
+        var useSsl = useSecureConnection?.CheckboxValue ?? false;
+        var skipCertValidation = certificateValidation?.StringValue == LdapConnectorConstants.CERT_VALIDATION_SKIP;
+        var maxRetries = maxRetriesSetting?.IntValue ?? LdapConnectorConstants.DEFAULT_MAX_RETRIES;
+        var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
+
+        logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
+            directoryServer.StringValue, directoryServerPort.IntValue, username.StringValue, authTypeSettingValue.StringValue, useSsl);
+
         var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
         var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
 
@@ -170,13 +188,69 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         else if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM)
             authTypeEnumValue = AuthType.Ntlm;
 
-        _connection = new LdapConnection(identifier, credential, authTypeEnumValue);
-        _connection.SessionOptions.ProtocolVersion = 3;
-        // TODO: Enable SSL options when LDAPS support is implemented (Phase 5)
-        // _connection.SessionOptions.SecureSocketLayer = true;
-        // _connection.SessionOptions.VerifyServerCertificate += (connection, certificate) => true; // Accept all certs - make configurable
-        _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value); // doesn't seem to have any effect. consider wrapping this in a time-limited, cancellable task instead
-        _connection.Bind();
+        // Execute connection with retry logic
+        ExecuteWithRetry(() =>
+        {
+            _connection = new LdapConnection(identifier, credential, authTypeEnumValue);
+            _connection.SessionOptions.ProtocolVersion = 3;
+            _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value);
+
+            // Configure LDAPS if enabled
+            if (useSsl)
+            {
+                _connection.SessionOptions.SecureSocketLayer = true;
+                if (skipCertValidation)
+                {
+                    logger.Warning("Certificate validation is disabled. This is not recommended for production environments.");
+                    _connection.SessionOptions.VerifyServerCertificate = (connection, certificate) => true;
+                }
+            }
+
+            _connection.Bind();
+        }, maxRetries, retryDelayMs, logger);
+    }
+
+    /// <summary>
+    /// Executes an action with retry logic for transient failures.
+    /// Uses exponential backoff between retries.
+    /// </summary>
+    private static void ExecuteWithRetry(Action action, int maxRetries, int baseDelayMs, ILogger logger)
+    {
+        var attempt = 0;
+        while (true)
+        {
+            try
+            {
+                action();
+                return;
+            }
+            catch (LdapException ex) when (IsTransientError(ex) && attempt < maxRetries)
+            {
+                attempt++;
+                var delay = baseDelayMs * (int)Math.Pow(2, attempt - 1);
+                logger.Warning(ex, "Transient LDAP error on attempt {Attempt}/{MaxRetries}. Retrying in {Delay}ms",
+                    attempt, maxRetries, delay);
+                Thread.Sleep(delay);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines if an LDAP exception represents a transient error that may succeed on retry.
+    /// </summary>
+    private static bool IsTransientError(LdapException ex)
+    {
+        // Common transient error codes
+        return ex.ErrorCode switch
+        {
+            51 => true,  // Busy
+            52 => true,  // Unavailable
+            53 => true,  // Unwilling to perform (server overloaded)
+            80 => true,  // Other (generic, often transient)
+            81 => true,  // Server down
+            -1 => true,  // Network/connection error
+            _ => false
+        };
     }
 
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken)

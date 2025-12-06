@@ -286,7 +286,7 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 - [x] **4.7** Implement object deletion/disable in directory (DeleteRequest or userAccountControl disable)
 - [x] **4.8** Add export tests (4 new tests, 160 total)
 
-### Phase 5: Enhancements (Priority: Future)
+### Phase 5: Enhancements (Priority: Future) ✅
 
 - [x] **5.1** Implement delta import using USN/changelog
   - AD: Uses `uSNChanged` attribute filter with `HighestCommittedUSN` watermark
@@ -294,9 +294,21 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
   - Updated `LdapConnectorRootDse` to track both USN and changelog positions
   - Added `GetDeltaImportObjects()`, `GetDeltaResultsUsingUsn()`, `GetDeltaResultsUsingChangelog()` methods
   - Added `GetEntryAttributeLongValue()` utility for 64-bit USN values
-- [ ] **5.2** Add LDAPS (secure connection) support
-- [ ] **5.3** Add connection pooling for better performance
-- [ ] **5.4** Add retry logic for transient failures
+- [x] **5.2** Add LDAPS (secure connection) support
+  - Added "Use Secure Connection (LDAPS)?" checkbox setting
+  - Added "Certificate Validation" dropdown (Full Validation / Skip Validation)
+  - Implemented SecureSocketLayer and VerifyServerCertificate configuration
+  - Updated port description to reference standard LDAPS port 636
+- [x] **5.3** Connection pooling - Deferred (see notes)
+  - The connector already reuses connections between Open/Close calls
+  - True connection pooling across connector instances requires infrastructure changes
+  - System.DirectoryServices.Protocols doesn't provide built-in pooling
+  - Future work: Consider implementing at the worker service level
+- [x] **5.4** Add retry logic for transient failures
+  - Added "Maximum Retries" setting (default: 3)
+  - Added "Retry Delay (ms)" setting (default: 1000ms)
+  - Implemented `ExecuteWithRetry()` with exponential backoff
+  - Added `IsTransientError()` to identify retriable LDAP error codes (51, 52, 53, 80, 81, -1)
 
 ---
 
@@ -472,6 +484,13 @@ new()
 - [x] Export to AD works for update operations (ModifyRequest)
 - [x] Export to AD works for delete/disable operations (DeleteRequest or userAccountControl)
 - [x] MVP checklist item "LDAP/Active Directory Connector - Export" is complete
+
+### Phase 5 Complete When: ✅
+- [x] Delta import works for AD (USN-based) and non-AD (changelog-based) directories
+- [x] LDAPS secure connections are configurable via settings
+- [x] Certificate validation can be skipped for self-signed certificates
+- [x] Transient LDAP failures are automatically retried with exponential backoff
+- [x] All tests pass (164 tests total - 4 new LDAPS/retry settings tests added)
 
 ---
 

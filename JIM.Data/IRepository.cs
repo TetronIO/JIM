@@ -12,6 +12,7 @@ public interface IRepository
     public ISeedingRepository Seeding { get; }
     public IServiceSettingsRepository ServiceSettings { get; }
     public ITaskingRepository Tasking { get; }
+    public ITrustedCertificateRepository TrustedCertificates { get; }
 
     public Task InitialiseDatabaseAsync();
     public Task InitialisationCompleteAsync();

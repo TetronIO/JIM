@@ -9,6 +9,7 @@ public class JimApplication
     internal IRepository Repository { get; }
     private SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
+    public CertificateServer Certificates { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
     public DataGenerationServer DataGeneration { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
@@ -22,6 +23,7 @@ public class JimApplication
     public JimApplication(IRepository dataRepository)
     {
         Activities = new ActivityServer(this);
+        Certificates = new CertificateServer(this);
         ConnectedSystems = new ConnectedSystemServer(this);
         DataGeneration = new DataGenerationServer(this);
         ExportEvaluation = new ExportEvaluationServer(this);
