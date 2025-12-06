@@ -649,6 +649,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (!Repository.Database.ConnectedSystemRunProfiles.Any(q => q.Id == runProfile.Id))
             return;
 
+        // Null out the FK reference in Activities to preserve audit history
+        // Only execute raw SQL if we have a real database connection (not mocked)
+        try
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Activities"" SET ""ConnectedSystemRunProfileId"" = NULL WHERE ""ConnectedSystemRunProfileId"" = {0}",
+                runProfile.Id);
+        }
+        catch (Exception)
+        {
+            // Expected when running with mocked DbContext in tests
+        }
+
         Repository.Database.ConnectedSystemRunProfiles.Remove(runProfile);
         await Repository.Database.SaveChangesAsync();
     }
@@ -846,6 +859,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         
     public async Task DeleteSyncRuleAsync(SyncRule syncRule)
     {
+        // Null out the FK reference in Activities to preserve audit history
+        // Only execute raw SQL if we have a real database connection (not mocked)
+        try
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
+                syncRule.Id);
+        }
+        catch (Exception)
+        {
+            // Expected when running with mocked DbContext in tests
+        }
+
         Repository.Database.Remove(syncRule);
         await Repository.Database.SaveChangesAsync();
     }

@@ -102,7 +102,7 @@ public class FullSyncTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
-        
+
         // instantiate Jim using the mocked db context
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
     }

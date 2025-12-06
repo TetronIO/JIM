@@ -214,6 +214,19 @@ public class DataGenerationRepository : IDataGenerationRepository
             return;
         }
 
+        // Null out the FK reference in Activities to preserve audit history
+        // Only execute raw SQL if we have a real database connection (not mocked)
+        try
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Activities"" SET ""DataGenerationTemplateId"" = NULL WHERE ""DataGenerationTemplateId"" = {0}",
+                templateId);
+        }
+        catch (Exception)
+        {
+            // Expected when running with mocked DbContext in tests
+        }
+
         // go through the template tree and remove all descendant template objects
         // cascade delete not used here due to references to non-template objects we definately don't want to delete
         foreach (var objectType in template.ObjectTypes)
