@@ -198,25 +198,25 @@ User clicks "Delete System"
 │                                                                 │
 │  ⚠ This action cannot be undone.                               │
 │                                                                 │
-│  ┌─ Preview Impact ─────────────────────────────────────────┐  │
-│  │  Objects to delete:                                       │  │
-│  │  • 12,847 Connected System Objects                        │  │
-│  │  • 3 Sync Rules                                          │  │
-│  │  • 2 Run Profiles                                        │  │
-│  │  • 15 Pending Exports                                    │  │
-│  │                                                          │  │
-│  │  Metaverse Impact:                                       │  │
-│  │  • 12,500 MVOs currently joined                          │  │
-│  │  • 8,200 MVOs have other connector links (safe)          │  │
-│  │  • 4,300 MVOs will be scheduled for deletion (30d grace) │  │
-│  │  • 0 MVOs will be immediately deleted                    │  │
-│  │                                                          │  │
-│  │  ⚠ 15 pending exports will be discarded                  │  │
-│  │                                                          │  │
-│  │  Estimated time: ~45 seconds (background job)            │  │
-│  └──────────────────────────────────────────────────────────┘  │
+│  ┌─ Preview Impact ─────────────────────────────────────────┐   │
+│  │  Objects to delete:                                      │   │
+│  │  • 12,847 Connected System Objects                       │   │
+│  │  • 3 Sync Rules                                          │   │
+│  │  • 2 Run Profiles                                        │   │
+│  │  • 15 Pending Exports                                    │   │
+│  │                                                          │   │
+│  │  Metaverse Impact:                                       │   │
+│  │  • 12,500 MVOs currently joined                          │   │
+│  │  • 8,200 MVOs have other connector links (safe)          │   │
+│  │  • 4,300 MVOs will be scheduled for deletion (30d grace) │   │
+│  │  • 0 MVOs will be immediately deleted                    │   │
+│  │                                                          │   │
+│  │  ⚠ 15 pending exports will be discarded                 │   │
+│  │                                                          │   │
+│  │  Estimated time: ~45 seconds (background job)            │   │
+│  └──────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  [ ] Evaluate MVO deletion rules after disconnect              │
+│  [ ] Evaluate MVO deletion rules after disconnect               │
 │                                                                 │
 │  Type "HR Source" to confirm: [________________]                │
 │                                                                 │
@@ -486,17 +486,17 @@ This analysis is expensive:
 ### UI Mockup
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Delete Connected System: "Old HR System"                       │
-│                                                                 │
+┌────────────────────────────────────────────────────────────────┐
+│  Delete Connected System: "Old HR System"                      │
+│                                                                │
 │  ┌─ Basic Impact ───────────────────────────────────────────┐  │
-│  │  • 12,847 CSOs will be deleted                            │  │
+│  │  • 12,847 CSOs will be deleted                           │  │
 │  │  • 3 Sync Rules will be deleted                          │  │
 │  │  • 4,300 MVOs may be affected                            │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                                                                 │
+│                                                                │
 │  [▶ Run Detailed Attribute Analysis]                           │
-│                                                                 │
+│                                                                │
 │  ┌─ Attribute Impact (detailed) ────────────────────────────┐  │
 │  │  ⚠ 2,150 MVO attributes will be RECALLED (deleted)       │  │
 │  │  ⚠ 890 MVO attributes will CHANGE VALUE (precedence)     │  │
@@ -509,11 +509,11 @@ This analysis is expensive:
 │  │                                                          │  │
 │  │  [View Sample MVOs] [Export Full Report]                 │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  Type "Old HR System" to confirm: [________________]            │
-│                                                                 │
-│                    [Cancel]  [Delete System]                    │
-└─────────────────────────────────────────────────────────────────┘
+│                                                                │
+│  Type "Old HR System" to confirm: [________________]           │
+│                                                                │
+│                    [Cancel]  [Delete System]                   │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ### Implementation Phases
