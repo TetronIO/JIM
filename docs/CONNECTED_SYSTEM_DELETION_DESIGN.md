@@ -93,7 +93,7 @@ However, for MVP, we will NOT serialize deleted CSOs because:
 
 **Recommendation for MVP**: Simply null the ConnectedSystemId FK. Preserve activities for audit trail.
 
-**Future Work** (GitHub Issue #136): Implement selective activity serialization:
+**Future Work** (GitHub Issue [#136](https://github.com/TetronIO/JIM/issues/136)): Implement selective activity serialization:
 - Only serialize system-level metadata (ConnectedSystem settings, schema)
 - Do NOT serialize individual CSOs (too much data)
 - Provide "Export deleted system configuration" feature for admins needing recovery info
@@ -566,7 +566,7 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
 3. **Pending exports shown in preview** - Warn about pending exports but don't block deletion
 4. **Q1: Handle MVO deletion** - Option D (Disconnect first, delete second) - preserves referential integrity and allows MVO rules to be evaluated in background
 5. **Q2: Handle Sync Rules** - Option B (Cascade delete) - sync rules are useless without the system; show count in confirmation
-6. **Q3: Handle Activities** - Option B (Null FK) - preserve immutable audit logs; activity serialization deferred to post-MVP enhancement (#136)
+6. **Q3: Handle Activities** - Option B (Null FK) - preserve immutable audit logs; activity serialization deferred to post-MVP enhancement ([#136](https://github.com/TetronIO/JIM/issues/136))
 7. **Q4: Deletion mode** - Option C (Auto-detect) - synchronous for <1000 CSOs, async background job for >=1000 CSOs
 8. **Q5: Concurrency safety** - Awaiting final decision (Option D - Hybrid approach proposed)
 
