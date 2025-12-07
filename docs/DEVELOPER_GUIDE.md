@@ -164,7 +164,8 @@ builder.Services.AddSingleton<IConfiguration>(configuration);
 
 **Controllers**:
 - Inherit from `ControllerBase`
-- Use attribute routing: `[Route("api/[controller]")]`
+- Use versioned attribute routing: `[Route("api/v{version:apiVersion}/[controller]")]`
+- Add `[ApiVersion("1.0")]` to mark controller version
 - Return `ActionResult<T>` for typed responses
 - Use DTOs for request/response bodies
 - Add XML comments for Swagger documentation
@@ -172,7 +173,8 @@ builder.Services.AddSingleton<IConfiguration>(configuration);
 **Example**:
 ```csharp
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class MetaverseController : ControllerBase
 {
     /// <summary>
@@ -188,6 +190,14 @@ public class MetaverseController : ControllerBase
     }
 }
 ```
+
+**API Versioning**:
+- All endpoints are versioned using URL path (e.g., `/api/v1/certificates`)
+- Current version: **1.0**
+- Default version assumed if not specified in request
+- Responses include `api-supported-versions` header
+- To add v2: Create new methods/controllers with `[ApiVersion("2.0")]` and `[MapToApiVersion("2.0")]`
+- Deprecate old versions: Add `[ApiVersion("1.0", Deprecated = true)]`
 
 ### 6. Blazor Development
 
