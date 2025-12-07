@@ -1,6 +1,7 @@
 ﻿using JIM.Api.Models;
 using JIM.Application;
 using JIM.Models.DataGeneration;
+using JIM.Models.DataGeneration.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,21 +22,23 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("example-data-sets")]
-        [ProducesResponseType(typeof(IEnumerable<ExampleDataSet>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<ExampleDataSetHeader>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetExampleDataSetsAsync()
         {
             _logger.LogTrace("Requested example data sets");
             var dataSets = await _application.DataGeneration.GetExampleDataSetsAsync();
-            return Ok(dataSets);
+            var headers = dataSets.Select(ExampleDataSetHeader.FromEntity);
+            return Ok(headers);
         }
 
         [HttpGet("templates")]
-        [ProducesResponseType(typeof(IEnumerable<DataGenerationTemplate>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<DataGenerationTemplateHeader>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetTemplatesAsync()
         {
             _logger.LogTrace("Requested data generation templates");
             var templates = await _application.DataGeneration.GetTemplatesAsync();
-            return Ok(templates);
+            var headers = templates.Select(DataGenerationTemplateHeader.FromEntity);
+            return Ok(headers);
         }
 
         [HttpGet("templates/{id:int}")]
@@ -48,6 +51,7 @@ namespace JIM.Api.Controllers
             if (template == null)
                 return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
+            // Return full entity for detail view - template includes nested ObjectTypes
             return Ok(template);
         }
 

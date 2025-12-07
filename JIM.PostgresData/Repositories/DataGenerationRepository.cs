@@ -30,7 +30,7 @@ public class DataGenerationRepository : IDataGenerationRepository
             Created = d.Created,
             Id = d.Id,
             Culture = d.Culture,
-            Values = d.Values.Count()
+            ValueCount = d.Values.Count()
         }).ToListAsync();
 
         return datasetHeaders;

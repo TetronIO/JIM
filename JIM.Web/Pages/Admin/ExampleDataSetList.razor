@@ -33,14 +33,14 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Culture)"><MudText Typo="Typo.button">Culture</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Values)"><MudText Typo="Typo.button">Values</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.ValueCount)"><MudText Typo="Typo.button">Values</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataSetHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/example-data/datasets/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="Culture">@context.Culture</MudTd>
-        <MudTd DataLabel="Values">@context.Values.ToString("N0")</MudTd>
+        <MudTd DataLabel="Values">@context.ValueCount.ToString("N0")</MudTd>
         <MudTd DataLabel="Created">@context.Created</MudTd>
     </RowTemplate>
     <NoRecordsContent>

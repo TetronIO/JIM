@@ -1,7 +1,6 @@
 ﻿using JIM.Api.Models;
 using JIM.Application;
-using JIM.Models.Logic;
-using JIM.Models.Staging;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging.DTOs;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
@@ -24,16 +23,17 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("connected-systems")]
-        [ProducesResponseType(typeof(IEnumerable<ConnectedSystem>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<ConnectedSystemHeader>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetConnectedSystemsAsync()
         {
             _logger.LogTrace("Requested connected systems");
             var systems = await _application.ConnectedSystems.GetConnectedSystemsAsync();
-            return Ok(systems);
+            var headers = systems.Select(ConnectedSystemHeader.FromEntity);
+            return Ok(headers);
         }
 
         [HttpGet("connected-systems/{connectedSystemId:int}")]
-        [ProducesResponseType(typeof(ConnectedSystem), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetConnectedSystemAsync(int connectedSystemId)
         {
@@ -42,11 +42,11 @@ namespace JIM.Api.Controllers
             if (system == null)
                 return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
-            return Ok(system);
+            return Ok(ConnectedSystemDetailDto.FromEntity(system));
         }
 
         [HttpGet("connected-systems/{connectedSystemId:int}/object-types")]
-        [ProducesResponseType(typeof(IEnumerable<ConnectedSystemObjectType>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<ConnectedSystemObjectTypeDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetConnectedSystemObjectTypesAsync(int connectedSystemId)
         {
@@ -55,11 +55,12 @@ namespace JIM.Api.Controllers
             if (objectTypes == null)
                 return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
-            return Ok(objectTypes);
+            var dtos = objectTypes.Select(ConnectedSystemObjectTypeDto.FromEntity);
+            return Ok(dtos);
         }
 
         [HttpGet("connected-systems/{connectedSystemId:int}/objects/{id:guid}")]
-        [ProducesResponseType(typeof(ConnectedSystemObject), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ConnectedSystemObjectDetailDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
@@ -68,7 +69,7 @@ namespace JIM.Api.Controllers
             if (obj == null)
                 return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in connected system {connectedSystemId}."));
 
-            return Ok(obj);
+            return Ok(ConnectedSystemObjectDetailDto.FromEntity(obj));
         }
 
         /// <summary>
@@ -180,16 +181,17 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("sync-rules")]
-        [ProducesResponseType(typeof(IEnumerable<SyncRule>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<SyncRuleHeader>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSyncRulesAsync()
         {
             _logger.LogTrace("Requested synchronisation rules");
             var rules = await _application.ConnectedSystems.GetSyncRulesAsync();
-            return Ok(rules);
+            var headers = rules.Select(SyncRuleHeader.FromEntity);
+            return Ok(headers);
         }
 
         [HttpGet("sync-rules/{id:int}")]
-        [ProducesResponseType(typeof(SyncRule), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetSyncRuleAsync(int id)
         {
@@ -198,7 +200,7 @@ namespace JIM.Api.Controllers
             if (rule == null)
                 return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
 
-            return Ok(rule);
+            return Ok(SyncRuleHeader.FromEntity(rule));
         }
     }
 }

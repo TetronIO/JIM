@@ -1,6 +1,6 @@
 ﻿using JIM.Api.Models;
 using JIM.Application;
-using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,16 +21,17 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("object-types")]
-        [ProducesResponseType(typeof(IEnumerable<MetaverseObjectType>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<MetaverseObjectTypeHeader>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetObjectTypesAsync(bool includeChildObjects)
         {
             _logger.LogTrace("Requested metaverse object types");
             var objectTypes = await _application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
-            return Ok(objectTypes);
+            var headers = objectTypes.Select(MetaverseObjectTypeHeader.FromEntity);
+            return Ok(headers);
         }
 
         [HttpGet("object-types/{id:int}")]
-        [ProducesResponseType(typeof(MetaverseObjectType), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(MetaverseObjectTypeDetailDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetObjectTypeAsync(int id, bool includeChildObjects)
         {
@@ -39,20 +40,21 @@ namespace JIM.Api.Controllers
             if (objectType == null)
                 return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
 
-            return Ok(objectType);
+            return Ok(MetaverseObjectTypeDetailDto.FromEntity(objectType));
         }
 
         [HttpGet("attributes")]
-        [ProducesResponseType(typeof(IEnumerable<MetaverseAttribute>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<MetaverseAttributeHeader>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAttributesAsync()
         {
             _logger.LogTrace("Requested metaverse attributes");
             var attributes = await _application.Metaverse.GetMetaverseAttributesAsync();
-            return Ok(attributes);
+            var headers = attributes.Select(MetaverseAttributeHeader.FromEntity);
+            return Ok(headers);
         }
 
         [HttpGet("attributes/{id:int}")]
-        [ProducesResponseType(typeof(MetaverseAttribute), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetAttributeAsync(int id)
         {
@@ -61,11 +63,11 @@ namespace JIM.Api.Controllers
             if (attribute == null)
                 return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
 
-            return Ok(attribute);
+            return Ok(MetaverseAttributeDetailDto.FromEntity(attribute));
         }
 
         [HttpGet("objects/{id:guid}")]
-        [ProducesResponseType(typeof(MetaverseObject), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(MetaverseObjectDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetObjectAsync(Guid id)
         {
@@ -74,7 +76,7 @@ namespace JIM.Api.Controllers
             if (obj == null)
                 return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
 
-            return Ok(obj);
+            return Ok(MetaverseObjectDto.FromEntity(obj));
         }
     }
 }

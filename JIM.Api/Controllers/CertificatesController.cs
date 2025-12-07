@@ -54,7 +54,7 @@ public class CertificatesController : ControllerBase
     /// Gets a trusted certificate by ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(TrustedCertificate), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TrustedCertificateDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetByIdAsync(Guid id)
     {
@@ -63,7 +63,7 @@ public class CertificatesController : ControllerBase
         if (certificate == null)
             return NotFound();
 
-        return Ok(certificate);
+        return Ok(TrustedCertificateDetailDto.FromEntity(certificate));
     }
 
     /// <summary>

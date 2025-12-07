@@ -54,35 +54,42 @@
 
 ---
 
-## Phase 3: Response DTOs
+## Phase 3: Response DTOs ✅
 
 ### 3.1 Create DTOs for MetaverseController
-- [ ] `MetaverseObjectTypeDto`
-- [ ] `MetaverseObjectDto`
-- [ ] `MetaverseAttributeDto`
+- [x] `MetaverseObjectTypeDto` / `MetaverseObjectTypeDetailDto`
+- [x] `MetaverseObjectDto`
+- [x] `MetaverseAttributeDto` / `MetaverseAttributeDetailDto`
 
 ### 3.2 Create DTOs for SynchronisationController
-- [ ] `ConnectedSystemDto`
-- [ ] `ConnectedSystemObjectTypeDto`
-- [ ] `ConnectedSystemObjectDto`
+- [x] `ConnectedSystemDto` / `ConnectedSystemDetailDto`
+- [x] `ConnectedSystemObjectTypeDto`
+- [x] `ConnectedSystemObjectDto`
 
 ### 3.3 Create DTOs for DataGenerationController
-- [ ] `DataGenerationTemplateDto`
-- [ ] `ExampleDataSetDto`
+- [x] `DataGenerationTemplateHeader` (uses existing DTO from JIM.Models)
+- [x] `ExampleDataSetHeader` (uses existing DTO from JIM.Models)
 
 ### 3.4 Create DTOs for SecurityController
-- [ ] `RoleDto`
+- [x] `RoleDto`
 
 ### 3.5 Update CertificatesController
-- [ ] Create `TrustedCertificateDetailDto` (without raw certificate bytes)
-- [ ] Add separate endpoint for certificate data download if needed
+- [x] Create `TrustedCertificateDetailDto` (without raw certificate bytes)
+- [x] Add separate endpoint for certificate data download if needed
 
 ### 3.6 Refactor Controllers to Use DTOs
-- [ ] MetaverseController - map all responses to DTOs
-- [ ] SynchronisationController - map all responses to DTOs
-- [ ] DataGenerationController - map all responses to DTOs
-- [ ] SecurityController - map all responses to DTOs
-- [ ] CertificatesController - use detail DTO for GetById
+- [x] MetaverseController - map all responses to DTOs
+- [x] SynchronisationController - map all responses to DTOs
+- [x] DataGenerationController - map all responses to DTOs
+- [x] SecurityController - map all responses to DTOs
+- [x] CertificatesController - use detail DTO for GetById
+
+### 3.7 JWT Authentication & Swagger OAuth
+- [x] Configure JWT Bearer authentication with OIDC discovery
+- [x] Configure Swagger UI OAuth2 with PKCE (SPA public client)
+- [x] Auto-detect Entra ID and configure v1/v2 issuer formats
+- [x] Extract API audience from scope for proper token validation
+- [x] Document SSO configuration in `.env.example`
 
 ---
 

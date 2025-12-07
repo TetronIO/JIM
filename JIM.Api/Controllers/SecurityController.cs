@@ -1,5 +1,5 @@
-﻿using JIM.Application;
-using JIM.Models.Security;
+﻿using JIM.Api.Models;
+using JIM.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,12 +20,13 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("roles")]
-        [ProducesResponseType(typeof(IEnumerable<Role>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(IEnumerable<RoleDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetRolesAsync()
         {
             _logger.LogTrace("Requested roles");
             var roles = await _application.Security.GetRolesAsync();
-            return Ok(roles);
+            var dtos = roles.Select(RoleDto.FromEntity);
+            return Ok(dtos);
         }
     }
 }

@@ -48,14 +48,19 @@ try
     var clientId = Environment.GetEnvironmentVariable("SSO_CLIENT_ID");
     var apiScope = Environment.GetEnvironmentVariable("SSO_API_SCOPE");
 
+    // Extract the API identifier from the scope (e.g., "api://client-id/access_as_user" -> "api://client-id")
+    var apiAudience = ExtractApiAudience(apiScope, clientId);
+    var validIssuers = GetValidIssuers(authority);
+
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
             options.Authority = authority;
-            options.Audience = clientId;
+            options.Audience = apiAudience;
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
+                ValidIssuers = validIssuers,
                 ValidateAudience = true,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true
@@ -122,12 +127,11 @@ try
     // Configure the HTTP request pipeline.
     if (app.Environment.IsDevelopment())
     {
-        var clientSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
         app.UseSwagger();
         app.UseSwaggerUI(options =>
         {
             options.OAuthClientId(clientId);
-            options.OAuthClientSecret(clientSecret);
+            // No client secret - Swagger uses SPA platform with PKCE (public client)
             options.OAuthUsePkce();
         });
     }
@@ -234,6 +238,70 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 
     if (assignLogLogger)
         Log.Logger = loggerConfiguration.CreateLogger();
+}
+
+/// <summary>
+/// Extracts the API audience from an OAuth scope.
+/// For Entra ID scopes like "api://client-id/access_as_user", extracts "api://client-id".
+/// For other IDPs, falls back to the client ID.
+/// </summary>
+/// <param name="apiScope">The full API scope (e.g., api://client-id/access_as_user)</param>
+/// <param name="clientId">The OAuth client ID as fallback</param>
+/// <returns>The API audience for JWT validation</returns>
+static string? ExtractApiAudience(string? apiScope, string? clientId)
+{
+    if (string.IsNullOrEmpty(apiScope))
+        return clientId;
+
+    // For scopes like "api://client-id/access_as_user", extract "api://client-id"
+    var lastSlashIndex = apiScope.LastIndexOf('/');
+    if (lastSlashIndex > 0 && apiScope.StartsWith("api://"))
+        return apiScope.Substring(0, lastSlashIndex);
+
+    return clientId;
+}
+
+/// <summary>
+/// Gets the valid token issuers for JWT validation.
+/// Auto-detects Entra ID and configures both v1 and v2 issuer formats.
+/// For other IDPs, uses the authority as the issuer.
+/// </summary>
+/// <param name="authority">The OIDC authority URL</param>
+/// <returns>Array of valid issuer URLs</returns>
+static string[] GetValidIssuers(string? authority)
+{
+    // Check if user has configured explicit issuers
+    var configuredIssuers = Environment.GetEnvironmentVariable("SSO_VALID_ISSUERS");
+    if (!string.IsNullOrEmpty(configuredIssuers))
+    {
+        return configuredIssuers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    if (string.IsNullOrEmpty(authority))
+        return Array.Empty<string>();
+
+    // Auto-detect Entra ID and handle v1/v2 token format quirks
+    // Entra ID authority format: https://login.microsoftonline.com/{tenant-id}/v2.0
+    if (authority.Contains("login.microsoftonline.com"))
+    {
+        // Extract tenant ID from the authority URL
+        var uri = new Uri(authority);
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length >= 1)
+        {
+            var tenantId = segments[0];
+            Log.Information("Detected Entra ID authority, configuring v1 and v2 issuers for tenant {TenantId}", tenantId);
+
+            return new[]
+            {
+                $"https://sts.windows.net/{tenantId}/",           // v1 issuer format
+                $"https://login.microsoftonline.com/{tenantId}/v2.0"  // v2 issuer format
+            };
+        }
+    }
+
+    // For other IDPs, the issuer typically matches the authority
+    return new[] { authority };
 }
 
 /// <summary>
