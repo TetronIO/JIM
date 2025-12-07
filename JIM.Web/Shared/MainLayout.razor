@@ -138,7 +138,7 @@
     private MudThemeProvider? _mudThemeProvider;
     private const string LightModeText = "Switch to light mode";
     private const string DarkModeText = "Switch to dark mode";
-    private bool IsDrawerOpen { get; set; }
+    private bool IsDrawerOpen { get; set; } = true;
     private bool IsDarkMode { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
