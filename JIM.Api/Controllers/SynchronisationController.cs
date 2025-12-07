@@ -74,7 +74,15 @@ namespace JIM.Api.Controllers
         /// </summary>
         /// <param name="connectedSystemId">The ID of the Connected System to delete.</param>
         /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
+        /// <response code="200">Deletion completed immediately.</response>
+        /// <response code="202">Deletion has been queued as a background job.</response>
+        /// <response code="400">Deletion failed.</response>
+        /// <response code="401">User could not be identified from authentication token.</response>
         [HttpDelete("connected-systems/{connectedSystemId}")]
+        [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<ConnectedSystemDeletionResult>> DeleteConnectedSystemAsync(int connectedSystemId)
         {
             _logger.LogInformation("Deletion requested for connected system: {Id}", connectedSystemId);
@@ -91,6 +99,13 @@ namespace JIM.Api.Controllers
 
             if (!result.Success)
                 return BadRequest(result);
+
+            // Return 202 Accepted for queued operations, 200 OK for immediate completion
+            if (result.Outcome == DeletionOutcome.QueuedAsBackgroundJob ||
+                result.Outcome == DeletionOutcome.QueuedAfterSync)
+            {
+                return Accepted(result);
+            }
 
             return Ok(result);
         }

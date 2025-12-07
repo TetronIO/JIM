@@ -21,8 +21,8 @@
 ### 1.3 Fix Return Types
 - [x] Add explicit `IActionResult` return type to `DataGenerationController.ExecuteTemplateAsync`
 - [x] Return `202 Accepted` for async operations (template execution)
-- [ ] Return `202 Accepted` for queued deletions (requires SynchronisationController change)
-- [ ] Return `204 No Content` for void operations
+- [x] Return `202 Accepted` for queued deletions (SynchronisationController)
+- [x] Return `204 No Content` for void operations (already implemented in CertificatesController)
 
 ---
 
