@@ -1,8 +1,47 @@
 # JIM MVP Definition
 
-> **Version**: 1.2
+> **Version**: 1.3
 > **Last Updated**: 2025-12-07
-> **Status**: In Progress (~83% Complete)
+> **Status**: In Progress (~85% Complete)
+
+---
+
+## MVP Completion Summary
+
+| Category | Progress | Complete | Total |
+|----------|----------|----------|-------|
+| Connectors | `██████████` | 10 | 10 |
+| Inbound Sync | `█████████░` | 14 | 15 |
+| Outbound Sync | `██████████` | 15 | 15 |
+| Scheduling | `████░░░░░░` | 4 | 9 |
+| Admin UI | `███████░░░` | 10 | 15 |
+| Security | `██████░░░░` | 3 | 5 |
+| Operations | `███████░░░` | 4 | 6 |
+| **Overall** | `████████░░` | **60** | **75** |
+
+### Priority Order for Remaining Work
+
+**Critical Path (Required for MVP):**
+1. **Scheduler Service** - Automate run profile execution (4 items remaining)
+
+**Important (Highly Desirable for MVP):**
+2. Background job for scheduled MVO deletions (#120)
+3. Pending Export review UI (#25)
+
+**Nice to Have (Can follow MVP):**
+- Full RBAC (#21)
+- Change history (#14)
+- Sync preview
+- Delta sync support
+
+### Recently Completed ✓
+- ~~API Authentication (#8)~~ - JWT Bearer with OIDC, role-based authorisation
+- ~~Outbound Sync (#121)~~ - Implemented in ExportEvaluationServer.cs
+- ~~Export Execution~~ - Implemented in ExportExecutionServer.cs
+- ~~LDAP Connector Export~~ - Implemented in LdapConnectorExport.cs
+- ~~Certificate Store~~ - Implemented for LDAPS trusted certificates
+
+---
 
 ## Overview
 
@@ -94,6 +133,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [ ] Scheduler service implementation
 - [ ] Cron-style or interval-based scheduling
 - [ ] Run profile scheduling configuration
+- [ ] Scheduler configuration UI
 
 #### 4.2 Background Processing
 - [x] Worker service for task execution
@@ -120,7 +160,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Activity monitoring
 - [ ] Pending Export review/management (#25)
 - [ ] Sync preview (what-if analysis)
-- [ ] Scheduler configuration UI
 
 ### 6. Security & Access Control
 
@@ -146,45 +185,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Run profile execution tracking
 - [x] Error capture and display
 - [ ] Change history / audit trail (#14)
-
----
-
-## MVP Completion Summary
-
-| Category | Complete | Total | Status |
-|----------|----------|-------|--------|
-| Connectors | 10 | 10 | 100% |
-| Inbound Sync | 14 | 15 | 93% |
-| Outbound Sync | 15 | 15 | 100% |
-| Scheduling | 4 | 5 | 80% |
-| Admin UI | 10 | 15 | 67% |
-| Security | 3 | 5 | 60% |
-| Operations | 4 | 6 | 67% |
-| **Overall** | **60** | **71** | **~85%** |
-
----
-
-## Priority Order for Remaining Work
-
-### Critical Path (Required for MVP)
-1. **Scheduler Service** - Automate run profile execution (4 items remaining)
-
-### Important (Highly Desirable for MVP)
-2. Background job for scheduled MVO deletions (#120)
-3. Pending Export review UI (#25)
-
-### Nice to Have (Can follow MVP)
-5. Full RBAC (#21)
-6. Change history (#14)
-7. Sync preview
-8. Delta sync support
-
-### Recently Completed ✓
-- ~~API Authentication (#8)~~ - JWT Bearer with OIDC, role-based authorisation
-- ~~Outbound Sync (#121)~~ - Implemented in ExportEvaluationServer.cs
-- ~~Export Execution~~ - Implemented in ExportExecutionServer.cs
-- ~~LDAP Connector Export~~ - Implemented in LdapConnectorExport.cs
-- ~~Certificate Store~~ - Implemented for LDAPS trusted certificates
 
 ---
 
