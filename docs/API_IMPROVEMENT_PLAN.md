@@ -200,14 +200,18 @@
 
 ## Phase 8: Testing & Validation
 
-### 8.1 Integration Tests
+### 8.1 Integration Tests (Deferred)
+- **Status**: Deferred to backlog - tracked in [GitHub Issue #137](https://github.com/TetronIO/JIM/issues/137)
+- **Reason**: Not required for MVP; implement when setting up CI/CD pipeline or when API needs regression protection
 - [ ] Create API integration test project
 - [ ] Test authentication flows
 - [ ] Test pagination
 - [ ] Test error responses
 - [ ] Test all CRUD operations
 
-### 8.2 PowerShell Module Validation
+### 8.2 PowerShell Module Validation (Deferred)
+- **Status**: Deferred to backlog - tracked in [GitHub Issue #138](https://github.com/TetronIO/JIM/issues/138)
+- **Reason**: Not required for MVP; implement when API is stable and PowerShell automation is needed
 - [ ] Generate PowerShell module from OpenAPI spec
 - [ ] Test all cmdlets work correctly
 - [ ] Validate error handling in PowerShell
@@ -242,3 +246,4 @@ public async Task<IActionResult> GetAllAsync()
 - **Priority**: Phases 1-3 are required before PowerShell module development
 - **Breaking Changes**: All changes in this plan may break existing API consumers (none currently)
 - **Testing**: Build and test after each phase completion
+- **MVP Status**: Phases 1-7 complete; Phase 6.4 (Rate Limiting), Phase 8.1 (Integration Tests), and Phase 8.2 (PowerShell Module) deferred to backlog
