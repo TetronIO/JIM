@@ -1,0 +1,258 @@
+@page "/admin/connected-systems/{Id:int}/pending-exports"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Staging.DTOs
+@using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
+@using JIM.Models.Utility
+@using JIM.Utilities
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Pending Exports: @_connectedSystemHeader?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Pending Exports:</span> @_connectedSystemHeader?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    Pending exports are changes that need to be applied to the connected system. These are created when metaverse objects
+    change and need to be synchronised to this target system.
+</MudText>
+
+@if (_pendingExports != null)
+{
+    <MudGrid Class="mt-5">
+        <MudItem xs="6">
+            <MudSelect T="PendingExportStatus?" Label="Filter by Status" Value="_statusFilter" ValueChanged="OnStatusFilterChanged"
+                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 250px;">
+                <MudSelectItem T="PendingExportStatus?" Value="@((PendingExportStatus?)null)">All</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.ExportNotImported">Export Not Imported</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" Class="d-flex justify-end align-center">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Showing @_pendingExports.Results.Count of @_pendingExports.TotalResults results
+                @if (_pendingExports.TotalPages > 1)
+                {
+                    <text> (Page @_pendingExports.CurrentPage of @_pendingExports.TotalPages)</text>
+                }
+            </MudText>
+        </MudItem>
+    </MudGrid>
+
+    <MudTable Items="@_pendingExports.Results"
+              Hover="true"
+              Breakpoint="Breakpoint.Sm"
+              Class="mt-5 mb-5"
+              SortLabel="Sort By"
+              Filter="new Func<PendingExportHeader,bool>(FilterFunc1)"
+              Outlined="true"
+              Elevation="0"
+              OnRowClick="HandleRowClick"
+              T="PendingExportHeader"
+              RowClass="cursor-pointer">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.ChangeType)">Change Type</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.TargetObjectIdentifier ?? string.Empty)">Target Object</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.SourceMetaverseObjectDisplayName ?? string.Empty)">Source MVO</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.AttributeChangeCount)">Changes</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.CreatedAt)">Created</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.ErrorCount)">Errors</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.NextRetryAt ?? DateTime.MaxValue)">Next Retry</MudTableSortLabel></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Change Type">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Size="Size.Small">
+                    @context.ChangeType
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Size="Size.Small">
+                    @context.Status.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Target Object">
+                @if (context.ConnectedSystemObjectId.HasValue)
+                {
+                    <MudLink Href="@($"/admin/connected-systems/{Id}/objects/{context.ConnectedSystemObjectId}")">
+                        @(context.TargetObjectIdentifier ?? context.ConnectedSystemObjectId.ToString())
+                    </MudLink>
+                }
+                else
+                {
+                    <span class="mud-text-secondary">New object</span>
+                }
+            </MudTd>
+            <MudTd DataLabel="Source MVO">
+                @if (context.SourceMetaverseObjectId.HasValue)
+                {
+                    <MudLink Href="@($"/admin/metaverse/objects/{context.SourceMetaverseObjectId}")">
+                        @(context.SourceMetaverseObjectDisplayName ?? context.SourceMetaverseObjectId.ToString())
+                    </MudLink>
+                }
+                else
+                {
+                    <span>-</span>
+                }
+            </MudTd>
+            <MudTd DataLabel="Changes">@context.AttributeChangeCount</MudTd>
+            <MudTd DataLabel="Created">@context.CreatedAt.ToFriendlyDate()</MudTd>
+            <MudTd DataLabel="Errors">
+                @if (context.ErrorCount > 0)
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                        @context.ErrorCount / @context.MaxRetries
+                    </MudChip>
+                }
+                else
+                {
+                    <span>0</span>
+                }
+            </MudTd>
+            <MudTd DataLabel="Next Retry">
+                @if (context.NextRetryAt.HasValue)
+                {
+                    @context.NextRetryAt.Value.ToFriendlyDate()
+                }
+                else
+                {
+                    <span>-</span>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>There are no pending exports for this connected system.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    @if (_pendingExports.TotalPages > 1)
+    {
+        <MudPagination Count="@_pendingExports.TotalPages"
+                       Selected="@_pendingExports.CurrentPage"
+                       SelectedChanged="OnPageChanged"
+                       Class="mt-4" />
+    }
+}
+else
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-5" />
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? StatusFilterParam { get; set; }
+
+    private ConnectedSystemHeader? _connectedSystemHeader;
+    private PagedResultSet<PendingExportHeader>? _pendingExports;
+    private string _searchString = "";
+    private PendingExportStatus? _statusFilter;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
+    private const int PageSize = 20;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
+        if (_connectedSystemHeader == null)
+        {
+            NavManager.NavigateTo("../");
+            return;
+        }
+
+        _breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
+            new("Pending Exports", href: null, disabled: true)
+        };
+
+        if (Page is null or < 1)
+            Page = 1;
+
+        // Parse status filter from query param
+        if (!string.IsNullOrEmpty(StatusFilterParam) && Enum.TryParse<PendingExportStatus>(StatusFilterParam, true, out var status))
+            _statusFilter = status;
+
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _pendingExports = await Jim.ConnectedSystems.GetPendingExportHeadersAsync(
+            Id, Page ?? 1, PageSize, _statusFilter);
+    }
+
+    private bool FilterFunc1(PendingExportHeader element) => FilterFunc(element, _searchString);
+
+    private static bool FilterFunc(PendingExportHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (!string.IsNullOrEmpty(element.TargetObjectIdentifier) &&
+            element.TargetObjectIdentifier.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!string.IsNullOrEmpty(element.SourceMetaverseObjectDisplayName) &&
+            element.SourceMetaverseObjectDisplayName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!string.IsNullOrEmpty(element.LastErrorMessage) &&
+            element.LastErrorMessage.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    private async Task OnStatusFilterChanged(PendingExportStatus? newStatus)
+    {
+        _statusFilter = newStatus;
+        Page = 1;
+        await LoadDataAsync();
+        UpdateUrl();
+    }
+
+    private async Task OnPageChanged(int newPage)
+    {
+        Page = newPage;
+        await LoadDataAsync();
+        UpdateUrl();
+    }
+
+    private void UpdateUrl()
+    {
+        var url = $"/admin/connected-systems/{Id}/pending-exports";
+        var queryParams = new List<string>();
+
+        if (Page > 1)
+            queryParams.Add($"p={Page}");
+        if (_statusFilter.HasValue)
+            queryParams.Add($"status={_statusFilter}");
+
+        if (queryParams.Count > 0)
+            url += "?" + string.Join("&", queryParams);
+
+        NavManager.NavigateTo(url, replace: true);
+    }
+
+    private void HandleRowClick(TableRowClickEventArgs<PendingExportHeader> args)
+    {
+        if (args.Item != null)
+            NavManager.NavigateTo($"/admin/connected-systems/{Id}/pending-exports/{args.Item.Id}");
+    }
+}

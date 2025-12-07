@@ -1,0 +1,389 @@
+@page "/admin/connected-systems/{ConnectedSystemId:int}/pending-exports/{Id:guid}"
+@attribute [Authorize(Roles = "Administrators")]
+@using JIM.Application
+@using JIM.Models.Staging.DTOs
+@using JIM.Models.Transactional
+@using JIM.Utilities
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+@inject ISnackbar Snackbar
+
+<PageTitle>Pending Export Detail</PageTitle>
+
+@if (_pendingExport != null)
+{
+    <MudText Typo="Typo.h4">
+        <span class="mud-secondary-text">Pending Export:</span>
+        <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Class="ml-2">
+            @_pendingExport.ChangeType
+        </MudChip>
+    </MudText>
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+    <MudGrid Class="mt-5">
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Elevation="0">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Details</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudSimpleTable Hover="true" Dense="true" Striped="true">
+                        <tbody>
+                            <tr>
+                                <td><strong>ID</strong></td>
+                                <td><code>@_pendingExport.Id</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Status</strong></td>
+                                <td>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(_pendingExport.Status)" Size="Size.Small">
+                                        @_pendingExport.Status.ToString().SplitOnCapitalLetters()
+                                    </MudChip>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Change Type</strong></td>
+                                <td>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Size="Size.Small">
+                                        @_pendingExport.ChangeType
+                                    </MudChip>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Connected System</strong></td>
+                                <td>
+                                    <MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader!)">
+                                        @_pendingExport.ConnectedSystem.Name
+                                    </MudLink>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Created</strong></td>
+                                <td>@_pendingExport.CreatedAt.ToFriendlyDate()</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Has Unresolved References</strong></td>
+                                <td>
+                                    @if (_pendingExport.HasUnresolvedReferences)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Size="Size.Small">Yes</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <span>No</span>
+                                    }
+                                </td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Elevation="0">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Related Objects</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudSimpleTable Hover="true" Dense="true" Striped="true">
+                        <tbody>
+                            <tr>
+                                <td><strong>Target CSO</strong></td>
+                                <td>
+                                    @if (_pendingExport.ConnectedSystemObject != null)
+                                    {
+                                        <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/objects/{_pendingExport.ConnectedSystemObject.Id}")">
+                                            @GetCsoDisplayName()
+                                        </MudLink>
+                                    }
+                                    else
+                                    {
+                                        <span class="mud-text-secondary">New object (will be created)</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Source MVO</strong></td>
+                                <td>
+                                    @if (_pendingExport.SourceMetaverseObject != null)
+                                    {
+                                        <MudLink Href="@($"/admin/metaverse/objects/{_pendingExport.SourceMetaverseObjectId}")">
+                                            @GetMvoDisplayName()
+                                        </MudLink>
+                                    }
+                                    else if (_pendingExport.SourceMetaverseObjectId.HasValue)
+                                    {
+                                        <span>@_pendingExport.SourceMetaverseObjectId</span>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        @if (_pendingExport.ErrorCount > 0 || !string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
+        {
+            <MudItem xs="12">
+                <MudCard Outlined="true" Elevation="0">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6" Color="Color.Error">Error Information</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudSimpleTable Hover="true" Dense="true" Striped="true">
+                            <tbody>
+                                <tr>
+                                    <td style="width: 200px;"><strong>Error Count</strong></td>
+                                    <td>
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                                            @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
+                                        </MudChip>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Last Attempted</strong></td>
+                                    <td>@(_pendingExport.LastAttemptedAt?.ToFriendlyDate() ?? "-")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Next Retry</strong></td>
+                                    <td>@(_pendingExport.NextRetryAt?.ToFriendlyDate() ?? "-")</td>
+                                </tr>
+                                @if (!string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
+                                {
+                                    <tr>
+                                        <td><strong>Last Error</strong></td>
+                                        <td>
+                                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">
+                                                <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">@_pendingExport.LastErrorMessage</pre>
+                                            </MudAlert>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+
+        <MudItem xs="12">
+            <MudCard Outlined="true" Elevation="0">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Attribute Changes (@_pendingExport.AttributeValueChanges.Count)</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (_pendingExport.AttributeValueChanges.Count > 0)
+                    {
+                        <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Striped="true" Dense="true" Outlined="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Attribute</MudTh>
+                                <MudTh>Change Type</MudTh>
+                                <MudTh>Value</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Attribute">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudTd>
+                                <MudTd DataLabel="Change Type">
+                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)" Size="Size.Small">
+                                        @context.ChangeType
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Value">@GetAttributeValue(context)</MudTd>
+                            </RowTemplate>
+                            <NoRecordsContent>
+                                <MudText>No attribute changes.</MudText>
+                            </NoRecordsContent>
+                        </MudTable>
+                    }
+                    else
+                    {
+                        <MudText Class="mud-text-secondary">
+                            @if (_pendingExport.ChangeType == PendingExportChangeType.Delete)
+                            {
+                                <text>No attribute changes (object will be deleted).</text>
+                            }
+                            else
+                            {
+                                <text>No attribute changes recorded.</text>
+                            }
+                        </MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" Class="d-flex gap-2 mt-4">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")">
+                Back to List
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Delete"
+                       OnClick="HandleDeleteClickAsync">
+                Delete Pending Export
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    <MudMessageBox @ref="DeleteMessageBox" Title="Confirm Delete" CancelText="Cancel">
+        <MessageContent>
+            Are you sure you want to delete this pending export? This action cannot be undone.
+            <br/><br/>
+            The change will <strong>not</strong> be applied to the connected system.
+        </MessageContent>
+        <YesButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false" StartIcon="@Icons.Material.Filled.Delete" Class="ml-2">Delete</MudButton>
+        </YesButton>
+    </MudMessageBox>
+}
+else if (_notFound)
+{
+    <MudAlert Severity="Severity.Warning">Pending export not found.</MudAlert>
+    <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
+        Back to List
+    </MudButton>
+}
+else
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-5" />
+}
+
+@code {
+    [Parameter]
+    public int ConnectedSystemId { get; set; }
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private PendingExport? _pendingExport;
+    private ConnectedSystemHeader? _connectedSystemHeader;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
+    private bool _notFound;
+    private MudMessageBox? DeleteMessageBox;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(ConnectedSystemId);
+        if (_connectedSystemHeader == null)
+        {
+            NavManager.NavigateTo("/admin/connected-systems/");
+            return;
+        }
+
+        _pendingExport = await Jim.ConnectedSystems.GetPendingExportAsync(Id);
+        if (_pendingExport == null)
+        {
+            _notFound = true;
+            _breadcrumbs = new List<BreadcrumbItem>
+            {
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new("Connected Systems", href: "/admin/connected-systems/"),
+                new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
+                new("Pending Exports", href: $"/admin/connected-systems/{ConnectedSystemId}/pending-exports"),
+                new("Not Found", href: null, disabled: true)
+            };
+            return;
+        }
+
+        _breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
+            new("Pending Exports", href: $"/admin/connected-systems/{ConnectedSystemId}/pending-exports"),
+            new(_pendingExport.ChangeType.ToString(), href: null, disabled: true)
+        };
+    }
+
+    private string GetCsoDisplayName()
+    {
+        if (_pendingExport?.ConnectedSystemObject == null)
+            return "Unknown";
+
+        var displayNameAttr = _pendingExport.ConnectedSystemObject.AttributeValues?
+            .FirstOrDefault(av => av.Attribute?.Name?.ToLower() == "displayname");
+        if (displayNameAttr?.StringValue != null)
+            return displayNameAttr.StringValue;
+
+        var externalIdAttr = _pendingExport.ConnectedSystemObject.AttributeValues?
+            .FirstOrDefault(av => av.AttributeId == _pendingExport.ConnectedSystemObject.ExternalIdAttributeId);
+        if (externalIdAttr?.StringValue != null)
+            return externalIdAttr.StringValue;
+
+        return _pendingExport.ConnectedSystemObject.Id.ToString();
+    }
+
+    private string GetMvoDisplayName()
+    {
+        if (_pendingExport?.SourceMetaverseObject == null)
+            return _pendingExport?.SourceMetaverseObjectId?.ToString() ?? "Unknown";
+
+        var displayNameAttr = _pendingExport.SourceMetaverseObject.AttributeValues?
+            .FirstOrDefault(av => av.Attribute?.Name?.ToLower() == "displayname");
+
+        return displayNameAttr?.StringValue ?? _pendingExport.SourceMetaverseObject.Id.ToString();
+    }
+
+    private string GetAttributeValue(PendingExportAttributeValueChange change)
+    {
+        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
+            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
+
+        if (change.StringValue != null)
+            return change.StringValue;
+
+        if (change.DateTimeValue.HasValue)
+            return change.DateTimeValue.Value.ToFriendlyDate();
+
+        if (change.IntValue.HasValue)
+            return change.IntValue.Value.ToString();
+
+        if (change.ByteValue != null)
+            return $"[Binary data: {change.ByteValue.Length} bytes]";
+
+        return "[null]";
+    }
+
+    private static MudBlazor.Color GetAttributeChangeTypeColor(PendingExportAttributeChangeType changeType)
+    {
+        return changeType switch
+        {
+            PendingExportAttributeChangeType.Add => MudBlazor.Color.Primary,
+            PendingExportAttributeChangeType.Update => MudBlazor.Color.Info,
+            PendingExportAttributeChangeType.Remove => MudBlazor.Color.Warning,
+            PendingExportAttributeChangeType.RemoveAll => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default,
+        };
+    }
+
+    private async Task HandleDeleteClickAsync()
+    {
+        if (DeleteMessageBox == null || _pendingExport == null)
+            return;
+
+        var result = await DeleteMessageBox.ShowAsync();
+        if (!result.HasValue || !result.Value)
+            return;
+
+        await Jim.ConnectedSystems.DeletePendingExportAsync(_pendingExport);
+        Snackbar.Add("Pending export deleted successfully.", Severity.Success);
+        NavManager.NavigateTo($"/admin/connected-systems/{ConnectedSystemId}/pending-exports");
+    }
+}

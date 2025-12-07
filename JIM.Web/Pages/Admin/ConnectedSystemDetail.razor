@@ -29,6 +29,30 @@
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
+
+            <MudPaper Class="pa-4 mt-5" Outlined="true">
+                <MudText Typo="Typo.h6">Quick Links</MudText>
+                <MudGrid Class="mt-3">
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Default"
+                                   FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.Storage"
+                                   Href="@($"/admin/connected-systems/{Id}/objects")">
+                            Objects
+                        </MudButton>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
+                                   FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.Outbox"
+                                   Href="@($"/admin/connected-systems/{Id}/pending-exports")">
+                            Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
         </MudTabPanel>
 
         <MudTabPanel Text="Settings">
@@ -880,6 +904,7 @@
     private string? _partitionsAndHierarchiesText;
     private string? _partitionAndHierarchyText;
     private bool _schemaBeingRetrieved;
+    private int _pendingExportCount;
     private ConnectedSystemObjectType? _selectedObjectType;
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
@@ -948,6 +973,9 @@
             _selectedObjectType = _connectedSystem.ObjectTypes.FirstOrDefault(q => q.Selected);
 
         ApplyContainerIncludedToPartitions(_connectedSystem);
+
+        // load the pending export count for the quick links section
+        _pendingExportCount = await Jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
     }
 
     private bool AreSettingDependentTabsDisabled()
