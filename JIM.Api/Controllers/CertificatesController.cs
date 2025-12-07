@@ -9,7 +9,7 @@ namespace JIM.Api.Controllers;
 /// <summary>
 /// API controller for managing trusted certificates in the JIM certificate store.
 /// </summary>
-[Route("[controller]")]
+[Route("api/[controller]")]
 [ApiController]
 [Authorize]
 public class CertificatesController : ControllerBase

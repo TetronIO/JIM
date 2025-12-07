@@ -11,16 +11,17 @@
 ## Phase 1: Quick Wins & Bug Fixes
 
 ### 1.1 Fix Known Bugs
-- [ ] Fix parameter naming inconsistency (`csid` → `connectedSystemId`) in SynchronisationController
+- [x] Fix parameter naming inconsistency (`csid` → `connectedSystemId`) in SynchronisationController
 
 ### 1.2 Standardise Route Declarations
-- [ ] Convert all absolute routes to relative routes (e.g., `/metaverse/object-types` → `object-types`)
-- [ ] Add `api/` prefix to base route: `[Route("api/[controller]")]`
-- [ ] Ensure consistent kebab-case throughout
+- [x] Convert all absolute routes to relative routes (e.g., `/metaverse/object-types` → `object-types`)
+- [x] Add `api/` prefix to base route: `[Route("api/[controller]")]`
+- [x] Ensure consistent kebab-case throughout
 
 ### 1.3 Fix Return Types
-- [ ] Add explicit `IActionResult` return type to `DataGenerationController.ExecuteTemplateAsync`
-- [ ] Return `202 Accepted` for async operations (template execution, queued deletions)
+- [x] Add explicit `IActionResult` return type to `DataGenerationController.ExecuteTemplateAsync`
+- [x] Return `202 Accepted` for async operations (template execution)
+- [ ] Return `202 Accepted` for queued deletions (requires SynchronisationController change)
 - [ ] Return `204 No Content` for void operations
 
 ---

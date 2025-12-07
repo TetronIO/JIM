@@ -7,7 +7,7 @@ namespace JIM.Api.Controllers;
 /// Health check endpoint for load balancers and service monitors.
 /// This controller is intentionally unauthenticated to allow external health probes.
 /// </summary>
-[Route("[controller]")]
+[Route("api/[controller]")]
 [ApiController]
 [AllowAnonymous]
 public class HealthController : ControllerBase

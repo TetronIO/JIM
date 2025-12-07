@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers
 {
-    [Route("[controller]")]
+    [Route("api/[controller]")]
     [ApiController]
     [Authorize]
     public class SynchronisationController : ControllerBase
@@ -22,28 +22,28 @@ namespace JIM.Api.Controllers
             _application = application;
         }
 
-        [HttpGet("/synchronisation/connected-systems")]
+        [HttpGet("connected-systems")]
         public async Task<IEnumerable<ConnectedSystem>> GetConnectedSystemsAsync()
         {
             _logger.LogTrace($"Someone requested the connected systems");
             return await _application.ConnectedSystems.GetConnectedSystemsAsync();
         }
 
-        [HttpGet("/synchronisation/connected-systems/{csid}")]
-        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int csid)
+        [HttpGet("connected-systems/{connectedSystemId}")]
+        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int connectedSystemId)
         {
-            _logger.LogTrace($"Someone requested a connected system: {csid}");
-            return await _application.ConnectedSystems.GetConnectedSystemAsync(csid);
+            _logger.LogTrace($"Someone requested a connected system: {connectedSystemId}");
+            return await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         }
 
-        [HttpGet("/synchronisation/connected-systems/{connectedSystemId}/object-types")]
+        [HttpGet("connected-systems/{connectedSystemId}/object-types")]
         public async Task<IEnumerable<ConnectedSystemObjectType>?> GetConnectedSystemObjectTypesAsync(int connectedSystemId)
         {
             _logger.LogTrace($"Someone requested object types for connected system: {connectedSystemId}");
             return await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
         }
 
-        [HttpGet("/synchronisation/connected-systems/{connectedSystemId}/objects/{id}")]
+        [HttpGet("connected-systems/{connectedSystemId}/objects/{id}")]
         public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
             _logger.LogTrace($"Someone requested an object ({id}) connected system: {connectedSystemId}");
@@ -56,7 +56,7 @@ namespace JIM.Api.Controllers
         /// </summary>
         /// <param name="connectedSystemId">The ID of the Connected System to preview deletion for.</param>
         /// <returns>A preview showing counts of affected objects and any warnings.</returns>
-        [HttpGet("/synchronisation/connected-systems/{connectedSystemId}/deletion-preview")]
+        [HttpGet("connected-systems/{connectedSystemId}/deletion-preview")]
         public async Task<ActionResult<ConnectedSystemDeletionPreview>> GetConnectedSystemDeletionPreviewAsync(int connectedSystemId)
         {
             _logger.LogInformation("Deletion preview requested for connected system: {Id}", connectedSystemId);
@@ -74,7 +74,7 @@ namespace JIM.Api.Controllers
         /// </summary>
         /// <param name="connectedSystemId">The ID of the Connected System to delete.</param>
         /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
-        [HttpDelete("/synchronisation/connected-systems/{connectedSystemId}")]
+        [HttpDelete("connected-systems/{connectedSystemId}")]
         public async Task<ActionResult<ConnectedSystemDeletionResult>> DeleteConnectedSystemAsync(int connectedSystemId)
         {
             _logger.LogInformation("Deletion requested for connected system: {Id}", connectedSystemId);
@@ -141,14 +141,14 @@ namespace JIM.Api.Controllers
                 uniqueIdClaimValue);
         }
 
-        [HttpGet("/synchronisation/sync-rules")]
+        [HttpGet("sync-rules")]
         public async Task<IEnumerable<SyncRule>?> GetSyncRulesAsync()
         {
             _logger.LogTrace("Someone requested the synchronisation rules");
             return await _application.ConnectedSystems.GetSyncRulesAsync();
         }
 
-        [HttpGet("/synchronisation/sync-rules/{id}")]
+        [HttpGet("sync-rules/{id}")]
         public async Task<SyncRule?> GetSyncRuleAsync(int id)
         {
             _logger.LogTrace($"Someone requested a specific sync rule: {id}");

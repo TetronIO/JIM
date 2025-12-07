@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers
 {
-    [Route("[controller]")]
+    [Route("api/[controller]")]
     [ApiController]
     [Authorize]
     public class SecurityController : ControllerBase
@@ -19,7 +19,7 @@ namespace JIM.Api.Controllers
             _application = application;
         }
 
-        [HttpGet("/security/roles")]
+        [HttpGet("roles")]
         public async Task<IEnumerable<Role>> GetRolesAsync()
         {
             _logger.LogTrace($"Someone requested the roles");
