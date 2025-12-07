@@ -155,10 +155,12 @@
 
 ## Phase 6: Security Enhancements
 
-### 6.1 Input Validation
-- [ ] Add `[Required]` and validation attributes to all request DTOs
-- [ ] Add size limits to string parameters
-- [ ] Add model validation middleware
+### 6.1 Input Validation ✅
+- [x] Add `[Required]` and validation attributes to all request DTOs
+- [x] Add size limits to string parameters (`[StringLength]`)
+- [x] Add range validation for numeric parameters (`[Range]`)
+- [x] Add regex validation for constrained strings (`[RegularExpression]`)
+- Note: ASP.NET Core model validation automatically validates DTOs via data annotations
 
 ### 6.2 Resource-Level Authorisation
 - [ ] Implement authorisation service for resource access checks
