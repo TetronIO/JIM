@@ -13,13 +13,13 @@ updates:
     open-pull-requests-limit: 10
     reviewers:
       - "TetronIO/jim-maintainers"
-    labels:
-      - "dependencies"
-      - "nuget"
-      - "automated"
     commit-message:
       prefix: "chore"
       include: "scope"
+    ignore:
+      # Ignore all major version updates
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       # Group .NET runtime and SDK updates together
       dotnet-runtime:
@@ -60,12 +60,12 @@ updates:
       timezone: "Europe/London"
     reviewers:
       - "TetronIO/jim-maintainers"
-    labels:
-      - "dependencies"
-      - "docker"
-      - "automated"
     commit-message:
       prefix: "chore"
+    ignore:
+      # Ignore all major version updates
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/JIM.Web"
@@ -76,12 +76,12 @@ updates:
       timezone: "Europe/London"
     reviewers:
       - "TetronIO/jim-maintainers"
-    labels:
-      - "dependencies"
-      - "docker"
-      - "automated"
     commit-message:
       prefix: "chore"
+    ignore:
+      # Ignore all major version updates
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/JIM.Worker"
@@ -92,12 +92,12 @@ updates:
       timezone: "Europe/London"
     reviewers:
       - "TetronIO/jim-maintainers"
-    labels:
-      - "dependencies"
-      - "docker"
-      - "automated"
     commit-message:
       prefix: "chore"
+    ignore:
+      # Ignore all major version updates
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/JIM.Scheduler"
@@ -108,12 +108,12 @@ updates:
       timezone: "Europe/London"
     reviewers:
       - "TetronIO/jim-maintainers"
-    labels:
-      - "dependencies"
-      - "docker"
-      - "automated"
     commit-message:
       prefix: "chore"
+    ignore:
+      # Ignore all major version updates
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -125,9 +125,9 @@ updates:
       timezone: "Europe/London"
     reviewers:
       - "TetronIO/jim-maintainers"
-    labels:
-      - "dependencies"
-      - "github-actions"
-      - "automated"
     commit-message:
       prefix: "chore"
+    ignore:
+      # Ignore all major version updates
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
