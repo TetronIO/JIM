@@ -10,6 +10,7 @@ using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Serilog;
 
@@ -1205,6 +1206,32 @@ public class ConnectedSystemServer
     public async Task UpdatePendingExportAsync(PendingExport pendingExport)
     {
         await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+    }
+
+    /// <summary>
+    /// Retrieves a page of Pending Export headers for a Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="page">Which page to return results for, i.e. 1-n.</param>
+    /// <param name="pageSize">How many results to return per page.</param>
+    /// <param name="statusFilter">Optional filter by status.</param>
+    public async Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
+        int connectedSystemId,
+        int page,
+        int pageSize,
+        PendingExportStatus? statusFilter = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportHeadersAsync(
+            connectedSystemId, page, pageSize, statusFilter);
+    }
+
+    /// <summary>
+    /// Retrieves a single Pending Export by ID with all related data.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Pending Export.</param>
+    public async Task<PendingExport?> GetPendingExportAsync(Guid id)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportAsync(id);
     }
     #endregion
 

@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -735,6 +736,92 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         await Repository.Database.PendingExports.AddAsync(pendingExport);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Retrieves a page of Pending Export headers for a Connected System.
+    /// </summary>
+    public async Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
+        int connectedSystemId,
+        int page,
+        int pageSize,
+        PendingExportStatus? statusFilter = null)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // Limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        var query = Repository.Database.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+            .Include(pe => pe.ConnectedSystemObject)
+            .Include(pe => pe.SourceMetaverseObject)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId);
+
+        if (statusFilter.HasValue)
+            query = query.Where(pe => pe.Status == statusFilter.Value);
+
+        // Order by most recent first, then by status (Failed first)
+        query = query.OrderByDescending(pe => pe.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var offset = (page - 1) * pageSize;
+        var pagedItems = await query.Skip(offset).Take(pageSize).ToListAsync();
+
+        // Convert to headers
+        var headers = pagedItems.Select(pe =>
+        {
+            // Get target object identifier from CSO if available
+            string? targetIdentifier = null;
+            if (pe.ConnectedSystemObject != null)
+            {
+                // Try to get external ID attribute value
+                var externalIdAttr = pe.ConnectedSystemObject.AttributeValues?
+                    .FirstOrDefault(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId);
+                targetIdentifier = externalIdAttr?.StringValue ?? pe.ConnectedSystemObject.Id.ToString();
+            }
+
+            // Get source MVO display name if available
+            string? sourceMvoDisplayName = null;
+            if (pe.SourceMetaverseObject != null)
+            {
+                sourceMvoDisplayName = pe.SourceMetaverseObject.AttributeValues?
+                    .FirstOrDefault(av => av.Attribute?.Name?.ToLower() == "displayname")?.StringValue;
+            }
+
+            return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);
+        }).ToList();
+
+        return new PagedResultSet<PendingExportHeader>
+        {
+            PageSize = pageSize,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            Results = headers
+        };
+    }
+
+    /// <summary>
+    /// Retrieves a single Pending Export by ID with all related data.
+    /// </summary>
+    public async Task<PendingExport?> GetPendingExportAsync(Guid id)
+    {
+        return await Repository.Database.PendingExports
+            .Include(pe => pe.ConnectedSystem)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .FirstOrDefaultAsync(pe => pe.Id == id);
     }
 
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
