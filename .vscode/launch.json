@@ -15,6 +15,7 @@
         "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
         "uriFormat": "%s"
       },
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_URLS": "https://localhost:5201;http://localhost:5200"
@@ -40,6 +41,7 @@
         "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
         "uriFormat": "%s/swagger"
       },
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_URLS": "https://localhost:5203;http://localhost:5202"
@@ -58,6 +60,7 @@
       "cwd": "${workspaceFolder}/JIM.Worker",
       "stopAtEntry": false,
       "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "DOTNET_ENVIRONMENT": "Development"
       }
@@ -72,6 +75,7 @@
       "cwd": "${workspaceFolder}/JIM.Scheduler",
       "stopAtEntry": false,
       "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "DOTNET_ENVIRONMENT": "Development"
       }

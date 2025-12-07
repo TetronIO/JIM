@@ -4,21 +4,13 @@ services:
     container_name: jim.web
     image: ${DOCKER_REGISTRY-}jim.web
     restart: always
+    env_file: .env
     environment:
-     - LOGGING_LEVEL=Verbose
-     - LOGGING_PATH=/var/log/jim
-     - ENABLE_REQUEST_LOGGING=true
-     - DB_HOSTNAME=JIM.Database
-     - DB_NAME=${DB_NAME}
-     - DB_USERNAME=${DB_USERNAME}
-     - DB_PASSWORD=${DB_PASSWORD}
-     - DB_LOG_SENSITIVE_INFO=${DB_LOG_SENSITIVE_INFO}
-     - SSO_AUTHORITY=${SSO_AUTHORITY}
-     - SSO_CLIENT_ID=${SSO_CLIENT_ID}
-     - SSO_SECRET=${SSO_SECRET}
-     - SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=${SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE}
-     - SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=${SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME}
-     - SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=${SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE}
+      # Docker-specific overrides
+      - DB_HOSTNAME=jim.database
+      - LOGGING_PATH=/var/log/jim
+      - LOGGING_LEVEL=Verbose
+      - ENABLE_REQUEST_LOGGING=true
     volumes:
       - jim-logs-volume:/var/log/jim
     cap_add:
@@ -38,22 +30,13 @@ services:
     container_name: jim.api
     image: ${DOCKER_REGISTRY-}jim.api
     restart: always
+    env_file: .env
     environment:
-     - LOGGING_LEVEL=Verbose
-     - LOGGING_PATH=/var/log/jim
-     - ENABLE_REQUEST_LOGGING=true
-     - DB_HOSTNAME=JIM.Database
-     - DB_NAME=${DB_NAME}
-     - DB_USERNAME=${DB_USERNAME}
-     - DB_PASSWORD=${DB_PASSWORD}
-     - DB_LOG_SENSITIVE_INFO=${DB_LOG_SENSITIVE_INFO}
-     - SSO_AUTHORITY=${SSO_AUTHORITY}
-     - SSO_CLIENT_ID=${SSO_CLIENT_ID}
-     - SSO_SECRET=${SSO_SECRET}
-     - SSO_API_SCOPE=${SSO_API_SCOPE}
-     - SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=${SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE}
-     - SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=${SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME}
-     - SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=${SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE}
+      # Docker-specific overrides
+      - DB_HOSTNAME=jim.database
+      - LOGGING_PATH=/var/log/jim
+      - LOGGING_LEVEL=Verbose
+      - ENABLE_REQUEST_LOGGING=true
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -69,14 +52,12 @@ services:
     container_name: jim.worker
     image: ${DOCKER_REGISTRY-}jim.worker
     restart: always
+    env_file: .env
     environment:
-     - LOGGING_LEVEL=Verbose
-     - LOGGING_PATH=/var/log/jim
-     - DB_HOSTNAME=JIM.Database
-     - DB_NAME=${DB_NAME}
-     - DB_USERNAME=${DB_USERNAME}
-     - DB_PASSWORD=${DB_PASSWORD}
-     - DB_LOG_SENSITIVE_INFO=${DB_LOG_SENSITIVE_INFO}
+      # Docker-specific overrides
+      - DB_HOSTNAME=jim.database
+      - LOGGING_PATH=/var/log/jim
+      - LOGGING_LEVEL=Verbose
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -91,14 +72,12 @@ services:
     container_name: jim.scheduler
     image: ${DOCKER_REGISTRY-}jim.scheduler
     restart: always
+    env_file: .env
     environment:
-     - LOGGING_LEVEL=Error
-     - LOGGING_PATH=/var/log/jim
-     - DB_HOSTNAME=JIM.Database
-     - DB_NAME=${DB_NAME}
-     - DB_USERNAME=${DB_USERNAME}
-     - DB_PASSWORD=${DB_PASSWORD}
-     - DB_LOG_SENSITIVE_INFO=${DB_LOG_SENSITIVE_INFO}
+      # Docker-specific overrides
+      - DB_HOSTNAME=jim.database
+      - LOGGING_PATH=/var/log/jim
+      - LOGGING_LEVEL=Error
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -109,7 +88,7 @@ services:
       - jim.worker
     networks:
       - jim-network
-  
+
   adminer:
     container_name: jim.adminer
     image: adminer
@@ -130,7 +109,9 @@ services:
     restart: always
     volumes:
       - jim-db-volume:/var/lib/postgresql
+    env_file: .env
     environment:
+      # Postgres uses different var names
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USERNAME}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
