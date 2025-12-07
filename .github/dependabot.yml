@@ -1,0 +1,133 @@
+# Dependabot configuration for JIM
+# Automatically manages dependency updates for NuGet packages, Docker images, and GitHub Actions
+version: 2
+updates:
+  # .NET NuGet dependencies
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    labels:
+      - "dependencies"
+      - "nuget"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      # Group .NET runtime and SDK updates together
+      dotnet-runtime:
+        patterns:
+          - "Microsoft.NETCore.*"
+          - "Microsoft.AspNetCore.*"
+          - "Microsoft.Extensions.*"
+      # Group EF Core updates together
+      entity-framework:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+          - "Npgsql.EntityFrameworkCore*"
+      # Group testing dependencies
+      testing:
+        patterns:
+          - "NUnit*"
+          - "Moq*"
+          - "coverlet*"
+          - "Microsoft.NET.Test.Sdk"
+      # Group Blazor/UI dependencies
+      blazor-ui:
+        patterns:
+          - "MudBlazor*"
+          - "Microsoft.AspNetCore.Components*"
+      # Group Azure Functions dependencies
+      azure-functions:
+        patterns:
+          - "Microsoft.Azure.Functions*"
+          - "Microsoft.Azure.WebJobs*"
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/JIM.Api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/JIM.Web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/JIM.Worker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker"
+    directory: "/JIM.Scheduler"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "chore"
