@@ -89,9 +89,14 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 For local development instructions and advanced setup, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
    
 ### Setup SSO
-JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [﻿Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
+JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
 
 > **Note**: JIM uses PKCE for improved security. JIM is IDP-agnostic and works with any OIDC-compliant Identity Provider, including Microsoft Entra ID, Okta, Auth0, Keycloak, AD FS, and others.
+
+For detailed step-by-step setup instructions, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) which covers:
+- Microsoft Entra ID (Azure AD)
+- AD FS (Active Directory Federation Services)
+- Keycloak
 
 Currently there can only be a single administrator, the one you setup in your `.env` file below. Later releases will include a full RBAC model. All other users accessing JIM will be standard users with no privileges.
 

@@ -422,6 +422,8 @@ Configuration via environment variables (defined in `.env`). See `.env.example` 
 ### SSO/Authentication (IDP-Agnostic)
 JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keycloak, AD FS, etc.).
 
+For detailed setup instructions, see the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
+
 - `SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
 - `SSO_CLIENT_ID`: OIDC client/application ID
 - `SSO_SECRET`: OIDC client secret
