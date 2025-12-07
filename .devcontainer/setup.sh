@@ -167,6 +167,7 @@ alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override
 alias jim-stack-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml up -d --build'
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml logs -f'
 alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml down'
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-stack-build to start fresh."'
 EOF
 
 print_success "Shell aliases created (restart terminal or run: source ~/.zshrc)"
@@ -189,6 +190,7 @@ echo "  jim-stack          → Start full Docker stack (all services)"
 echo "  jim-stack-build    → Build and start Docker stack"
 echo "  jim-stack-logs     → View Docker stack logs"
 echo "  jim-stack-down     → Stop Docker stack"
+echo "  jim-reset          → Reset JIM (delete database & logs volumes)"
 echo ""
 echo "🔧 Database Commands:"
 echo "  jim-migrate        → Apply pending migrations"

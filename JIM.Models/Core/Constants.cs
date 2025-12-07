@@ -74,6 +74,7 @@ public static class Constants
         public static string Manager => "Manager";
         public static string MobileNumber => "Mobile Number";
         public static string ObjectIdentifier => "Object Identifier";
+        public static string SubjectIdentifier => "Subject Identifier";
         public static string Office => "Office";
         public static string Organisation => "Organisation";
         public static string OtherFacsimileTelephoneNumbers => "Other Facsimile Telephone Numbers";

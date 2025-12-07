@@ -63,6 +63,10 @@ try
             options.UsePkce = true;
             options.Scope.Add("profile");
 
+            // Preserve standard OIDC claim names (sub, name, email, etc.) instead of mapping them
+            // to Microsoft's legacy XML-based claim URIs. This makes JIM IDP-agnostic.
+            options.MapInboundClaims = false;
+
             // intercept the user login when a token is received and validate we can map them to a JIM user
             options.Events.OnTicketReceived = async ctx =>
             {
@@ -315,30 +319,11 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
         }
     }
 
-    // do it again. some IDPs use "name" instead of the xmlsoap version below for conveying display name
-    if (!user.HasAttributeValue(Constants.BuiltInAttributes.DisplayName))
-    {
-        var nameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");
-        if (nameClaim != null)
-        {
-            var displayNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName);
-            if (displayNameAttribute != null)
-            {
-                user.AttributeValues.Add(new MetaverseObjectAttributeValue
-                {
-                    Attribute = displayNameAttribute,
-                    StringValue = nameClaim.Value
-                });
 
-                updateRequired = true;
-                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + nameClaim.Type);
-            }
-        }
-    }
-
+    // Map given_name claim (standard OIDC claim for first name)
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.FirstName))
     {
-        var givenNameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname");
+        var givenNameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "given_name");
         if (givenNameClaim != null)
         {
             var firstNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.FirstName);
@@ -356,10 +341,11 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
         }
     }
 
+    // Map family_name claim (standard OIDC claim for last name)
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.LastName))
     {
-        var surnameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname");
-        if (surnameClaim != null)
+        var familyNameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "family_name");
+        if (familyNameClaim != null)
         {
             var lastNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.LastName);
             if (lastNameAttribute != null)
@@ -367,19 +353,20 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
                 user.AttributeValues.Add(new MetaverseObjectAttributeValue
                 {
                     Attribute = lastNameAttribute,
-                    StringValue = surnameClaim.Value
+                    StringValue = familyNameClaim.Value
                 });
 
                 updateRequired = true;
-                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + surnameClaim.Type);
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + familyNameClaim.Type);
             }
         }
     }
 
+    // Map preferred_username claim (standard OIDC claim, often contains UPN for Entra ID)
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.UserPrincipalName))
     {
-        var upnClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn");
-        if (upnClaim != null)
+        var preferredUsernameClaim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == "preferred_username");
+        if (preferredUsernameClaim != null)
         {
             var upnAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.UserPrincipalName);
             if (upnAttribute != null)
@@ -387,11 +374,11 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
                 user.AttributeValues.Add(new MetaverseObjectAttributeValue
                 {
                     Attribute = upnAttribute,
-                    StringValue = upnClaim.Value
+                    StringValue = preferredUsernameClaim.Value
                 });
 
                 updateRequired = true;
-                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + upnClaim.Type);
+                Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + preferredUsernameClaim.Type);
             }
         }
     }

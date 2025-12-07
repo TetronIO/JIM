@@ -164,7 +164,8 @@ builder.Services.AddSingleton<IConfiguration>(configuration);
 
 **Controllers**:
 - Inherit from `ControllerBase`
-- Use attribute routing: `[Route("api/[controller]")]`
+- Use versioned attribute routing: `[Route("api/v{version:apiVersion}/[controller]")]`
+- Add `[ApiVersion("1.0")]` to mark controller version
 - Return `ActionResult<T>` for typed responses
 - Use DTOs for request/response bodies
 - Add XML comments for Swagger documentation
@@ -172,7 +173,8 @@ builder.Services.AddSingleton<IConfiguration>(configuration);
 **Example**:
 ```csharp
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class MetaverseController : ControllerBase
 {
     /// <summary>
@@ -188,6 +190,14 @@ public class MetaverseController : ControllerBase
     }
 }
 ```
+
+**API Versioning**:
+- All endpoints are versioned using URL path (e.g., `/api/v1/certificates`)
+- Current version: **1.0**
+- Default version assumed if not specified in request
+- Responses include `api-supported-versions` header
+- To add v2: Create new methods/controllers with `[ApiVersion("2.0")]` and `[MapToApiVersion("2.0")]`
+- Deprecate old versions: Add `[ApiVersion("1.0", Deprecated = true)]`
 
 ### 6. Blazor Development
 
@@ -397,6 +407,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim-stack-build` - Rebuild and start Docker stack (use after code changes)
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop full Docker stack
+- `jim-reset` - Reset JIM (delete database and logs volumes)
 
 **Development Workflows**:
 1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
@@ -409,30 +420,38 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 
 ## Environment Configuration
 
-Configuration via environment variables (defined in `.env`):
+Configuration via environment variables (defined in `.env`). See `.env.example` for detailed documentation.
 
 ### Database
-- `DB_HOST`: PostgreSQL host
-- `DB_PORT`: PostgreSQL port (default: 5432)
+- `DB_HOSTNAME`: PostgreSQL host
 - `DB_NAME`: Database name
 - `DB_USERNAME`: Database user
 - `DB_PASSWORD`: Database password
+- `DB_LOG_SENSITIVE_INFO`: Log sensitive SQL data (development only)
 
-### SSO/Authentication
-- `SSO_AUTHORITY`: OIDC authority URL
-- `SSO_CLIENTID`: OIDC client ID
-- `SSO_CLIENTSECRET`: OIDC client secret
-- `SSO_CALLBACKPATH`: OAuth callback path
+### SSO/Authentication (IDP-Agnostic)
+JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keycloak, AD FS, etc.).
+
+For detailed setup instructions, see the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
+
+- `SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
+- `SSO_CLIENT_ID`: OIDC client/application ID
+- `SSO_SECRET`: OIDC client secret
+- `SSO_API_SCOPE`: API scope for JWT bearer authentication (e.g., `api://{client-id}/access_as_user`)
+
+### User Identity Mapping
+JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `preferred_username`) for user mapping.
+
+- `SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE`: JWT claim for unique user identification (recommended: `sub`)
+- `SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME`: Metaverse attribute to store the identifier (default: `Subject Identifier`)
+- `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE`: Claim value for initial admin user
+
+> **Tip**: Log into JIM and visit `/claims` to see your OIDC claims and find your `sub` value.
 
 ### Logging
-- `LOGGING_CONSOLE_MINIMUMLEVEL`: Console log level (Information, Debug, etc.)
-- `LOGGING_FILE_MINIMUMLEVEL`: File log level
-- `LOGGING_FILE_PATH`: Log file path
+- `LOGGING_LEVEL`: Minimum log level (Verbose, Debug, Information, Warning, Error, Fatal)
+- `LOGGING_PATH`: Directory for log files
 - `ENABLE_REQUEST_LOGGING`: Enable verbose HTTP request logging (true/false)
-
-### Initial Setup
-- `INITIAL_ADMIN_USERNAME`: Initial admin user from SSO
-- `INITIAL_ADMIN_DISPLAYNAME`: Admin display name
 
 **Rule**: Never hardcode these values. Always use environment variables.
 

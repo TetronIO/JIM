@@ -89,28 +89,46 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 For local development instructions and advanced setup, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
    
 ### Setup SSO
-JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [﻿Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
+JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
 
->  Note: JIM uses PKCE for improved security. Also, JIM has been tested with Microsoft Entra ID to date, but should work with all OIDC-compliant Identity Providers (IdPs). 
+> **Note**: JIM uses PKCE for improved security. JIM is IDP-agnostic and works with any OIDC-compliant Identity Provider, including Microsoft Entra ID, Okta, Auth0, Keycloak, AD FS, and others.
+
+For detailed step-by-step setup instructions, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) which covers:
+- Microsoft Entra ID (Azure AD)
+- AD FS (Active Directory Federation Services)
+- Keycloak
 
 Currently there can only be a single administrator, the one you setup in your `.env` file below. Later releases will include a full RBAC model. All other users accessing JIM will be standard users with no privileges.
 
-### `.env` Entra ID Example:
-Replace `<...>` elements with your real values. Suggested values are for Entra ID.
+### `.env` Configuration Example:
+Replace `<...>` elements with your real values. See `.env.example` for detailed documentation.
 
 ```
+# Database
 DB_NAME=jim
 DB_USERNAME=jim
 DB_PASSWORD=password
 DB_LOG_SENSITIVE_INFO=true
-SSO_AUTHORITY=<your IDP URL, i.e. https://login.microsoftonline.com/f9953c7e-b69b-4cb1-ad60-b11df84f8af2>
-SSO_CLIENT_ID=<your client id, i.e. 24d89e93-353e-45d6-9528-cc2dd2529dad>
-SSO_SECRET=<your client secret, i.e. abcd1234>
-SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=<the unique identifier claim from your IdP, i.e. http://schemas.microsoft.com/identity/claims/objectidentifier for Entra ID>
-SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=<the JIM Metaverse attribute the token unique identifier claim type maps to, i.e. Object Identifier>
-SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your user object identifier, i.e. 1a2e0377-e36c-4388-b185-c489ae7daa6a>
+
+# SSO/OIDC - works with any OIDC-compliant provider
+SSO_AUTHORITY=<your IDP URL, e.g. https://login.microsoftonline.com/{tenant-id}/v2.0>
+SSO_CLIENT_ID=<your client id>
+SSO_SECRET=<your client secret>
+SSO_API_SCOPE=<your API scope, e.g. api://{client-id}/access_as_user>
+
+# User Identity Mapping
+# JIM uses standard OIDC claims (sub, name, given_name, family_name, preferred_username)
+SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=sub
+SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=Subject Identifier
+SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your sub claim value>
 ```
-Note, the `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE` variable enables you to sign in to JIM as the initial admin.
+
+**Finding Your `sub` Claim Value**:
+1. Log into JIM with your admin account
+2. Navigate to `/claims` to see your OIDC claims
+3. Copy the value of the `sub` claim
+
+The `sub` (subject identifier) claim is the standard OIDC claim for uniquely identifying users. It's guaranteed to be unique and stable per user per application across all OIDC-compliant providers.
 
 ## State of Development
 In JIM currently, you can setup connectors to LDAP-based systems (tested against Active Directory so far) and CSV files and perform imports. Synchronisation Rules can also be created, though synchronisation of objects (from connected systems to the Metaverse) is currently under development, with unit tests being worked on. Once that's complete, export functionality will be next, to target an Minimum Viable Product (MVP) status.
