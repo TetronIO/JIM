@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace JIM.Api.Models;
 
 /// <summary>
@@ -11,6 +13,7 @@ public class PaginationRequest
     /// <summary>
     /// The page number (1-based). Defaults to 1.
     /// </summary>
+    [Range(1, int.MaxValue, ErrorMessage = "Page must be at least 1.")]
     public int Page
     {
         get => _page;
@@ -20,6 +23,7 @@ public class PaginationRequest
     /// <summary>
     /// The number of items per page. Defaults to 25, max 100.
     /// </summary>
+    [Range(1, 100, ErrorMessage = "Page size must be between 1 and 100.")]
     public int PageSize
     {
         get => _pageSize;
@@ -29,11 +33,13 @@ public class PaginationRequest
     /// <summary>
     /// The property name to sort by.
     /// </summary>
+    [StringLength(100, ErrorMessage = "Sort property name must not exceed 100 characters.")]
     public string? SortBy { get; set; }
 
     /// <summary>
     /// Sort direction: "asc" or "desc". Defaults to "asc".
     /// </summary>
+    [RegularExpression("^(asc|desc)$", ErrorMessage = "Sort direction must be 'asc' or 'desc'.")]
     public string SortDirection { get; set; } = "asc";
 
     /// <summary>
@@ -41,6 +47,7 @@ public class PaginationRequest
     /// Supported operators: eq, ne, contains, startswith, endswith.
     /// Example: "name:contains:test" or "status:eq:active"
     /// </summary>
+    [StringLength(500, ErrorMessage = "Filter string must not exceed 500 characters.")]
     public string? Filter { get; set; }
 
     /// <summary>
