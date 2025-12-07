@@ -23,16 +23,10 @@ namespace JIM.Api.Controllers;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
-public class DataGenerationController : ControllerBase
+public class DataGenerationController(ILogger<DataGenerationController> logger, JimApplication application) : ControllerBase
 {
-    private readonly ILogger<DataGenerationController> _logger;
-    private readonly JimApplication _application;
-
-    public DataGenerationController(ILogger<DataGenerationController> logger, JimApplication application)
-    {
-        _logger = logger;
-        _application = application;
-    }
+    private readonly ILogger<DataGenerationController> _logger = logger;
+    private readonly JimApplication _application = application;
 
     /// <summary>
     /// Gets all example data sets with optional pagination, sorting, and filtering.

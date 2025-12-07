@@ -20,16 +20,10 @@ namespace JIM.Api.Controllers;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
-public class MetaverseController : ControllerBase
+public class MetaverseController(ILogger<MetaverseController> logger, JimApplication application) : ControllerBase
 {
-    private readonly ILogger<MetaverseController> _logger;
-    private readonly JimApplication _application;
-
-    public MetaverseController(ILogger<MetaverseController> logger, JimApplication application)
-    {
-        _logger = logger;
-        _application = application;
-    }
+    private readonly ILogger<MetaverseController> _logger = logger;
+    private readonly JimApplication _application = application;
 
     /// <summary>
     /// Gets all metaverse object types with optional pagination, sorting, and filtering.

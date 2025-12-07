@@ -23,16 +23,10 @@ namespace JIM.Api.Controllers;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
-public class SynchronisationController : ControllerBase
+public class SynchronisationController(ILogger<SynchronisationController> logger, JimApplication application) : ControllerBase
 {
-    private readonly ILogger<SynchronisationController> _logger;
-    private readonly JimApplication _application;
-
-    public SynchronisationController(ILogger<SynchronisationController> logger, JimApplication application)
-    {
-        _logger = logger;
-        _application = application;
-    }
+    private readonly ILogger<SynchronisationController> _logger = logger;
+    private readonly JimApplication _application = application;
 
     #region Connected Systems
 
