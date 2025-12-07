@@ -1,7 +1,7 @@
 # JIM MVP Definition
 
-> **Version**: 1.1
-> **Last Updated**: 2025-12-06
+> **Version**: 1.2
+> **Last Updated**: 2025-12-07
 > **Status**: In Progress (~83% Complete)
 
 ## Overview
@@ -127,7 +127,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 #### 6.1 Authentication
 - [x] SSO/OIDC authentication for Web UI
-- [ ] API authentication (#8)
+- [x] API authentication (#8)
 
 #### 6.2 Authorisation
 - [x] Basic role model
@@ -159,9 +159,9 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 | Outbound Sync | 15 | 15 | 100% |
 | Scheduling | 4 | 6 | 67% |
 | Admin UI | 10 | 15 | 67% |
-| Security | 2 | 5 | 40% |
+| Security | 3 | 5 | 60% |
 | Operations | 4 | 6 | 67% |
-| **Overall** | **59** | **72** | **~82%** |
+| **Overall** | **60** | **72** | **~83%** |
 
 ---
 
@@ -173,7 +173,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### Important (Highly Desirable for MVP)
 2. Background job for scheduled MVO deletions (#120)
 3. Pending Export review UI (#25)
-4. API authentication (#8)
 
 ### Nice to Have (Can follow MVP)
 5. Full RBAC (#21)
@@ -182,6 +181,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 8. Delta sync support
 
 ### Recently Completed ✓
+- ~~API Authentication (#8)~~ - JWT Bearer with OIDC, role-based authorisation
 - ~~Outbound Sync (#121)~~ - Implemented in ExportEvaluationServer.cs
 - ~~Export Execution~~ - Implemented in ExportExecutionServer.cs
 - ~~LDAP Connector Export~~ - Implemented in LdapConnectorExport.cs
