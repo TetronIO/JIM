@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Asp.Versioning;
 using JIM.Api.Middleware;
 using JIM.Application;
 using JIM.PostgresData;
@@ -42,6 +43,19 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddTransient<JimApplication>(x => new JimApplication(new PostgresDataRepository(new JimDbContext())));
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
+
+    // Configure API versioning with URL path segment (e.g., /api/v1/...)
+    builder.Services.AddApiVersioning(options =>
+    {
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.ReportApiVersions = true;
+        options.ApiVersionReader = new UrlSegmentApiVersionReader();
+    }).AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVV";
+        options.SubstituteApiVersionInUrl = true;
+    });
 
     // Setup JWT Bearer authentication using the same OIDC authority as JIM.Web
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");

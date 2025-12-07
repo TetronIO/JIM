@@ -182,18 +182,19 @@
 
 ---
 
-## Phase 7: API Versioning (Future)
+## Phase 7: API Versioning ✅
 
-### 7.1 Implement Versioning Strategy
-- [ ] Choose versioning approach (URL path, header, or query string)
-- [ ] Add API versioning NuGet package
-- [ ] Configure default version
-- [ ] Add version to Swagger documentation
+### 7.1 Implement Versioning Strategy ✅
+- [x] Choose versioning approach: **URL path** (`/api/v1/...`)
+- [x] Add `Asp.Versioning.Mvc` and `Asp.Versioning.Mvc.ApiExplorer` NuGet packages
+- [x] Configure default version (1.0) with `AssumeDefaultVersionWhenUnspecified`
+- [x] Add version to Swagger documentation via `AddApiExplorer`
 
-### 7.2 Version Existing Endpoints
-- [ ] Mark current API as v1
-- [ ] Document versioning strategy
-- [ ] Plan deprecation policy
+### 7.2 Version Existing Endpoints ✅
+- [x] Mark current API as v1 (`[ApiVersion("1.0")]` on all controllers)
+- [x] Update routes to include version segment (`api/v{version:apiVersion}/...`)
+- [ ] Document versioning strategy (deferred - add to README when needed)
+- [ ] Plan deprecation policy (deferred - define when v2 is needed)
 
 ---
 

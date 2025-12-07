@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,9 +10,11 @@ namespace JIM.Api.Controllers;
 /// <remarks>
 /// This controller is intentionally unauthenticated to allow external health probes
 /// from orchestrators like Kubernetes, Docker, and load balancers.
+/// Note: Health endpoints are version-neutral and available at /api/v1/health.
 /// </remarks>
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
+[ApiVersion("1.0")]
 [AllowAnonymous]
 [Produces("application/json")]
 public class HealthController : ControllerBase

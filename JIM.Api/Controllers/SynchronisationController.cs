@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using JIM.Api.Extensions;
 using JIM.Api.Models;
 using JIM.Application;
@@ -17,8 +18,9 @@ namespace JIM.Api.Controllers;
 /// - Connected Systems: External identity stores that sync with the Metaverse
 /// - Sync Rules: Configuration for how data flows between Connected Systems and the Metaverse
 /// </remarks>
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
+[ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
 public class SynchronisationController : ControllerBase

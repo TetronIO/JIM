@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using JIM.Api.Extensions;
 using JIM.Api.Models;
 using JIM.Application;
@@ -17,8 +18,9 @@ namespace JIM.Api.Controllers;
 /// - Viewing example data sets that can be used for testing
 /// - Executing templates to generate test data in the Metaverse
 /// </remarks>
-[Route("api/data-generation")]
+[Route("api/v{version:apiVersion}/data-generation")]
 [ApiController]
+[ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
 public class DataGenerationController : ControllerBase

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using JIM.Api.Extensions;
 using JIM.Api.Models;
 using JIM.Application;
@@ -14,8 +15,9 @@ namespace JIM.Api.Controllers;
 /// The Metaverse is the central identity store in JIM. This controller provides
 /// endpoints for managing object types, attributes, and individual metaverse objects.
 /// </remarks>
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
+[ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
 public class MetaverseController : ControllerBase

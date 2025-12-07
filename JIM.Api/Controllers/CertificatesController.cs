@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using JIM.Api.Extensions;
 using JIM.Api.Models;
 using JIM.Application;
@@ -16,8 +17,9 @@ namespace JIM.Api.Controllers;
 /// such as LDAP servers using TLS/SSL. This controller provides full CRUD operations
 /// for certificate management.
 /// </remarks>
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
+[ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
 public class CertificatesController : ControllerBase

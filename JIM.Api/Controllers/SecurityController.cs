@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using JIM.Api.Models;
 using JIM.Application;
 using Microsoft.AspNetCore.Authorization;
@@ -12,8 +13,9 @@ namespace JIM.Api.Controllers;
 /// This controller provides endpoints for:
 /// - Retrieving role definitions used for access control
 /// </remarks>
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
+[ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
 public class SecurityController : ControllerBase
