@@ -119,37 +119,37 @@
 - [x] Implement dynamic sorting via reflection in `QueryableExtensions.ApplySort`
 
 ### 4.5 Implementation Notes
-- Pagination is currently applied at the API layer (in-memory) for simplicity
-- Database-level pagination can be added later by exposing `IQueryable` from repositories
+- Pagination is applied at the API layer (in-memory) for configuration endpoints (Connected Systems, Sync Rules, Object Types, Attributes) which have small, bounded datasets
+- Database-level pagination already exists for large datasets (CSOs and MVOs) via `PagedResultSet<T>` in the repository layer
 - Default page size: 25, max: 100
 
 ---
 
-## Phase 5: Documentation
+## Phase 5: Documentation ✅
 
 ### 5.1 Add XML Documentation to All Endpoints
-- [ ] MetaverseController - add `<summary>`, `<param>`, `<returns>` to all methods
-- [ ] SynchronisationController - add XML docs
-- [ ] DataGenerationController - add XML docs
-- [ ] SecurityController - add XML docs
-- [ ] CertificatesController - enhance existing docs
-- [ ] HealthController - add XML docs
+- [x] MetaverseController - add `<summary>`, `<param>`, `<returns>` to all methods
+- [x] SynchronisationController - add XML docs
+- [x] DataGenerationController - add XML docs
+- [x] SecurityController - add XML docs
+- [x] CertificatesController - enhance existing docs
+- [x] HealthController - add XML docs
 
 ### 5.2 Add ProducesResponseType Attributes
-- [ ] All endpoints: `[ProducesResponseType(200)]` with specific type
-- [ ] All endpoints: `[ProducesResponseType(typeof(ApiErrorResponse), 400)]`
-- [ ] All endpoints: `[ProducesResponseType(401)]`
-- [ ] All endpoints: `[ProducesResponseType(typeof(ApiErrorResponse), 500)]`
-- [ ] Applicable endpoints: `[ProducesResponseType(404)]`, `[ProducesResponseType(204)]`
+- [x] All endpoints: `[ProducesResponseType(200)]` with specific type
+- [x] All endpoints: `[ProducesResponseType(typeof(ApiErrorResponse), 400)]`
+- [x] All endpoints: `[ProducesResponseType(401)]`
+- [ ] All endpoints: `[ProducesResponseType(typeof(ApiErrorResponse), 500)]` (deferred - handled by global exception handler)
+- [x] Applicable endpoints: `[ProducesResponseType(404)]`, `[ProducesResponseType(204)]`
 
 ### 5.3 Add Operation IDs for PowerShell Generation
-- [ ] Add `Name = "OperationName"` to all HTTP method attributes
-- [ ] Follow naming convention: `Get{Resource}`, `Create{Resource}`, `Update{Resource}`, `Delete{Resource}`
+- [x] Add `Name = "OperationName"` to all HTTP method attributes
+- [x] Follow naming convention: `Get{Resource}`, `Create{Resource}`, `Update{Resource}`, `Delete{Resource}`
 
 ### 5.4 Configure Swagger for Better Documentation
-- [ ] Enable XML comment inclusion in Swagger
-- [ ] Add API description and contact info
-- [ ] Group endpoints by controller/tag
+- [x] Enable XML comment inclusion in Swagger
+- [x] Add API description and contact info
+- [x] Group endpoints by controller/tag (automatic via controller-based routing)
 
 ---
 

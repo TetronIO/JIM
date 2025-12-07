@@ -29,6 +29,12 @@
 5. **NEVER** implement architectural decisions without user confirmation
 6. Present options with trade-offs when relevant, and let the user decide
 
+**COMMIT WITHOUT ASKING:**
+
+1. When the user says "yes" to committing, just commit - don't ask for confirmation
+2. When work is complete and tests pass, commit automatically if the user has indicated approval
+3. Don't ask "Would you like me to commit?" - if the context is clear, just do it
+
 **Test project locations:**
 - API tests: `test/JIM.Api.Tests/`
 - Model tests: `test/JIM.Models.Tests/`

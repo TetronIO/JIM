@@ -80,7 +80,25 @@ try
     // Uses OIDC discovery to get endpoints - works with any OIDC-compliant IDP
     builder.Services.AddSwaggerGen(options =>
     {
-        options.SwaggerDoc("v1", new OpenApiInfo { Title = "JIM API", Version = "v1" });
+        options.SwaggerDoc("v1", new OpenApiInfo
+        {
+            Title = "JIM API",
+            Version = "v1",
+            Description = "JIM (Just Identity Management) REST API for managing identity synchronisation.",
+            Contact = new OpenApiContact
+            {
+                Name = "Tetron",
+                Url = new Uri("https://github.com/TetronIO/JIM")
+            }
+        });
+
+        // Include XML comments for API documentation
+        var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+        var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+        if (File.Exists(xmlPath))
+        {
+            options.IncludeXmlComments(xmlPath);
+        }
 
         options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
         {

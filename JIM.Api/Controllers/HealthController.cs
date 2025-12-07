@@ -5,26 +5,37 @@ namespace JIM.Api.Controllers;
 
 /// <summary>
 /// Health check endpoint for load balancers and service monitors.
-/// This controller is intentionally unauthenticated to allow external health probes.
 /// </summary>
+/// <remarks>
+/// This controller is intentionally unauthenticated to allow external health probes
+/// from orchestrators like Kubernetes, Docker, and load balancers.
+/// </remarks>
 [Route("api/[controller]")]
 [ApiController]
 [AllowAnonymous]
+[Produces("application/json")]
 public class HealthController : ControllerBase
 {
     /// <summary>
     /// Basic health check - returns 200 OK if the service is running.
     /// </summary>
-    [HttpGet]
+    /// <returns>Health status and timestamp.</returns>
+    [HttpGet(Name = "GetHealth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult Get()
     {
         return Ok(new { status = "healthy", timestamp = DateTime.UtcNow });
     }
 
     /// <summary>
-    /// Readiness check - can be extended to verify database connectivity, etc.
+    /// Readiness check - confirms the service is ready to accept requests.
     /// </summary>
-    [HttpGet("ready")]
+    /// <remarks>
+    /// Can be extended to verify database connectivity and other dependencies.
+    /// </remarks>
+    /// <returns>Readiness status and timestamp.</returns>
+    [HttpGet("ready", Name = "GetHealthReady")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult Ready()
     {
         // TODO: Add database connectivity check if needed
@@ -34,7 +45,12 @@ public class HealthController : ControllerBase
     /// <summary>
     /// Liveness check - confirms the service process is alive.
     /// </summary>
-    [HttpGet("live")]
+    /// <remarks>
+    /// Used by orchestrators to determine if the service needs to be restarted.
+    /// </remarks>
+    /// <returns>Liveness status and timestamp.</returns>
+    [HttpGet("live", Name = "GetHealthLive")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult Live()
     {
         return Ok(new { status = "alive", timestamp = DateTime.UtcNow });
