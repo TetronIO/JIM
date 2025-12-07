@@ -131,9 +131,44 @@ SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your sub claim value>
 The `sub` (subject identifier) claim is the standard OIDC claim for uniquely identifying users. It's guaranteed to be unique and stable per user per application across all OIDC-compliant providers.
 
 ## State of Development
-In JIM currently, you can setup connectors to LDAP-based systems (tested against Active Directory so far) and CSV files and perform imports. Synchronisation Rules can also be created, though synchronisation of objects (from connected systems to the Metaverse) is currently under development, with unit tests being worked on. Once that's complete, export functionality will be next, to target an Minimum Viable Product (MVP) status.
+JIM is approaching MVP status with core identity synchronisation functionality complete. Here's what's currently available:
 
-If you don't have any connected systems available, you can also use the Example Data feature to fill JIM with thousands of users and groups. The UI for users and groups is basic, with a fully customisable UI planned.
+**Connectors (Complete):**
+- **LDAP/Active Directory** - Full import and export, schema discovery, LDAPS support with certificate validation
+- **CSV Files** - Full import and export, configurable delimiters, timestamped outputs
+
+**Import (Complete):**
+- Full import from all connectors with object creation, update, and deletion detection
+- Multi-valued attribute handling and all data types supported
+
+**Inbound Synchronisation (Complete):**
+- Join rules to match Connected System Objects to existing Metaverse Objects
+- Projection to create new Metaverse Objects
+- Attribute flow rules with multi-valued attribute support
+- Metaverse Object lifecycle management with deletion rules and grace periods
+
+**Outbound Synchronisation / Export (Complete):**
+- Pending Export detection when Metaverse Objects change
+- Export evaluation and execution via connectors
+- Create, update, and delete operations in target systems
+- Retry logic with exponential backoff
+- Pending Export review UI for monitoring and troubleshooting
+
+**Web UI:**
+- Operations view for manual run profile execution and task monitoring
+- Connected Systems management and connector configuration
+- Sync Rule configuration with attribute flow mapping
+- Metaverse Object browsing and inspection
+- Pending Export list and detail views
+- Certificate management for secure connections
+
+**In Progress:**
+- Scheduler service for automated run profile execution
+- Full RBAC model (currently single administrator)
+
+> **Note:** Integration testing is currently underway. As a pre-MVP release, bugs may exist. Please report any issues on [GitHub](https://github.com/TetronIO/JIM/issues).
+
+If you don't have any connected systems available, you can use the Example Data feature to populate JIM with sample users and groups for testing.
 
 ## Licensing
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).
