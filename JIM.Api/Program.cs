@@ -98,7 +98,7 @@ try
         {
             Title = "JIM API",
             Version = "v1",
-            Description = "JIM (Just Identity Management) REST API for managing identity synchronisation.",
+            Description = "JIM (Junctional Identity Manager) REST API for managing identity synchronisation.",
             Contact = new OpenApiContact
             {
                 Name = "Tetron",
