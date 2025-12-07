@@ -193,7 +193,7 @@
 ### 7.2 Version Existing Endpoints ✅
 - [x] Mark current API as v1 (`[ApiVersion("1.0")]` on all controllers)
 - [x] Update routes to include version segment (`api/v{version:apiVersion}/...`)
-- [ ] Document versioning strategy (deferred - add to README when needed)
+- [x] Document versioning strategy in Developer Guide
 - [ ] Plan deprecation policy (deferred - define when v2 is needed)
 
 ---
