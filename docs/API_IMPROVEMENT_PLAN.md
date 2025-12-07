@@ -1,0 +1,237 @@
+# JIM API Improvement Plan
+
+> **Goal**: Build a standards-compliant RESTful API suitable for PowerShell module consumption.
+>
+> **Branch**: `feature/api-authentication`
+>
+> **Last Updated**: 2025-12-07
+
+---
+
+## Phase 1: Quick Wins & Bug Fixes
+
+### 1.1 Fix Known Bugs
+- [ ] Fix double-dot in log filename (`jim.api..log` → `jim.api.log`) in Program.cs line 193
+- [ ] Fix parameter naming inconsistency (`csid` → `connectedSystemId`) in SynchronisationController
+
+### 1.2 Standardise Route Declarations
+- [ ] Convert all absolute routes to relative routes (e.g., `/metaverse/object-types` → `object-types`)
+- [ ] Add `api/` prefix to base route: `[Route("api/[controller]")]`
+- [ ] Ensure consistent kebab-case throughout
+
+### 1.3 Fix Return Types
+- [ ] Add explicit `IActionResult` return type to `DataGenerationController.ExecuteTemplateAsync`
+- [ ] Return `202 Accepted` for async operations (template execution, queued deletions)
+- [ ] Return `204 No Content` for void operations
+
+---
+
+## Phase 2: Error Handling & Response Consistency
+
+### 2.1 Create Standardised Error Response
+- [ ] Create `ApiErrorResponse` DTO in `JIM.Api/Models/`:
+  ```csharp
+  public class ApiErrorResponse
+  {
+      public string Code { get; set; }
+      public string Message { get; set; }
+      public Dictionary<string, string[]>? ValidationErrors { get; set; }
+      public DateTime Timestamp { get; set; }
+  }
+  ```
+- [ ] Define standard error codes (e.g., `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORIZED`, `CONFLICT`)
+
+### 2.2 Add Global Exception Handler
+- [ ] Create exception handling middleware
+- [ ] Return consistent `ApiErrorResponse` for all errors
+- [ ] Log exceptions with correlation IDs
+- [ ] Document 500 responses on all endpoints
+
+### 2.3 Standardise Error Returns in Controllers
+- [ ] Replace string error messages with `ApiErrorResponse`
+- [ ] Use `BadRequest(new ApiErrorResponse { ... })` pattern consistently
+- [ ] Add `[ProducesResponseType(typeof(ApiErrorResponse), 400)]` to all endpoints
+
+---
+
+## Phase 3: Response DTOs
+
+### 3.1 Create DTOs for MetaverseController
+- [ ] `MetaverseObjectTypeDto`
+- [ ] `MetaverseObjectDto`
+- [ ] `MetaverseAttributeDto`
+
+### 3.2 Create DTOs for SynchronisationController
+- [ ] `ConnectedSystemDto`
+- [ ] `ConnectedSystemObjectTypeDto`
+- [ ] `ConnectedSystemObjectDto`
+
+### 3.3 Create DTOs for DataGenerationController
+- [ ] `DataGenerationTemplateDto`
+- [ ] `ExampleDataSetDto`
+
+### 3.4 Create DTOs for SecurityController
+- [ ] `RoleDto`
+
+### 3.5 Update CertificatesController
+- [ ] Create `TrustedCertificateDetailDto` (without raw certificate bytes)
+- [ ] Add separate endpoint for certificate data download if needed
+
+### 3.6 Refactor Controllers to Use DTOs
+- [ ] MetaverseController - map all responses to DTOs
+- [ ] SynchronisationController - map all responses to DTOs
+- [ ] DataGenerationController - map all responses to DTOs
+- [ ] SecurityController - map all responses to DTOs
+- [ ] CertificatesController - use detail DTO for GetById
+
+---
+
+## Phase 4: Pagination & Filtering
+
+### 4.1 Create Pagination Infrastructure
+- [ ] Create `PaginationRequest` model (skip, take, sortBy, sortDirection)
+- [ ] Create `PaginatedResponse<T>` wrapper:
+  ```csharp
+  public class PaginatedResponse<T>
+  {
+      public IEnumerable<T> Items { get; set; }
+      public int TotalCount { get; set; }
+      public int Page { get; set; }
+      public int PageSize { get; set; }
+      public bool HasMore { get; set; }
+  }
+  ```
+- [ ] Add pagination extension methods to IQueryable
+
+### 4.2 Add Pagination to List Endpoints
+- [ ] `GET /api/certificates` - add pagination
+- [ ] `GET /api/metaverse/object-types` - add pagination
+- [ ] `GET /api/metaverse/objects` - add pagination
+- [ ] `GET /api/synchronisation/connected-systems` - add pagination
+- [ ] `GET /api/synchronisation/connected-systems/{id}/objects` - add pagination
+- [ ] `GET /api/data-generation/templates` - add pagination
+
+### 4.3 Add Filtering Support
+- [ ] Define filter query parameter format (e.g., `?filter=name:contains:test`)
+- [ ] Implement filter parsing middleware or model binder
+- [ ] Add filtering to key list endpoints
+
+### 4.4 Add Sorting Support
+- [ ] Add `sortBy` and `sortDirection` query parameters
+- [ ] Implement sorting on all paginated endpoints
+
+---
+
+## Phase 5: Documentation
+
+### 5.1 Add XML Documentation to All Endpoints
+- [ ] MetaverseController - add `<summary>`, `<param>`, `<returns>` to all methods
+- [ ] SynchronisationController - add XML docs
+- [ ] DataGenerationController - add XML docs
+- [ ] SecurityController - add XML docs
+- [ ] CertificatesController - enhance existing docs
+- [ ] HealthController - add XML docs
+
+### 5.2 Add ProducesResponseType Attributes
+- [ ] All endpoints: `[ProducesResponseType(200)]` with specific type
+- [ ] All endpoints: `[ProducesResponseType(typeof(ApiErrorResponse), 400)]`
+- [ ] All endpoints: `[ProducesResponseType(401)]`
+- [ ] All endpoints: `[ProducesResponseType(typeof(ApiErrorResponse), 500)]`
+- [ ] Applicable endpoints: `[ProducesResponseType(404)]`, `[ProducesResponseType(204)]`
+
+### 5.3 Add Operation IDs for PowerShell Generation
+- [ ] Add `Name = "OperationName"` to all HTTP method attributes
+- [ ] Follow naming convention: `Get{Resource}`, `Create{Resource}`, `Update{Resource}`, `Delete{Resource}`
+
+### 5.4 Configure Swagger for Better Documentation
+- [ ] Enable XML comment inclusion in Swagger
+- [ ] Add API description and contact info
+- [ ] Group endpoints by controller/tag
+
+---
+
+## Phase 6: Security Enhancements
+
+### 6.1 Input Validation
+- [ ] Add `[Required]` and validation attributes to all request DTOs
+- [ ] Add size limits to string parameters
+- [ ] Add model validation middleware
+
+### 6.2 Resource-Level Authorisation
+- [ ] Implement authorisation service for resource access checks
+- [ ] Add permission checks to certificate operations
+- [ ] Add permission checks to connected system operations
+- [ ] Add permission checks to metaverse object operations
+
+### 6.3 Sensitive Data Protection
+- [ ] Remove certificate bytes from standard GET response
+- [ ] Create separate download endpoint for certificate data
+- [ ] Review MetaverseObject attributes for sensitive data exposure
+- [ ] Add field selection parameter to limit returned data
+
+### 6.4 Rate Limiting (Optional)
+- [ ] Add rate limiting middleware
+- [ ] Configure per-endpoint rate limits
+- [ ] Document rate limits in Swagger
+
+---
+
+## Phase 7: API Versioning (Future)
+
+### 7.1 Implement Versioning Strategy
+- [ ] Choose versioning approach (URL path, header, or query string)
+- [ ] Add API versioning NuGet package
+- [ ] Configure default version
+- [ ] Add version to Swagger documentation
+
+### 7.2 Version Existing Endpoints
+- [ ] Mark current API as v1
+- [ ] Document versioning strategy
+- [ ] Plan deprecation policy
+
+---
+
+## Phase 8: Testing & Validation
+
+### 8.1 Integration Tests
+- [ ] Create API integration test project
+- [ ] Test authentication flows
+- [ ] Test pagination
+- [ ] Test error responses
+- [ ] Test all CRUD operations
+
+### 8.2 PowerShell Module Validation
+- [ ] Generate PowerShell module from OpenAPI spec
+- [ ] Test all cmdlets work correctly
+- [ ] Validate error handling in PowerShell
+- [ ] Validate pagination handling
+
+---
+
+## Reference: CertificatesController Pattern
+
+The `CertificatesController` should be used as the template for all other controllers. Key patterns:
+
+```csharp
+/// <summary>
+/// Retrieves all trusted certificates.
+/// </summary>
+/// <returns>A list of certificate headers.</returns>
+[HttpGet]
+[ProducesResponseType(typeof(IEnumerable<TrustedCertificateHeader>), StatusCodes.Status200OK)]
+[ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status500InternalServerError)]
+public async Task<IActionResult> GetAllAsync()
+{
+    var certificates = await _application.Certificates.GetAllAsync();
+    var headers = certificates.Select(TrustedCertificateHeader.FromEntity);
+    return Ok(headers);
+}
+```
+
+---
+
+## Notes
+
+- **Priority**: Phases 1-3 are required before PowerShell module development
+- **Breaking Changes**: All changes in this plan may break existing API consumers (none currently)
+- **Testing**: Build and test after each phase completion
