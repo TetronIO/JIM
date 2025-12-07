@@ -169,11 +169,11 @@
 - Note: NPE/service account access is out of scope for MVP
 - Note: Fine-grained resource-level permissions deferred to future RBAC implementation
 
-### 6.3 Sensitive Data Protection
-- [ ] Remove certificate bytes from standard GET response
-- [ ] Create separate download endpoint for certificate data
-- [ ] Review MetaverseObject attributes for sensitive data exposure
-- [ ] Add field selection parameter to limit returned data
+### 6.3 Sensitive Data Protection ✅
+- [x] Remove certificate bytes from standard GET response (POST responses now use `TrustedCertificateDetailDto`)
+- [x] Create separate download endpoint for certificate data (`GET /api/certificates/{id}/download`)
+- [x] Review MetaverseObject attributes for sensitive data exposure (no sensitive data exposed via DTOs)
+- [ ] Add field selection parameter to limit returned data (deferred - nice-to-have for future)
 
 ### 6.4 Rate Limiting (Optional)
 - [ ] Add rate limiting middleware

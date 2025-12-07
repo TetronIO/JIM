@@ -94,9 +94,9 @@ public class CertificatesController : ControllerBase
     /// The certificate data should be Base64 encoded. Both PEM and DER formats are supported.
     /// </remarks>
     /// <param name="request">The certificate data and metadata.</param>
-    /// <returns>The created certificate.</returns>
+    /// <returns>The created certificate details (excluding raw certificate data).</returns>
     [HttpPost("upload", Name = "UploadCertificate")]
-    [ProducesResponseType(typeof(TrustedCertificate), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(TrustedCertificateDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AddFromDataAsync([FromBody] AddCertificateFromDataRequest request)
@@ -125,7 +125,7 @@ public class CertificatesController : ControllerBase
                 certificateData,
                 notes: request.Notes);
 
-            return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, certificate);
+            return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
         }
         catch (InvalidOperationException ex)
         {
@@ -147,9 +147,9 @@ public class CertificatesController : ControllerBase
     /// Both PEM and DER formats are supported.
     /// </remarks>
     /// <param name="request">The file path and certificate metadata.</param>
-    /// <returns>The created certificate.</returns>
+    /// <returns>The created certificate details (excluding raw certificate data).</returns>
     [HttpPost("file", Name = "AddCertificateFromFile")]
-    [ProducesResponseType(typeof(TrustedCertificate), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(TrustedCertificateDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -169,7 +169,7 @@ public class CertificatesController : ControllerBase
                 request.FilePath,
                 notes: request.Notes);
 
-            return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, certificate);
+            return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
         }
         catch (FileNotFoundException ex)
         {
@@ -276,5 +276,37 @@ public class CertificatesController : ControllerBase
         {
             return NotFound();
         }
+    }
+
+    /// <summary>
+    /// Downloads the raw certificate data in DER format.
+    /// </summary>
+    /// <remarks>
+    /// Returns the certificate as a binary file download. The certificate is returned
+    /// in DER (Distinguished Encoding Rules) format, which can be converted to PEM
+    /// if needed using standard tools like OpenSSL.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the certificate to download.</param>
+    /// <returns>The certificate file as application/x-x509-ca-cert.</returns>
+    [HttpGet("{id:guid}/download", Name = "DownloadCertificate")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [Produces("application/x-x509-ca-cert")]
+    public async Task<IActionResult> DownloadAsync(Guid id)
+    {
+        _logger.LogDebug("Downloading certificate data: {Id}", id);
+        var certificate = await _application.Certificates.GetByIdAsync(id);
+
+        if (certificate == null)
+            return NotFound(ApiErrorResponse.NotFound($"Certificate with ID {id} not found."));
+
+        if (certificate.CertificateData == null || certificate.CertificateData.Length == 0)
+            return NotFound(ApiErrorResponse.NotFound("Certificate data is not available."));
+
+        // Create a safe filename from the certificate name
+        var safeFileName = string.Join("_", certificate.Name.Split(Path.GetInvalidFileNameChars())) + ".cer";
+
+        return File(certificate.CertificateData, "application/x-x509-ca-cert", safeFileName);
     }
 }
