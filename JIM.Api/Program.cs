@@ -60,6 +60,10 @@ try
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true
             };
+
+            // Preserve standard OIDC claim names (sub, name, email, etc.) instead of mapping them
+            // to Microsoft's legacy XML-based claim URIs. This makes JIM IDP-agnostic.
+            options.MapInboundClaims = false;
         });
 
     builder.Services.AddAuthorization();

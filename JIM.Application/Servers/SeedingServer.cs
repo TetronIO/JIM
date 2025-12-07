@@ -105,6 +105,7 @@ internal class SeedingServer
         var managerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Manager, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
         var mobileNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MobileNumber, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var objectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var subjectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SubjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var officeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Office, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var organisationAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Organisation, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var otherFacsimileTelephoneNumbersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
@@ -202,6 +203,7 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, mobileNumberAttribute);
         AddAttributeToObjectType(userObjectType, objectGuidAttribute);
         AddAttributeToObjectType(userObjectType, objectIdentifierAttribute);
+        AddAttributeToObjectType(userObjectType, subjectIdentifierAttribute);
         AddAttributeToObjectType(userObjectType, objectSidAttribute);
         AddAttributeToObjectType(userObjectType, officeAttribute);
         AddAttributeToObjectType(userObjectType, organisationAttribute);
