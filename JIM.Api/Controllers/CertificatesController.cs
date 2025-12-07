@@ -1,3 +1,4 @@
+using JIM.Api.Extensions;
 using JIM.Api.Models;
 using JIM.Application;
 using JIM.Models.Core;
@@ -25,16 +26,23 @@ public class CertificatesController : ControllerBase
     }
 
     /// <summary>
-    /// Gets all trusted certificates.
+    /// Gets all trusted certificates with optional pagination, sorting, and filtering.
     /// </summary>
+    /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<TrustedCertificateHeader>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllAsync()
+    [ProducesResponseType(typeof(PaginatedResponse<TrustedCertificateHeader>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllAsync([FromQuery] PaginationRequest pagination)
     {
-        _logger.LogDebug("Getting all trusted certificates");
+        _logger.LogDebug("Getting all trusted certificates (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
         var certificates = await _application.Certificates.GetAllAsync();
-        var headers = certificates.Select(TrustedCertificateHeader.FromEntity);
-        return Ok(headers);
+        var headers = certificates.Select(TrustedCertificateHeader.FromEntity).AsQueryable();
+
+        // Apply sorting and filtering, then paginate
+        var result = headers
+            .ApplySortAndFilter(pagination)
+            .ToPaginatedResponse(pagination);
+
+        return Ok(result);
     }
 
     /// <summary>

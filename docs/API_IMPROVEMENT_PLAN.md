@@ -93,39 +93,35 @@
 
 ---
 
-## Phase 4: Pagination & Filtering
+## Phase 4: Pagination & Filtering ✅
 
 ### 4.1 Create Pagination Infrastructure
-- [ ] Create `PaginationRequest` model (skip, take, sortBy, sortDirection)
-- [ ] Create `PaginatedResponse<T>` wrapper:
-  ```csharp
-  public class PaginatedResponse<T>
-  {
-      public IEnumerable<T> Items { get; set; }
-      public int TotalCount { get; set; }
-      public int Page { get; set; }
-      public int PageSize { get; set; }
-      public bool HasMore { get; set; }
-  }
-  ```
-- [ ] Add pagination extension methods to IQueryable
+- [x] Create `PaginationRequest` model (page, pageSize, sortBy, sortDirection, filter)
+- [x] Create `PaginatedResponse<T>` wrapper with metadata (totalCount, totalPages, hasNextPage, hasPreviousPage)
+- [x] Add pagination extension methods to IQueryable (`ToPaginatedResponse`, `ApplySort`, `ApplyFilter`)
 
 ### 4.2 Add Pagination to List Endpoints
-- [ ] `GET /api/certificates` - add pagination
-- [ ] `GET /api/metaverse/object-types` - add pagination
-- [ ] `GET /api/metaverse/objects` - add pagination
-- [ ] `GET /api/synchronisation/connected-systems` - add pagination
-- [ ] `GET /api/synchronisation/connected-systems/{id}/objects` - add pagination
-- [ ] `GET /api/data-generation/templates` - add pagination
+- [x] `GET /api/certificates` - add pagination
+- [x] `GET /api/metaverse/object-types` - add pagination
+- [x] `GET /api/metaverse/attributes` - add pagination
+- [x] `GET /api/synchronisation/connected-systems` - add pagination
+- [x] `GET /api/synchronisation/sync-rules` - add pagination
+- [x] `GET /api/data-generation/templates` - add pagination
+- [x] `GET /api/data-generation/example-data-sets` - add pagination
 
 ### 4.3 Add Filtering Support
-- [ ] Define filter query parameter format (e.g., `?filter=name:contains:test`)
-- [ ] Implement filter parsing middleware or model binder
-- [ ] Add filtering to key list endpoints
+- [x] Define filter query parameter format: `?filter=property:operator:value`
+- [x] Supported operators: `eq`, `ne`, `contains`, `startswith`, `endswith` (strings); `eq`, `ne`, `gt`, `gte`, `lt`, `lte` (numbers)
+- [x] Implement expression-based filtering in `QueryableExtensions.ApplyFilter`
 
 ### 4.4 Add Sorting Support
-- [ ] Add `sortBy` and `sortDirection` query parameters
-- [ ] Implement sorting on all paginated endpoints
+- [x] Add `sortBy` and `sortDirection` query parameters
+- [x] Implement dynamic sorting via reflection in `QueryableExtensions.ApplySort`
+
+### 4.5 Implementation Notes
+- Pagination is currently applied at the API layer (in-memory) for simplicity
+- Database-level pagination can be added later by exposing `IQueryable` from repositories
+- Default page size: 25, max: 100
 
 ---
 

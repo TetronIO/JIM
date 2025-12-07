@@ -1,4 +1,5 @@
-﻿using JIM.Api.Models;
+﻿using JIM.Api.Extensions;
+using JIM.Api.Models;
 using JIM.Application;
 using JIM.Models.DataGeneration;
 using JIM.Models.DataGeneration.DTOs;
@@ -22,23 +23,33 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("example-data-sets")]
-        [ProducesResponseType(typeof(IEnumerable<ExampleDataSetHeader>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetExampleDataSetsAsync()
+        [ProducesResponseType(typeof(PaginatedResponse<ExampleDataSetHeader>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetExampleDataSetsAsync([FromQuery] PaginationRequest pagination)
         {
-            _logger.LogTrace("Requested example data sets");
+            _logger.LogTrace("Requested example data sets (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
             var dataSets = await _application.DataGeneration.GetExampleDataSetsAsync();
-            var headers = dataSets.Select(ExampleDataSetHeader.FromEntity);
-            return Ok(headers);
+            var headers = dataSets.Select(ExampleDataSetHeader.FromEntity).AsQueryable();
+
+            var result = headers
+                .ApplySortAndFilter(pagination)
+                .ToPaginatedResponse(pagination);
+
+            return Ok(result);
         }
 
         [HttpGet("templates")]
-        [ProducesResponseType(typeof(IEnumerable<DataGenerationTemplateHeader>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetTemplatesAsync()
+        [ProducesResponseType(typeof(PaginatedResponse<DataGenerationTemplateHeader>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetTemplatesAsync([FromQuery] PaginationRequest pagination)
         {
-            _logger.LogTrace("Requested data generation templates");
+            _logger.LogTrace("Requested data generation templates (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
             var templates = await _application.DataGeneration.GetTemplatesAsync();
-            var headers = templates.Select(DataGenerationTemplateHeader.FromEntity);
-            return Ok(headers);
+            var headers = templates.Select(DataGenerationTemplateHeader.FromEntity).AsQueryable();
+
+            var result = headers
+                .ApplySortAndFilter(pagination)
+                .ToPaginatedResponse(pagination);
+
+            return Ok(result);
         }
 
         [HttpGet("templates/{id:int}")]

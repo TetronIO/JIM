@@ -1,4 +1,5 @@
-﻿using JIM.Api.Models;
+﻿using JIM.Api.Extensions;
+using JIM.Api.Models;
 using JIM.Application;
 using JIM.Models.Core.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -21,13 +22,18 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("object-types")]
-        [ProducesResponseType(typeof(IEnumerable<MetaverseObjectTypeHeader>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetObjectTypesAsync(bool includeChildObjects)
+        [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectTypeHeader>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetObjectTypesAsync([FromQuery] PaginationRequest pagination, bool includeChildObjects = false)
         {
-            _logger.LogTrace("Requested metaverse object types");
+            _logger.LogTrace("Requested metaverse object types (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
             var objectTypes = await _application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
-            var headers = objectTypes.Select(MetaverseObjectTypeHeader.FromEntity);
-            return Ok(headers);
+            var headers = objectTypes.Select(MetaverseObjectTypeHeader.FromEntity).AsQueryable();
+
+            var result = headers
+                .ApplySortAndFilter(pagination)
+                .ToPaginatedResponse(pagination);
+
+            return Ok(result);
         }
 
         [HttpGet("object-types/{id:int}")]
@@ -44,13 +50,18 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("attributes")]
-        [ProducesResponseType(typeof(IEnumerable<MetaverseAttributeHeader>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAttributesAsync()
+        [ProducesResponseType(typeof(PaginatedResponse<MetaverseAttributeHeader>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAttributesAsync([FromQuery] PaginationRequest pagination)
         {
-            _logger.LogTrace("Requested metaverse attributes");
+            _logger.LogTrace("Requested metaverse attributes (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
             var attributes = await _application.Metaverse.GetMetaverseAttributesAsync();
-            var headers = attributes.Select(MetaverseAttributeHeader.FromEntity);
-            return Ok(headers);
+            var headers = attributes.Select(MetaverseAttributeHeader.FromEntity).AsQueryable();
+
+            var result = headers
+                .ApplySortAndFilter(pagination)
+                .ToPaginatedResponse(pagination);
+
+            return Ok(result);
         }
 
         [HttpGet("attributes/{id:int}")]

@@ -1,4 +1,5 @@
-﻿using JIM.Api.Models;
+﻿using JIM.Api.Extensions;
+using JIM.Api.Models;
 using JIM.Application;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging.DTOs;
@@ -23,13 +24,18 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("connected-systems")]
-        [ProducesResponseType(typeof(IEnumerable<ConnectedSystemHeader>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetConnectedSystemsAsync()
+        [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemHeader>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetConnectedSystemsAsync([FromQuery] PaginationRequest pagination)
         {
-            _logger.LogTrace("Requested connected systems");
+            _logger.LogTrace("Requested connected systems (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
             var systems = await _application.ConnectedSystems.GetConnectedSystemsAsync();
-            var headers = systems.Select(ConnectedSystemHeader.FromEntity);
-            return Ok(headers);
+            var headers = systems.Select(ConnectedSystemHeader.FromEntity).AsQueryable();
+
+            var result = headers
+                .ApplySortAndFilter(pagination)
+                .ToPaginatedResponse(pagination);
+
+            return Ok(result);
         }
 
         [HttpGet("connected-systems/{connectedSystemId:int}")]
@@ -181,13 +187,18 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("sync-rules")]
-        [ProducesResponseType(typeof(IEnumerable<SyncRuleHeader>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetSyncRulesAsync()
+        [ProducesResponseType(typeof(PaginatedResponse<SyncRuleHeader>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetSyncRulesAsync([FromQuery] PaginationRequest pagination)
         {
-            _logger.LogTrace("Requested synchronisation rules");
+            _logger.LogTrace("Requested synchronisation rules (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
             var rules = await _application.ConnectedSystems.GetSyncRulesAsync();
-            var headers = rules.Select(SyncRuleHeader.FromEntity);
-            return Ok(headers);
+            var headers = rules.Select(SyncRuleHeader.FromEntity).AsQueryable();
+
+            var result = headers
+                .ApplySortAndFilter(pagination)
+                .ToPaginatedResponse(pagination);
+
+            return Ok(result);
         }
 
         [HttpGet("sync-rules/{id:int}")]
