@@ -1,11 +1,13 @@
 ﻿using JIM.Application;
 using JIM.Models.DataGeneration;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [Authorize]
     public class DataGenerationController : ControllerBase
     {
         private readonly ILogger<DataGenerationController> _logger;

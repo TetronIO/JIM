@@ -2,12 +2,15 @@
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Utilities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [Authorize]
     public class SynchronisationController : ControllerBase
     {
         private readonly ILogger<SynchronisationController> _logger;
@@ -76,14 +79,66 @@ namespace JIM.Api.Controllers
         {
             _logger.LogInformation("Deletion requested for connected system: {Id}", connectedSystemId);
 
-            // TODO: Get the current user from authentication context
-            // For now, we pass null which means the action is not attributed to a specific user
-            var result = await _application.ConnectedSystems.DeleteAsync(connectedSystemId, null!);
+            // Get the current user from the JWT claims
+            var initiatedBy = await GetCurrentUserAsync();
+            if (initiatedBy == null)
+            {
+                _logger.LogWarning("Could not identify user from JWT claims for deletion request");
+                return Unauthorized("Could not identify user from authentication token");
+            }
+
+            var result = await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy);
 
             if (!result.Success)
                 return BadRequest(result);
 
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Resolves the current user from JWT claims by looking up their SSO identifier in the Metaverse.
+        /// </summary>
+        private async Task<Models.Core.MetaverseObject?> GetCurrentUserAsync()
+        {
+            if (User.Identity?.IsAuthenticated != true)
+                return null;
+
+            // Get the service settings to know which claim type contains the unique identifier
+            var serviceSettings = await _application.ServiceSettings.GetServiceSettingsAsync();
+            if (serviceSettings?.SSOUniqueIdentifierClaimType == null ||
+                serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
+            {
+                _logger.LogError("Service settings are not configured for SSO claim mapping");
+                return null;
+            }
+
+            // Get the unique identifier from the JWT claims
+            var uniqueIdClaimValue = IdentityUtilities.GetSsoUniqueIdentifier(
+                User,
+                serviceSettings.SSOUniqueIdentifierClaimType);
+
+            if (string.IsNullOrEmpty(uniqueIdClaimValue))
+            {
+                _logger.LogWarning("JWT does not contain the expected claim: {ClaimType}",
+                    serviceSettings.SSOUniqueIdentifierClaimType);
+                return null;
+            }
+
+            // Look up the user in the Metaverse
+            var userType = await _application.Metaverse.GetMetaverseObjectTypeAsync(
+                Models.Core.Constants.BuiltInObjectTypes.Users,
+                false);
+
+            if (userType == null)
+            {
+                _logger.LogError("Could not find User object type in Metaverse");
+                return null;
+            }
+
+            return await _application.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(
+                userType,
+                serviceSettings.SSOUniqueIdentifierMetaverseAttribute,
+                uniqueIdClaimValue);
         }
 
         [HttpGet("/synchronisation/sync-rules")]

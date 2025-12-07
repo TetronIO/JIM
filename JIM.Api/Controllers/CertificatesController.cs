@@ -1,6 +1,7 @@
 using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers;
@@ -10,6 +11,7 @@ namespace JIM.Api.Controllers;
 /// </summary>
 [Route("[controller]")]
 [ApiController]
+[Authorize]
 public class CertificatesController : ControllerBase
 {
     private readonly ILogger<CertificatesController> _logger;

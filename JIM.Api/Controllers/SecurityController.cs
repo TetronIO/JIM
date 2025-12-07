@@ -1,11 +1,13 @@
 ﻿using JIM.Application;
 using JIM.Models.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [Authorize]
     public class SecurityController : ControllerBase
     {
         private readonly ILogger<SecurityController> _logger;

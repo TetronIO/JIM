@@ -1,11 +1,13 @@
 ﻿using JIM.Application;
 using JIM.Models.Core;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JIM.Api.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [Authorize]
     public class MetaverseController : ControllerBase
     {
         private readonly ILogger<MetaverseController> _logger;
