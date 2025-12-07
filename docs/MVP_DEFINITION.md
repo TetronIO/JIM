@@ -100,7 +100,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Task queuing and state management
 - [x] Cancellation support
 - [x] Activity tracking and logging
-- [ ] Scheduled MVO deletion processing (#120)
 
 ### 5. Administration UI
 
@@ -157,11 +156,11 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 | Connectors | 10 | 10 | 100% |
 | Inbound Sync | 14 | 15 | 93% |
 | Outbound Sync | 15 | 15 | 100% |
-| Scheduling | 4 | 6 | 67% |
+| Scheduling | 4 | 5 | 80% |
 | Admin UI | 10 | 15 | 67% |
 | Security | 3 | 5 | 60% |
 | Operations | 4 | 6 | 67% |
-| **Overall** | **60** | **72** | **~83%** |
+| **Overall** | **60** | **71** | **~85%** |
 
 ---
 
