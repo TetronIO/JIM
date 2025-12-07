@@ -12,6 +12,28 @@
 4. **NEVER** create a PR without verifying build and tests pass
 5. **NEVER** assume tests will pass without running them
 
+**YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
+
+1. **ALWAYS** write unit tests for new classes, methods, and logic
+2. **ALWAYS** write tests for new API endpoints, extension methods, and utilities
+3. **ALWAYS** write tests for bug fixes (to prevent regression)
+4. **NEVER** commit new functionality without corresponding tests
+5. Tests should cover: happy path, edge cases, error conditions
+
+**YOU MUST ASK BEFORE IMPLEMENTING SIGNIFICANT CHANGES:**
+
+1. **ALWAYS** ask the user before implementing new features or significant functionality
+2. **ALWAYS** confirm the approach when multiple implementation options exist
+3. **ALWAYS** clarify requirements when there is ambiguity about what the user wants
+4. **NEVER** assume you know what the user wants for non-trivial changes
+5. **NEVER** implement architectural decisions without user confirmation
+6. Present options with trade-offs when relevant, and let the user decide
+
+**Test project locations:**
+- API tests: `test/JIM.Api.Tests/`
+- Model tests: `test/JIM.Models.Tests/`
+- Worker/business logic tests: `JIM.Worker.Tests/`
+
 **Failure to build and test wastes CI/CD resources and delays the project.**
 
 If you cannot build/test locally due to environment constraints, you MUST:
@@ -59,7 +81,7 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - Domain models: `JIM.Models/Core/` or `JIM.Models/Staging/`
 - Database repositories: `JIM.PostgresData/`
 - Connectors: `JIM.Connectors/` or new connector project
-- Tests: `JIM.Worker.Tests/` or `test/JIM.Models.Tests/`
+- Tests: `test/JIM.Api.Tests/`, `test/JIM.Models.Tests/`, `JIM.Worker.Tests/`
 
 ## Code Style & Conventions
 
