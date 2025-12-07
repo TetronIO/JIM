@@ -11,7 +11,6 @@
 ## Phase 1: Quick Wins & Bug Fixes
 
 ### 1.1 Fix Known Bugs
-- [ ] Fix double-dot in log filename (`jim.api..log` → `jim.api.log`) in Program.cs line 193
 - [ ] Fix parameter naming inconsistency (`csid` → `connectedSystemId`) in SynchronisationController
 
 ### 1.2 Standardise Route Declarations
