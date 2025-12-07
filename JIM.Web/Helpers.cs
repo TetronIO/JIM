@@ -2,6 +2,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Transactional;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
@@ -79,6 +80,30 @@ public static class Helpers
             ValueChangeType.Add => Color.Primary,
             ValueChangeType.Remove => Color.Secondary,
             ValueChangeType.NotSet => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    public static Color GetPendingExportStatusColor(PendingExportStatus status)
+    {
+        return status switch
+        {
+            PendingExportStatus.Pending => Color.Info,
+            PendingExportStatus.Executing => Color.Primary,
+            PendingExportStatus.ExportNotImported => Color.Warning,
+            PendingExportStatus.Failed => Color.Error,
+            PendingExportStatus.Exported => Color.Success,
+            _ => Color.Default,
+        };
+    }
+
+    public static Color GetPendingExportChangeTypeColor(PendingExportChangeType changeType)
+    {
+        return changeType switch
+        {
+            PendingExportChangeType.Create => Color.Primary,
+            PendingExportChangeType.Update => Color.Info,
+            PendingExportChangeType.Delete => Color.Error,
             _ => Color.Default,
         };
     }
