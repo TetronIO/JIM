@@ -1,4 +1,5 @@
 using System.Text.Json;
+using JIM.Api.Middleware;
 using JIM.Application;
 using JIM.PostgresData;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -110,6 +111,9 @@ try
     builder.Host.UseSerilog((context, services, configuration) => InitialiseLogging(configuration, false));
 
     var app = builder.Build();
+
+    // Global exception handler - must be first in the pipeline
+    app.UseGlobalExceptionHandler();
 
     // Configure the HTTP request pipeline.
     if (app.Environment.IsDevelopment())

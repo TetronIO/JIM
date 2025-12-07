@@ -1,4 +1,5 @@
-﻿using JIM.Application;
+﻿using JIM.Api.Models;
+using JIM.Application;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -23,31 +24,51 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("connected-systems")]
-        public async Task<IEnumerable<ConnectedSystem>> GetConnectedSystemsAsync()
+        [ProducesResponseType(typeof(IEnumerable<ConnectedSystem>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetConnectedSystemsAsync()
         {
-            _logger.LogTrace($"Someone requested the connected systems");
-            return await _application.ConnectedSystems.GetConnectedSystemsAsync();
+            _logger.LogTrace("Requested connected systems");
+            var systems = await _application.ConnectedSystems.GetConnectedSystemsAsync();
+            return Ok(systems);
         }
 
-        [HttpGet("connected-systems/{connectedSystemId}")]
-        public async Task<ConnectedSystem?> GetConnectedSystemAsync(int connectedSystemId)
+        [HttpGet("connected-systems/{connectedSystemId:int}")]
+        [ProducesResponseType(typeof(ConnectedSystem), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetConnectedSystemAsync(int connectedSystemId)
         {
-            _logger.LogTrace($"Someone requested a connected system: {connectedSystemId}");
-            return await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+            _logger.LogTrace("Requested connected system: {Id}", connectedSystemId);
+            var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+            if (system == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+            return Ok(system);
         }
 
-        [HttpGet("connected-systems/{connectedSystemId}/object-types")]
-        public async Task<IEnumerable<ConnectedSystemObjectType>?> GetConnectedSystemObjectTypesAsync(int connectedSystemId)
+        [HttpGet("connected-systems/{connectedSystemId:int}/object-types")]
+        [ProducesResponseType(typeof(IEnumerable<ConnectedSystemObjectType>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetConnectedSystemObjectTypesAsync(int connectedSystemId)
         {
-            _logger.LogTrace($"Someone requested object types for connected system: {connectedSystemId}");
-            return await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+            _logger.LogTrace("Requested object types for connected system: {Id}", connectedSystemId);
+            var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+            if (objectTypes == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+            return Ok(objectTypes);
         }
 
-        [HttpGet("connected-systems/{connectedSystemId}/objects/{id}")]
-        public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
+        [HttpGet("connected-systems/{connectedSystemId:int}/objects/{id:guid}")]
+        [ProducesResponseType(typeof(ConnectedSystemObject), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
         {
-            _logger.LogTrace($"Someone requested an object ({id}) connected system: {connectedSystemId}");
-            return await _application.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
+            _logger.LogTrace("Requested object {ObjectId} for connected system: {SystemId}", id, connectedSystemId);
+            var obj = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
+            if (obj == null)
+                return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in connected system {connectedSystemId}."));
+
+            return Ok(obj);
         }
 
         /// <summary>
@@ -56,14 +77,16 @@ namespace JIM.Api.Controllers
         /// </summary>
         /// <param name="connectedSystemId">The ID of the Connected System to preview deletion for.</param>
         /// <returns>A preview showing counts of affected objects and any warnings.</returns>
-        [HttpGet("connected-systems/{connectedSystemId}/deletion-preview")]
-        public async Task<ActionResult<ConnectedSystemDeletionPreview>> GetConnectedSystemDeletionPreviewAsync(int connectedSystemId)
+        [HttpGet("connected-systems/{connectedSystemId:int}/deletion-preview")]
+        [ProducesResponseType(typeof(ConnectedSystemDeletionPreview), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetConnectedSystemDeletionPreviewAsync(int connectedSystemId)
         {
             _logger.LogInformation("Deletion preview requested for connected system: {Id}", connectedSystemId);
 
             var preview = await _application.ConnectedSystems.GetDeletionPreviewAsync(connectedSystemId);
             if (preview == null)
-                return NotFound($"Connected System {connectedSystemId} not found.");
+                return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
             return Ok(preview);
         }
@@ -78,12 +101,12 @@ namespace JIM.Api.Controllers
         /// <response code="202">Deletion has been queued as a background job.</response>
         /// <response code="400">Deletion failed.</response>
         /// <response code="401">User could not be identified from authentication token.</response>
-        [HttpDelete("connected-systems/{connectedSystemId}")]
+        [HttpDelete("connected-systems/{connectedSystemId:int}")]
         [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status202Accepted)]
-        [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<ActionResult<ConnectedSystemDeletionResult>> DeleteConnectedSystemAsync(int connectedSystemId)
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> DeleteConnectedSystemAsync(int connectedSystemId)
         {
             _logger.LogInformation("Deletion requested for connected system: {Id}", connectedSystemId);
 
@@ -92,13 +115,13 @@ namespace JIM.Api.Controllers
             if (initiatedBy == null)
             {
                 _logger.LogWarning("Could not identify user from JWT claims for deletion request");
-                return Unauthorized("Could not identify user from authentication token");
+                return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
             }
 
             var result = await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy);
 
             if (!result.Success)
-                return BadRequest(result);
+                return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Deletion failed."));
 
             // Return 202 Accepted for queued operations, 200 OK for immediate completion
             if (result.Outcome == DeletionOutcome.QueuedAsBackgroundJob ||
@@ -113,7 +136,7 @@ namespace JIM.Api.Controllers
         /// <summary>
         /// Resolves the current user from JWT claims by looking up their SSO identifier in the Metaverse.
         /// </summary>
-        private async Task<Models.Core.MetaverseObject?> GetCurrentUserAsync()
+        private async Task<JIM.Models.Core.MetaverseObject?> GetCurrentUserAsync()
         {
             if (User.Identity?.IsAuthenticated != true)
                 return null;
@@ -141,7 +164,7 @@ namespace JIM.Api.Controllers
 
             // Look up the user in the Metaverse
             var userType = await _application.Metaverse.GetMetaverseObjectTypeAsync(
-                Models.Core.Constants.BuiltInObjectTypes.Users,
+                JIM.Models.Core.Constants.BuiltInObjectTypes.Users,
                 false);
 
             if (userType == null)
@@ -157,17 +180,25 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("sync-rules")]
-        public async Task<IEnumerable<SyncRule>?> GetSyncRulesAsync()
+        [ProducesResponseType(typeof(IEnumerable<SyncRule>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetSyncRulesAsync()
         {
-            _logger.LogTrace("Someone requested the synchronisation rules");
-            return await _application.ConnectedSystems.GetSyncRulesAsync();
+            _logger.LogTrace("Requested synchronisation rules");
+            var rules = await _application.ConnectedSystems.GetSyncRulesAsync();
+            return Ok(rules);
         }
 
-        [HttpGet("sync-rules/{id}")]
-        public async Task<SyncRule?> GetSyncRuleAsync(int id)
+        [HttpGet("sync-rules/{id:int}")]
+        [ProducesResponseType(typeof(SyncRule), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetSyncRuleAsync(int id)
         {
-            _logger.LogTrace($"Someone requested a specific sync rule: {id}");
-            return await _application.ConnectedSystems.GetSyncRuleAsync(id);
+            _logger.LogTrace("Requested sync rule: {Id}", id);
+            var rule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+            if (rule == null)
+                return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
+
+            return Ok(rule);
         }
     }
 }

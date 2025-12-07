@@ -1,3 +1,4 @@
+using JIM.Api.Models;
 using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
@@ -70,14 +71,14 @@ public class CertificatesController : ControllerBase
     /// </summary>
     [HttpPost("upload")]
     [ProducesResponseType(typeof(TrustedCertificate), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AddFromDataAsync([FromBody] AddCertificateFromDataRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest("Name is required");
+            return BadRequest(ApiErrorResponse.ValidationError("Name is required"));
 
         if (string.IsNullOrWhiteSpace(request.CertificateDataBase64))
-            return BadRequest("Certificate data is required");
+            return BadRequest(ApiErrorResponse.ValidationError("Certificate data is required"));
 
         byte[] certificateData;
         try
@@ -86,7 +87,7 @@ public class CertificatesController : ControllerBase
         }
         catch (FormatException)
         {
-            return BadRequest("Invalid Base64 certificate data");
+            return BadRequest(ApiErrorResponse.ValidationError("Invalid Base64 certificate data"));
         }
 
         try
@@ -102,12 +103,12 @@ public class CertificatesController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to add certificate: {Message}", ex.Message);
-            return BadRequest(ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding certificate from data");
-            return BadRequest("Failed to parse certificate data. Ensure it is valid PEM or DER format.");
+            return BadRequest(ApiErrorResponse.BadRequest("Failed to parse certificate data. Ensure it is valid PEM or DER format."));
         }
     }
 
@@ -116,14 +117,14 @@ public class CertificatesController : ControllerBase
     /// </summary>
     [HttpPost("file")]
     [ProducesResponseType(typeof(TrustedCertificate), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AddFromFileAsync([FromBody] AddCertificateFromFileRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest("Name is required");
+            return BadRequest(ApiErrorResponse.ValidationError("Name is required"));
 
         if (string.IsNullOrWhiteSpace(request.FilePath))
-            return BadRequest("File path is required");
+            return BadRequest(ApiErrorResponse.ValidationError("File path is required"));
 
         try
         {
@@ -138,17 +139,17 @@ public class CertificatesController : ControllerBase
         catch (FileNotFoundException ex)
         {
             _logger.LogWarning(ex, "Certificate file not found: {FilePath}", request.FilePath);
-            return BadRequest(ex.Message);
+            return NotFound(ApiErrorResponse.NotFound(ex.Message));
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to add certificate: {Message}", ex.Message);
-            return BadRequest(ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding certificate from file");
-            return BadRequest("Failed to parse certificate file. Ensure it is valid PEM or DER format.");
+            return BadRequest(ApiErrorResponse.BadRequest("Failed to parse certificate file. Ensure it is valid PEM or DER format."));
         }
     }
 
@@ -178,7 +179,7 @@ public class CertificatesController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to update certificate: {Message}", ex.Message);
-            return BadRequest(ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
 
@@ -187,12 +188,13 @@ public class CertificatesController : ControllerBase
     /// </summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var existing = await _application.Certificates.GetByIdAsync(id);
         if (existing == null)
-            return NotFound();
+            return NotFound(ApiErrorResponse.NotFound($"Certificate with ID {id} not found."));
 
         try
         {
@@ -203,7 +205,7 @@ public class CertificatesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting certificate: {Id}", id);
-            return BadRequest(ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
 

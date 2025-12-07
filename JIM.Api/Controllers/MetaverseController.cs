@@ -1,4 +1,5 @@
-﻿using JIM.Application;
+﻿using JIM.Api.Models;
+using JIM.Application;
 using JIM.Models.Core;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,38 +21,60 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("object-types")]
-        public async Task<IEnumerable<MetaverseObjectType>> GetObjectTypesAsync(bool includeChildObjects)
+        [ProducesResponseType(typeof(IEnumerable<MetaverseObjectType>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetObjectTypesAsync(bool includeChildObjects)
         {
-            _logger.LogTrace($"Someone requested the metaverse object types");
-            return await _application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
+            _logger.LogTrace("Requested metaverse object types");
+            var objectTypes = await _application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
+            return Ok(objectTypes);
         }
 
-        [HttpGet("object-types/{id}")]
-        public async Task<MetaverseObjectType?> GetObjectTypeAsync(int id, bool includeChildObjects)
+        [HttpGet("object-types/{id:int}")]
+        [ProducesResponseType(typeof(MetaverseObjectType), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetObjectTypeAsync(int id, bool includeChildObjects)
         {
-            _logger.LogTrace($"Someone requested an object type: {id}");
-            return await _application.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);
+            _logger.LogTrace("Requested object type: {Id}", id);
+            var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);
+            if (objectType == null)
+                return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+            return Ok(objectType);
         }
 
         [HttpGet("attributes")]
-        public async Task<IEnumerable<MetaverseAttribute>?> GetAttributesAsync()
+        [ProducesResponseType(typeof(IEnumerable<MetaverseAttribute>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAttributesAsync()
         {
-            _logger.LogTrace($"Someone requested the metaverse attributes");
-            return await _application.Metaverse.GetMetaverseAttributesAsync();
+            _logger.LogTrace("Requested metaverse attributes");
+            var attributes = await _application.Metaverse.GetMetaverseAttributesAsync();
+            return Ok(attributes);
         }
 
-        [HttpGet("attributes/{id}")]
-        public async Task<MetaverseAttribute?> GetAttributeAsync(int id)
+        [HttpGet("attributes/{id:int}")]
+        [ProducesResponseType(typeof(MetaverseAttribute), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetAttributeAsync(int id)
         {
-            _logger.LogTrace($"Someone requested an attribute: {id}");
-            return await _application.Metaverse.GetMetaverseAttributeAsync(id);
+            _logger.LogTrace("Requested attribute: {Id}", id);
+            var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+            if (attribute == null)
+                return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+            return Ok(attribute);
         }
 
-        [HttpGet("objects/{id}")]
-        public async Task<MetaverseObject?> GetObjectAsync(Guid id)
+        [HttpGet("objects/{id:guid}")]
+        [ProducesResponseType(typeof(MetaverseObject), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetObjectAsync(Guid id)
         {
-            _logger.LogTrace($"Someone requested a metaverse object: {id}");
-            return await _application.Metaverse.GetMetaverseObjectAsync(id);
+            _logger.LogTrace("Requested metaverse object: {Id}", id);
+            var obj = await _application.Metaverse.GetMetaverseObjectAsync(id);
+            if (obj == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
+
+            return Ok(obj);
         }
     }
 }

@@ -20,10 +20,12 @@ namespace JIM.Api.Controllers
         }
 
         [HttpGet("roles")]
-        public async Task<IEnumerable<Role>> GetRolesAsync()
+        [ProducesResponseType(typeof(IEnumerable<Role>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetRolesAsync()
         {
-            _logger.LogTrace($"Someone requested the roles");
-            return await _application.Security.GetRolesAsync();
+            _logger.LogTrace("Requested roles");
+            var roles = await _application.Security.GetRolesAsync();
+            return Ok(roles);
         }
     }
 }

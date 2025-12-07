@@ -29,7 +29,7 @@
 ## Phase 2: Error Handling & Response Consistency
 
 ### 2.1 Create Standardised Error Response
-- [ ] Create `ApiErrorResponse` DTO in `JIM.Api/Models/`:
+- [x] Create `ApiErrorResponse` DTO in `JIM.Api/Models/`:
   ```csharp
   public class ApiErrorResponse
   {
@@ -39,18 +39,18 @@
       public DateTime Timestamp { get; set; }
   }
   ```
-- [ ] Define standard error codes (e.g., `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORIZED`, `CONFLICT`)
+- [x] Define standard error codes (e.g., `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORISED`, `CONFLICT`)
 
 ### 2.2 Add Global Exception Handler
-- [ ] Create exception handling middleware
-- [ ] Return consistent `ApiErrorResponse` for all errors
-- [ ] Log exceptions with correlation IDs
-- [ ] Document 500 responses on all endpoints
+- [x] Create exception handling middleware
+- [x] Return consistent `ApiErrorResponse` for all errors
+- [x] Log exceptions with correlation IDs
+- [ ] Document 500 responses on all endpoints (deferred to Phase 5)
 
 ### 2.3 Standardise Error Returns in Controllers
-- [ ] Replace string error messages with `ApiErrorResponse`
-- [ ] Use `BadRequest(new ApiErrorResponse { ... })` pattern consistently
-- [ ] Add `[ProducesResponseType(typeof(ApiErrorResponse), 400)]` to all endpoints
+- [x] Replace string error messages with `ApiErrorResponse`
+- [x] Use `BadRequest(new ApiErrorResponse { ... })` pattern consistently
+- [x] Add `[ProducesResponseType(typeof(ApiErrorResponse), 400/404)]` to all endpoints
 
 ---
 
