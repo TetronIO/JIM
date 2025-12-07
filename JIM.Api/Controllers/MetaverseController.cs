@@ -16,7 +16,7 @@ namespace JIM.Api.Controllers;
 /// </remarks>
 [Route("api/[controller]")]
 [ApiController]
-[Authorize]
+[Authorize(Roles = "Administrators")]
 [Produces("application/json")]
 public class MetaverseController : ControllerBase
 {

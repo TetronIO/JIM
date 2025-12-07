@@ -162,11 +162,12 @@
 - [x] Add regex validation for constrained strings (`[RegularExpression]`)
 - Note: ASP.NET Core model validation automatically validates DTOs via data annotations
 
-### 6.2 Resource-Level Authorisation
-- [ ] Implement authorisation service for resource access checks
-- [ ] Add permission checks to certificate operations
-- [ ] Add permission checks to connected system operations
-- [ ] Add permission checks to metaverse object operations
+### 6.2 Role-Based Authorisation (MVP) ✅
+- [x] Add middleware to look up JIM roles from database for authenticated API users (`JimRoleEnrichmentMiddleware`)
+- [x] Add `[Authorize]` to all controllers (require authentication) - already in place
+- [x] Add `[Authorize(Roles = "Administrators")]` to admin-only endpoints (all current endpoints are admin-only)
+- Note: NPE/service account access is out of scope for MVP
+- Note: Fine-grained resource-level permissions deferred to future RBAC implementation
 
 ### 6.3 Sensitive Data Protection
 - [ ] Remove certificate bytes from standard GET response

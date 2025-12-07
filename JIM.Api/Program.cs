@@ -157,6 +157,7 @@ try
     // todo: don't think this will work with docker
     app.UseHttpsRedirection();
     app.UseAuthentication();
+    app.UseJimRoleEnrichment(); // Enrich JWT claims with JIM roles from database
     app.UseAuthorization();
     app.MapControllers();
 

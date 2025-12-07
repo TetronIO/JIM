@@ -19,7 +19,7 @@ namespace JIM.Api.Controllers;
 /// </remarks>
 [Route("api/data-generation")]
 [ApiController]
-[Authorize]
+[Authorize(Roles = "Administrators")]
 [Produces("application/json")]
 public class DataGenerationController : ControllerBase
 {
