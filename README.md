@@ -131,10 +131,10 @@ SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your sub claim value>
 The `sub` (subject identifier) claim is the standard OIDC claim for uniquely identifying users. It's guaranteed to be unique and stable per user per application across all OIDC-compliant providers.
 
 ## State of Development
-JIM is approaching MVP status with core identity synchronisation functionality complete. Here's what's currently available:
+JIM is approximately 82% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
 
 **Connectors (Complete):**
-- **LDAP/Active Directory** - Full import and export, schema discovery, LDAPS support with certificate validation
+- **LDAP/Active Directory** - Full import and export, schema discovery, LDAPS support with certificate validation, auto-detection of default naming context
 - **CSV Files** - Full import and export, configurable delimiters, timestamped outputs
 
 **Import (Complete):**
@@ -152,10 +152,16 @@ JIM is approaching MVP status with core identity synchronisation functionality c
 - Export evaluation and execution via connectors
 - Create, update, and delete operations in target systems
 - Retry logic with exponential backoff
-- Pending Export review UI for monitoring and troubleshooting
+- Pending Export review UI with server-side sorting, filtering, and pagination
+
+**Security (Complete):**
+- SSO/OIDC authentication for Web UI
+- JWT Bearer token authentication for API
+- Role-based authorisation (basic model)
 
 **Web UI:**
 - Operations view for manual run profile execution and task monitoring
+- Activity history with server-side sorting, filtering, and pagination
 - Connected Systems management and connector configuration
 - Sync Rule configuration with attribute flow mapping
 - Metaverse Object browsing and inspection
@@ -163,8 +169,8 @@ JIM is approaching MVP status with core identity synchronisation functionality c
 - Certificate management for secure connections
 
 **In Progress:**
-- Scheduler service for automated run profile execution
-- Full RBAC model (currently single administrator)
+- Scheduler service for automated run profile execution (critical path for MVP)
+- Full RBAC model with additional roles
 
 > **Note:** Integration testing is currently underway. As a pre-MVP release, bugs may exist. Please report any issues on [GitHub](https://github.com/TetronIO/JIM/issues).
 
