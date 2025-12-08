@@ -58,30 +58,6 @@
         <MudTabPanel Text="Settings">
             <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
 
-            @if (_connectedSystem?.ConnectorDefinition?.Name == "LDAP")
-            {
-                <MudPaper Class="pa-4 mt-5 mb-5" Outlined="true">
-                    <MudText Typo="Typo.subtitle2" Class="mb-3">LDAP Auto-Detection</MudText>
-                    <MudText Class="mb-4">Click the button below to automatically detect the default naming context from your LDAP directory. This will populate the root DN field based on your connection settings.</MudText>
-                    <MudButton
-                        Variant="Variant.Filled"
-                        Color="Color.Info"
-                        Disabled="@(_detectingLdapContext || !_connectedSystem.SettingValuesValid)"
-                        OnClick="HandleDetectLdapNamingContextAsync"
-                        DropShadow="false">
-                        @if (_detectingLdapContext)
-                        {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                            <MudText Class="ms-2">Detecting...</MudText>
-                        }
-                        else
-                        {
-                            <text>Detect Default Naming Context</text>
-                        }
-                    </MudButton>
-                </MudPaper>
-            }
-
             <MudForm @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
                 @if (_settingCategories != null)
                 {
@@ -939,7 +915,6 @@
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
     private List<BreadcrumbItem> _breadcrumbs = null!;
-    private bool _detectingLdapContext;
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
     private bool _editSchemaAttributeDialogVisible;
@@ -1114,38 +1089,6 @@
 
         StateHasChanged();
         await Task.Delay(1);
-    }
-
-    private async Task HandleDetectLdapNamingContextAsync()
-    {
-        if (_connectedSystem == null || _connectedSystem.Id == 0)
-            return;
-
-        _detectingLdapContext = true;
-        StateHasChanged();
-
-        try
-        {
-            var result = await Jim.ConnectedSystems.DetectLdapDefaultNamingContextAsync(_connectedSystem.Id);
-
-            if (result.Success && !string.IsNullOrEmpty(result.DefaultNamingContext))
-            {
-                Snackbar.Add($"Detected naming context: {result.DefaultNamingContext}", Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add($"Failed to detect naming context: {result.ErrorMessage ?? "Unknown error"}", Severity.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error detecting naming context: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _detectingLdapContext = false;
-            StateHasChanged();
-        }
     }
 
     private async Task HandleImportSchemaAsync()

@@ -1335,67 +1335,6 @@ public class ConnectedSystemServer
     }
     #endregion
 
-    #region LDAP Detection
-
-    /// <summary>
-    /// Detects the default naming context for an LDAP connected system.
-    /// </summary>
-    /// <remarks>
-    /// This method connects to the LDAP directory using the connected system's current settings
-    /// and queries the rootDSE for the defaultNamingContext attribute.
-    /// </remarks>
-    public async Task<DetectLdapDefaultNamingContextResult> DetectLdapDefaultNamingContextAsync(int connectedSystemId)
-    {
-        try
-        {
-            var connectedSystem = await GetConnectedSystemAsync(connectedSystemId);
-            if (connectedSystem == null)
-                return new DetectLdapDefaultNamingContextResult { Success = false, ErrorMessage = "Connected system not found." };
-
-            if (connectedSystem.ConnectorDefinition?.Name != "LDAP")
-                return new DetectLdapDefaultNamingContextResult { Success = false, ErrorMessage = "This feature is only available for LDAP connectors." };
-
-            // Create an LDAP connector instance to establish a connection
-            var connector = new LdapConnector();
-
-            try
-            {
-                // Get the LDAP connection from the connector
-                var connection = await connector.TestConnectionAsync(connectedSystem.SettingValues, Serilog.Log.Logger);
-
-                if (connection == null)
-                    return new DetectLdapDefaultNamingContextResult { Success = false, ErrorMessage = "Failed to establish LDAP connection." };
-
-                // Query the rootDSE for defaultNamingContext
-                var defaultNamingContext = LdapConnectorUtilities.GetDefaultNamingContextFromRootDse(connection);
-
-                if (string.IsNullOrEmpty(defaultNamingContext))
-                    return new DetectLdapDefaultNamingContextResult { Success = false, ErrorMessage = "Could not retrieve defaultNamingContext from LDAP directory." };
-
-                return new DetectLdapDefaultNamingContextResult
-                {
-                    Success = true,
-                    DefaultNamingContext = defaultNamingContext
-                };
-            }
-            finally
-            {
-                connector?.Dispose();
-            }
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Error(ex, "Error detecting LDAP default naming context for connected system: {ConnectedSystemId}", connectedSystemId);
-            return new DetectLdapDefaultNamingContextResult
-            {
-                Success = false,
-                ErrorMessage = $"Error detecting naming context: {GetFullExceptionMessage(ex)}"
-            };
-        }
-    }
-
-    #endregion
-
     #region Helpers
     /// <summary>
     /// Builds a full error message including all inner exceptions.
