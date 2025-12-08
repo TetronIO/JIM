@@ -93,8 +93,7 @@
                         <MudPaper Class="pa-4 mt-5" Outlined="true">
                             @foreach (var settingValue in _connectedSystem.SettingValues
                                 .Where(sv => sv.Setting.Category == settingCategory)
-                                .OrderByDescending(sv => sv.Setting.Required)
-                                .ThenBy(sv => sv.Setting.Id))
+                                .OrderBy(sv => sv.Setting.Id))
                             {
                                 if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
                                 {
