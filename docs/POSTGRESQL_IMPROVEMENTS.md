@@ -137,18 +137,77 @@ jim.database:
 - [x] **1.7** Add database connectivity check to health endpoint (`/api/v1/health/ready`)
 - [x] **1.8** Add unit tests for health controller
 
-### Phase 2: Operational Improvements (Priority: Low)
+### Phase 2: Operational Improvements (Priority: Low) - COMPLETED
 
-- [ ] **2.1** Add `statement_timeout` to prevent runaway queries
-- [ ] **2.2** Add container health checks
-- [ ] **2.3** Add `log_min_duration_statement` for slow query logging in development
-- [ ] **2.4** Document backup/restore procedures
+- [x] **2.1** Add `statement_timeout` (5 minutes) to prevent runaway queries
+- [x] **2.2** Add container health checks using `pg_isready`
+- [x] **2.3** Add `log_min_duration_statement` (1s prod, 0.5s dev) for slow query logging
+- [x] **2.4** Document backup/restore procedures (see below)
 
-### Phase 3: Connection Management (Priority: Low)
+### Phase 3: Connection Management (Priority: Low) - COMPLETED
 
-- [ ] **3.1** Add explicit connection pooling parameters to connection string
-- [ ] **3.2** Add connection pool monitoring/logging
-- [ ] **3.3** Document recommended pool sizes for different deployment sizes
+- [x] **3.1** Add explicit connection pooling parameters to connection string
+- [x] **3.2** Document connection pool settings (monitoring is via Npgsql logging)
+- [x] **3.3** Document recommended pool sizes for different deployment sizes (see below)
+
+---
+
+## Connection Pooling Configuration
+
+JIM uses Npgsql connection pooling with the following default settings:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Minimum Pool Size | 5 | Keep connections warm for common operations |
+| Maximum Pool Size | 50 | Per-service limit (4 services × 50 = 200 max total) |
+| Connection Idle Lifetime | 300s | Recycle idle connections after 5 minutes |
+| Connection Pruning Interval | 30s | Check for idle connections every 30 seconds |
+
+### Recommended Pool Sizes by Deployment Size
+
+| Environment | Services | Max Pool/Service | Total Max | PostgreSQL max_connections |
+|-------------|----------|------------------|-----------|----------------------------|
+| Development | 4 | 25 | 100 | 100 |
+| Small (< 10k objects) | 4 | 50 | 200 | 200 |
+| Medium (10k-100k objects) | 4 | 75 | 300 | 300 |
+| Large (100k+ objects) | 4-8 | 100 | 400-800 | 500-1000 |
+
+### Monitoring Connection Pool
+
+Enable Npgsql logging by setting the logging level to `Debug` for the `Npgsql` logger. Connection pool statistics will appear in logs during high activity.
+
+---
+
+## Backup and Restore Procedures
+
+### Creating a Backup
+
+Using Docker:
+```bash
+# Backup to a timestamped file
+docker exec jim.database pg_dump -U ${DB_USERNAME} -Fc ${DB_NAME} > jim_backup_$(date +%Y%m%d_%H%M%S).dump
+
+# Or use plain SQL format (larger but human-readable)
+docker exec jim.database pg_dump -U ${DB_USERNAME} ${DB_NAME} > jim_backup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+### Restoring from Backup
+
+```bash
+# Restore from custom format (.dump)
+docker exec -i jim.database pg_restore -U ${DB_USERNAME} -d ${DB_NAME} --clean < jim_backup.dump
+
+# Restore from SQL format
+docker exec -i jim.database psql -U ${DB_USERNAME} -d ${DB_NAME} < jim_backup.sql
+```
+
+### Scheduled Backups (Production)
+
+For production deployments, consider:
+1. Using a volume-mounted backup directory
+2. Setting up cron jobs for automated backups
+3. Implementing backup rotation (keep last N backups)
+4. Testing restore procedures regularly
 
 ---
 
