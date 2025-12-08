@@ -21,14 +21,15 @@
 {
     <MudGrid Class="mt-5">
         <MudItem xs="6">
-            <MudSelect T="PendingExportStatus?" Label="Filter by Status" Value="_statusFilter" ValueChanged="OnStatusFilterChanged"
-                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 250px;">
-                <MudSelectItem T="PendingExportStatus?" Value="@((PendingExportStatus?)null)">All</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.ExportNotImported">Export Not Imported</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
+            <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
+                       SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
+                       MultiSelectionTextFunc="@GetStatusFilterText"
+                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotImported">Export Not Imported</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
             </MudSelect>
         </MudItem>
     </MudGrid>
@@ -178,7 +179,7 @@ else
     private MudTable<PendingExportHeader>? _table;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private string _searchString = "";
-    private PendingExportStatus? _statusFilter;
+    private IEnumerable<PendingExportStatus> _statusFilters = new HashSet<PendingExportStatus>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _loading;
 
@@ -215,7 +216,7 @@ else
                 Id,
                 page,
                 state.PageSize,
-                _statusFilter,
+                _statusFilters.Any() ? _statusFilters : null,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
                 sortDescending);
@@ -239,9 +240,20 @@ else
         _table?.ReloadServerData();
     }
 
-    private void OnStatusFilterChanged(PendingExportStatus? newStatus)
+    private string GetStatusFilterText(List<string> selectedValues)
     {
-        _statusFilter = newStatus;
+        if (selectedValues == null || selectedValues.Count == 0)
+            return "All";
+
+        if (selectedValues.Count == 1)
+            return selectedValues[0].SplitOnCapitalLetters();
+
+        return $"{selectedValues.Count} selected";
+    }
+
+    private void OnStatusFiltersChanged(IEnumerable<PendingExportStatus> newFilters)
+    {
+        _statusFilters = newFilters;
         _table?.ReloadServerData();
     }
 

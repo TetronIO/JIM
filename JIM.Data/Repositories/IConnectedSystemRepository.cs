@@ -60,7 +60,7 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many results to return per page.</param>
-    /// <param name="statusFilter">Optional filter by status.</param>
+    /// <param name="statusFilters">Optional filter by one or more statuses.</param>
     /// <param name="searchQuery">Optional search query to filter by target object identifier, source MVO display name, or error message.</param>
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
@@ -68,7 +68,7 @@ public interface IConnectedSystemRepository
         int connectedSystemId,
         int page,
         int pageSize,
-        PendingExportStatus? statusFilter = null,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true);

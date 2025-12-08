@@ -745,7 +745,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int connectedSystemId,
         int page,
         int pageSize,
-        PendingExportStatus? statusFilter = null,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true)
@@ -769,9 +769,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(av => av.Attribute)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId);
 
-        // Apply status filter
-        if (statusFilter.HasValue)
-            query = query.Where(pe => pe.Status == statusFilter.Value);
+        // Apply status filter (supports multiple statuses)
+        var statusList = statusFilters?.ToList();
+        if (statusList != null && statusList.Count > 0)
+            query = query.Where(pe => statusList.Contains(pe.Status));
 
         // Apply search filter - search on target identifier, source MVO display name, or error message
         if (!string.IsNullOrWhiteSpace(searchQuery))
