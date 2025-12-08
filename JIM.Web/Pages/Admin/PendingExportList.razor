@@ -17,7 +17,7 @@
     change and need to be synchronised to this target system.
 </MudText>
 
-@if (_pendingExports != null)
+@if (_connectedSystemHeader != null)
 {
     <MudGrid Class="mt-5">
         <MudItem xs="6">
@@ -31,41 +31,72 @@
                 <MudSelectItem T="PendingExportStatus?" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="6" Class="d-flex justify-end align-center">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                Showing @_pendingExports.Results.Count of @_pendingExports.TotalResults results
-                @if (_pendingExports.TotalPages > 1)
-                {
-                    <text> (Page @_pendingExports.CurrentPage of @_pendingExports.TotalPages)</text>
-                }
-            </MudText>
-        </MudItem>
     </MudGrid>
 
-    <MudTable Items="@_pendingExports.Results"
+    <MudTable @ref="_table"
+              T="PendingExportHeader"
+              ServerData="ServerReload"
               Hover="true"
+              Dense="true"
               Breakpoint="Breakpoint.Sm"
-              Class="mt-5 mb-5"
-              SortLabel="Sort By"
-              Filter="new Func<PendingExportHeader,bool>(FilterFunc1)"
+              Class="mt-5"
               Outlined="true"
               Elevation="0"
               OnRowClick="HandleRowClick"
-              T="PendingExportHeader"
-              RowClass="cursor-pointer">
+              RowClass="cursor-pointer"
+              Loading="@_loading"
+              LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudSpacer />
-            <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            <MudTextField T="string"
+                          ValueChanged="@(s => OnSearch(s))"
+                          Placeholder="Search target, source MVO, or errors"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium"
+                          Class="mt-0" />
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.ChangeType)">Change Type</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.TargetObjectIdentifier ?? string.Empty)">Target Object</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.SourceMetaverseObjectDisplayName ?? string.Empty)">Source MVO</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.AttributeChangeCount)">Changes</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.CreatedAt)">Created</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.ErrorCount)">Errors</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PendingExportHeader, object>(x => x.NextRetryAt ?? DateTime.MaxValue)">Next Retry</MudTableSortLabel></MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="changetype" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Change Type</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="status" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Status</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="targetobject" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Target Object</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="sourcemvo" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Source MVO</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="changes" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Changes</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="created" T="PendingExportHeader" InitialDirection="SortDirection.Descending">
+                    <MudText Typo="Typo.button">Created</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="errors" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Errors</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="nextretry" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Next Retry</MudText>
+                </MudTableSortLabel>
+            </MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Change Type">
@@ -130,15 +161,10 @@
         <NoRecordsContent>
             <MudText>There are no pending exports for this connected system.</MudText>
         </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
     </MudTable>
-
-    @if (_pendingExports.TotalPages > 1)
-    {
-        <MudPagination Count="@_pendingExports.TotalPages"
-                       Selected="@_pendingExports.CurrentPage"
-                       SelectedChanged="OnPageChanged"
-                       Class="mt-4" />
-    }
 }
 else
 {
@@ -149,22 +175,14 @@ else
     [Parameter]
     public int Id { get; set; }
 
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "p")]
-    public int? Page { get; set; }
-
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "status")]
-    public string? StatusFilterParam { get; set; }
-
+    private MudTable<PendingExportHeader>? _table;
     private ConnectedSystemHeader? _connectedSystemHeader;
-    private PagedResultSet<PendingExportHeader>? _pendingExports;
     private string _searchString = "";
     private PendingExportStatus? _statusFilter;
     private List<BreadcrumbItem> _breadcrumbs = null!;
-    private const int PageSize = 20;
+    private bool _loading;
 
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnInitializedAsync()
     {
         _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
         if (_connectedSystemHeader == null)
@@ -180,74 +198,51 @@ else
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Pending Exports", href: null, disabled: true)
         };
-
-        if (Page is null or < 1)
-            Page = 1;
-
-        // Parse status filter from query param
-        if (!string.IsNullOrEmpty(StatusFilterParam) && Enum.TryParse<PendingExportStatus>(StatusFilterParam, true, out var status))
-            _statusFilter = status;
-
-        await LoadDataAsync();
     }
 
-    private async Task LoadDataAsync()
+    private async Task<TableData<PendingExportHeader>> ServerReload(TableState state, CancellationToken token)
     {
-        _pendingExports = await Jim.ConnectedSystems.GetPendingExportHeadersAsync(
-            Id, Page ?? 1, PageSize, _statusFilter);
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Convert MudBlazor's 0-indexed page to our 1-indexed page
+            var page = state.Page + 1;
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+
+            var result = await Jim.ConnectedSystems.GetPendingExportHeadersAsync(
+                Id,
+                page,
+                state.PageSize,
+                _statusFilter,
+                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                state.SortLabel,
+                sortDescending);
+
+            return new TableData<PendingExportHeader>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
     }
 
-    private bool FilterFunc1(PendingExportHeader element) => FilterFunc(element, _searchString);
-
-    private static bool FilterFunc(PendingExportHeader element, string searchString)
+    private void OnSearch(string text)
     {
-        if (string.IsNullOrWhiteSpace(searchString))
-            return true;
-
-        if (!string.IsNullOrEmpty(element.TargetObjectIdentifier) &&
-            element.TargetObjectIdentifier.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (!string.IsNullOrEmpty(element.SourceMetaverseObjectDisplayName) &&
-            element.SourceMetaverseObjectDisplayName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (!string.IsNullOrEmpty(element.LastErrorMessage) &&
-            element.LastErrorMessage.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return false;
+        _searchString = text;
+        _table?.ReloadServerData();
     }
 
-    private async Task OnStatusFilterChanged(PendingExportStatus? newStatus)
+    private void OnStatusFilterChanged(PendingExportStatus? newStatus)
     {
         _statusFilter = newStatus;
-        Page = 1;
-        await LoadDataAsync();
-        UpdateUrl();
-    }
-
-    private async Task OnPageChanged(int newPage)
-    {
-        Page = newPage;
-        await LoadDataAsync();
-        UpdateUrl();
-    }
-
-    private void UpdateUrl()
-    {
-        var url = $"/admin/connected-systems/{Id}/pending-exports";
-        var queryParams = new List<string>();
-
-        if (Page > 1)
-            queryParams.Add($"p={Page}");
-        if (_statusFilter.HasValue)
-            queryParams.Add($"status={_statusFilter}");
-
-        if (queryParams.Count > 0)
-            url += "?" + string.Join("&", queryParams);
-
-        NavManager.NavigateTo(url, replace: true);
+        _table?.ReloadServerData();
     }
 
     private void HandleRowClick(TableRowClickEventArgs<PendingExportHeader> args)

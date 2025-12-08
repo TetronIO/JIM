@@ -61,11 +61,17 @@ public interface IConnectedSystemRepository
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many results to return per page.</param>
     /// <param name="statusFilter">Optional filter by status.</param>
+    /// <param name="searchQuery">Optional search query to filter by target object identifier, source MVO display name, or error message.</param>
+    /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     public Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
         int pageSize,
-        PendingExportStatus? statusFilter = null);
+        PendingExportStatus? statusFilter = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true);
 
     /// <summary>
     /// Retrieves a single Pending Export by ID.
