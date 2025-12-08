@@ -19,21 +19,25 @@
 {
     <ActivityItemPaginator Results="@_activities" />
 
-    <MudTable T="Activity" Items="@_activities.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+    <MudTable T="Activity" Items="@_activities.Results" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Filter="new Func<Activity, bool>(FilterFunc)" Outlined="true" Elevation="0">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchString" Placeholder="Search type or target" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudText Typo="Typo.button">Target</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Operation</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Execution Time</MudText></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Activity, object>(x => x.TargetType)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Activity, object>(x => x.TargetName ?? string.Empty)"><MudText Typo="Typo.button">Target</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Activity, object>(x => x.TargetOperationType)"><MudText Typo="Typo.button">Operation</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Activity, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Activity, object>(x => x.InitiatedByName ?? string.Empty)"><MudText Typo="Typo.button">Initiated By</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Activity, object>(x => x.Status)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Activity, object>(x => x.ExecutionTime ?? TimeSpan.Zero)"><MudText Typo="Typo.button">Execution Time</MudText></MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Target">
                 <MudLink Href="@($"/activity/{context.Id}")">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudLink>
             </MudTd>
-            <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Operation">@context.TargetOperationType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Created">@context.Created.ToFriendlyDate()</MudTd>
             <MudTd DataLabel="Initiated By">
@@ -62,6 +66,7 @@
     [SupplyParameterFromQuery(Name = "p")]
     public int? Page { get; set; }
     private PagedResultSet<Activity>? _activities;
+    private string _searchString = "";
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -75,5 +80,19 @@
             Page = 1;
 
         _activities = await Jim.Activities.GetActivitiesAsync(Page.Value);
+    }
+
+    private bool FilterFunc(Activity activity)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        if (activity.TargetType.ToString().Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!string.IsNullOrEmpty(activity.TargetName) && activity.TargetName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }
