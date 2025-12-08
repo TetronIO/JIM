@@ -47,7 +47,15 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - Mark the PR as draft
 - Request manual review and testing before merge
 
-## Bash Commands
+## Scripting
+
+**IMPORTANT: Use PowerShell for ALL scripts:**
+- All automation, integration tests, and utility scripts MUST be written in PowerShell (.ps1)
+- PowerShell is cross-platform and works on Linux, macOS, and Windows
+- Exception: `.devcontainer/setup.sh` is acceptable as it runs during container creation
+- Never create bash/shell scripts for project automation or testing
+
+## Commands
 
 **Build & Test:**
 - `dotnet build JIM.sln` - Build entire solution
