@@ -126,27 +126,29 @@ jim.database:
 
 ## Improvement Plan
 
-### Phase 1: Index Optimisation (Priority: Medium)
+### Phase 1: Index Optimisation (Priority: Medium) - COMPLETED
 
-- [ ] **1.1** Analyse slow query patterns using `pg_stat_statements`
-- [ ] **1.2** Add composite index on `ConnectedSystemObject (ConnectedSystemId, ExternalId)`
-- [ ] **1.3** Add composite index on `PendingExport (ConnectedSystemId, ChangeType)`
-- [ ] **1.4** Add index on `MetaverseObjectAttributeValue (AttributeId, StringValue)`
-- [ ] **1.5** Create EF migration for new indexes
-- [ ] **1.6** Test import/sync performance with indexes
+- [x] **1.1** Analyse slow query patterns using `pg_stat_statements`
+- [x] **1.2** Add composite index on `ConnectedSystemObject (ConnectedSystemId, TypeId)`
+- [x] **1.3** Add composite index on `PendingExport (ConnectedSystemId, Status)`
+- [x] **1.4** Add index on `MetaverseObjectAttributeValue (AttributeId, StringValue)`
+- [x] **1.5** Add index on `ConnectedSystemObjectAttributeValue (ConnectedSystemObjectId, AttributeId)`
+- [x] **1.6** Create EF migration for new indexes (`20251208094620_AddPerformanceIndexes`)
+- [x] **1.7** Add database connectivity check to health endpoint (`/api/v1/health/ready`)
+- [x] **1.8** Add unit tests for health controller
 
-### Phase 2: Connection Management (Priority: Low)
+### Phase 2: Operational Improvements (Priority: Low)
 
-- [ ] **2.1** Add explicit connection pooling parameters to connection string
-- [ ] **2.2** Add connection pool monitoring/logging
-- [ ] **2.3** Document recommended pool sizes for different deployment sizes
+- [ ] **2.1** Add `statement_timeout` to prevent runaway queries
+- [ ] **2.2** Add container health checks
+- [ ] **2.3** Add `log_min_duration_statement` for slow query logging in development
+- [ ] **2.4** Document backup/restore procedures
 
-### Phase 3: Operational Improvements (Priority: Low)
+### Phase 3: Connection Management (Priority: Low)
 
-- [ ] **3.1** Add `statement_timeout` to prevent runaway queries
-- [ ] **3.2** Add container health checks
-- [ ] **3.3** Add `log_min_duration_statement` for slow query logging in development
-- [ ] **3.4** Document backup/restore procedures
+- [ ] **3.1** Add explicit connection pooling parameters to connection string
+- [ ] **3.2** Add connection pool monitoring/logging
+- [ ] **3.3** Document recommended pool sizes for different deployment sizes
 
 ---
 

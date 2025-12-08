@@ -207,5 +207,27 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<TrustedCertificate>()
             .HasIndex(tc => tc.Thumbprint)
             .IsUnique();
+
+        // Performance indexes for frequently queried tables
+        // ConnectedSystemObject: composite index for lookups by system and type
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.TypeId })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId");
+
+        // PendingExport: composite index for export queries by system and status
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
+
+        // MetaverseObjectAttributeValue: index for attribute lookups by value
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .HasIndex(moav => new { moav.AttributeId, moav.StringValue })
+            .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_StringValue");
+
+        // ConnectedSystemObjectAttributeValue: composite index for CSO attribute lookups
+        // Uses shadow property "ConnectedSystemObjectId" created by EF convention
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex("ConnectedSystemObjectId", "AttributeId")
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
     }
 }
