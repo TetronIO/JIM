@@ -131,7 +131,7 @@ SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your sub claim value>
 The `sub` (subject identifier) claim is the standard OIDC claim for uniquely identifying users. It's guaranteed to be unique and stable per user per application across all OIDC-compliant providers.
 
 ## State of Development
-JIM is approximately 82% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
+JIM is approximately 81% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
 
 **Connectors (Complete):**
 - **LDAP/Active Directory** - Full import and export, schema discovery, LDAPS support with certificate validation, auto-detection of default naming context

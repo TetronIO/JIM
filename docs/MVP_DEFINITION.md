@@ -2,7 +2,7 @@
 
 > **Version**: 1.4
 > **Last Updated**: 2025-12-08
-> **Status**: In Progress (~82% Complete)
+> **Status**: In Progress (~81% Complete)
 
 ---
 
@@ -15,9 +15,9 @@
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
 | Admin UI | `████████░░` | 11 | 14 | 79% |
-| Security | `██████░░░░` | 3 | 5 | 60% |
+| Security | `█████░░░░░` | 3 | 6 | 50% |
 | Operations | `███████░░░` | 4 | 6 | 67% |
-| **Overall** | `████████░░` | **61** | **74** | **82%** |
+| **Overall** | `████████░░` | **61** | **75** | **81%** |
 
 ### Priority Order for Remaining Work
 
@@ -26,6 +26,7 @@
 
 **Important (Highly Desirable for MVP):**
 2. Background job for scheduled MVO deletions (#120)
+3. **Connector credential encryption** - Encrypt passwords at rest (#171)
 
 **Nice to Have (Can follow MVP):**
 - Full RBAC (#21)
@@ -171,6 +172,9 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Basic role model
 - [ ] Full RBAC implementation (#21)
 - [ ] Synchronisation Readers role (#9)
+
+#### 6.3 Data Protection
+- [ ] Connector credential encryption at rest (#171)
 
 ### 7. Operational Readiness
 
