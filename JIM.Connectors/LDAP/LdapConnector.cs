@@ -119,6 +119,23 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         return response;
     }
+
+    /// <summary>
+    /// Tests the LDAP connection using the provided settings and returns the established connection.
+    /// The connection remains open and must be disposed by the caller.
+    /// </summary>
+    public async Task<LdapConnection?> TestConnectionAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
+        try
+        {
+            OpenImportConnection(settingValues, logger);
+            return _connection;
+        }
+        catch
+        {
+            return null;
+        }
+    }
     #endregion
 
     #region IConnectorSchema members

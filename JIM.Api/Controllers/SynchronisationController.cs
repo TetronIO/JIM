@@ -71,6 +71,45 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     }
 
     /// <summary>
+    /// Tests LDAP connection for a connected system and detects the default naming context.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint attempts to connect to the LDAP directory using the provided settings
+    /// and queries the rootDSE for the defaultNamingContext, which is typically the root DN
+    /// (e.g., DC=contoso,DC=com) of the directory.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <returns>The detected defaultNamingContext if successful, or an error message if the connection fails.</returns>
+    [HttpPost("connected-systems/{connectedSystemId:int}/detect-ldap-naming-context", Name = "DetectLdapNamingContext")]
+    [ProducesResponseType(typeof(DetectLdapNamingContextResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DetectLdapNamingContextAsync(int connectedSystemId)
+    {
+        _logger.LogInformation("LDAP naming context detection requested for connected system: {Id}", connectedSystemId);
+
+        try
+        {
+            var result = await _application.ConnectedSystems.DetectLdapDefaultNamingContextAsync(connectedSystemId);
+
+            if (!result.Success)
+                return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Failed to detect naming context."));
+
+            return Ok(new DetectLdapNamingContextResponse
+            {
+                DefaultNamingContext = result.DefaultNamingContext,
+                Success = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error detecting LDAP naming context for connected system: {Id}", connectedSystemId);
+            return BadRequest(ApiErrorResponse.BadRequest($"Error detecting LDAP naming context: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
     /// Gets all object types defined in a connected system's schema.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
