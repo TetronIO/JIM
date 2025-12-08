@@ -88,7 +88,12 @@ public class JimDbContext : DbContext
         if (string.IsNullOrEmpty(dbPassword))
             throw new Exception($"{Constants.Config.DatabasePassword} environment variable missing");
 
-        _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}";
+        // Connection pooling settings for optimal performance
+        // - Minimum Pool Size: Keep connections warm to reduce latency for common operations
+        // - Maximum Pool Size: Limit per-process connections (4 services * 50 = 200 max total)
+        // - Connection Idle Lifetime: Recycle idle connections after 5 minutes
+        // - Connection Pruning Interval: Check for idle connections every 30 seconds
+        _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle Lifetime=300;Connection Pruning Interval=30";
 
         _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
         if (logSensitiveInfo)
@@ -207,5 +212,27 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<TrustedCertificate>()
             .HasIndex(tc => tc.Thumbprint)
             .IsUnique();
+
+        // Performance indexes for frequently queried tables
+        // ConnectedSystemObject: composite index for lookups by system and type
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.TypeId })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId");
+
+        // PendingExport: composite index for export queries by system and status
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
+
+        // MetaverseObjectAttributeValue: index for attribute lookups by value
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .HasIndex(moav => new { moav.AttributeId, moav.StringValue })
+            .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_StringValue");
+
+        // ConnectedSystemObjectAttributeValue: composite index for CSO attribute lookups
+        // Uses shadow property "ConnectedSystemObjectId" created by EF convention
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex("ConnectedSystemObjectId", "AttributeId")
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
     }
 }
