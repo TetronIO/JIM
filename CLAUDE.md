@@ -172,6 +172,22 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - Test output appears in the test results under "Standard Output Messages"
 - **IMPORTANT**: Remove all debug statements before committing
 
+## Design Principles
+
+**Minimise Environment Variables:**
+- Prefer configuration through admin UI and guided setup wizards over environment variables
+- Environment variables should be a fallback for container/automated deployments, not the primary configuration method
+- Settings that administrators might need to change should be configurable through the web interface
+- Only use environment variables for:
+  - Bootstrap configuration (database connection for initial setup)
+  - Secrets that cannot be stored in the database (encryption keys before encryption is configured)
+  - Container orchestration overrides
+
+**Self-Contained & Air-Gapped Deployable:**
+- JIM must work in air-gapped environments with no internet connectivity
+- No cloud service dependencies (no Azure Key Vault, AWS KMS, etc.)
+- All features must work with on-premises infrastructure only
+
 ## Architecture Quick Reference
 
 **Metaverse Pattern:**
