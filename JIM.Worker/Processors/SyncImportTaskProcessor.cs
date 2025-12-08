@@ -336,20 +336,56 @@ public class SyncImportTaskProcessor
 
                 // see if we already have a matching connected system object for this imported object within JIM
                 var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
-                
+
+                // Handle delete requests from delta imports (e.g., LDAP changelog)
+                // When a connector specifies Delete, mark the existing CSO as Obsolete
+                if (importObject.ChangeType == ObjectChangeType.Delete)
+                {
+                    if (connectedSystemObject != null)
+                    {
+                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
+                        activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
+                        connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+                        Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} as Obsolete.",
+                            importObject.ObjectType, connectedSystemObject.Id);
+                    }
+                    else
+                    {
+                        // Connector says delete, but we don't have the object - nothing to do
+                        Log.Debug("ProcessImportObjectsAsync: Connector requested delete for object type '{ObjectType}' but no matching CSO found. Ignoring.",
+                            importObject.ObjectType);
+                    }
+                    continue;
+                }
+
                 // is new - new cso required
                 // is existing - apply any changes to the cso from the import object
                 if (connectedSystemObject == null)
                 {
+                    // Log warning if connector said Update but object doesn't exist
+                    if (importObject.ChangeType == ObjectChangeType.Update)
+                    {
+                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead.",
+                            importObject.ObjectType);
+                    }
+
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
-                    
+
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
                     if (connectedSystemObject != null)
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
                 }
                 else
                 {
+                    // Log warning if connector said Create but object already exists
+                    if (importObject.ChangeType == ObjectChangeType.Create)
+                    {
+                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Create for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead.",
+                            importObject.ObjectType, connectedSystemObject.Id);
+                    }
+
                     // existing connected system object - update from import object if necessary
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                     activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
