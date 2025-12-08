@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using JIM.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,8 +18,10 @@ namespace JIM.Api.Controllers;
 [ApiVersion("1.0")]
 [AllowAnonymous]
 [Produces("application/json")]
-public class HealthController : ControllerBase
+public class HealthController(JimApplication application) : ControllerBase
 {
+    private readonly JimApplication _application = application;
+
     /// <summary>
     /// Basic health check - returns 200 OK if the service is running.
     /// </summary>
@@ -34,15 +37,46 @@ public class HealthController : ControllerBase
     /// Readiness check - confirms the service is ready to accept requests.
     /// </summary>
     /// <remarks>
-    /// Can be extended to verify database connectivity and other dependencies.
+    /// Verifies the application is ready by checking database connectivity
+    /// and that the service is not in maintenance mode.
+    /// Returns 503 Service Unavailable if the application is not ready.
     /// </remarks>
     /// <returns>Readiness status and timestamp.</returns>
     [HttpGet("ready", Name = "GetHealthReady")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public IActionResult Ready()
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> ReadyAsync()
     {
-        // TODO: Add database connectivity check if needed
-        return Ok(new { status = "ready", timestamp = DateTime.UtcNow });
+        try
+        {
+            var isReady = await _application.IsApplicationReadyAsync();
+
+            if (!isReady)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    status = "not_ready",
+                    reason = "maintenance_mode",
+                    timestamp = DateTime.UtcNow
+                });
+            }
+
+            return Ok(new
+            {
+                status = "ready",
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                status = "not_ready",
+                reason = "error",
+                error = ex.Message,
+                timestamp = DateTime.UtcNow
+            });
+        }
     }
 
     /// <summary>
@@ -50,6 +84,7 @@ public class HealthController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Used by orchestrators to determine if the service needs to be restarted.
+    /// This check does not verify external dependencies like the database.
     /// </remarks>
     /// <returns>Liveness status and timestamp.</returns>
     [HttpGet("live", Name = "GetHealthLive")]
