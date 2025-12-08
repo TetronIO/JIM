@@ -10,6 +10,7 @@
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject HttpClient Http
 
 <PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @_connectedSystem?.Name</MudText>
@@ -57,6 +58,31 @@
 
         <MudTabPanel Text="Settings">
             <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
+
+            @if (_connectedSystem?.ConnectorDefinition?.Name == "LDAP")
+            {
+                <MudPaper Class="pa-4 mt-5 mb-5" Outlined="true">
+                    <MudText Typo="Typo.subtitle2" Class="mb-3">LDAP Auto-Detection</MudText>
+                    <MudText Class="mb-4">Click the button below to automatically detect the default naming context from your LDAP directory. This will populate the root DN field based on your connection settings.</MudText>
+                    <MudButton
+                        Variant="Variant.Filled"
+                        Color="Color.Info"
+                        Disabled="@(_detectingLdapContext || !_connectedSystem.SettingValuesValid)"
+                        OnClick="HandleDetectLdapNamingContextAsync"
+                        DropShadow="false">
+                        @if (_detectingLdapContext)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudText Class="ms-2">Detecting...</MudText>
+                        }
+                        else
+                        {
+                            <text>Detect Default Naming Context</text>
+                        }
+                    </MudButton>
+                </MudPaper>
+            }
+
             <MudForm @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
                 @if (_settingCategories != null)
                 {
@@ -915,6 +941,7 @@
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private bool _detectingLdapContext;
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
     private bool _editSchemaAttributeDialogVisible;
@@ -1089,6 +1116,66 @@
 
         StateHasChanged();
         await Task.Delay(1);
+    }
+
+    private async Task HandleDetectLdapNamingContextAsync()
+    {
+        if (_connectedSystem == null || _connectedSystem.Id == 0)
+            return;
+
+        _detectingLdapContext = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/v1/Synchronisation/connected-systems/{_connectedSystem.Id}/detect-ldap-naming-context",
+                new { });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonText = await response.Content.ReadAsStringAsync();
+                using var document = System.Text.Json.JsonDocument.Parse(jsonText);
+                var root = document.RootElement;
+
+                if (root.TryGetProperty("success", out var successProp) && successProp.GetBoolean())
+                {
+                    if (root.TryGetProperty("defaultNamingContext", out var dnProp))
+                    {
+                        var namingContext = dnProp.GetString();
+                        if (!string.IsNullOrEmpty(namingContext))
+                        {
+                            Snackbar.Add($"Detected naming context: {namingContext}", Severity.Success);
+                            StateHasChanged();
+                        }
+                        else
+                        {
+                            Snackbar.Add("Could not retrieve defaultNamingContext from LDAP directory.", Severity.Error);
+                        }
+                    }
+                }
+                else
+                {
+                    var errorMsg = root.TryGetProperty("errorMessage", out var errProp)
+                        ? errProp.GetString()
+                        : "Unknown error";
+                    Snackbar.Add($"Failed to detect naming context: {errorMsg}", Severity.Error);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Failed to detect naming context. Please check your connection settings.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error detecting naming context: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _detectingLdapContext = false;
+            StateHasChanged();
+        }
     }
 
     private async Task HandleImportSchemaAsync()
