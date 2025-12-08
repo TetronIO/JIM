@@ -143,7 +143,37 @@ else
     print_success "Symlink already exists: connector-files/test-data"
 fi
 
-# 8. Create useful shell aliases
+# 8. Configure Git SSH commit signing
+print_step "Configuring Git SSH commit signing..."
+
+# Check if SSH agent has keys forwarded
+if ssh-add -l &>/dev/null; then
+    # Get the first SSH key from the agent
+    SSH_KEY=$(ssh-add -L | head -1)
+
+    if [ -n "$SSH_KEY" ]; then
+        # Configure git to use SSH signing
+        git config --global gpg.format ssh
+        git config --global commit.gpgsign true
+        git config --global user.signingkey "key::$SSH_KEY"
+
+        # Create allowed_signers file for local verification
+        # Uses the git user email (if configured) or a placeholder
+        GIT_EMAIL=$(git config --global user.email || echo "developer@local")
+        mkdir -p ~/.ssh
+        echo "$GIT_EMAIL $SSH_KEY" > ~/.ssh/allowed_signers
+        git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
+
+        print_success "Git SSH signing configured (key from SSH agent)"
+    else
+        print_warning "SSH agent has no keys - commit signing not configured"
+    fi
+else
+    print_warning "SSH agent not available - commit signing not configured"
+    print_warning "To enable signing, ensure SSH agent forwarding is working"
+fi
+
+# 9. Create useful shell aliases
 print_step "Creating shell aliases..."
 cat >> ~/.zshrc << 'EOF'
 
@@ -172,7 +202,7 @@ EOF
 
 print_success "Shell aliases created (restart terminal or run: source ~/.zshrc)"
 
-# 8. Display useful information
+# 10. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
