@@ -154,7 +154,7 @@ All templates generate realistic enterprise data following normal distribution p
 3. **Mover**: User department/title changed in CSV → attributes and groups updated in AD
 4. **Reconnection**: User removed then re-added within grace period → deletion cancelled
 
-**Script**: `tests/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1`
 
 ---
 
@@ -172,7 +172,7 @@ All templates generate realistic enterprise data following normal distribution p
 3. Different attributes changed in Target AD → flow back to Source AD
 4. Simultaneous changes to same user → conflict resolution applied
 
-**Script**: `tests/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1`
 
 ---
 
@@ -189,7 +189,7 @@ All templates generate realistic enterprise data following normal distribution p
 2. User attributes modified in AD → CSV updated
 3. User deleted in AD → removed from CSV
 
-**Script**: `tests/integration/scenarios/Invoke-Scenario3-GALSYNC.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario3-GALSYNC.ps1`
 
 ---
 
@@ -211,7 +211,7 @@ All templates generate realistic enterprise data following normal distribution p
 3. **Attribute Precedence**: SQL Server authoritative for email/phone, Oracle for department/title
 4. **Data Types**: VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT → correct mapping
 
-**Script**: `tests/integration/scenarios/Invoke-Scenario4-MultiSourceAggregation.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario4-MultiSourceAggregation.ps1`
 
 ---
 
@@ -229,7 +229,7 @@ All templates generate realistic enterprise data following normal distribution p
 3. Data type handling (text, numeric, date, boolean)
 4. Multi-valued attributes (if supported)
 
-**Script**: `tests/integration/scenarios/Invoke-Scenario5-DatabaseSourceTarget.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario5-DatabaseSourceTarget.ps1`
 
 ---
 
@@ -246,7 +246,7 @@ All templates generate realistic enterprise data following normal distribution p
 4. Identify bottlenecks
 5. Establish acceptable thresholds
 
-**Script**: `tests/integration/scenarios/Invoke-Scenario6-Performance.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario6-Performance.ps1`
 
 ---
 
@@ -293,11 +293,11 @@ docker compose -f docker-compose.integration-tests.yml up -d
 Start-Sleep -Seconds 120
 
 # Populate with Small template
-./tests/integration/Populate-SambaAD.ps1 -Template Small -Instance Primary
-./tests/integration/Generate-TestCSV.ps1 -Template Small
+./test/integration/Populate-SambaAD.ps1 -Template Small -Instance Primary
+./test/integration/Generate-TestCSV.ps1 -Template Small
 
 # Run Scenario 1
-./tests/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Small
+./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Small
 
 # Tear down when complete
 docker compose -f docker-compose.integration-tests.yml down -v
@@ -317,11 +317,11 @@ docker compose -f docker-compose.integration-tests.yml --profile scenario2 up -d
 Start-Sleep -Seconds 180
 
 # Populate both AD instances
-./tests/integration/Populate-SambaAD.ps1 -Template Medium -Instance Source
-./tests/integration/Populate-SambaAD.ps1 -Template Medium -Instance Target
+./test/integration/Populate-SambaAD.ps1 -Template Medium -Instance Source
+./test/integration/Populate-SambaAD.ps1 -Template Medium -Instance Target
 
 # Run scenario
-./tests/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1 -Template Medium
+./test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1 -Template Medium
 
 # Tear down
 docker compose -f docker-compose.integration-tests.yml --profile scenario2 down -v
@@ -331,14 +331,14 @@ docker compose -f docker-compose.integration-tests.yml --profile scenario2 down 
 
 ```powershell
 # Use master script
-./tests/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 1
+./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 1
 ```
 
 This script will:
 1. Stand up all Phase 1 systems
 2. Populate data
 3. Run all Phase 1 scenarios
-4. Collect results to `tests/integration/results/`
+4. Collect results to `test/integration/results/`
 5. Tear down systems
 6. Display summary report
 
@@ -351,15 +351,15 @@ Phase 2 requires the Database Connector (#170) to be complete:
 docker compose -f docker-compose.integration-tests.yml --profile phase2 up -d
 
 # Wait for databases (Oracle can take 5-10 minutes)
-./tests/integration/Wait-SystemsReady.ps1 -Phase 2
+./test/integration/Wait-SystemsReady.ps1 -Phase 2
 
 # Populate databases
-./tests/integration/Populate-SqlServer.ps1 -Template Medium
-./tests/integration/Populate-Oracle.ps1 -Template Medium
-./tests/integration/Populate-PostgreSQL.ps1 -Template Medium
+./test/integration/Populate-SqlServer.ps1 -Template Medium
+./test/integration/Populate-Oracle.ps1 -Template Medium
+./test/integration/Populate-PostgreSQL.ps1 -Template Medium
 
 # Run Phase 2 scenarios
-./tests/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 2
+./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 2
 
 # Tear down
 docker compose -f docker-compose.integration-tests.yml --profile phase2 down -v
@@ -456,7 +456,7 @@ Write-Host "`n✓ Scenario X completed successfully" -ForegroundColor Green
 
 ### Testing Utilities
 
-Create reusable helpers in `tests/integration/utils/`:
+Create reusable helpers in `test/integration/utils/`:
 
 **`Test-Helpers.ps1`**:
 ```powershell
@@ -596,7 +596,9 @@ Get-ChildItem /connector-files/test-data/
 ```
 JIM/
 ├── docker-compose.integration-tests.yml                    # Container definitions
-├── tests/
+├── test/
+│   ├── JIM.Api.Tests/                                      # API unit tests
+│   ├── JIM.Models.Tests/                                   # Model unit tests
 │   └── integration/
 │       ├── Invoke-IntegrationTests.ps1                     # Master test runner
 │       ├── Populate-SambaAD.ps1                            # AD population
@@ -653,9 +655,10 @@ JIM/
 
 ## Version History
 
-| Version | Date       | Changes                                      |
-|---------|------------|----------------------------------------------|
-| 1.0     | 2025-12-08 | Initial version - Phase 1 & 2 specification |
+| Version | Date       | Changes                                         |
+|---------|------------|-------------------------------------------------|
+| 1.1     | 2025-12-08 | Updated file paths to use existing test/ folder |
+| 1.0     | 2025-12-08 | Initial version - Phase 1 & 2 specification     |
 
 ---
 
