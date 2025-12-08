@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.3
-> **Last Updated**: 2025-12-07
-> **Status**: In Progress (~85% Complete)
+> **Version**: 1.4
+> **Last Updated**: 2025-12-08
+> **Status**: In Progress (~87% Complete)
 
 ---
 
@@ -14,10 +14,10 @@
 | Inbound Sync | `█████████░` | 14 | 15 |
 | Outbound Sync | `██████████` | 15 | 15 |
 | Scheduling | `████░░░░░░` | 4 | 9 |
-| Admin UI | `███████░░░` | 10 | 15 |
+| Admin UI | `████████░░` | 11 | 14 |
 | Security | `██████░░░░` | 3 | 5 |
 | Operations | `███████░░░` | 4 | 6 |
-| **Overall** | `████████░░` | **60** | **75** |
+| **Overall** | `████████░░` | **61** | **74** |
 
 ### Priority Order for Remaining Work
 
@@ -26,7 +26,6 @@
 
 **Important (Highly Desirable for MVP):**
 2. Background job for scheduled MVO deletions (#120)
-3. Pending Export review UI (#25)
 
 **Nice to Have (Can follow MVP):**
 - Full RBAC (#21)
@@ -40,6 +39,7 @@
 - ~~Export Execution~~ - Implemented in ExportExecutionServer.cs
 - ~~LDAP Connector Export~~ - Implemented in LdapConnectorExport.cs
 - ~~Certificate Store~~ - Implemented for LDAPS trusted certificates
+- ~~Pending Export review UI (#25)~~ - Server-side sorting, filtering, pagination
 
 ---
 
@@ -158,7 +158,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 #### 5.2 Synchronisation Management
 - [x] Manual run profile execution
 - [x] Activity monitoring
-- [ ] Pending Export review/management (#25)
+- [x] Pending Export review/management (#25)
 - [ ] Sync preview (what-if analysis)
 
 ### 6. Security & Access Control
