@@ -3,7 +3,7 @@ using JIM.Models.Staging;
 using System.DirectoryServices.Protocols;
 namespace JIM.Connectors.LDAP;
 
-public static class LdapConnectorUtilities
+internal static class LdapConnectorUtilities
 {
     internal static string? GetEntryAttributeStringValue(SearchResultEntry entry, string attributeName)
     {
@@ -105,33 +105,6 @@ public static class LdapConnectorUtilities
         var request = new SearchRequest(schemaRootDn, query, SearchScope.OneLevel);
         var response = (SearchResponse)connection.SendRequest(request);
         return response != null && response.Entries.Count == 1 ? response.Entries[0] : null;
-    }
-
-    /// <summary>
-    /// Queries the LDAP rootDSE for the defaultNamingContext.
-    /// This is typically the root DN (e.g., DC=contoso,DC=com) of the directory.
-    /// </summary>
-    public static string? GetDefaultNamingContextFromRootDse(LdapConnection connection)
-    {
-        try
-        {
-            var request = new SearchRequest
-            {
-                Scope = SearchScope.Base
-            };
-            request.Attributes.Add("defaultNamingContext");
-
-            var response = (SearchResponse)connection.SendRequest(request);
-
-            if (response?.ResultCode != ResultCode.Success || response.Entries.Count == 0)
-                return null;
-
-            return GetEntryAttributeStringValue(response.Entries[0], "defaultNamingContext");
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     internal static string GetPaginationTokenName(ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType)
