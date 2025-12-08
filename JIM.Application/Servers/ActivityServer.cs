@@ -130,9 +130,19 @@ public class ActivityServer
     /// <summary>
     /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
     /// </summary>
-    public async Task<PagedResultSet<Activity>> GetActivitiesAsync(int page = 1, int pageSize = 20, QuerySortBy querySortBy = QuerySortBy.DateCreated)
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="searchQuery">Optional search query to filter by TargetName or TargetType.</param>
+    /// <param name="sortBy">Optional column to sort by (e.g., "type", "target", "created", "status").</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
+        int page = 1,
+        int pageSize = 20,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
-        return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, querySortBy);
+        return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
     #region synchronisation related
