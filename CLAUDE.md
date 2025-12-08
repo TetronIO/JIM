@@ -95,7 +95,14 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - YOU MUST use async/await for all I/O operations (method suffix: `Async`)
 - YOU MUST use constructor injection for all dependencies
 - YOU MUST test method signature: `[Test] public async Task TestNameAsync()`
-- IMPORTANT: Use en-GB spellings (e.g., "authorisation", "synchronisation")
+- **CRITICAL: Use British English (en-GB) for ALL text:**
+  - Code: "authorisation" not "authorization", "synchronisation" not "synchronization", "colour" not "color"
+  - Comments: "behaviour" not "behavior", "centre" not "center", "licence" not "license" (noun)
+  - Documentation: "organise" not "organize", "analyse" not "analyze", "programme" not "program" (unless referring to computer programs)
+  - UI text: "minimise" not "minimize", "optimise" not "optimize", "cancelled" not "canceled"
+  - Units: Metric only (metres, litres, kilograms, kilometres) - never use imperial units
+  - Date/Time: Always use UTC for storage and internal operations; display in user's local time zone where appropriate
+  - Exceptions: Technical terms, proper nouns, third-party library names, URLs
 
 **Naming Patterns:**
 - Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`
