@@ -88,7 +88,12 @@ public class JimDbContext : DbContext
         if (string.IsNullOrEmpty(dbPassword))
             throw new Exception($"{Constants.Config.DatabasePassword} environment variable missing");
 
-        _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}";
+        // Connection pooling settings for optimal performance
+        // - Minimum Pool Size: Keep connections warm to reduce latency for common operations
+        // - Maximum Pool Size: Limit per-process connections (4 services * 50 = 200 max total)
+        // - Connection Idle Lifetime: Recycle idle connections after 5 minutes
+        // - Connection Pruning Interval: Check for idle connections every 30 seconds
+        _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle Lifetime=300;Connection Pruning Interval=30";
 
         _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
         if (logSensitiveInfo)
