@@ -10,7 +10,6 @@
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
-@inject HttpClient Http
 
 <PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @_connectedSystem?.Name</MudText>
@@ -1127,43 +1126,15 @@
 
         try
         {
-            var response = await Http.PostAsJsonAsync(
-                $"api/v1/Synchronisation/connected-systems/{_connectedSystem.Id}/detect-ldap-naming-context",
-                new { });
+            var result = await Jim.ConnectedSystems.DetectLdapDefaultNamingContextAsync(_connectedSystem.Id);
 
-            if (response.IsSuccessStatusCode)
+            if (result.Success && !string.IsNullOrEmpty(result.DefaultNamingContext))
             {
-                var jsonText = await response.Content.ReadAsStringAsync();
-                using var document = System.Text.Json.JsonDocument.Parse(jsonText);
-                var root = document.RootElement;
-
-                if (root.TryGetProperty("success", out var successProp) && successProp.GetBoolean())
-                {
-                    if (root.TryGetProperty("defaultNamingContext", out var dnProp))
-                    {
-                        var namingContext = dnProp.GetString();
-                        if (!string.IsNullOrEmpty(namingContext))
-                        {
-                            Snackbar.Add($"Detected naming context: {namingContext}", Severity.Success);
-                            StateHasChanged();
-                        }
-                        else
-                        {
-                            Snackbar.Add("Could not retrieve defaultNamingContext from LDAP directory.", Severity.Error);
-                        }
-                    }
-                }
-                else
-                {
-                    var errorMsg = root.TryGetProperty("errorMessage", out var errProp)
-                        ? errProp.GetString()
-                        : "Unknown error";
-                    Snackbar.Add($"Failed to detect naming context: {errorMsg}", Severity.Error);
-                }
+                Snackbar.Add($"Detected naming context: {result.DefaultNamingContext}", Severity.Success);
             }
             else
             {
-                Snackbar.Add("Failed to detect naming context. Please check your connection settings.", Severity.Error);
+                Snackbar.Add($"Failed to detect naming context: {result.ErrorMessage ?? "Unknown error"}", Severity.Error);
             }
         }
         catch (Exception ex)
