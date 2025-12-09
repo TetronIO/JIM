@@ -1,5 +1,7 @@
 # Import ChangeType Design
 
+> **Status**: Implemented
+>
 > Design decisions for handling ObjectChangeType during import operations
 
 ## Background
@@ -90,7 +92,7 @@ result.ImportObjects.Add(deletedObject);
 
 ## Related Issues
 
-- GitHub Issue #88: ObjectChangeType from connectors not fully honoured
+- GitHub Issue #88: ObjectChangeType from connectors not fully honoured (Closed)
 
 ## Future Considerations
 

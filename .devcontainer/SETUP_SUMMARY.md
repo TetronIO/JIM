@@ -9,7 +9,9 @@ Your JIM development environment is now fully configured for GitHub Codespaces!
   - .NET 9.0 SDK
   - Docker-in-Docker
   - GitHub CLI
+  - PowerShell 7+
   - Claude Code extension
+  - PowerShell extension
   - JSON Crack extension
   - 20+ useful VS Code extensions
   - Port forwarding (PostgreSQL, Adminer, Web, API)
@@ -156,11 +158,13 @@ Codespaces will automatically forward these and provide public URLs.
 - ✅ dotnet-ef (Entity Framework tools)
 - ✅ Docker + Docker Compose
 - ✅ GitHub CLI (gh)
+- ✅ PowerShell 7+ (cross-platform scripting)
 - ✅ Zsh + Oh My Zsh
 
 ### VS Code Extensions
 - ✅ Claude Code (Anthropic.claude-code)
 - ✅ C# Dev Kit (ms-dotnettools.csdevkit)
+- ✅ PowerShell (ms-vscode.powershell)
 - ✅ JSON Crack (AykutSarac.jsoncrack-vscode)
 - ✅ PostgreSQL Client
 - ✅ Docker
