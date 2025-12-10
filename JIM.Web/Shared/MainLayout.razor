@@ -1,5 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor.Utilities
+@inject IJSRuntime JSRuntime
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
 <MudPopoverProvider/>
 <MudDialogProvider />
@@ -146,15 +147,31 @@
     private const string DarkModeText = "Switch to dark mode";
     private const string PinMenuText = "Pin menu open";
     private const string UnpinMenuText = "Unpin menu";
-    private bool IsDrawerOpen { get; set; } = true;
-    private bool IsDrawerPinned { get; set; } = true;
+    // Minimum viewport width (in pixels) to have drawer open by default
+    // 1400px is a common breakpoint for "large" screens
+    private const int LargeScreenBreakpoint = 1400;
+    // Default to closed/unpinned - will be set based on screen size in OnAfterRenderAsync
+    private bool IsDrawerOpen { get; set; }
+    private bool IsDrawerPinned { get; set; }
     private bool IsDarkMode { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _mudThemeProvider != null)
+        if (firstRender)
         {
-            IsDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+            // Get dark mode preference
+            if (_mudThemeProvider != null)
+            {
+                IsDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+            }
+
+            // Detect screen width and set drawer state accordingly
+            var windowWidth = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
+            var isLargeScreen = windowWidth >= LargeScreenBreakpoint;
+
+            IsDrawerOpen = isLargeScreen;
+            IsDrawerPinned = isLargeScreen;
+
             StateHasChanged();
         }
     }

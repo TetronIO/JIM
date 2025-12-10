@@ -14,11 +14,12 @@ This guide covers setting up JIM with three identity providers:
 Before starting, ensure you have:
 - JIM deployed and accessible
 - Administrative access to your identity provider
-- The URLs where JIM.Web and JIM.Api are hosted
+- The URL where JIM is hosted
 
-**JIM URLs you'll need:**
-- Web application: `https://your-jim-web-url` (e.g., `https://jim.example.com`)
-- API: `https://your-jim-api-url` (e.g., `https://api.jim.example.com`)
+**JIM URL you'll need:**
+- JIM application: `https://your-jim-url` (e.g., `https://jim.example.com`)
+
+> **Note**: JIM serves both the web interface and API from a single application. The API is available at `/api/` on the same host (e.g., `https://jim.example.com/api/`).
 
 ---
 
@@ -36,7 +37,7 @@ Before starting, ensure you have:
      - *Multitenant*: Users from any Azure AD directory
    - **Redirect URI**:
      - Platform: **Web**
-     - URI: `https://your-jim-web-url/signin-oidc`
+     - URI: `https://your-jim-url/signin-oidc`
 5. Click **Register**
 
 ### Step 2: Note the Application Details
@@ -68,9 +69,9 @@ After registration, note these values from the **Overview** page:
 6. Click **Add permissions**
 7. If required by your organisation, click **Grant admin consent**
 
-### Step 5: Expose an API (for JIM.Api)
+### Step 5: Expose an API
 
-This step creates the API scope that JIM.Api uses for JWT validation.
+This step creates the API scope that JIM uses for JWT Bearer token validation (for API access).
 
 1. Go to **Expose an API**
 2. Click **Set** next to Application ID URI
@@ -136,7 +137,7 @@ SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 ### Step 2: Configure the Native Application
 
 1. Note the **Client Identifier** (auto-generated GUID)
-2. Add the **Redirect URI**: `https://your-jim-web-url/signin-oidc`
+2. Add the **Redirect URI**: `https://your-jim-url/signin-oidc`
 3. Click **Next**
 
 ### Step 3: Configure Access Control
@@ -149,7 +150,9 @@ SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 1. Select **openid** and **profile** scopes
 2. Click **Next** and then **Close**
 
-### Step 5: Create the Web API (for JIM.Api)
+### Step 5: Create the Web API
+
+This step creates the API configuration for JWT Bearer token validation.
 
 1. Right-click your Application Group and select **Properties**
 2. Click **Add application**
@@ -232,13 +235,13 @@ c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
 3. Enter a **Realm name** (e.g., `jim`)
 4. Click **Create**
 
-### Step 2: Create a Client for JIM.Web
+### Step 2: Create a Client for JIM
 
 1. Navigate to **Clients**
 2. Click **Create client**
 3. Configure the client:
    - **Client type**: OpenID Connect
-   - **Client ID**: `jim-web`
+   - **Client ID**: `jim`
 4. Click **Next**
 5. Configure capability:
    - **Client authentication**: ON
@@ -246,10 +249,10 @@ c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
    - **Authentication flow**: Check **Standard flow** (Authorization Code)
 6. Click **Next**
 7. Configure login settings:
-   - **Root URL**: `https://your-jim-web-url`
-   - **Valid redirect URIs**: `https://your-jim-web-url/signin-oidc`
-   - **Valid post logout redirect URIs**: `https://your-jim-web-url/signout-callback-oidc`
-   - **Web origins**: `https://your-jim-web-url`
+   - **Root URL**: `https://your-jim-url`
+   - **Valid redirect URIs**: `https://your-jim-url/signin-oidc`
+   - **Valid post logout redirect URIs**: `https://your-jim-url/signout-callback-oidc`
+   - **Web origins**: `https://your-jim-url`
 8. Click **Save**
 
 ### Step 3: Get the Client Secret
@@ -257,14 +260,14 @@ c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
 1. Go to the **Credentials** tab
 2. Copy the **Client secret**
 
-### Step 4: Create a Client for JIM.Api (Optional - for API-only access)
+### Step 4: Create a Service Account Client (Optional - for API-only access)
 
-If you need separate API clients (e.g., for service-to-service communication):
+If you need separate API clients for service-to-service communication:
 
 1. Click **Create client**
 2. Configure:
    - **Client type**: OpenID Connect
-   - **Client ID**: `jim-api`
+   - **Client ID**: `jim-service`
 3. Click **Next**
 4. Configure capability:
    - **Client authentication**: ON
@@ -285,13 +288,13 @@ If you need separate API clients (e.g., for service-to-service communication):
 7. Select **Audience**
 8. Configure:
    - **Name**: `jim-api-audience`
-   - **Included Client Audience**: `jim-web` (or `jim-api` if created)
+   - **Included Client Audience**: `jim` (or `jim-service` if created)
    - **Add to access token**: ON
 9. Click **Save**
 
 ### Step 6: Assign the Scope to the Client
 
-1. Navigate to **Clients** > **jim-web**
+1. Navigate to **Clients** > **jim**
 2. Go to the **Client scopes** tab
 3. Click **Add client scope**
 4. Select `jim-api` and add as **Optional**
@@ -301,7 +304,7 @@ If you need separate API clients (e.g., for service-to-service communication):
 ```bash
 # Keycloak Configuration
 SSO_AUTHORITY=https://{your-keycloak-server}/realms/{realm-name}
-SSO_CLIENT_ID=jim-web
+SSO_CLIENT_ID=jim
 SSO_SECRET={your-client-secret}
 SSO_API_SCOPE=jim-api
 
@@ -314,7 +317,7 @@ SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE={your-admin-sub-value}
 **Example:**
 ```bash
 SSO_AUTHORITY=https://keycloak.example.com/realms/jim
-SSO_CLIENT_ID=jim-web
+SSO_CLIENT_ID=jim
 SSO_SECRET=AbCdEfGhIjKlMnOpQrStUvWxYz123456
 SSO_API_SCOPE=jim-api
 ```
@@ -329,7 +332,7 @@ SSO_API_SCOPE=jim-api
 
 **Checking claim values:**
 
-1. Navigate to **Clients** > **jim-web** > **Client scopes**
+1. Navigate to **Clients** > **jim** > **Client scopes**
 2. Click **Evaluate**
 3. Select a user and click **Evaluate**
 4. Check the **Generated access token** to see claim values
@@ -350,7 +353,7 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 
 ### 2. Start JIM and Test Login
 
-1. Start JIM.Web and JIM.Api with your configuration
+1. Start JIM with your configuration
 2. Navigate to the JIM web interface
 3. Click **Login**
 4. You should be redirected to your identity provider
@@ -366,10 +369,10 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 
 ### 4. Test the API (Swagger)
 
-1. Navigate to `https://your-jim-api-url/swagger`
+1. Navigate to `https://your-jim-url/api/swagger`
 2. Click **Authorize**
 3. Log in with your identity provider
-4. Try an API endpoint (e.g., GET /api/health)
+4. Try an API endpoint (e.g., GET /api/v1/health)
 
 ---
 
