@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.4
-> **Last Updated**: 2025-12-08
-> **Status**: In Progress (~81% Complete)
+> **Version**: 1.5
+> **Last Updated**: 2025-12-10
+> **Status**: In Progress (~85% Complete)
 
 ---
 
@@ -14,27 +14,33 @@
 | Inbound Sync | `█████████░` | 14 | 15 | 93% |
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
-| Admin UI | `████████░░` | 11 | 14 | 79% |
-| Security | `█████░░░░░` | 3 | 6 | 50% |
-| Operations | `███████░░░` | 4 | 6 | 67% |
-| **Overall** | `████████░░` | **61** | **75** | **81%** |
+| Admin UI | `█████████░` | 13 | 15 | 87% |
+| Security | `███████░░░` | 5 | 7 | 71% |
+| Operations | `████████░░` | 5 | 7 | 71% |
+| **Overall** | `████████░░` | **66** | **78** | **85%** |
 
 ### Priority Order for Remaining Work
 
 **Critical Path (Required for MVP):**
-1. **Scheduler Service** - Automate run profile execution (4 items remaining)
+1. **Scheduler Service** (#168) - Automate run profile execution (4 items remaining)
 
 **Important (Highly Desirable for MVP):**
 2. Background job for scheduled MVO deletions (#120)
-3. **Connector credential encryption** - Encrypt passwords at rest (#171)
+3. Dashboard admin home page (#169)
+4. **Connector credential encryption** - Encrypt passwords at rest (#171)
 
 **Nice to Have (Can follow MVP):**
 - Full RBAC (#21)
 - Change history (#14)
 - Sync preview
 - Delta sync support
+- PowerShell Module (#176)
+- End-to-End Integration Testing Framework (#173)
 
 ### Recently Completed ✓
+- ~~API Key Authentication (#175)~~ - X-API-Key header auth for CI/CD and automation
+- ~~Server-side file browser (#177)~~ - File path selection for connector settings
+- ~~Merged API into Web (#180)~~ - Simplified deployment architecture
 - ~~API Authentication (#8)~~ - JWT Bearer with OIDC, role-based authorisation
 - ~~Outbound Sync (#121)~~ - Implemented in ExportEvaluationServer.cs
 - ~~Export Execution~~ - Implemented in ExportExecutionServer.cs
@@ -145,7 +151,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 5. Administration UI
 
 #### 5.1 Core Views
-- [ ] Dashboard (summary metrics, system health)
+- [ ] Dashboard (summary metrics, system health) (#169)
 - [x] Operations view (run activities, task status)
 - [x] Connected System list and detail
 - [x] Connector configuration
@@ -155,18 +161,22 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Metaverse Object Type management
 - [x] Metaverse Object list and detail
 - [x] Activity history
+- [x] API Key management (#175)
+- [x] Certificate management
 
 #### 5.2 Synchronisation Management
 - [x] Manual run profile execution
 - [x] Activity monitoring
 - [x] Pending Export review/management (#25)
+- [x] Server-side file browser for connector settings (#177)
 - [ ] Sync preview (what-if analysis)
 
 ### 6. Security & Access Control
 
 #### 6.1 Authentication
 - [x] SSO/OIDC authentication for Web UI
-- [x] API authentication (#8)
+- [x] API authentication via JWT Bearer (#8)
+- [x] API Key authentication for non-interactive access (#175)
 
 #### 6.2 Authorisation
 - [x] Basic role model
@@ -189,6 +199,17 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Run profile execution tracking
 - [x] Error capture and display
 - [ ] Change history / audit trail (#14)
+
+### 8. Tooling & Automation (Post-MVP)
+
+#### 8.1 PowerShell Module (#176)
+- [ ] Cmdlets for common administration tasks
+- [ ] API key authentication support
+- [ ] Script-based automation
+
+#### 8.2 Testing Framework (#173)
+- [ ] End-to-end integration tests with real connected systems
+- [ ] Automated test scenarios
 
 ---
 
