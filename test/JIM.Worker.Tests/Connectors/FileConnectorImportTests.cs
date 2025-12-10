@@ -383,10 +383,20 @@ public class FileConnectorImportTests
                 Setting = new ConnectorDefinitionSetting
                 {
                     Name = "Import File Path",
-                    Required = true,
+                    Required = false,
                     Type = ConnectedSystemSettingType.String
                 },
                 StringValue = filePath
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Export File Path",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = null
             },
             new()
             {
@@ -490,6 +500,16 @@ public class FileConnectorImportTests
                     Type = ConnectedSystemSettingType.String
                 },
                 StringValue = filePath
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting
+                {
+                    Name = "Export File Path",
+                    Required = false,
+                    Type = ConnectedSystemSettingType.String
+                },
+                StringValue = null
             },
             new()
             {

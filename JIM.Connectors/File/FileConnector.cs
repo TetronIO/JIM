@@ -43,8 +43,6 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     // Export settings
     private const string SettingExportFilePath = "Export File Path";
-    private const string SettingTimestampedFiles = "Timestamped Files";
-    private const string SettingSeparateFilesByObjectType = "Separate Files Per Object Type";
     private const string SettingIncludeFullState = "Include Full State";
     private const string SettingAutoConfirmExports = "Auto-Confirm Exports";
 
@@ -53,15 +51,13 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return new List<ConnectorSetting>
         {
             // Import settings
-            new() { Name = SettingImportFilePath, Required = true, Description = "Path to the CSV file to import. The container path is determined by the Docker Volume configuration. e.g. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingImportFilePath, Required = false, Description = "Path to the CSV file to import. Leave empty if this connector is export-only. e.g. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
 
             // Export settings
-            new() { Name = SettingExportFilePath, Required = false, Description = "Directory path where export files will be written. i.e. /var/connector-files/exports/", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingTimestampedFiles, Required = false, Description = "Append timestamp to export filename (e.g., export_20240115_143022.csv).", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = SettingSeparateFilesByObjectType, Required = false, Description = "Create separate export files per object type (e.g., User.csv, Group.csv).", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = SettingExportFilePath, Required = false, Description = "Path to the CSV file to export. Used for schema discovery and as the output file. Leave empty if this connector is import-only. e.g. /var/connector-files/exports/Users.csv", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingIncludeFullState, Required = false, Description = "Include all attribute values in exports, not just changed attributes.", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
             new() { Name = SettingAutoConfirmExports, Required = false, Description = "Automatically confirm exports after file is written. Disable for bidirectional integrations that provide feedback.", DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
 
@@ -87,18 +83,62 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
         }
 
-        // test that we can access the file
-        var filePathSettingValue = settingValues.Single(q => q.Setting.Name == SettingImportFilePath);
-        if (!string.IsNullOrEmpty(filePathSettingValue.StringValue) && System.IO.File.Exists(filePathSettingValue.StringValue))
-            return response;
-        
-        // wasn't given a file path, or the path couldn't be accessed, or no file found at the path location. error!
-        var connectivityTestResult = new ConnectorSettingValueValidationResult
+        // Validate file paths
+        var importFilePathSetting = settingValues.Single(q => q.Setting.Name == SettingImportFilePath);
+        var exportFilePathSetting = settingValues.Single(q => q.Setting.Name == SettingExportFilePath);
+
+        var hasImportPath = !string.IsNullOrEmpty(importFilePathSetting.StringValue);
+        var hasExportPath = !string.IsNullOrEmpty(exportFilePathSetting.StringValue);
+
+        // At least one path must be configured
+        if (!hasImportPath && !hasExportPath)
         {
-            IsValid = false,
-            ErrorMessage = $"File path not provided, the path couldn't be accessed, or the file doesn't exist. Does '{filePathSettingValue.StringValue}' map to a Docker Volume in the docker-compose.yml file?"
-        };
-        response.Add(connectivityTestResult);
+            response.Add(new ConnectorSettingValueValidationResult
+            {
+                IsValid = false,
+                ErrorMessage = "At least one of Import File Path or Export File Path must be configured."
+            });
+            return response;
+        }
+
+        // If import path is provided, validate the file exists
+        if (hasImportPath && !System.IO.File.Exists(importFilePathSetting.StringValue))
+        {
+            response.Add(new ConnectorSettingValueValidationResult
+            {
+                IsValid = false,
+                ErrorMessage = $"Import file not found: '{importFilePathSetting.StringValue}'. Check the path and ensure it maps to a Docker Volume."
+            });
+        }
+
+        // If export path is provided, validate the file exists (for schema discovery)
+        // or that its parent directory exists (so we can create it)
+        if (hasExportPath)
+        {
+            var exportFilePath = exportFilePathSetting.StringValue!;
+            var exportDir = Path.GetDirectoryName(exportFilePath);
+
+            if (!System.IO.File.Exists(exportFilePath))
+            {
+                // File doesn't exist yet - check if parent directory exists or can be created
+                if (!string.IsNullOrEmpty(exportDir) && !Directory.Exists(exportDir))
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(exportDir);
+                        logger.Information("Created export directory: {ExportDir}", exportDir);
+                    }
+                    catch (Exception ex)
+                    {
+                        response.Add(new ConnectorSettingValueValidationResult
+                        {
+                            IsValid = false,
+                            ErrorMessage = $"Export directory could not be created: '{exportDir}'. Error: {ex.Message}"
+                        });
+                    }
+                }
+            }
+        }
 
         return response;
     }
@@ -107,19 +147,54 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorSchema members
     /// <summary>
     /// Determine the file schema by inspecting some of the headers and row fields.
+    /// Supports both import files and export files for export-only connectors.
     /// </summary>
     public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         var importFilePath = settingValues.SingleOrDefault(q => q.Setting.Name == SettingImportFilePath);
-        if (importFilePath == null || string.IsNullOrEmpty(importFilePath.StringValue))
-            throw new InvalidSettingValuesException($"Missing setting value for {SettingImportFilePath}.");
+        var exportFilePath = settingValues.SingleOrDefault(q => q.Setting.Name == SettingExportFilePath);
 
+        // Determine which file to use for schema discovery
+        string? schemaFilePath = null;
+        var isExportOnlySchema = false;
+
+        if (!string.IsNullOrEmpty(importFilePath?.StringValue))
+        {
+            // Use import file for schema (standard case)
+            schemaFilePath = importFilePath.StringValue;
+            logger.Debug("GetSchemaAsync: Using import file for schema discovery: {FilePath}", schemaFilePath);
+        }
+        else if (!string.IsNullOrEmpty(exportFilePath?.StringValue))
+        {
+            // Use export file for schema (export-only connector)
+            schemaFilePath = exportFilePath.StringValue;
+            isExportOnlySchema = true;
+            logger.Debug("GetSchemaAsync: Using export file for schema discovery: {FilePath}", schemaFilePath);
+        }
+        else
+        {
+            throw new InvalidSettingValuesException($"Either {SettingImportFilePath} or {SettingExportFilePath} must be specified for schema discovery.");
+        }
+
+        // For import files, we require object type configuration
+        // For export files, we use the Object Type setting (column-based doesn't make sense for export schemas)
         var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectTypeColumn);
         var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectType);
-        if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
-            throw new InvalidSettingValuesException($"Either a {SettingObjectTypeColumn} or {SettingObjectType} need a setting value specifying.");
 
-        var reader = GetCsvReader(importFilePath.StringValue, settingValues, logger);
+        if (!isExportOnlySchema)
+        {
+            // Import schema requires object type configuration
+            if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
+                throw new InvalidSettingValuesException($"Either a {SettingObjectTypeColumn} or {SettingObjectType} need a setting value specifying.");
+        }
+        else
+        {
+            // Export schema requires a predefined object type (column-based doesn't apply to export schemas)
+            if (objectType == null || string.IsNullOrEmpty(objectType.StringValue))
+                throw new InvalidSettingValuesException($"For export-only connectors, {SettingObjectType} must be specified to define the object type for the export schema.");
+        }
+
+        var reader = GetCsvReader(schemaFilePath, settingValues, logger);
         await reader.CsvReader.ReadAsync();
         reader.CsvReader.ReadHeader();
         var columnNames = reader.CsvReader.HeaderRecord;
@@ -129,7 +204,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // start building the schema by inspecting the file!
         var schema = new ConnectorSchema();
 
-        var objectTypeInfo = GetFileConnectorObjectTypeInfo(settingValues, logger);
+        var objectTypeInfo = GetFileConnectorObjectTypeInfo(settingValues, logger, isExportOnlySchema);
         switch (objectTypeInfo.Specifier)
         {
             case FileConnectorObjectTypeSpecifier.PredefinedObjectType when !string.IsNullOrEmpty(objectTypeInfo.PredefinedObjectType):
@@ -164,7 +239,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
                 // Reset the reader position for attribute type inference
                 reader.Dispose();
-                reader = GetCsvReader(importFilePath.StringValue, settingValues, logger);
+                reader = GetCsvReader(schemaFilePath, settingValues, logger);
                 await reader.CsvReader.ReadAsync();
                 reader.CsvReader.ReadHeader();
                 break;
@@ -312,11 +387,29 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// <summary>
     /// Helper to make it easy to work out what type of object a row is representing.
     /// </summary>
-    private static FileConnectorObjectTypeInfo GetFileConnectorObjectTypeInfo(IReadOnlyCollection<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    /// <param name="settingValues">The connector setting values.</param>
+    /// <param name="logger">The logger.</param>
+    /// <param name="isExportOnlySchema">If true, only predefined object type is allowed (for export schema discovery).</param>
+    private static FileConnectorObjectTypeInfo GetFileConnectorObjectTypeInfo(IReadOnlyCollection<ConnectedSystemSettingValue> settingValues, ILogger logger, bool isExportOnlySchema = false)
     {
         logger.Verbose("GetFileConnectorObjectTypeInfo: Called.");
         var objectTypeColumn = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectTypeColumn);
         var objectType = settingValues.SingleOrDefault(q => q.Setting.Name == SettingObjectType);
+
+        // For export-only schema, we only support predefined object type
+        if (isExportOnlySchema)
+        {
+            if (objectType == null || string.IsNullOrEmpty(objectType.StringValue))
+                throw new InvalidSettingValuesException($"For export-only connectors, {SettingObjectType} must be specified.");
+
+            return new FileConnectorObjectTypeInfo
+            {
+                Specifier = FileConnectorObjectTypeSpecifier.PredefinedObjectType,
+                PredefinedObjectType = objectType.StringValue
+            };
+        }
+
+        // Standard import file handling
         if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
             throw new InvalidSettingValuesException($"Either a {SettingObjectTypeColumn} or {SettingObjectType} need a setting value specifying.");
 
