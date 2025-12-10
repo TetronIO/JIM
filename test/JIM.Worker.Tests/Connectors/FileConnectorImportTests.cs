@@ -382,9 +382,9 @@ public class FileConnectorImportTests
             {
                 Setting = new ConnectorDefinitionSetting
                 {
-                    Name = "Import File Path",
-                    Required = false,
-                    Type = ConnectedSystemSettingType.String
+                    Name = "File Path",
+                    Required = true,
+                    Type = ConnectedSystemSettingType.File
                 },
                 StringValue = filePath
             },
@@ -392,11 +392,11 @@ public class FileConnectorImportTests
             {
                 Setting = new ConnectorDefinitionSetting
                 {
-                    Name = "Export File Path",
-                    Required = false,
-                    Type = ConnectedSystemSettingType.String
+                    Name = "Mode",
+                    Required = true,
+                    Type = ConnectedSystemSettingType.DropDown
                 },
-                StringValue = null
+                StringValue = "Import Only"
             },
             new()
             {
@@ -495,9 +495,9 @@ public class FileConnectorImportTests
             {
                 Setting = new ConnectorDefinitionSetting
                 {
-                    Name = "Import File Path",
+                    Name = "File Path",
                     Required = true,
-                    Type = ConnectedSystemSettingType.String
+                    Type = ConnectedSystemSettingType.File
                 },
                 StringValue = filePath
             },
@@ -505,11 +505,11 @@ public class FileConnectorImportTests
             {
                 Setting = new ConnectorDefinitionSetting
                 {
-                    Name = "Export File Path",
-                    Required = false,
-                    Type = ConnectedSystemSettingType.String
+                    Name = "Mode",
+                    Required = true,
+                    Type = ConnectedSystemSettingType.DropDown
                 },
-                StringValue = null
+                StringValue = "Import Only"
             },
             new()
             {

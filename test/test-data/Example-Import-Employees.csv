@@ -1,0 +1,21 @@
+employeeId,firstName,lastName,email,department,title,manager,startDate,salary,isActive,accessLevel,phoneExtension,costCentre,skills
+EMP001,Alice,Henderson,alice.henderson@globexcorp.example,Engineering,Senior Software Engineer,EMP005,2019-03-15,85000,true,3,1001,CC-ENG-001,Python|Java|Kubernetes
+EMP002,Benjamin,Clarke,benjamin.clarke@globexcorp.example,Finance,Financial Analyst,EMP006,2021-07-01,62000,true,2,1002,CC-FIN-001,Excel|SAP|PowerBI
+EMP003,Charlotte,Davies,charlotte.davies@globexcorp.example,Human Resources,HR Coordinator,EMP007,2022-01-10,48000,true,2,1003,CC-HR-001,Workday|Recruitment
+EMP004,Daniel,Foster,daniel.foster@globexcorp.example,Engineering,DevOps Engineer,EMP005,2020-11-20,78000,true,3,1004,CC-ENG-001,AWS|Terraform|Docker|Linux
+EMP005,Eleanor,Graham,eleanor.graham@globexcorp.example,Engineering,Engineering Manager,EMP010,2017-06-01,110000,true,4,1005,CC-ENG-001,Leadership|Architecture|Agile
+EMP006,Frederick,Hughes,frederick.hughes@globexcorp.example,Finance,Finance Director,EMP010,2016-02-15,135000,true,5,1006,CC-FIN-001,Strategy|M&A|Compliance
+EMP007,Grace,Irving,grace.irving@globexcorp.example,Human Resources,HR Director,EMP010,2018-09-01,105000,true,5,1007,CC-HR-001,Employment Law|HRIS|Benefits
+EMP008,Henry,Jenkins,henry.jenkins@globexcorp.example,Sales,Account Executive,EMP009,2023-02-28,55000,true,2,1008,CC-SALES-001,CRM|Negotiation|B2B
+EMP009,Isabella,Knight,isabella.knight@globexcorp.example,Sales,Sales Manager,EMP010,2019-08-12,92000,true,4,1009,CC-SALES-001,Pipeline Management|Forecasting
+EMP010,James,Lawrence,james.lawrence@globexcorp.example,Executive,Chief Operating Officer,,2015-01-05,185000,true,6,1010,CC-EXEC-001,Operations|Strategy|Leadership
+EMP011,Katherine,Mitchell,katherine.mitchell@globexcorp.example,Engineering,Junior Developer,EMP005,2024-01-15,52000,true,1,1011,CC-ENG-001,JavaScript|React
+EMP012,Lucas,Norton,lucas.norton@globexcorp.example,Marketing,Marketing Specialist,EMP013,2022-06-20,58000,true,2,1012,CC-MKT-001,SEO|Content|Analytics
+EMP013,Madeleine,Oliver,madeleine.oliver@globexcorp.example,Marketing,Marketing Director,EMP010,2018-03-10,115000,true,5,1013,CC-MKT-001,Brand Strategy|Digital Marketing
+EMP014,Nathan,Palmer,nathan.palmer@globexcorp.example,IT,Systems Administrator,EMP015,2020-04-01,68000,true,3,1014,CC-IT-001,Windows Server|Active Directory|VMware
+EMP015,Olivia,Quinn,olivia.quinn@globexcorp.example,IT,IT Manager,EMP010,2017-11-15,98000,true,4,1015,CC-IT-001,ITIL|Security|Infrastructure
+EMP016,Patrick,Reynolds,patrick.reynolds@globexcorp.example,Legal,Legal Counsel,EMP010,2019-05-22,125000,true,5,1016,CC-LEGAL-001,Contract Law|Compliance|IP
+EMP017,Rachel,Stevens,rachel.stevens@globexcorp.example,Finance,Accounts Payable Clerk,EMP006,2023-09-05,42000,true,1,1017,CC-FIN-001,Invoice Processing|Reconciliation
+EMP018,Samuel,Turner,samuel.turner@globexcorp.example,Engineering,QA Engineer,EMP005,2021-02-14,65000,true,2,1018,CC-ENG-001,Selenium|TestNG|API Testing
+EMP019,Victoria,Ward,victoria.ward@globexcorp.example,Sales,Sales Representative,EMP009,2022-11-01,48000,true,1,1019,CC-SALES-001,Cold Calling|Lead Generation
+EMP020,William,Young,william.young@globexcorp.example,Operations,Facilities Coordinator,EMP010,2021-08-30,45000,false,2,1020,CC-OPS-001,Vendor Management|Safety

@@ -1,0 +1,86 @@
+@using JIM.Models.Exceptions
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Class="mr-2" />
+            CSV Parsing Error
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Error" Dense="true">
+                @ErrorMessage
+            </MudAlert>
+
+            @if (RowNumber.HasValue)
+            {
+                <MudText Typo="Typo.body2">
+                    <strong>Row:</strong> @RowNumber
+                </MudText>
+            }
+
+            @if (!string.IsNullOrEmpty(ColumnInfo))
+            {
+                <MudText Typo="Typo.body2">
+                    <strong>Column:</strong> @ColumnInfo
+                </MudText>
+            }
+
+            @if (!string.IsNullOrEmpty(RawData))
+            {
+                <MudText Typo="Typo.body2"><strong>Raw data:</strong></MudText>
+                <MudPaper Elevation="0" Class="pa-2" Style="background-color: var(--mud-palette-background-gray); font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">
+                    @RawData
+                </MudPaper>
+            }
+
+            @if (!string.IsNullOrEmpty(Suggestion))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.Lightbulb">
+                    <strong>Suggestion:</strong> @Suggestion
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">OK</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The main error message.
+    /// </summary>
+    [Parameter]
+    public string ErrorMessage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The row number where the error occurred.
+    /// </summary>
+    [Parameter]
+    public int? RowNumber { get; set; }
+
+    /// <summary>
+    /// Information about the problematic column.
+    /// </summary>
+    [Parameter]
+    public string? ColumnInfo { get; set; }
+
+    /// <summary>
+    /// The raw data from the problematic row.
+    /// </summary>
+    [Parameter]
+    public string? RawData { get; set; }
+
+    /// <summary>
+    /// A suggestion for how to fix the issue.
+    /// </summary>
+    [Parameter]
+    public string? Suggestion { get; set; }
+
+    private void Close() => MudDialog.Close();
+}

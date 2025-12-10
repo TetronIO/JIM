@@ -14,6 +14,7 @@ public class JimApplication
     public DataGenerationServer DataGeneration { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
+    public FileSystemServer FileSystem { get; }
     public MetaverseServer Metaverse { get; }
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
@@ -28,6 +29,7 @@ public class JimApplication
         DataGeneration = new DataGenerationServer(this);
         ExportEvaluation = new ExportEvaluationServer(this);
         ExportExecution = new ExportExecutionServer(this);
+        FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);
         Repository = dataRepository;
         Search = new SearchServer(this);

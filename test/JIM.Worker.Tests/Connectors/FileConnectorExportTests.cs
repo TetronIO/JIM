@@ -137,8 +137,13 @@ public class FileConnectorExportTests
         {
             new()
             {
-                Setting = new ConnectorDefinitionSetting { Name = "Export File Path" },
+                Setting = new ConnectorDefinitionSetting { Name = "File Path" },
                 StringValue = null
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting { Name = "Mode" },
+                StringValue = "Export Only"
             }
         };
         var pendingExports = CreateSamplePendingExports();
@@ -208,15 +213,19 @@ public class FileConnectorExportTests
         string exportPath,
         string delimiter = ",",
         string multiValueDelimiter = "|",
-        bool includeFullState = false,
-        bool autoConfirmExports = true)
+        bool includeFullState = false)
     {
         return new List<ConnectedSystemSettingValue>
         {
             new()
             {
-                Setting = new ConnectorDefinitionSetting { Name = "Export File Path" },
+                Setting = new ConnectorDefinitionSetting { Name = "File Path" },
                 StringValue = exportPath
+            },
+            new()
+            {
+                Setting = new ConnectorDefinitionSetting { Name = "Mode" },
+                StringValue = "Export Only"
             },
             new()
             {
@@ -232,11 +241,6 @@ public class FileConnectorExportTests
             {
                 Setting = new ConnectorDefinitionSetting { Name = "Include Full State" },
                 CheckboxValue = includeFullState
-            },
-            new()
-            {
-                Setting = new ConnectorDefinitionSetting { Name = "Auto-Confirm Exports" },
-                CheckboxValue = autoConfirmExports
             }
         };
     }

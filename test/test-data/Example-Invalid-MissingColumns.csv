@@ -1,0 +1,6 @@
+employeeId,firstName,lastName,email,department,title,manager,startDate,salary,isActive
+EMP001,Alice,Henderson,alice.henderson@globexcorp.example,Engineering,Senior Software Engineer,EMP005,2019-03-15,85000,true
+EMP002,Benjamin,Clarke,benjamin.clarke@globexcorp.example,Finance
+EMP003,Charlotte,Davies,charlotte.davies@globexcorp.example,Human Resources,HR Coordinator,EMP007,2022-01-10,48000,true
+EMP004,Daniel,Foster,daniel.foster@globexcorp.example
+EMP005,Eleanor,Graham,eleanor.graham@globexcorp.example,Engineering,Engineering Manager,EMP010,2017-06-01,110000,true

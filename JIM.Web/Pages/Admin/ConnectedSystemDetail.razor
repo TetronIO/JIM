@@ -2,9 +2,11 @@
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Exceptions
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using JIM.Web.Shared
 @using Serilog
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -58,7 +60,7 @@
         <MudTabPanel Text="Settings">
             <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
 
-            <MudForm @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
+            <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
                 @if (_settingCategories != null)
                 {
                     @for (var i = 0; i < _settingCategories.Count; i++)
@@ -146,7 +148,18 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
                                 {
-                                    <MudText Class="mt-b">Files not yet supported for settings.</MudText>
+                                    <MudTextField T="string"
+                                                  Label="@settingValue.Setting.Name"
+                                                  @bind-Value="settingValue.StringValue"
+                                                  Required="@settingValue.Setting.Required"
+                                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                  HelperText="@settingValue.Setting.Description"
+                                                  Variant="Variant.Outlined"
+                                                  ReadOnly="true"
+                                                  Adornment="Adornment.End"
+                                                  AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                                                  OnAdornmentClick="@(() => OpenFileBrowserAsync(settingValue))"
+                                                  Class="mb-5" />
                                 }
                                 else
                                 {
@@ -343,16 +356,19 @@
                         </MudPaper>
                     }
 
-                    <MudPaper Outlined="true" Class="pa-4 mt-5">
-                        <MudText Typo="Typo.subtitle1" Class="mb-3">Object Type Settings</MudText>
-                        <MudSwitch
-                            @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
-                            Color="@Color.Primary"
-                            Label="Remove contributed attributes when objects are obsoleted" />
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            When enabled, attribute values contributed by objects of this type will be removed from the Metaverse when the source object is deleted or no longer present in the connected system.
-                        </MudText>
-                    </MudPaper>
+                    @if (_connectedSystem.SupportsImportMode())
+                    {
+                        <MudPaper Outlined="true" Class="pa-4 mt-5">
+                            <MudText Typo="Typo.subtitle1" Class="mb-3">Object Type Settings</MudText>
+                            <MudSwitch
+                                @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
+                                Color="@Color.Primary"
+                                Label="Remove contributed attributes when objects are obsoleted" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                When enabled, attribute values contributed by objects of this type will be removed from the Metaverse when the source object is deleted or no longer present in the connected system.
+                            </MudText>
+                        </MudPaper>
+                    }
 
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText>
@@ -900,6 +916,7 @@
     private bool IsNewRunProfileFormValid { get; set; }
     private ConnectedSystem? _connectedSystem;
     private bool _settingsBeingSaved;
+    private MudForm? _settingsForm;
     private List<ConnectedSystemSettingCategory>? _settingCategories;
     private string? _partitionsAndHierarchiesText;
     private string? _partitionAndHierarchyText;
@@ -1103,15 +1120,29 @@
         StateHasChanged();
         await Task.Delay(1);
 
-        await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(_connectedSystem, user);
+        try
+        {
+            await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(_connectedSystem, user);
 
-        // if there's just a single object type in the schema, auto-select it
-        if (_connectedSystem.ObjectTypes is { Count: 1 })
-            HandleSelectedObjectTypeClick(_connectedSystem.ObjectTypes[0], true);
-
-        _schemaBeingRetrieved = false;
-        StateHasChanged();
-        await Task.Delay(1);
+            // if there's just a single object type in the schema, auto-select it
+            if (_connectedSystem.ObjectTypes is { Count: 1 })
+                HandleSelectedObjectTypeClick(_connectedSystem.ObjectTypes[0], true);
+        }
+        catch (CsvParsingException ex)
+        {
+            await ShowCsvErrorDialogAsync(ex);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to import schema for connected system {SystemId}", _connectedSystem.Id);
+            Snackbar.Add($"Failed to import schema: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _schemaBeingRetrieved = false;
+            StateHasChanged();
+            await Task.Delay(1);
+        }
     }
 
     private void HandleSelectedObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType, bool isObjectTypeChecked)
@@ -1532,6 +1563,65 @@
         // all done, let the user know
         Snackbar.Add("Attribute data type updated.", Severity.Success);
     }
+
+    #region File Browser
+    private async Task OpenFileBrowserAsync(ConnectedSystemSettingValue settingValue)
+    {
+        // Determine if this is an export mode (may need new filename)
+        var isExportMode = _connectedSystem?.IsExportOnlyMode() ?? false;
+        var title = isExportMode ? "Select Export Location" : "Select File";
+
+        var parameters = new DialogParameters<FileBrowserDialog>
+        {
+            { x => x.Title, title },
+            { x => x.AllowNewFilename, isExportMode },
+            { x => x.InitialPath, settingValue.StringValue }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<FileBrowserDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string selectedPath })
+        {
+            settingValue.StringValue = selectedPath;
+            StateHasChanged();
+
+            // Force form to re-validate after programmatic value change
+            if (_settingsForm != null)
+            {
+                await _settingsForm.Validate();
+            }
+        }
+    }
+
+    private async Task ShowCsvErrorDialogAsync(CsvParsingException ex)
+    {
+        var parameters = new DialogParameters<CsvErrorDialog>
+        {
+            { x => x.ErrorMessage, ex.Message },
+            { x => x.RowNumber, ex.RowNumber },
+            { x => x.ColumnInfo, ex.ColumnInfo },
+            { x => x.RawData, ex.RawRow },
+            { x => x.Suggestion, ex.Suggestion }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<CsvErrorDialog>("CSV Parsing Error", parameters, options);
+    }
+    #endregion
 
     #region Delete Connected System
     private async Task HandleShowDeleteConfirmationAsync()
