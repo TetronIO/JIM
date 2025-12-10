@@ -50,6 +50,24 @@ public interface IMetaverseRepository
         QueryRange queryRange = QueryRange.Forever);
 
     /// <summary>
+    /// Gets a paginated list of metaverse objects with optional filtering by type and search query.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="searchQuery">Optional search query to filter by display name.</param>
+    /// <param name="sortDescending">Whether to sort in descending order by created date.</param>
+    /// <param name="attributes">Optional list of attribute names to include. Use "*" to include all attributes. DisplayName is always included.</param>
+    /// <returns>A paged result set of metaverse object headers.</returns>
+    public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsAsync(
+        int page,
+        int pageSize,
+        int? objectTypeId = null,
+        string? searchQuery = null,
+        bool sortDescending = true,
+        IEnumerable<string>? attributes = null);
+
+    /// <summary>
     /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
     /// This is to help the process of joining a CSO to an MVO.
     /// </summary>
