@@ -3,9 +3,10 @@ namespace JIM.Data;
 
 public interface IRepository
 {
+    public IActivityRepository Activity { get; }
+    public IApiKeyRepository ApiKeys { get; }
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IDataGenerationRepository DataGeneration { get; }
-    public IActivityRepository Activity { get; }
     public IMetaverseRepository Metaverse { get; }
     public ISearchRepository Search { get; }
     public ISecurityRepository Security { get; }

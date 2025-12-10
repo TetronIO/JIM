@@ -6,7 +6,7 @@ namespace JIM.Application;
 
 public class JimApplication
 {
-    internal IRepository Repository { get; }
+    public IRepository Repository { get; }
     private SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
     public CertificateServer Certificates { get; }

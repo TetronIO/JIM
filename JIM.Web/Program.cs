@@ -57,7 +57,7 @@ try
     var apiAudience = ExtractApiAudience(apiScope, clientId);
     var validIssuers = GetValidIssuers(authority);
 
-    // Configure dual authentication: Cookies for Blazor UI, JWT Bearer for API
+    // Configure triple authentication: Cookies for Blazor UI, JWT Bearer for SSO API, API Key for non-interactive API
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -100,7 +100,8 @@ try
 
             // Preserve standard OIDC claim names for API requests
             options.MapInboundClaims = false;
-        });
+        })
+        .AddApiKeyAuthentication();
 
     // setup authorisation policies
     builder.Services.AddAuthorization(options =>
@@ -158,6 +159,7 @@ try
             options.IncludeXmlComments(xmlPath);
         }
 
+        // OAuth2 security scheme for SSO authentication
         options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
         {
             Type = SecuritySchemeType.OAuth2,
@@ -176,6 +178,16 @@ try
             }
         });
 
+        // API Key security scheme for non-interactive authentication
+        options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.ApiKey,
+            In = ParameterLocation.Header,
+            Name = "X-API-Key",
+            Description = "API key for non-interactive authentication. Format: jim_ak_<random>"
+        });
+
+        // Both authentication methods are valid - API will accept either
         options.AddSecurityRequirement(new OpenApiSecurityRequirement
         {
             {
@@ -188,6 +200,17 @@ try
                     }
                 },
                 new[] { "openid", apiScope! }
+            },
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "ApiKey"
+                    }
+                },
+                Array.Empty<string>()
             }
         });
     });

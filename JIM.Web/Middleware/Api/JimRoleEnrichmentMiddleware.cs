@@ -22,8 +22,10 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
 
     public async Task InvokeAsync(HttpContext context, JimApplication jim)
     {
-        // Only process authenticated requests
-        if (context.User.Identity?.IsAuthenticated == true)
+        // Only process authenticated requests that aren't using API key authentication
+        // API key authentication already includes roles in the claims
+        if (context.User.Identity?.IsAuthenticated == true &&
+            context.User.Identity.AuthenticationType != ApiKeyAuthenticationHandler.SchemeName)
         {
             await EnrichWithJimRolesAsync(context, jim);
         }
