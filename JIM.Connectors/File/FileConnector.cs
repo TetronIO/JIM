@@ -51,13 +51,13 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return new List<ConnectorSetting>
         {
             // Import settings
-            new() { Name = SettingImportFilePath, Required = false, Description = "Path to the CSV file to import. Leave empty if this connector is export-only. e.g. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingImportFilePath, Required = false, Description = "Path to the CSV file to import. Leave empty if this connector is export-only. e.g. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.File },
             new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
 
             // Export settings
-            new() { Name = SettingExportFilePath, Required = false, Description = "Path to the CSV file to export. Used for schema discovery and as the output file. Leave empty if this connector is import-only. e.g. /var/connector-files/exports/Users.csv", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingExportFilePath, Required = false, Description = "Path to the CSV file to export. Used for schema discovery and as the output file. Leave empty if this connector is import-only. e.g. /var/connector-files/exports/Users.csv", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.File },
             new() { Name = SettingIncludeFullState, Required = false, Description = "Include all attribute values in exports, not just changed attributes.", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
             new() { Name = SettingAutoConfirmExports, Required = false, Description = "Automatically confirm exports after file is written. Disable for bidirectional integrations that provide feedback.", DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
 
@@ -79,7 +79,9 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // general required setting value validation
         foreach (var requiredSettingValue in settingValues.Where(q => q.Setting.Required))
         {
-            if (requiredSettingValue.Setting.Type == ConnectedSystemSettingType.String && string.IsNullOrEmpty(requiredSettingValue.StringValue))
+            if ((requiredSettingValue.Setting.Type == ConnectedSystemSettingType.String ||
+                 requiredSettingValue.Setting.Type == ConnectedSystemSettingType.File) &&
+                string.IsNullOrEmpty(requiredSettingValue.StringValue))
                 response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
         }
 

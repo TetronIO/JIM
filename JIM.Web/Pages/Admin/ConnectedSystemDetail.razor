@@ -5,6 +5,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using JIM.Web.Shared
 @using Serilog
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -146,7 +147,18 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
                                 {
-                                    <MudText Class="mt-b">Files not yet supported for settings.</MudText>
+                                    <MudTextField T="string"
+                                                  Label="@settingValue.Setting.Name"
+                                                  @bind-Value="settingValue.StringValue"
+                                                  Required="@settingValue.Setting.Required"
+                                                  RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                                  HelperText="@settingValue.Setting.Description"
+                                                  Variant="Variant.Outlined"
+                                                  ReadOnly="true"
+                                                  Adornment="Adornment.End"
+                                                  AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                                                  OnAdornmentClick="@(() => OpenFileBrowserAsync(settingValue))"
+                                                  Class="mb-5" />
                                 }
                                 else
                                 {
@@ -1532,6 +1544,38 @@
         // all done, let the user know
         Snackbar.Add("Attribute data type updated.", Severity.Success);
     }
+
+    #region File Browser
+    private async Task OpenFileBrowserAsync(ConnectedSystemSettingValue settingValue)
+    {
+        // Determine if this is an export setting (may need new filename) or import (existing file only)
+        var isExportSetting = settingValue.Setting.Category == ConnectedSystemSettingCategory.Export;
+        var title = isExportSetting ? "Select Export Location" : "Select File";
+
+        var parameters = new DialogParameters<FileBrowserDialog>
+        {
+            { x => x.Title, title },
+            { x => x.AllowNewFilename, isExportSetting },
+            { x => x.InitialPath, settingValue.StringValue }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<FileBrowserDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string selectedPath })
+        {
+            settingValue.StringValue = selectedPath;
+            StateHasChanged();
+        }
+    }
+    #endregion
 
     #region Delete Connected System
     private async Task HandleShowDeleteConfirmationAsync()

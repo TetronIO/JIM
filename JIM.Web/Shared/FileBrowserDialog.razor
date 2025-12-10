@@ -1,0 +1,225 @@
+@using JIM.Application
+@using JIM.Application.Servers
+@inject JimApplication Jim
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Class="mr-2" />
+            @Title
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            @* Current path breadcrumb *@
+            <MudBreadcrumbs Items="_breadcrumbs" Class="pa-0">
+                <ItemTemplate Context="item">
+                    <MudButton Variant="Variant.Text"
+                               Size="Size.Small"
+                               OnClick="@(() => NavigateToPath(item.Href))"
+                               Disabled="@item.Disabled">
+                        @item.Text
+                    </MudButton>
+                </ItemTemplate>
+            </MudBreadcrumbs>
+
+            <MudPaper Elevation="0" Class="pa-2" Style="max-height: 350px; overflow-y: auto; border: 1px solid var(--mud-palette-lines-default);">
+                <MudList T="FileSystemEntry" Dense="true" @bind-SelectedValue="_selectedEntry">
+                    @foreach (var entry in _currentEntries)
+                    {
+                        <MudListItem T="FileSystemEntry"
+                                     Value="@entry"
+                                     Icon="@(entry.IsDirectory ? Icons.Material.Filled.Folder : Icons.Material.Filled.InsertDriveFile)"
+                                     IconColor="@(entry.IsDirectory ? Color.Warning : Color.Default)"
+                                     OnClick="@(() => HandleItemClick(entry))">
+                            @entry.Name
+                        </MudListItem>
+                    }
+                    @if (_currentEntries.Count == 0)
+                    {
+                        <MudListItem T="FileSystemEntry" Disabled="true">
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">No files or directories found</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+
+            @if (AllowNewFilename)
+            {
+                <MudTextField @bind-Value="_filename"
+                              Label="Filename"
+                              Placeholder="Enter filename (e.g., export.csv)"
+                              Variant="Variant.Outlined"
+                              Immediate="true"
+                              HelperText="@GetFilenameHelperText()" />
+            }
+
+            @if (_selectedEntry != null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Selected: @GetSelectedPath()
+                </MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="@(!CanSubmit())">
+            Select
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The dialog title.
+    /// </summary>
+    [Parameter]
+    public string Title { get; set; } = "Select File";
+
+    /// <summary>
+    /// Whether to show a filename input field (for export paths where file may not exist).
+    /// </summary>
+    [Parameter]
+    public bool AllowNewFilename { get; set; }
+
+    /// <summary>
+    /// The initial path to display.
+    /// </summary>
+    [Parameter]
+    public string? InitialPath { get; set; }
+
+    private List<FileSystemEntry> _currentEntries = new();
+    private FileSystemEntry? _selectedEntry;
+    private string _filename = string.Empty;
+    private string? _errorMessage;
+    private string _currentPath = string.Empty;
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    protected override void OnInitialized()
+    {
+        LoadDirectory(null);
+    }
+
+    private void LoadDirectory(string? path)
+    {
+        var result = Jim.FileSystem.ListDirectory(path);
+        if (result.Success)
+        {
+            _currentPath = result.Path;
+            _currentEntries = result.Entries;
+            _selectedEntry = null;
+            _errorMessage = null;
+            UpdateBreadcrumbs(result);
+        }
+        else
+        {
+            _errorMessage = result.Error ?? "Failed to load directory.";
+        }
+    }
+
+    private void UpdateBreadcrumbs(FileSystemListResult result)
+    {
+        _breadcrumbs = new List<BreadcrumbItem>();
+
+        if (result.IsRoot && result.Path == "/")
+        {
+            _breadcrumbs.Add(new BreadcrumbItem("Root", href: null, disabled: true));
+            return;
+        }
+
+        // Build breadcrumbs from path
+        var parts = result.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var currentBuildPath = "";
+
+        _breadcrumbs.Add(new BreadcrumbItem("Root", href: "/", disabled: false));
+
+        for (var i = 0; i < parts.Length; i++)
+        {
+            currentBuildPath += "/" + parts[i];
+            var isLast = i == parts.Length - 1;
+            _breadcrumbs.Add(new BreadcrumbItem(parts[i], href: currentBuildPath, disabled: isLast));
+        }
+    }
+
+    private void NavigateToPath(string? path)
+    {
+        if (path == "/")
+        {
+            LoadDirectory(null);
+        }
+        else if (!string.IsNullOrEmpty(path))
+        {
+            LoadDirectory(path);
+        }
+    }
+
+    private void HandleItemClick(FileSystemEntry entry)
+    {
+        if (entry.IsDirectory)
+        {
+            // Navigate into directory on double-click or single click for directories
+            LoadDirectory(entry.FullPath);
+        }
+        else
+        {
+            // Select file
+            _selectedEntry = entry;
+        }
+    }
+
+    private string GetSelectedPath()
+    {
+        if (AllowNewFilename && !string.IsNullOrWhiteSpace(_filename))
+        {
+            // For export: combine current directory with filename
+            return Path.Combine(_currentPath, _filename);
+        }
+
+        if (_selectedEntry != null)
+        {
+            return _selectedEntry.FullPath;
+        }
+
+        return _currentPath;
+    }
+
+    private string GetFilenameHelperText()
+    {
+        return $"File will be created in: {_currentPath}";
+    }
+
+    private bool CanSubmit()
+    {
+        if (AllowNewFilename)
+        {
+            // For export: just need a filename entered (directory is current directory)
+            return !string.IsNullOrWhiteSpace(_filename);
+        }
+
+        // For import: need file selected
+        return _selectedEntry != null && !_selectedEntry.IsDirectory;
+    }
+
+    private void Submit()
+    {
+        var path = GetSelectedPath();
+        MudDialog.Close(DialogResult.Ok(path));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}
