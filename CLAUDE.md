@@ -47,7 +47,15 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - Mark the PR as draft
 - Request manual review and testing before merge
 
-## Bash Commands
+## Scripting
+
+**IMPORTANT: Use PowerShell for ALL scripts:**
+- All automation, integration tests, and utility scripts MUST be written in PowerShell (.ps1)
+- PowerShell is cross-platform and works on Linux, macOS, and Windows
+- Exception: `.devcontainer/setup.sh` is acceptable as it runs during container creation
+- Never create bash/shell scripts for project automation or testing
+
+## Commands
 
 **Build & Test:**
 - `dotnet build JIM.sln` - Build entire solution
@@ -95,7 +103,14 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - YOU MUST use async/await for all I/O operations (method suffix: `Async`)
 - YOU MUST use constructor injection for all dependencies
 - YOU MUST test method signature: `[Test] public async Task TestNameAsync()`
-- IMPORTANT: Use en-GB spellings (e.g., "authorisation", "synchronisation")
+- **CRITICAL: Use British English (en-GB) for ALL text:**
+  - Code: "authorisation" not "authorization", "synchronisation" not "synchronization", "colour" not "color"
+  - Comments: "behaviour" not "behavior", "centre" not "center", "licence" not "license" (noun)
+  - Documentation: "organise" not "organize", "analyse" not "analyze", "programme" not "program" (unless referring to computer programs)
+  - UI text: "minimise" not "minimize", "optimise" not "optimize", "cancelled" not "canceled"
+  - Units: Metric only (metres, litres, kilograms, kilometres) - never use imperial units
+  - Date/Time: Always use UTC for storage and internal operations; display in user's local time zone where appropriate
+  - Exceptions: Technical terms, proper nouns, third-party library names, URLs
 
 **Naming Patterns:**
 - Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`
@@ -171,6 +186,22 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - To diagnose issues, add temporary `Console.WriteLine()` statements to trace execution and inspect variable values
 - Test output appears in the test results under "Standard Output Messages"
 - **IMPORTANT**: Remove all debug statements before committing
+
+## Design Principles
+
+**Minimise Environment Variables:**
+- Prefer configuration through admin UI and guided setup wizards over environment variables
+- Environment variables should be a fallback for container/automated deployments, not the primary configuration method
+- Settings that administrators might need to change should be configurable through the web interface
+- Only use environment variables for:
+  - Bootstrap configuration (database connection for initial setup)
+  - Secrets that cannot be stored in the database (encryption keys before encryption is configured)
+  - Container orchestration overrides
+
+**Self-Contained & Air-Gapped Deployable:**
+- JIM must work in air-gapped environments with no internet connectivity
+- No cloud service dependencies (no Azure Key Vault, AWS KMS, etc.)
+- All features must work with on-premises infrastructure only
 
 ## Architecture Quick Reference
 

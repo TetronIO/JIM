@@ -1,47 +1,94 @@
-﻿@page "/admin/predefined-searches"
+@page "/admin/predefined-searches"
 @attribute [Authorize(Roles = "Administrators")]
 @using JIM.Application
 @using JIM.Models.Search.DTOs
 @inject JimApplication Jim
+@inject NavigationManager NavManager
 
 <PageTitle>Predefined Searches</PageTitle>
 <MudText Typo="Typo.h4">Predefined Searches</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Predefined Searches make it easy to find objects and control what attributes are returned.</MudText>
 
-<MudSimpleTable Style="overflow-x: auto;" Hover="true" Bordered="false" Striped="false" Class="mt-5" Outlined="true" Elevation="0">
-    <thead>
-        <tr>
-            <th><MudText Typo="Typo.button">Name</MudText></th>
-            <th><MudText Typo="Typo.button">Uri</MudText></th>
-            <th><MudText Typo="Typo.button">Object Type</MudText></th>
-            <th><MudText Typo="Typo.button">Default?</MudText></th>
-            <th><MudText Typo="Typo.button">Built-in?</MudText></th>
-            <th><MudText Typo="Typo.button">Attributes</MudText></th>
-            <th><MudText Typo="Typo.button">Created</MudText></th>
-        </tr>
-    </thead>
-    <tbody>
-        @if (_predefinedSearchHeaders != null)
-        {
-            foreach (var predefinedSearchHeader in _predefinedSearchHeaders)
-            {
-                <tr>
-                    <td><MudLink Href="@("/admin/predefined-searches/"+predefinedSearchHeader.Uri)">@predefinedSearchHeader.Name</MudLink></td>
-                    <td>@predefinedSearchHeader.Uri</td>
-                    <td>@predefinedSearchHeader.MetaverseObjectTypeName</td>
-                    <td>@(predefinedSearchHeader.IsDefaultForMetaverseObjectType ? "Yes" : "No")</td>
-                    <td>@(predefinedSearchHeader.BuiltIn ? "Yes" : "No")</td>
-                    <td>@predefinedSearchHeader.MetaverseAttributeCount</td>
-                    <td>@predefinedSearchHeader.Created</td>
-                </tr>
-            }
-        }
-    </tbody>
-</MudSimpleTable>
+<MudTable Items="@_predefinedSearchHeaders"
+          T="PredefinedSearchHeader"
+          Hover="true"
+          Breakpoint="Breakpoint.Sm"
+          Class="mt-5"
+          Outlined="true"
+          Elevation="0"
+          Filter="new Func<PredefinedSearchHeader, bool>(FilterFunc)"
+          OnRowClick="HandleRowClick"
+          RowClass="cursor-pointer"
+          Loading="@_loading"
+          LoadingProgressColor="Color.Primary">
+    <ToolBarContent>
+        <MudSpacer />
+        <MudTextField @bind-Value="_searchString"
+                      Placeholder="Search by name or URI"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      IconSize="Size.Medium"
+                      Class="mt-0"
+                      Immediate="true" />
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.Name)">
+                <MudText Typo="Typo.button">Name</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.Uri)">
+                <MudText Typo="Typo.button">URI</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.MetaverseObjectTypeName)">
+                <MudText Typo="Typo.button">Object Type</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.IsDefaultForMetaverseObjectType)">
+                <MudText Typo="Typo.button">Default?</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.BuiltIn)">
+                <MudText Typo="Typo.button">Built-in?</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.MetaverseAttributeCount)">
+                <MudText Typo="Typo.button">Attributes</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.Created)" InitialDirection="SortDirection.Descending">
+                <MudText Typo="Typo.button">Created</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">
+            <MudLink Href="@("/admin/predefined-searches/" + context.Uri)">@context.Name</MudLink>
+        </MudTd>
+        <MudTd DataLabel="URI">@context.Uri</MudTd>
+        <MudTd DataLabel="Object Type">@context.MetaverseObjectTypeName</MudTd>
+        <MudTd DataLabel="Default?">@(context.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Attributes">@context.MetaverseAttributeCount</MudTd>
+        <MudTd DataLabel="Created">@context.Created</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>There are no predefined searches.</MudText>
+    </NoRecordsContent>
+</MudTable>
 
 @code {
     private IList<PredefinedSearchHeader>? _predefinedSearchHeaders;
+    private string _searchString = "";
+    private bool _loading = true;
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
         new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -51,5 +98,26 @@
     protected override async Task OnInitializedAsync()
     {
         _predefinedSearchHeaders = await Jim.Search.GetPredefinedSearchHeadersAsync();
+        _loading = false;
+    }
+
+    private bool FilterFunc(PredefinedSearchHeader element)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        if (element.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (element.Uri.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    private void HandleRowClick(TableRowClickEventArgs<PredefinedSearchHeader> args)
+    {
+        if (args.Item != null)
+            NavManager.NavigateTo($"/admin/predefined-searches/{args.Item.Uri}");
     }
 }

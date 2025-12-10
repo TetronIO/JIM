@@ -7,16 +7,10 @@ namespace JIM.Api.Middleware;
 /// <summary>
 /// Middleware that catches unhandled exceptions and returns a standardised error response.
 /// </summary>
-public class GlobalExceptionHandler
+public class GlobalExceptionHandler(RequestDelegate next, ILogger<GlobalExceptionHandler> logger)
 {
-    private readonly RequestDelegate _next;
-    private readonly ILogger<GlobalExceptionHandler> _logger;
-
-    public GlobalExceptionHandler(RequestDelegate next, ILogger<GlobalExceptionHandler> logger)
-    {
-        _next = next;
-        _logger = logger;
-    }
+    private readonly RequestDelegate _next = next;
+    private readonly ILogger<GlobalExceptionHandler> _logger = logger;
 
     public async Task InvokeAsync(HttpContext context)
     {

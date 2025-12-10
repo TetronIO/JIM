@@ -2,7 +2,6 @@ using Asp.Versioning;
 using JIM.Api.Extensions;
 using JIM.Api.Models;
 using JIM.Application;
-using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,16 +21,10 @@ namespace JIM.Api.Controllers;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
-public class CertificatesController : ControllerBase
+public class CertificatesController(ILogger<CertificatesController> logger, JimApplication application) : ControllerBase
 {
-    private readonly ILogger<CertificatesController> _logger;
-    private readonly JimApplication _application;
-
-    public CertificatesController(ILogger<CertificatesController> logger, JimApplication application)
-    {
-        _logger = logger;
-        _application = application;
-    }
+    private readonly ILogger<CertificatesController> _logger = logger;
+    private readonly JimApplication _application = application;
 
     /// <summary>
     /// Gets all trusted certificates with optional pagination, sorting, and filtering.

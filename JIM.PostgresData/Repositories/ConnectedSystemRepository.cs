@@ -745,7 +745,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int connectedSystemId,
         int page,
         int pageSize,
-        PendingExportStatus? statusFilter = null)
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -760,14 +763,79 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var query = Repository.Database.PendingExports
             .Include(pe => pe.AttributeValueChanges)
             .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
             .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId);
 
-        if (statusFilter.HasValue)
-            query = query.Where(pe => pe.Status == statusFilter.Value);
+        // Apply status filter (supports multiple statuses)
+        var statusList = statusFilters?.ToList();
+        if (statusList != null && statusList.Count > 0)
+            query = query.Where(pe => statusList.Contains(pe.Status));
 
-        // Order by most recent first, then by status (Failed first)
-        query = query.OrderByDescending(pe => pe.CreatedAt);
+        // Apply search filter - search on target identifier, source MVO display name, or error message
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            query = query.Where(pe =>
+                (pe.LastErrorMessage != null && pe.LastErrorMessage.ToLower().Contains(searchLower)) ||
+                (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
+                    .Any(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId &&
+                         av.StringValue != null && av.StringValue.ToLower().Contains(searchLower))) ||
+                (pe.SourceMetaverseObject != null && pe.SourceMetaverseObject.AttributeValues
+                    .Any(av => av.Attribute != null && av.Attribute.Name.ToLower() == "displayname" &&
+                         av.StringValue != null && av.StringValue.ToLower().Contains(searchLower))));
+        }
+
+        // Apply sorting
+        query = sortBy?.ToLower() switch
+        {
+            "changetype" => sortDescending
+                ? query.OrderByDescending(pe => pe.ChangeType)
+                : query.OrderBy(pe => pe.ChangeType),
+            "status" => sortDescending
+                ? query.OrderByDescending(pe => pe.Status)
+                : query.OrderBy(pe => pe.Status),
+            "targetobject" => sortDescending
+                ? query.OrderByDescending(pe => pe.ConnectedSystemObject != null
+                    ? pe.ConnectedSystemObject.AttributeValues
+                        .Where(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId)
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null)
+                : query.OrderBy(pe => pe.ConnectedSystemObject != null
+                    ? pe.ConnectedSystemObject.AttributeValues
+                        .Where(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId)
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null),
+            "sourcemvo" => sortDescending
+                ? query.OrderByDescending(pe => pe.SourceMetaverseObject != null
+                    ? pe.SourceMetaverseObject.AttributeValues
+                        .Where(av => av.Attribute != null && av.Attribute.Name.ToLower() == "displayname")
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null)
+                : query.OrderBy(pe => pe.SourceMetaverseObject != null
+                    ? pe.SourceMetaverseObject.AttributeValues
+                        .Where(av => av.Attribute != null && av.Attribute.Name.ToLower() == "displayname")
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null),
+            "changes" => sortDescending
+                ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count)
+                : query.OrderBy(pe => pe.AttributeValueChanges.Count),
+            "errors" => sortDescending
+                ? query.OrderByDescending(pe => pe.ErrorCount)
+                : query.OrderBy(pe => pe.ErrorCount),
+            "nextretry" => sortDescending
+                ? query.OrderByDescending(pe => pe.NextRetryAt ?? DateTime.MaxValue)
+                : query.OrderBy(pe => pe.NextRetryAt ?? DateTime.MaxValue),
+            _ => sortDescending
+                ? query.OrderByDescending(pe => pe.CreatedAt)
+                : query.OrderBy(pe => pe.CreatedAt) // Default: sort by Created
+        };
 
         var totalCount = await query.CountAsync();
         var offset = (page - 1) * pageSize;

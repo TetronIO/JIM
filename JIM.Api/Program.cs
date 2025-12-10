@@ -41,7 +41,7 @@ try
     // Add services to the container.
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddTransient<JimApplication>(x => new JimApplication(new PostgresDataRepository(new JimDbContext())));
+    builder.Services.AddTransient(x => new JimApplication(new PostgresDataRepository(new JimDbContext())));
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
 
     // Configure API versioning with URL path segment (e.g., /api/v1/...)
@@ -98,7 +98,7 @@ try
         {
             Title = "JIM API",
             Version = "v1",
-            Description = "JIM (Just Identity Management) REST API for managing identity synchronisation.",
+            Description = "JIM (Junctional Identity Manager) REST API for managing identity synchronisation.",
             Contact = new OpenApiContact
             {
                 Name = "Tetron",
@@ -289,7 +289,7 @@ static string? ExtractApiAudience(string? apiScope, string? clientId)
     // For scopes like "api://client-id/access_as_user", extract "api://client-id"
     var lastSlashIndex = apiScope.LastIndexOf('/');
     if (lastSlashIndex > 0 && apiScope.StartsWith("api://"))
-        return apiScope.Substring(0, lastSlashIndex);
+        return apiScope[..lastSlashIndex];
 
     return clientId;
 }
@@ -311,7 +311,7 @@ static string[] GetValidIssuers(string? authority)
     }
 
     if (string.IsNullOrEmpty(authority))
-        return Array.Empty<string>();
+        return [];
 
     // Auto-detect Entra ID and handle v1/v2 token format quirks
     // Entra ID authority format: https://login.microsoftonline.com/{tenant-id}/v2.0
@@ -325,16 +325,16 @@ static string[] GetValidIssuers(string? authority)
             var tenantId = segments[0];
             Log.Information("Detected Entra ID authority, configuring v1 and v2 issuers for tenant {TenantId}", tenantId);
 
-            return new[]
-            {
-                $"https://sts.windows.net/{tenantId}/",           // v1 issuer format
-                $"https://login.microsoftonline.com/{tenantId}/v2.0"  // v2 issuer format
-            };
+            return
+            [
+                $"https://sts.windows.net/{tenantId}/",                 // v1 issuer format
+                $"https://login.microsoftonline.com/{tenantId}/v2.0"    // v2 issuer format
+            ];
         }
     }
 
     // For other IDPs, the issuer typically matches the authority
-    return new[] { authority };
+    return [authority];
 }
 
 /// <summary>

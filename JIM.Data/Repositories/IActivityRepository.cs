@@ -15,7 +15,12 @@ public interface IActivityRepository
 
     public Task<Activity?> GetActivityAsync(Guid id);
 
-    public Task<PagedResultSet<Activity>> GetActivitiesAsync(int page, int pageSize, QuerySortBy querySortBy);
+    public Task<PagedResultSet<Activity>> GetActivitiesAsync(
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true);
 
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize);
 

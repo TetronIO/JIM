@@ -10,7 +10,8 @@
 <MudLayout>
 
     <MudDrawerContainer Class="mud-height-full">
-        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" Overlay="false" Class="jim-drawer">
+        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false" Class="jim-drawer"
+                   @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
             
             <div class="jim-drawer-logo">
                 <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
@@ -25,22 +26,39 @@
             <div class="@(IsDrawerOpen ? "jim-drawer-container" : "jim-drawer-container-small") mud-text-secondary">
                 @if (IsDrawerOpen)
                 {
-                    <MudButton 
-                        Variant="Variant.Filled" 
-                        StartIcon="@(IsDarkMode  ? Icons.Material.Filled.WbSunny : Icons.Material.Filled.DarkMode)" 
+                    <MudButton
+                        Variant="Variant.Filled"
+                        StartIcon="@(IsDrawerPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
                         FullWidth="true"
                         DropShadow="false"
+                        OnClick="@ToggleDrawerPinned">
+                        @(IsDrawerPinned ? "Unpin" : "Pin") menu
+                    </MudButton>
+                    <MudButton
+                        Variant="Variant.Filled"
+                        StartIcon="@(IsDarkMode  ? Icons.Material.Filled.WbSunny : Icons.Material.Filled.DarkMode)"
+                        FullWidth="true"
+                        DropShadow="false"
+                        Class="mt-2"
                         OnClick="@(() => IsDarkMode = !IsDarkMode)">
                         @(IsDarkMode ? "Light" : "Dark") mode
                     </MudButton>
                 }
                 else
                 {
+                    <MudTooltip Text="@(IsDrawerPinned ? UnpinMenuText : PinMenuText)">
+                        <MudToggleIconButton Toggled="@IsDrawerPinned"
+                                             ToggledChanged="@(_ => ToggleDrawerPinned())"
+                                             Icon="@Icons.Material.Outlined.PushPin"
+                                             Color="@Color.Inherit"
+                                             ToggledIcon="@Icons.Material.Filled.PushPin"
+                                             ToggledColor="@Color.Inherit"/>
+                    </MudTooltip>
                     <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
                         <MudToggleIconButton @bind-Toggled="@IsDarkMode"
-                                             Icon="@Icons.Material.Filled.WbSunny" 
+                                             Icon="@Icons.Material.Filled.WbSunny"
                                              Color="@Color.Inherit"
-                                             ToggledIcon="@Icons.Material.Filled.DarkMode" 
+                                             ToggledIcon="@Icons.Material.Filled.DarkMode"
                                              ToggledColor="@Color.Inherit"/>
                     </MudTooltip>
                 }
@@ -51,18 +69,6 @@
 
         <MudMainContent>
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
-          
-                <!-- if someone could find a way to move this to the sidebar and remain functional, that would be amazing -->
-                <MudButton 
-                    OnClick="@ToggleDrawer" 
-                    Variant="Variant.Filled" 
-                    DropShadow="false" 
-                    StartIcon="@(IsDrawerOpen ? Icons.Material.Filled.MenuOpen : Icons.Material.Filled.Menu)"
-                    Size="Size.Small"
-                    Class="mb-3">
-                    @(IsDrawerOpen ? "Close" : "Open") 
-                </MudButton>
-            
                 @Body
 
                 <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
@@ -138,7 +144,10 @@
     private MudThemeProvider? _mudThemeProvider;
     private const string LightModeText = "Switch to light mode";
     private const string DarkModeText = "Switch to dark mode";
+    private const string PinMenuText = "Pin menu open";
+    private const string UnpinMenuText = "Unpin menu";
     private bool IsDrawerOpen { get; set; } = true;
+    private bool IsDrawerPinned { get; set; } = true;
     private bool IsDarkMode { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -150,8 +159,28 @@
         }
     }
 
-    private void ToggleDrawer()
+    private void ToggleDrawerPinned()
     {
-        IsDrawerOpen = !IsDrawerOpen;
+        IsDrawerPinned = !IsDrawerPinned;
+        // When pinning, ensure drawer stays open. When unpinning, close it.
+        IsDrawerOpen = IsDrawerPinned;
+    }
+
+    private void OnDrawerMouseEnter()
+    {
+        // Only respond to hover if not pinned
+        if (!IsDrawerPinned)
+        {
+            IsDrawerOpen = true;
+        }
+    }
+
+    private void OnDrawerMouseLeave()
+    {
+        // Only respond to hover if not pinned
+        if (!IsDrawerPinned)
+        {
+            IsDrawerOpen = false;
+        }
     }
 }

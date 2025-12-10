@@ -65,7 +65,7 @@ public static class QueryableExtensions
         var resultExpression = Expression.Call(
             typeof(Queryable),
             methodName,
-            new[] { typeof(T), property.PropertyType },
+            [typeof(T), property.PropertyType],
             query.Expression,
             Expression.Quote(orderByExpression));
 

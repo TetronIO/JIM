@@ -18,16 +18,10 @@ namespace JIM.Api.Controllers;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrators")]
 [Produces("application/json")]
-public class SecurityController : ControllerBase
+public class SecurityController(ILogger<SecurityController> logger, JimApplication application) : ControllerBase
 {
-    private readonly ILogger<SecurityController> _logger;
-    private readonly JimApplication _application;
-
-    public SecurityController(ILogger<SecurityController> logger, JimApplication application)
-    {
-        _logger = logger;
-        _application = application;
-    }
+    private readonly ILogger<SecurityController> _logger = logger;
+    private readonly JimApplication _application = application;
 
     /// <summary>
     /// Gets all security roles defined in the system.

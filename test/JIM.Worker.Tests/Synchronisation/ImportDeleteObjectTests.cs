@@ -253,5 +253,145 @@ public class ImportDeleteObjectTests
         Assert.Pass();
     }
     
+    /// <summary>
+    /// Tests that when a connector returns an import object with ChangeType.Delete (delta import scenario),
+    /// the existing CSO is marked as Obsolete.
+    /// </summary>
+    [Test]
+    public async Task DeltaImportDelete_WithExistingObject_MarksObjectAsObsoleteAsync()
+    {
+        // set up the Connected System Objects mock
+        var connectedSystemObjectType = ConnectedSystemObjectTypesData.First();
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var cso1 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            ConnectedSystem = ConnectedSystemsData.First(),
+            Type = connectedSystemObjectType,
+            Status = ConnectedSystemObjectStatus.Normal,
+            ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
+        };
+        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = TestConstants.CS_OBJECT_1_HR_ID,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.HR_ID.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                IntValue = 1,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = TestConstants.CS_OBJECT_1_DISPLAY_NAME,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = cso1
+            }
+        };
+        connectedSystemObjectData.Add(cso1);
+
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+                foreach (var entity in connectedSystemObjects)
+                    entity.Id = Guid.NewGuid();
+                connectedSystemObjectData.AddRange(connectedSystemObjects);
+            });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // mock up a connector that will return a delete change type for the existing object
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Delete, // Key: connector says DELETE
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                }
+            }
+        });
+
+        // execute Jim import
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // verify the CSO was marked as Obsolete
+        var updatedCso = connectedSystemObjectData.SingleOrDefault(q => q.Id == cso1.Id);
+        Assert.That(updatedCso, Is.Not.Null, "Expected to find our CSO.");
+        Assert.That(updatedCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete),
+            "Expected CSO to be marked as Obsolete when connector requests Delete.");
+    }
+
+    /// <summary>
+    /// Tests that when a connector returns an import object with ChangeType.Delete but no matching CSO exists,
+    /// the delete request is safely ignored.
+    /// </summary>
+    [Test]
+    public async Task DeltaImportDelete_WithNonExistentObject_IsIgnoredAsync()
+    {
+        // set up empty Connected System Objects mock (no existing CSOs)
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+                foreach (var entity in connectedSystemObjects)
+                    entity.Id = Guid.NewGuid();
+                connectedSystemObjectData.AddRange(connectedSystemObjects);
+            });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // mock up a connector that will return a delete for a non-existent object
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Delete,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { Guid.NewGuid() }, // Random GUID that doesn't match any CSO
+                    Type = AttributeDataType.Guid
+                }
+            }
+        });
+
+        // execute Jim import - should complete without error
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, InitiatedBy, activity, new CancellationTokenSource());
+
+        // Should not throw
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // verify no CSOs were created or updated
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0),
+            "Expected no CSOs to be created when deleting a non-existent object.");
+    }
+
     // todo: test activity/run profile execution item/change object creation
 }

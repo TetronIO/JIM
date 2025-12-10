@@ -16,14 +16,9 @@ namespace JIM.Api.Middleware;
 /// 3. Retrieves the user's JIM role assignments
 /// 4. Adds role claims to the ClaimsPrincipal for use with [Authorize(Roles = "...")] attributes
 /// </remarks>
-public class JimRoleEnrichmentMiddleware
+public class JimRoleEnrichmentMiddleware(RequestDelegate next)
 {
-    private readonly RequestDelegate _next;
-
-    public JimRoleEnrichmentMiddleware(RequestDelegate next)
-    {
-        _next = next;
-    }
+    private readonly RequestDelegate _next = next;
 
     public async Task InvokeAsync(HttpContext context, JimApplication jim)
     {

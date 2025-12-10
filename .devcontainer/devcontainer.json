@@ -14,6 +14,10 @@
     // GitHub CLI
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
+    },
+    // PowerShell - standard scripting platform
+    "ghcr.io/devcontainers/features/powershell:1": {
+      "version": "latest"
     }
   },
 
@@ -29,6 +33,9 @@
         "ms-dotnettools.csharp",
         "ms-dotnettools.csdevkit",
         "ms-dotnettools.vscode-dotnet-runtime",
+
+        // PowerShell
+        "ms-vscode.powershell",
 
         // Database
         "ms-azuretools.vscode-docker",
