@@ -1,5 +1,5 @@
 using System;
-using JIM.Api.Models;
+using JIM.Web.Models.Api;
 using NUnit.Framework;
 
 namespace JIM.Api.Tests;

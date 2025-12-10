@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\JIM.Api\JIM.Api.csproj" />
+    <ProjectReference Include="..\..\JIM.Web\JIM.Web.csproj" />
   </ItemGroup>
 
 </Project>

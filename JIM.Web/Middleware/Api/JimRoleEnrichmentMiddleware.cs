@@ -3,7 +3,7 @@ using JIM.Application;
 using JIM.Models.Core;
 using Serilog;
 
-namespace JIM.Api.Middleware;
+namespace JIM.Web.Middleware.Api;
 
 /// <summary>
 /// Middleware that enriches the authenticated user's claims with JIM roles from the database.

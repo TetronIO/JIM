@@ -1,4 +1,4 @@
-namespace JIM.Api.Models;
+namespace JIM.Web.Models.Api;
 
 /// <summary>
 /// Standardised error response for API errors.

@@ -1,6 +1,6 @@
 using JIM.Models.Core;
 
-namespace JIM.Api.Models;
+namespace JIM.Web.Models.Api;
 
 /// <summary>
 /// API representation of a MetaverseObject for detail views.

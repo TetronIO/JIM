@@ -1,10 +1,10 @@
 using Asp.Versioning;
-using JIM.Api.Models;
+using JIM.Web.Models.Api;
 using JIM.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JIM.Api.Controllers;
+namespace JIM.Web.Controllers.Api;
 
 /// <summary>
 /// API controller for managing security-related configuration such as roles.

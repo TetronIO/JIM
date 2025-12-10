@@ -1,12 +1,12 @@
 using Asp.Versioning;
-using JIM.Api.Extensions;
-using JIM.Api.Models;
+using JIM.Web.Extensions.Api;
+using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.Core.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JIM.Api.Controllers;
+namespace JIM.Web.Controllers.Api;
 
 /// <summary>
 /// API controller for managing trusted certificates in the JIM certificate store.

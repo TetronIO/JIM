@@ -11,7 +11,7 @@ JIM is a .NET-based Identity Management (IDM) system implementing the metaverse 
 ## Architecture Principles
 
 ### 1. Layered Architecture
-- **Presentation Layer**: JIM.Web (Blazor Server), JIM.Api (Web API)
+- **Presentation Layer**: JIM.Web (Blazor Server with integrated REST API at `/api/`)
 - **Application Layer**: JIM.Application (business logic, domain servers)
 - **Domain Layer**: JIM.Models (entities, DTOs, interfaces)
 - **Data Layer**: JIM.Data (abstractions), JIM.PostgresData (implementation)
@@ -77,7 +77,8 @@ When adding functionality:
 - **DTOs**: Add to appropriate `DTOs/` subdirectories
 - **Business logic**: Add to `JIM.Application/Servers/` or extend existing servers
 - **Data access**: Add to `JIM.PostgresData/` repository classes
-- **API endpoints**: Add to `JIM.Api/Controllers/`
+- **API endpoints**: Add to `JIM.Web/Controllers/Api/`
+- **API models/DTOs**: Add to `JIM.Web/Models/Api/`
 - **UI pages**: Add to `JIM.Web/Pages/`
 - **Connectors**: Create new project or extend `JIM.Connectors/`
 
@@ -415,7 +416,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 
 **Technical Details**:
 - PostgreSQL memory settings automatically optimised for Codespaces constraints
-- Port forwarding configured for Web (5200), API (5202), and Adminer (8080)
+- Port forwarding configured for Web + API (5200) and Adminer (8080)
 - Custom docker-compose override: `docker-compose.override.codespaces.yml`
 
 ## Environment Configuration
@@ -458,8 +459,7 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 ## Docker & Deployment
 
 ### Service Architecture
-- **jim.web**: Blazor Server UI (port 5201 HTTPS)
-- **jim.api**: Web API (port 5203 HTTPS)
+- **jim.web**: Blazor Server UI with integrated REST API at `/api/` (port 5200 HTTP / 5201 HTTPS). Swagger available at `/api/swagger` in development.
 - **jim.worker**: Background task processor
 - **jim.scheduler**: Scheduled job execution
 - **jim.database**: PostgreSQL 18
@@ -605,11 +605,11 @@ For production deployments, consider using Docker volume drivers or bind mounts 
 5. Update sync rules to support new type
 
 ### Adding a New API Endpoint
-1. Add method to appropriate controller in `JIM.Api/Controllers/`
-2. Use DTOs for request/response
+1. Add method to appropriate controller in `JIM.Web/Controllers/Api/`
+2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
 3. Add XML comments for Swagger
 4. Add authorisation attributes if needed
-5. Test via Swagger UI
+5. Test via Swagger UI at `/api/swagger`
 
 ### Modifying Database Schema
 1. Update entity classes in `JIM.Models/Models/`

@@ -35,8 +35,7 @@ Why choose JIM?
 ## Architecture
 JIM is a container-based distributed application. It is comprised of:
 
-- **JIM.Web** - A website, built using ﻿[﻿ASP.NET](https://asp.net/) Blazor Server.
-- **JIM.API** - ﻿﻿A web API, built using ﻿[﻿ASP.NET](https://asp.net/) Web API
+- **JIM.Web** - A website with integrated REST API, built using ﻿[﻿ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/` with Swagger documentation at `/api/swagger`.
 - **JIM.Scheduler** - A console app, built using .NET
 - **JIM.Worker** - A console app, built using .NET
 - A database - PostgreSQL
@@ -81,8 +80,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 4. Update the `.env` file with your SSO settings (see below)
 5. Use the pre-configured shell aliases:
    - `jim-db` - Start PostgreSQL database
-   - `jim-web` - Run Web UI locally (press F5 in VS Code)
-   - `jim-api` - Run API locally
+   - `jim-web` - Run Web UI locally (press F5 in VS Code) - also serves the API at `/api/`
    - `jim-stack` - Start full Docker stack
    - `jim-migrate` - Apply database migrations
 

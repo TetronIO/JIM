@@ -22,29 +22,6 @@ services:
     depends_on:
       - jim.database
       - jim.worker
-      - jim.api
-    networks:
-      - jim-network
-
-  jim.api:
-    container_name: jim.api
-    image: ${DOCKER_REGISTRY-}jim.api
-    restart: always
-    env_file: .env
-    environment:
-      # Docker-specific overrides
-      - DB_HOSTNAME=jim.database
-      - LOGGING_PATH=/var/log/jim
-      - LOGGING_LEVEL=Verbose
-      - ENABLE_REQUEST_LOGGING=true
-    volumes:
-      - jim-logs-volume:/var/log/jim
-    build:
-      context: .
-      dockerfile: JIM.Api/Dockerfile
-    depends_on:
-      - jim.database
-      - jim.worker
     networks:
       - jim-network
 
