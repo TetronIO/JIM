@@ -4,6 +4,7 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Tasking;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -185,6 +186,93 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
         }
 
         return Ok(result);
+    }
+
+    #endregion
+
+    #region Run Profiles
+
+    /// <summary>
+    /// Gets all run profiles for a connected system.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <returns>A list of run profiles configured for the connected system.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/run-profiles", Name = "GetRunProfiles")]
+    [ProducesResponseType(typeof(IEnumerable<RunProfileDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRunProfilesAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested run profiles for connected system: {Id}", connectedSystemId);
+
+        var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
+        var dtos = runProfiles.Select(RunProfileDto.FromEntity);
+        return Ok(dtos);
+    }
+
+    /// <summary>
+    /// Executes a run profile to trigger a synchronisation operation.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint queues a synchronisation task (Full Import, Delta Import, Full Sync, Delta Sync, or Export)
+    /// for execution by the worker service. The task runs asynchronously and can be monitored via the Activities API.
+    ///
+    /// Returns 202 Accepted with the Activity ID and Task ID for tracking the execution.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="runProfileId">The unique identifier of the run profile to execute.</param>
+    /// <returns>The execution response with activity and task IDs for tracking.</returns>
+    /// <response code="202">Run profile execution has been queued.</response>
+    /// <response code="404">Connected system or run profile not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}/execute", Name = "ExecuteRunProfile")]
+    [ProducesResponseType(typeof(RunProfileExecutionResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ExecuteRunProfileAsync(int connectedSystemId, int runProfileId)
+    {
+        _logger.LogInformation("Run profile execution requested: ConnectedSystem={SystemId}, RunProfile={ProfileId}",
+            connectedSystemId, runProfileId);
+
+        // Verify connected system exists
+        var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        // Verify run profile exists and belongs to this connected system
+        var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
+        var runProfile = runProfiles.FirstOrDefault(rp => rp.Id == runProfileId);
+        if (runProfile == null)
+            return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for connected system {connectedSystemId}."));
+
+        // Get the current user from the JWT claims
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null)
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for run profile execution");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Create and queue the synchronisation task
+        var workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, initiatedBy);
+
+        await _application.Tasking.CreateWorkerTaskAsync(workerTask);
+
+        _logger.LogInformation("Run profile execution queued: ConnectedSystem={SystemId}, RunProfile={ProfileId}, TaskId={TaskId}, ActivityId={ActivityId}",
+            connectedSystemId, runProfileId, workerTask.Id, workerTask.Activity?.Id);
+
+        var response = new RunProfileExecutionResponse
+        {
+            ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
+            TaskId = workerTask.Id,
+            Message = $"Run profile '{runProfile.Name}' has been queued for execution."
+        };
+
+        return Accepted(response);
     }
 
     #endregion

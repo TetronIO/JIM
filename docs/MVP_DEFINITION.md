@@ -17,7 +17,8 @@
 | Admin UI | `█████████░` | 13 | 15 | 87% |
 | Security | `███████░░░` | 5 | 7 | 71% |
 | Operations | `████████░░` | 5 | 7 | 71% |
-| **Overall** | `████████░░` | **66** | **78** | **85%** |
+| API Coverage | `░░░░░░░░░░` | 0 | 7 | 0% |
+| **Overall** | `████████░░` | **66** | **85** | **78%** |
 
 ### Priority Order for Remaining Work
 
@@ -28,6 +29,7 @@
 2. Background job for scheduled MVO deletions (#120)
 3. Dashboard admin home page (#169)
 4. **Connector credential encryption** - Encrypt passwords at rest (#171)
+5. **API Coverage Gaps** (#183) - Activity monitoring, run profile execution, MVO query
 
 **Nice to Have (Can follow MVP):**
 - Full RBAC (#21)
@@ -200,14 +202,27 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Error capture and display
 - [ ] Change history / audit trail (#14)
 
-### 8. Tooling & Automation (Post-MVP)
+### 8. API Coverage Expansion (#183)
 
-#### 8.1 PowerShell Module (#176)
+#### 8.1 Priority 1 - Critical for Automation
+- [ ] Activity Controller - Monitor sync operations via API
+- [ ] Run Profile Execution - Trigger syncs via API
+- [ ] MVO List/Search - Query metaverse objects via API
+
+#### 8.2 Priority 2 - Full Automation
+- [ ] Connected System CRUD - Full API management
+- [ ] Sync Rule CRUD - Full API management
+- [ ] Run Profile CRUD - Full API management
+- [ ] Pending Export Read - Monitor pending exports via API
+
+### 9. Tooling & Automation (Post-MVP)
+
+#### 9.1 PowerShell Module (#176)
 - [ ] Cmdlets for common administration tasks
 - [ ] API key authentication support
 - [ ] Script-based automation
 
-#### 8.2 Testing Framework (#173)
+#### 9.2 Testing Framework (#173)
 - [ ] End-to-end integration tests with real connected systems
 - [ ] Automated test scenarios
 

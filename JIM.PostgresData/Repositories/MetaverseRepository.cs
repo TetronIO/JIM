@@ -382,6 +382,115 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
+    /// Gets a paginated list of metaverse objects with optional filtering by type and search query.
+    /// </summary>
+    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsAsync(
+        int page,
+        int pageSize,
+        int? objectTypeId = null,
+        string? searchQuery = null,
+        bool sortDescending = true,
+        IEnumerable<string>? attributes = null)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        // Build the set of attribute names to include - always include DisplayName
+        // Use "*" wildcard to include all attributes
+        var includeAllAttributes = attributes?.Contains("*") == true;
+        HashSet<string>? attributeNames = null;
+        if (!includeAllAttributes)
+        {
+            attributeNames = new HashSet<string> { Constants.BuiltInAttributes.DisplayName };
+            if (attributes != null)
+            {
+                foreach (var attr in attributes)
+                {
+                    if (!string.IsNullOrWhiteSpace(attr))
+                        attributeNames.Add(attr);
+                }
+            }
+        }
+
+        // construct the base query
+        var objects = Repository.Database.MetaverseObjects
+            .Include(mo => mo.Type)
+            .Include(mo => mo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .AsQueryable();
+
+        // filter by object type if specified
+        if (objectTypeId.HasValue)
+        {
+            objects = objects.Where(q => q.Type.Id == objectTypeId.Value);
+        }
+
+        // filter by search query (searches display name attribute)
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            objects = objects.Where(q =>
+                q.AttributeValues.Any(av =>
+                    av.Attribute.Name == Constants.BuiltInAttributes.DisplayName &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
+        }
+
+        // apply sorting
+        objects = sortDescending
+            ? objects.OrderByDescending(q => q.Created)
+            : objects.OrderBy(q => q.Created);
+
+        // get total count
+        var grossCount = await objects.CountAsync();
+
+        // apply pagination
+        var offset = (page - 1) * pageSize;
+        var results = await objects
+            .Skip(offset)
+            .Take(pageSize)
+            .Select(d => new MetaverseObjectHeader
+            {
+                Id = d.Id,
+                Created = d.Created,
+                Status = d.Status,
+                TypeId = d.Type.Id,
+                TypeName = d.Type.Name,
+                AttributeValues = includeAllAttributes
+                    ? d.AttributeValues.ToList()
+                    : d.AttributeValues
+                        .Where(av => attributeNames!.Contains(av.Attribute.Name))
+                        .ToList()
+            })
+            .ToListAsync();
+
+        var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
     /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
     /// This is to help the process of joining a CSO to an MVO.
     /// </summary>

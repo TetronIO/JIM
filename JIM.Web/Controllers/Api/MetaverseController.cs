@@ -108,6 +108,58 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Gets a paginated list of metaverse objects with optional filtering.
+    /// </summary>
+    /// <remarks>
+    /// The DisplayName attribute is always included in the response. Use the `attributes` parameter
+    /// to request additional attributes to be included. This follows a common pattern in APIs and
+    /// PowerShell modules where clients can specify which properties to retrieve.
+    ///
+    /// Use `?attributes=*` to include all attributes.
+    ///
+    /// Examples:
+    /// - `?attributes=FirstName&amp;attributes=LastName&amp;attributes=Email` - Include specific attributes
+    /// - `?attributes=*` - Include all attributes
+    /// </remarks>
+    /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="search">Optional search query to filter by display name.</param>
+    /// <param name="attributes">Optional list of attribute names to include in the response. Use "*" for all attributes. DisplayName is always included.</param>
+    /// <returns>A paginated list of metaverse object headers.</returns>
+    [HttpGet("objects", Name = "GetObjects")]
+    [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectsAsync(
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] int? objectTypeId = null,
+        [FromQuery] string? search = null,
+        [FromQuery] IEnumerable<string>? attributes = null)
+    {
+        _logger.LogDebug("Getting metaverse objects (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId}, Search: {Search}, Attributes: {Attributes})",
+            pagination.Page, pagination.PageSize, objectTypeId, search, attributes != null ? string.Join(",", attributes) : "DisplayName only");
+
+        var result = await _application.Metaverse.GetMetaverseObjectsAsync(
+            page: pagination.Page,
+            pageSize: pagination.PageSize,
+            objectTypeId: objectTypeId,
+            searchQuery: search,
+            sortDescending: pagination.IsDescending,
+            attributes: attributes);
+
+        var headers = result.Results.Select(MetaverseObjectHeaderDto.FromHeader);
+
+        var response = new PaginatedResponse<MetaverseObjectHeaderDto>
+        {
+            Items = headers,
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
     /// Gets a specific metaverse object by ID.
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the metaverse object.</param>
