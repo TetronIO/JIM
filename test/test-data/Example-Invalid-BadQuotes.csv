@@ -1,0 +1,4 @@
+employeeId,firstName,lastName,email,department,title
+EMP001,Alice,Henderson,alice.henderson@globexcorp.example,Engineering,Senior Software Engineer
+EMP002,Benjamin,"Clarke,benjamin.clarke@globexcorp.example,Finance,Financial Analyst
+EMP003,Charlotte,Davies,charlotte.davies@globexcorp.example,Human Resources,HR Coordinator

@@ -217,123 +217,229 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if ((objectType == null || string.IsNullOrEmpty(objectType.StringValue)) && (objectTypeColumn == null || string.IsNullOrEmpty(objectTypeColumn.StringValue)))
             throw new InvalidSettingValuesException($"Either {SettingObjectTypeColumn} or {SettingObjectType} must be specified for schema discovery.");
 
-        var reader = GetCsvReader(filePath, settingValues, logger);
-        await reader.CsvReader.ReadAsync();
-        reader.CsvReader.ReadHeader();
-        var columnNames = reader.CsvReader.HeaderRecord;
-        if (columnNames == null || columnNames.Length == 0)
-            throw new InvalidOperationException("CSV file is missing column headers.");
-
-        // start building the schema by inspecting the file!
-        var schema = new ConnectorSchema();
-
-        var objectTypeInfo = GetFileConnectorObjectTypeInfo(settingValues, logger);
-        switch (objectTypeInfo.Specifier)
+        FileConnectorReader? reader = null;
+        try
         {
-            case FileConnectorObjectTypeSpecifier.PredefinedObjectType when !string.IsNullOrEmpty(objectTypeInfo.PredefinedObjectType):
+            reader = GetCsvReader(filePath, settingValues, logger);
+            await reader.CsvReader.ReadAsync();
+            reader.CsvReader.ReadHeader();
+            var columnNames = reader.CsvReader.HeaderRecord;
+            if (columnNames == null || columnNames.Length == 0)
+                throw new CsvParsingException(
+                    "CSV file is missing column headers.",
+                    rowNumber: null,
+                    rawRow: null,
+                    columnInfo: null,
+                    suggestion: "Ensure the first row of your CSV file contains column headers.");
+
+            // start building the schema by inspecting the file!
+            var schema = new ConnectorSchema();
+
+            var objectTypeInfo = GetFileConnectorObjectTypeInfo(settingValues, logger);
+            switch (objectTypeInfo.Specifier)
             {
-                var schemaObjectType = new ConnectorSchemaObjectType(objectTypeInfo.PredefinedObjectType);
-                schema.ObjectTypes.Add(schemaObjectType);
-                break;
-            }
-            case FileConnectorObjectTypeSpecifier.ColumnBasedObjectType when !string.IsNullOrEmpty(objectTypeInfo.ObjectTypeColumnName):
-            {
-                // Read through the file to discover unique object types from the specified column
-                var objectTypeColumnName = objectTypeInfo.ObjectTypeColumnName;
-                if (!columnNames.Contains(objectTypeColumnName, StringComparer.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Object type column '{objectTypeColumnName}' not found in file headers.");
-
-                var discoveredObjectTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                while (await reader.CsvReader.ReadAsync())
+                case FileConnectorObjectTypeSpecifier.PredefinedObjectType when !string.IsNullOrEmpty(objectTypeInfo.PredefinedObjectType):
                 {
-                    var objectTypeName = reader.CsvReader.GetField(objectTypeColumnName);
-                    if (!string.IsNullOrEmpty(objectTypeName))
-                        discoveredObjectTypes.Add(objectTypeName);
-                }
-
-                if (discoveredObjectTypes.Count == 0)
-                    throw new InvalidOperationException($"No object types found in column '{objectTypeColumnName}'.");
-
-                foreach (var typeName in discoveredObjectTypes.OrderBy(t => t))
-                {
-                    var schemaObjectType = new ConnectorSchemaObjectType(typeName);
+                    var schemaObjectType = new ConnectorSchemaObjectType(objectTypeInfo.PredefinedObjectType);
                     schema.ObjectTypes.Add(schemaObjectType);
-                }
-
-                // Reset the reader position for attribute type inference
-                reader.Dispose();
-                reader = GetCsvReader(filePath, settingValues, logger);
-                await reader.CsvReader.ReadAsync();
-                reader.CsvReader.ReadHeader();
-                break;
-            }
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
-
-        // now determine the attributes from the file headers.
-        // at this point we don't know what attributes are for what object type. so all object types get the same attributes.
-        // later, the user can refine the per-object type attribute lists.
-        foreach (var schemaObjectType in schema.ObjectTypes)
-        {
-            foreach (var columnName in columnNames)
-            {
-                // has this attribute already been added? if it has, this indicates it's a multivalued attribute
-                var existingSchemaAttribute = schemaObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-                if (existingSchemaAttribute != null)
-                {
-                    if (existingSchemaAttribute.AttributePlurality != AttributePlurality.MultiValued)
-                        existingSchemaAttribute.AttributePlurality = AttributePlurality.MultiValued;
-
-                    continue;
-                }
-
-                // initially set the attributes with just a name. we'll work out their data types next.
-                schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnName, AttributeDataType.NotSet, AttributePlurality.SingleValued));
-            }
-        }
-
-        // read some rows and infer the data type of the fields
-        const int maxRowsToInspect = 50;
-        var rowsInspected = 0;
-        while (await reader.CsvReader.ReadAsync())
-        {
-            if (rowsInspected == maxRowsToInspect)
-                break;
-
-            var schemaObjectType = schema.ObjectTypes[0];
-            foreach (var schemaAttribute in schemaObjectType.Attributes)
-            {
-                var field = reader.CsvReader.GetField(schemaAttribute.Name);
-
-                // some fields may be null/empty, skip those and hopefully we'll find
-                // a value we can inspect in a later row.
-                if (field == null || string.IsNullOrEmpty(field))
-                    continue;
-
-                // attempt to infer the data type
-                // conflating integers and doubles may turn out to be a bad idea
-                if (int.TryParse(field, out _) || double.TryParse(field, out _))
-                    schemaAttribute.Type = AttributeDataType.Number;
-                else if (bool.TryParse(field, out _))
-                    schemaAttribute.Type = AttributeDataType.Boolean;
-                else if (Guid.TryParse(field, out _))
-                    schemaAttribute.Type = AttributeDataType.Guid;
-                else if (DateTime.TryParse(field, out _))
-                    schemaAttribute.Type = AttributeDataType.DateTime;
-                else
-                    schemaAttribute.Type = AttributeDataType.Text;
-
-                // if all fields have a type definition, stop inspecting
-                if (schemaObjectType.Attributes.All(a => a.Type != AttributeDataType.NotSet))
                     break;
+                }
+                case FileConnectorObjectTypeSpecifier.ColumnBasedObjectType when !string.IsNullOrEmpty(objectTypeInfo.ObjectTypeColumnName):
+                {
+                    // Read through the file to discover unique object types from the specified column
+                    var objectTypeColumnName = objectTypeInfo.ObjectTypeColumnName;
+                    if (!columnNames.Contains(objectTypeColumnName, StringComparer.OrdinalIgnoreCase))
+                        throw new CsvParsingException(
+                            $"Object type column '{objectTypeColumnName}' not found in file headers.",
+                            rowNumber: null,
+                            rawRow: null,
+                            columnInfo: objectTypeColumnName,
+                            suggestion: $"Ensure your CSV file has a column named '{objectTypeColumnName}', or update the 'Object Type Column' setting to match an existing column.");
+
+                    var discoveredObjectTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    while (await reader.CsvReader.ReadAsync())
+                    {
+                        var objectTypeName = reader.CsvReader.GetField(objectTypeColumnName);
+                        if (!string.IsNullOrEmpty(objectTypeName))
+                            discoveredObjectTypes.Add(objectTypeName);
+                    }
+
+                    if (discoveredObjectTypes.Count == 0)
+                        throw new CsvParsingException(
+                            $"No object types found in column '{objectTypeColumnName}'.",
+                            rowNumber: null,
+                            rawRow: null,
+                            columnInfo: objectTypeColumnName,
+                            suggestion: "Ensure your CSV file has data rows with values in the object type column.");
+
+                    foreach (var typeName in discoveredObjectTypes.OrderBy(t => t))
+                    {
+                        var schemaObjectType = new ConnectorSchemaObjectType(typeName);
+                        schema.ObjectTypes.Add(schemaObjectType);
+                    }
+
+                    // Reset the reader position for attribute type inference
+                    reader.Dispose();
+                    reader = GetCsvReader(filePath, settingValues, logger);
+                    await reader.CsvReader.ReadAsync();
+                    reader.CsvReader.ReadHeader();
+                    break;
+                }
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
 
-            rowsInspected++;
-        }
+            // now determine the attributes from the file headers.
+            // at this point we don't know what attributes are for what object type. so all object types get the same attributes.
+            // later, the user can refine the per-object type attribute lists.
+            foreach (var schemaObjectType in schema.ObjectTypes)
+            {
+                foreach (var columnName in columnNames)
+                {
+                    // has this attribute already been added? if it has, this indicates it's a multivalued attribute
+                    var existingSchemaAttribute = schemaObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+                    if (existingSchemaAttribute != null)
+                    {
+                        if (existingSchemaAttribute.AttributePlurality != AttributePlurality.MultiValued)
+                            existingSchemaAttribute.AttributePlurality = AttributePlurality.MultiValued;
 
-        reader.Dispose();
-        return schema;
+                        continue;
+                    }
+
+                    // initially set the attributes with just a name. we'll work out their data types next.
+                    schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnName, AttributeDataType.NotSet, AttributePlurality.SingleValued));
+                }
+            }
+
+            // read some rows and infer the data type of the fields
+            const int maxRowsToInspect = 50;
+            var rowsInspected = 0;
+            var expectedColumnCount = reader.CsvReader.HeaderRecord?.Length ?? 0;
+
+            while (await reader.CsvReader.ReadAsync())
+            {
+                if (rowsInspected == maxRowsToInspect)
+                    break;
+
+                // Validate that this row has the expected number of columns
+                var actualColumnCount = reader.CsvReader.Parser.Count;
+                if (actualColumnCount < expectedColumnCount)
+                {
+                    var rowNumber = reader.CsvReader.Parser.Row;
+                    var rawRow = reader.CsvReader.Parser.RawRecord?.Trim();
+                    throw new CsvParsingException(
+                        $"Row {rowNumber} has {actualColumnCount} columns but the header defines {expectedColumnCount} columns.",
+                        rowNumber: rowNumber,
+                        rawRow: rawRow,
+                        columnInfo: $"Expected {expectedColumnCount} columns, found {actualColumnCount}",
+                        suggestion: "Ensure all rows in your CSV file have the same number of columns as the header row. Check for missing commas or values.");
+                }
+
+                var schemaObjectType = schema.ObjectTypes[0];
+                foreach (var schemaAttribute in schemaObjectType.Attributes)
+                {
+                    var field = reader.CsvReader.GetField(schemaAttribute.Name);
+
+                    // some fields may be null/empty, skip those and hopefully we'll find
+                    // a value we can inspect in a later row.
+                    if (field == null || string.IsNullOrEmpty(field))
+                        continue;
+
+                    // attempt to infer the data type
+                    // conflating integers and doubles may turn out to be a bad idea
+                    if (int.TryParse(field, out _) || double.TryParse(field, out _))
+                        schemaAttribute.Type = AttributeDataType.Number;
+                    else if (bool.TryParse(field, out _))
+                        schemaAttribute.Type = AttributeDataType.Boolean;
+                    else if (Guid.TryParse(field, out _))
+                        schemaAttribute.Type = AttributeDataType.Guid;
+                    else if (DateTime.TryParse(field, out _))
+                        schemaAttribute.Type = AttributeDataType.DateTime;
+                    else
+                        schemaAttribute.Type = AttributeDataType.Text;
+
+                    // if all fields have a type definition, stop inspecting
+                    if (schemaObjectType.Attributes.All(a => a.Type != AttributeDataType.NotSet))
+                        break;
+                }
+
+                rowsInspected++;
+            }
+
+            return schema;
+        }
+        catch (CsvHelper.MissingFieldException ex)
+        {
+            // CsvHelper throws MissingFieldException when a row has fewer columns than expected
+            var context = reader?.CsvReader.Context;
+            var rawRow = context?.Parser?.RawRecord?.Trim();
+            var rowNumber = context?.Parser?.Row;
+            var expectedColumns = context?.Reader?.HeaderRecord?.Length ?? 0;
+
+            throw new CsvParsingException(
+                $"Row {rowNumber} has fewer columns than expected. The file header defines {expectedColumns} columns, but this row has fewer values.",
+                rowNumber: rowNumber,
+                rawRow: rawRow,
+                columnInfo: $"Expected {expectedColumns} columns",
+                suggestion: "Ensure all rows in your CSV file have the same number of columns as the header row. Check for missing commas or incorrectly quoted fields.",
+                innerException: ex);
+        }
+        catch (BadDataException ex)
+        {
+            // CsvHelper throws BadDataException for malformed CSV data (e.g., unclosed quotes)
+            var context = reader?.CsvReader.Context;
+            var rawRow = context?.Parser?.RawRecord?.Trim();
+            var rowNumber = context?.Parser?.Row;
+
+            throw new CsvParsingException(
+                $"Malformed CSV data at row {rowNumber}. The row contains invalid formatting.",
+                rowNumber: rowNumber,
+                rawRow: rawRow,
+                columnInfo: null,
+                suggestion: "Check for unclosed quotation marks, incorrect escaping, or other CSV formatting issues. Fields containing commas or quotes should be enclosed in double quotes.",
+                innerException: ex);
+        }
+        catch (ReaderException ex)
+        {
+            // General CsvHelper reader exception
+            var context = reader?.CsvReader.Context;
+            var rawRow = context?.Parser?.RawRecord?.Trim();
+            var rowNumber = context?.Parser?.Row;
+
+            throw new CsvParsingException(
+                $"Error reading CSV at row {rowNumber}: {ex.Message}",
+                rowNumber: rowNumber,
+                rawRow: rawRow,
+                columnInfo: null,
+                suggestion: "Review the CSV file structure. Ensure it follows standard CSV formatting rules.",
+                innerException: ex);
+        }
+        catch (CsvParsingException)
+        {
+            // Re-throw our own exceptions
+            throw;
+        }
+        catch (InvalidSettingValuesException)
+        {
+            // Re-throw setting validation exceptions
+            throw;
+        }
+        catch (Exception ex) when (ex is not ArgumentOutOfRangeException)
+        {
+            // Catch any other unexpected CSV-related errors
+            logger.Error(ex, "Unexpected error during CSV schema discovery");
+            throw new CsvParsingException(
+                $"An unexpected error occurred while reading the CSV file: {ex.Message}",
+                rowNumber: null,
+                rawRow: null,
+                columnInfo: null,
+                suggestion: "Check that the file is a valid CSV file and is not corrupted or locked by another application.",
+                innerException: ex);
+        }
+        finally
+        {
+            reader?.Dispose();
+        }
     }
     #endregion
 
@@ -400,7 +506,12 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (delimiter == null || string.IsNullOrEmpty(delimiter.StringValue))
             throw new InvalidSettingValuesException($"Missing setting value for {SettingDelimiter}.");
 
-        var config = new CsvConfiguration(cultureInfo) { Delimiter = delimiter.StringValue };
+        var config = new CsvConfiguration(cultureInfo)
+        {
+            Delimiter = delimiter.StringValue,
+            // Throw an exception when a row has fewer fields than the header row
+            MissingFieldFound = null
+        };
         logger.Debug($"GetCsvReader: Attempting to read '{filePath}'.");
         var reader = new StreamReader(filePath);
         var csv = new CsvReader(reader, config);
