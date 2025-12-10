@@ -21,24 +21,24 @@ public class FileSystemServer
     /// <summary>
     /// Lists the contents of a directory within the allowed root paths.
     /// </summary>
-    /// <param name="path">The directory path to list. If null or empty, lists the allowed roots.</param>
+    /// <param name="path">The directory path to list. If null or empty, lists the default root.</param>
     /// <returns>A result containing directories and files, or an error if the path is invalid.</returns>
     public FileSystemListResult ListDirectory(string? path)
     {
-        // If no path specified, return the allowed roots
+        // If no path specified, start at the primary allowed root
         if (string.IsNullOrWhiteSpace(path))
         {
-            var rootDirs = AllowedRoots
-                .Where(Directory.Exists)
-                .Select(r => new FileSystemEntry(Path.GetFileName(r), r, true))
-                .ToList();
-
-            return new FileSystemListResult
+            var defaultRoot = AllowedRoots.FirstOrDefault(Directory.Exists);
+            if (defaultRoot == null)
             {
-                Path = "/",
-                Entries = rootDirs,
-                IsRoot = true
-            };
+                return new FileSystemListResult
+                {
+                    Path = "/var/connector-files",
+                    Error = "No accessible directories found. Ensure /var/connector-files is mounted.",
+                    Entries = new List<FileSystemEntry>()
+                };
+            }
+            path = defaultRoot;
         }
 
         // Validate the path is within allowed roots

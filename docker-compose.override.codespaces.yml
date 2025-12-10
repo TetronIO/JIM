@@ -6,9 +6,8 @@ services:
     ports:
       - "5200:80"
     volumes:
-      # Codespaces doesn't need HTTPS certificates for internal development
-      # Use /tmp for connector files (ephemeral, but works for dev)
-      - /tmp/jim-connector-files:/var/connector-files
+      # Map repo test data to connector-files/test-data for development
+      - ./test/test-data:/var/connector-files/test-data
 
   jim.api:
     environment:
@@ -19,7 +18,7 @@ services:
 
   jim.worker:
     volumes:
-      - /tmp/jim-connector-files:/var/connector-files
+      - ./test/test-data:/var/connector-files/test-data
 
   # Expose Adminer for database management
   adminer:

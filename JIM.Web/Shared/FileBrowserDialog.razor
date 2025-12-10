@@ -49,21 +49,22 @@
                 </MudList>
             </MudPaper>
 
-            @if (AllowNewFilename)
+            @if (_selectedEntry != null && !_selectedEntry.IsDirectory)
             {
+                @* Show selected file *@
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Selected: @_selectedEntry.FullPath
+                </MudText>
+            }
+            else if (AllowNewFilename)
+            {
+                @* Show filename input for creating new file (only when no file selected) *@
                 <MudTextField @bind-Value="_filename"
                               Label="Filename"
                               Placeholder="Enter filename (e.g., export.csv)"
                               Variant="Variant.Outlined"
                               Immediate="true"
                               HelperText="@GetFilenameHelperText()" />
-            }
-
-            @if (_selectedEntry != null)
-            {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Selected: @GetSelectedPath()
-                </MudText>
             }
         </MudStack>
     </DialogContent>
@@ -133,33 +134,39 @@
     {
         _breadcrumbs = new List<BreadcrumbItem>();
 
-        if (result.IsRoot && result.Path == "/")
+        // The allowed root is /var/connector-files - show paths relative to that
+        const string rootPath = "/var/connector-files";
+        const string rootDisplayName = "connector-files";
+
+        if (result.IsRoot)
         {
-            _breadcrumbs.Add(new BreadcrumbItem("Root", href: null, disabled: true));
+            // At the root - just show the root name, disabled (can't go higher)
+            _breadcrumbs.Add(new BreadcrumbItem(rootDisplayName, href: null, disabled: true));
             return;
         }
 
-        // Build breadcrumbs from path
-        var parts = result.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var currentBuildPath = "";
+        // Build breadcrumbs starting from the root
+        _breadcrumbs.Add(new BreadcrumbItem(rootDisplayName, href: rootPath, disabled: false));
 
-        _breadcrumbs.Add(new BreadcrumbItem("Root", href: "/", disabled: false));
-
-        for (var i = 0; i < parts.Length; i++)
+        // Get the path relative to the root
+        if (result.Path.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
         {
-            currentBuildPath += "/" + parts[i];
-            var isLast = i == parts.Length - 1;
-            _breadcrumbs.Add(new BreadcrumbItem(parts[i], href: currentBuildPath, disabled: isLast));
+            var relativePath = result.Path[rootPath.Length..];
+            var parts = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var currentBuildPath = rootPath;
+
+            for (var i = 0; i < parts.Length; i++)
+            {
+                currentBuildPath += "/" + parts[i];
+                var isLast = i == parts.Length - 1;
+                _breadcrumbs.Add(new BreadcrumbItem(parts[i], href: currentBuildPath, disabled: isLast));
+            }
         }
     }
 
     private void NavigateToPath(string? path)
     {
-        if (path == "/")
-        {
-            LoadDirectory(null);
-        }
-        else if (!string.IsNullOrEmpty(path))
+        if (!string.IsNullOrEmpty(path))
         {
             LoadDirectory(path);
         }
@@ -181,15 +188,16 @@
 
     private string GetSelectedPath()
     {
-        if (AllowNewFilename && !string.IsNullOrWhiteSpace(_filename))
-        {
-            // For export: combine current directory with filename
-            return Path.Combine(_currentPath, _filename);
-        }
-
-        if (_selectedEntry != null)
+        // Prioritise selected file
+        if (_selectedEntry != null && !_selectedEntry.IsDirectory)
         {
             return _selectedEntry.FullPath;
+        }
+
+        // For export: combine current directory with typed filename
+        if (AllowNewFilename && !string.IsNullOrWhiteSpace(_filename))
+        {
+            return Path.Combine(_currentPath, _filename);
         }
 
         return _currentPath;
@@ -202,14 +210,19 @@
 
     private bool CanSubmit()
     {
-        if (AllowNewFilename)
+        // If a file is selected, we can always submit
+        if (_selectedEntry != null && !_selectedEntry.IsDirectory)
         {
-            // For export: just need a filename entered (directory is current directory)
-            return !string.IsNullOrWhiteSpace(_filename);
+            return true;
         }
 
-        // For import: need file selected
-        return _selectedEntry != null && !_selectedEntry.IsDirectory;
+        // For export mode: can also submit if filename is entered (creates new file)
+        if (AllowNewFilename && !string.IsNullOrWhiteSpace(_filename))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private void Submit()
