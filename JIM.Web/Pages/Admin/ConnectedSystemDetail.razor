@@ -356,16 +356,19 @@
                         </MudPaper>
                     }
 
-                    <MudPaper Outlined="true" Class="pa-4 mt-5">
-                        <MudText Typo="Typo.subtitle1" Class="mb-3">Object Type Settings</MudText>
-                        <MudSwitch
-                            @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
-                            Color="@Color.Primary"
-                            Label="Remove contributed attributes when objects are obsoleted" />
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            When enabled, attribute values contributed by objects of this type will be removed from the Metaverse when the source object is deleted or no longer present in the connected system.
-                        </MudText>
-                    </MudPaper>
+                    @if (_connectedSystem.SupportsImportMode())
+                    {
+                        <MudPaper Outlined="true" Class="pa-4 mt-5">
+                            <MudText Typo="Typo.subtitle1" Class="mb-3">Object Type Settings</MudText>
+                            <MudSwitch
+                                @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
+                                Color="@Color.Primary"
+                                Label="Remove contributed attributes when objects are obsoleted" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                When enabled, attribute values contributed by objects of this type will be removed from the Metaverse when the source object is deleted or no longer present in the connected system.
+                            </MudText>
+                        </MudPaper>
+                    }
 
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText>
@@ -1564,9 +1567,8 @@
     #region File Browser
     private async Task OpenFileBrowserAsync(ConnectedSystemSettingValue settingValue)
     {
-        // Determine if this is an export mode (may need new filename) based on the Mode setting
-        var modeSetting = _connectedSystem?.SettingValues.FirstOrDefault(sv => sv.Setting.Name == "Mode");
-        var isExportMode = modeSetting?.StringValue == "Export Only";
+        // Determine if this is an export mode (may need new filename)
+        var isExportMode = _connectedSystem?.IsExportOnlyMode() ?? false;
         var title = isExportMode ? "Select Export Location" : "Select File";
 
         var parameters = new DialogParameters<FileBrowserDialog>
