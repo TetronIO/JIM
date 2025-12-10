@@ -67,7 +67,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             // Object type settings
             new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingObjectType, Required = false, Description = "Optionally specify a fixed object type, i.e. the file only contains Users.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingObjectType, Required = false, Description = "Optional: Specify an object type for when the file only contains one type of object, e.g. user.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
 
             // Import-specific settings
             new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },

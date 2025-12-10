@@ -1,0 +1,21 @@
+_objectType,_externalId,_changeType,accountName,displayName,email,department,enabled,memberOf,expirationDate,employeeNumber
+user,USR-001,Create,ahenderson,Alice Henderson,alice.henderson@globexcorp.example,Engineering,true,GRP-ENG-ALL|GRP-VPN-USERS,,EMP001
+user,USR-002,Create,bclarke,Benjamin Clarke,benjamin.clarke@globexcorp.example,Finance,true,GRP-FIN-ALL|GRP-SAP-USERS,,EMP002
+user,USR-003,Update,cdavies,Charlotte Davies,charlotte.davies@globexcorp.example,Human Resources,true,GRP-HR-ALL|GRP-WORKDAY-ADMINS,,EMP003
+user,USR-004,Create,dfoster,Daniel Foster,daniel.foster@globexcorp.example,Engineering,true,GRP-ENG-ALL|GRP-DEVOPS|GRP-AWS-ADMINS,,EMP004
+user,USR-005,Update,egraham,Eleanor Graham,eleanor.graham@globexcorp.example,Engineering,true,GRP-ENG-ALL|GRP-ENG-MANAGERS|GRP-JIRA-ADMINS,,EMP005
+group,GRP-PROJECT-ALPHA,Create,GRP-PROJECT-ALPHA,Project Alpha Team,,true,,,
+group,GRP-PROJECT-BETA,Create,GRP-PROJECT-BETA,Project Beta Team,,true,,,
+user,USR-006,Create,fhughes,Frederick Hughes,frederick.hughes@globexcorp.example,Finance,true,GRP-FIN-ALL|GRP-FIN-DIRECTORS|GRP-BUDGET-APPROVERS,,EMP006
+user,USR-007,Update,girving,Grace Irving,grace.irving@globexcorp.example,Human Resources,true,GRP-HR-ALL|GRP-HR-DIRECTORS,,EMP007
+user,USR-008,Create,hjenkins,Henry Jenkins,henry.jenkins@globexcorp.example,Sales,true,GRP-SALES-ALL|GRP-CRM-USERS,,EMP008
+user,USR-009,Create,iknight,Isabella Knight,isabella.knight@globexcorp.example,Sales,true,GRP-SALES-ALL|GRP-SALES-MANAGERS,,EMP009
+user,USR-010,Update,jlawrence,James Lawrence,james.lawrence@globexcorp.example,Executive,true,GRP-EXEC-ALL|GRP-BOARD-ACCESS,,EMP010
+user,USR-011,Create,kmitchell,Katherine Mitchell,katherine.mitchell@globexcorp.example,Engineering,true,GRP-ENG-ALL,,EMP011
+group,GRP-CONTRACTORS-Q1,Create,GRP-CONTRACTORS-Q1,Q1 Contractors,,true,,2025-03-31,
+user,USR-012,Create,lnorton,Lucas Norton,lucas.norton@globexcorp.example,Marketing,true,GRP-MKT-ALL|GRP-ANALYTICS-USERS,,EMP012
+user,USR-013,Update,moliver,Madeleine Oliver,madeleine.oliver@globexcorp.example,Marketing,true,GRP-MKT-ALL|GRP-MKT-DIRECTORS,,EMP013
+user,USR-014,Create,npalmer,Nathan Palmer,nathan.palmer@globexcorp.example,IT,true,GRP-IT-ALL|GRP-AD-ADMINS|GRP-VMWARE-ADMINS,,EMP014
+user,USR-015,Update,oquinn,Olivia Quinn,olivia.quinn@globexcorp.example,IT,true,GRP-IT-ALL|GRP-IT-MANAGERS|GRP-SECURITY-TEAM,,EMP015
+user,USR-020,Delete,wyoung,William Young,william.young@globexcorp.example,Operations,false,,,EMP020
+group,GRP-LEGACY-SYSTEM,Delete,GRP-LEGACY-SYSTEM,Legacy System Access,,false,,,
