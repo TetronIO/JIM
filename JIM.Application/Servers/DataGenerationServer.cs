@@ -479,7 +479,7 @@ public class DataGenerationServer
             return;
 
         // skip if this is for a user manager attribute, that's specially handled elsewhere
-        if (metaverseObject.Type.Name == Constants.BuiltInObjectTypes.Users && templateAttribute.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager)
+        if (metaverseObject.Type.Name == Constants.BuiltInObjectTypes.User && templateAttribute.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager)
             return;
 
 
@@ -535,7 +535,7 @@ public class DataGenerationServer
             ta.MetaverseAttribute != null &&
             ta.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
 
-        if (objectType.MetaverseObjectType.Name != Constants.BuiltInObjectTypes.Users || templateManagerAttribute is not { MetaverseAttribute: not null, ManagerDepthPercentage: not null }) 
+        if (objectType.MetaverseObjectType.Name != Constants.BuiltInObjectTypes.User || templateManagerAttribute is not { MetaverseAttribute: not null, ManagerDepthPercentage: not null })
             return;
             
         // binary tree approach:

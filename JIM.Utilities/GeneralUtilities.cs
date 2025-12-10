@@ -29,7 +29,7 @@ public static class Utilities
 
     public static string GetMetaverseObjectHref(MetaverseObject metaverseObject)
     {
-        return $"/t/{metaverseObject.Type.Name.ToLower()}/v/{metaverseObject.Id}";
+        return $"/t/{metaverseObject.Type.PluralName.ToLower()}/v/{metaverseObject.Id}";
     }
     public static string? GetMetaverseObjectHrefText(MetaverseObject metaverseObject)
     {
@@ -38,7 +38,7 @@ public static class Utilities
 
     public static string GetMetaverseObjectHref(MetaverseObjectHeader metaverseObjectHeader)
     {
-        return $"/t/{metaverseObjectHeader.TypeName.ToLower()}/v/{metaverseObjectHeader.Id}";
+        return $"/t/{metaverseObjectHeader.TypePluralName.ToLower()}/v/{metaverseObjectHeader.Id}";
     }
 
     public static string? GetMetaverseObjectHrefText(MetaverseObjectHeader metaverseObjectHeader)

@@ -13,8 +13,8 @@ public static class Constants
 
     public static class BuiltInObjectTypes
     {
-        public static string Users => "Users";
-        public static string Groups => "Groups";
+        public static string User => "User";
+        public static string Group => "Group";
     }
 
     public static class BuiltInAttributes

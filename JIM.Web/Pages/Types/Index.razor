@@ -86,16 +86,16 @@ else
         if (Page is null or < 1)
             Page = 1;
 
-        var typeName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
-        MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(typeName, false);
+        var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
+        MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
         if (MetaverseObjectType == null)
         {
             NavManager.NavigateTo("/");
             return;
         }
 
-        // set a default name for the objects on this page
-        PageTitle = MetaverseObjectType.Name;
+        // set a default name for the objects on this page (use PluralName for list views)
+        PageTitle = MetaverseObjectType.PluralName;
 
         // are we being asked to load a specific PredefinedSearch, via the URL?
         if (!string.IsNullOrEmpty(PredefinedSearchUri))
@@ -121,7 +121,7 @@ else
             _breadcrumbs = new List<BreadcrumbItem>
             {
                 new("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new(MetaverseObjectType.Name, href: null, disabled: true)
+                new(MetaverseObjectType.PluralName, href: null, disabled: true)
             };
         }
         else
@@ -129,7 +129,7 @@ else
             _breadcrumbs = new List<BreadcrumbItem>
             {
                 new("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new(MetaverseObjectType.Name, href: $"/t/{MetaverseObjectType.Name.ToLower()}"),
+                new(MetaverseObjectType.PluralName, href: $"/t/{MetaverseObjectType.PluralName.ToLower()}"),
                 new(PredefinedSearch.Name, href: null, disabled: true)
             };
         }

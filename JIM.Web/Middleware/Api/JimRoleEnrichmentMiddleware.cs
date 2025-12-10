@@ -69,7 +69,7 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
                 serviceSettings.SSOUniqueIdentifierClaimType, uniqueIdClaimValue);
 
             // Look up the Metaverse user
-            var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false);
+            var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, false);
             if (userType == null)
             {
                 Log.Warning("JimRoleEnrichmentMiddleware: User object type not found.");

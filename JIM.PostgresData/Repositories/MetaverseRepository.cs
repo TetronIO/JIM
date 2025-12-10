@@ -39,6 +39,7 @@ public class MetaverseRepository : IMetaverseRepository
         {
             Id = t.Id,
             Name = t.Name,
+            PluralName = t.PluralName,
             Created = t.Created,
             AttributesCount = t.Attributes.Count,
             BuiltIn = t.BuiltIn,
@@ -63,6 +64,15 @@ public class MetaverseRepository : IMetaverseRepository
             result.Include(q => q.Attributes);
 
         return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
+    }
+
+    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
+    {
+        var result = Repository.Database.MetaverseObjectTypes;
+        if (includeChildObjects)
+            result.Include(q => q.Attributes);
+
+        return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
     }
     #endregion
 
@@ -126,7 +136,8 @@ public class MetaverseRepository : IMetaverseRepository
                 Created = d.Created,
                 Status = d.Status,
                 TypeId = d.Type.Id,
-                TypeName = d.Type.Name
+                TypeName = d.Type.Name,
+                TypePluralName = d.Type.PluralName
             }).SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
@@ -355,6 +366,7 @@ public class MetaverseRepository : IMetaverseRepository
             Status = d.Status,
             TypeId = d.Type.Id,
             TypeName = d.Type.Name,
+            TypePluralName = d.Type.PluralName,
             AttributeValues = GetFilteredAttributeValuesList(predefinedSearch, d)
         }).ToListAsync();
 
@@ -462,6 +474,7 @@ public class MetaverseRepository : IMetaverseRepository
                 Status = d.Status,
                 TypeId = d.Type.Id,
                 TypeName = d.Type.Name,
+                TypePluralName = d.Type.PluralName,
                 AttributeValues = includeAllAttributes
                     ? d.AttributeValues.ToList()
                     : d.AttributeValues

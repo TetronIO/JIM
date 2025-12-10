@@ -122,8 +122,8 @@ public class JimApplication
 
         // check for a matching user, if not create the initial admin user, and check admin role assignment
         // get user by attribute = get a metaverse object by attribute value
-        var objectType = await Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false) ?? 
-                         throw new Exception($"{Constants.BuiltInObjectTypes.Users} object type could not be found. Something went wrong with db seeding.");
+        var objectType = await Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, false) ??
+                         throw new Exception($"{Constants.BuiltInObjectTypes.User} object type could not be found. Something went wrong with db seeding.");
 
         var user = await Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(objectType, uniqueIdentifierMetaverseAttribute, initialAdminUniqueIdentifierClaimValue);
         if (user != null)

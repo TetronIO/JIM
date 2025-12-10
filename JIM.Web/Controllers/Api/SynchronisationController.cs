@@ -354,7 +354,7 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
 
         // Look up the user in the Metaverse
         var userType = await _application.Metaverse.GetMetaverseObjectTypeAsync(
-            JIM.Models.Core.Constants.BuiltInObjectTypes.Users,
+            JIM.Models.Core.Constants.BuiltInObjectTypes.User,
             false);
 
         if (userType == null)

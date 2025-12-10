@@ -7,7 +7,17 @@ namespace JIM.Models.Core;
 public class MetaverseObjectType
 {
     public int Id { get; set; }
+
+    /// <summary>
+    /// The singular name of the object type (e.g., "User", "Group").
+    /// </summary>
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The plural name of the object type for display in list views (e.g., "Users", "Groups").
+    /// </summary>
+    public string PluralName { get; set; } = null!;
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
     public List<MetaverseAttribute> Attributes { get; set; } = new();
     public bool BuiltIn { get; set; }

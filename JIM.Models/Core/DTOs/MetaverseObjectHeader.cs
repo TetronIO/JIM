@@ -6,7 +6,15 @@ public class MetaverseObjectHeader
 
     public DateTime Created { get; set; }
 
+    /// <summary>
+    /// The singular name of the object type (e.g., "User", "Group").
+    /// </summary>
     public string TypeName { get; set; } = null!;
+
+    /// <summary>
+    /// The plural name of the object type for URLs and list views (e.g., "Users", "Groups").
+    /// </summary>
+    public string TypePluralName { get; set; } = null!;
 
     public int TypeId { get; set; }
 
