@@ -111,6 +111,7 @@ services:
 
 networks:
   jim-network:
+    name: jim-network
     driver: bridge
 
 volumes:
