@@ -4,7 +4,7 @@ using JIM.Application.Servers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JIM.Api.Controllers;
+namespace JIM.Web.Controllers.Api;
 
 /// <summary>
 /// API controller for browsing the container file system.

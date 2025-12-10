@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace JIM.Api.Models;
+namespace JIM.Web.Models.Api;
 
 /// <summary>
 /// Standard pagination parameters for list endpoints.

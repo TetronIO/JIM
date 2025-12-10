@@ -1,13 +1,13 @@
 using Asp.Versioning;
-using JIM.Api.Extensions;
-using JIM.Api.Models;
+using JIM.Web.Extensions.Api;
+using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.DataGeneration;
 using JIM.Models.DataGeneration.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JIM.Api.Controllers;
+namespace JIM.Web.Controllers.Api;
 
 /// <summary>
 /// API controller for data generation operations including templates and example data sets.

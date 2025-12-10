@@ -3,7 +3,7 @@ using JIM.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JIM.Api.Controllers;
+namespace JIM.Web.Controllers.Api;
 
 /// <summary>
 /// Health check endpoint for load balancers and service monitors.

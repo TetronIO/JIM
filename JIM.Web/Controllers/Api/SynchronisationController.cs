@@ -1,6 +1,6 @@
 using Asp.Versioning;
-using JIM.Api.Extensions;
-using JIM.Api.Models;
+using JIM.Web.Extensions.Api;
+using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging.DTOs;
@@ -8,7 +8,7 @@ using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JIM.Api.Controllers;
+namespace JIM.Web.Controllers.Api;
 
 /// <summary>
 /// API controller for managing synchronisation configuration including Connected Systems and Sync Rules.

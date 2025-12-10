@@ -107,13 +107,12 @@
   },
 
   // Port forwarding
+  // API is now served from JIM.Web at /api/ path
   "forwardPorts": [
     5432,  // PostgreSQL
     8080,  // Adminer
-    5202,  // JIM.Api (HTTP)
-    5203,  // JIM.Api (HTTPS)
-    5200,  // JIM.Web (HTTP)
-    5201   // JIM.Web (HTTPS)
+    5200,  // JIM.Web (HTTP) - also serves API at /api/
+    5201   // JIM.Web (HTTPS) - also serves API at /api/
   ],
 
   // Port labels and auto-forward behaviour
@@ -126,20 +125,12 @@
       "label": "Adminer (Database UI)",
       "onAutoForward": "notify"
     },
-    "5202": {
-      "label": "JIM API (HTTP)",
-      "onAutoForward": "notify"
-    },
-    "5203": {
-      "label": "JIM API (HTTPS)",
-      "onAutoForward": "openPreview"
-    },
     "5200": {
-      "label": "JIM Web (HTTP)",
+      "label": "JIM Web + API (HTTP)",
       "onAutoForward": "notify"
     },
     "5201": {
-      "label": "JIM Web (HTTPS)",
+      "label": "JIM Web + API (HTTPS)",
       "onAutoForward": "openBrowser"
     }
   },

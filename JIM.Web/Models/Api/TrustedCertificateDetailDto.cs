@@ -1,6 +1,6 @@
 using JIM.Models.Core;
 
-namespace JIM.Api.Models;
+namespace JIM.Web.Models.Api;
 
 /// <summary>
 /// Detailed API representation of a TrustedCertificate (excludes raw certificate bytes for security).

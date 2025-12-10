@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
-using JIM.Api.Extensions;
-using JIM.Api.Models;
+using JIM.Web.Extensions.Api;
+using JIM.Web.Models.Api;
 using NUnit.Framework;
 
 namespace JIM.Api.Tests;

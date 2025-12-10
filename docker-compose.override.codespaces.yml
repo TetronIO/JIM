@@ -9,13 +9,6 @@ services:
       # Map repo test data to connector-files/test-data for development
       - ./test/test-data:/var/connector-files/test-data
 
-  jim.api:
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
-    ports:
-      - "5202:80"
-
   jim.worker:
     volumes:
       - ./test/test-data:/var/connector-files/test-data

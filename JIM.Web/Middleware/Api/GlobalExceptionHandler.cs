@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using JIM.Api.Models;
+using JIM.Web.Models.Api;
 
-namespace JIM.Api.Middleware;
+namespace JIM.Web.Middleware.Api;
 
 /// <summary>
 /// Middleware that catches unhandled exceptions and returns a standardised error response.

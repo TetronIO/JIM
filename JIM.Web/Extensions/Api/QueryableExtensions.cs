@@ -1,9 +1,9 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using JIM.Api.Models;
+using JIM.Web.Models.Api;
 using Microsoft.EntityFrameworkCore;
 
-namespace JIM.Api.Extensions;
+namespace JIM.Web.Extensions.Api;
 
 /// <summary>
 /// Extension methods for IQueryable to support pagination, sorting, and filtering.

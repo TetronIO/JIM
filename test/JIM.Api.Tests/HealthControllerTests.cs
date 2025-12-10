@@ -1,4 +1,4 @@
-using JIM.Api.Controllers;
+using JIM.Web.Controllers.Api;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;

@@ -88,7 +88,10 @@ If you cannot build/test locally due to environment constraints, you MUST:
 ## Key Project Locations
 
 **Where to add:**
-- API endpoints: `JIM.Api/Controllers/`
+- API endpoints: `JIM.Web/Controllers/Api/`
+- API models/DTOs: `JIM.Web/Models/Api/`
+- API extensions: `JIM.Web/Extensions/Api/`
+- API middleware: `JIM.Web/Middleware/Api/`
 - UI pages: `JIM.Web/Pages/`
 - Blazor components: `JIM.Web/Shared/`
 - Business logic: `JIM.Application/Servers/`
@@ -212,7 +215,7 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - All operations flow through the metaverse (never direct system-to-system)
 
 **Layer Dependencies (top to bottom):**
-1. JIM.Web, JIM.Api (Presentation)
+1. JIM.Web (Presentation - includes both Blazor UI and REST API at `/api/`)
 2. JIM.Application (Business Logic)
 3. JIM.Models (Domain)
 4. JIM.Data, JIM.PostgresData (Data Access)
@@ -234,10 +237,10 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 4. Add tests
 
 **Adding API Endpoint:**
-1. Add method to controller in `JIM.Api/Controllers/`
-2. Use DTOs for request/response
+1. Add method to controller in `JIM.Web/Controllers/Api/`
+2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
 3. Add XML comments for Swagger
-4. Test via Swagger UI (port 5203)
+4. Test via Swagger UI at `/api/swagger`
 
 **Modifying Database Schema:**
 1. Update entity in `JIM.Models/`
@@ -252,14 +255,14 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 
 **Workflow 1 - Local Debugging (Recommended):**
 1. Start database: `jim-db`
-2. Press F5 in VS Code or run: `jim-web` / `jim-api`
+2. Press F5 in VS Code or run: `jim-web`
 3. Debug with breakpoints and hot reload
-4. Services: Web (https://localhost:7000), API (https://localhost:7203)
+4. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
 
 **Workflow 2 - Full Docker Stack:**
 1. Start all services: `jim-stack`
 2. Access containerized services
-3. Services: Web (http://localhost:5200), API (http://localhost:5202)
+3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`
 
 **Use Workflow 1** for active development and debugging.
 **Use Workflow 2** for integration testing or production-like environment.

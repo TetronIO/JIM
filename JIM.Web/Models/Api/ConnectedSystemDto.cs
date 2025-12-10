@@ -1,6 +1,6 @@
 using JIM.Models.Staging;
 
-namespace JIM.Api.Models;
+namespace JIM.Web.Models.Api;
 
 /// <summary>
 /// Detailed API representation of a ConnectedSystem.

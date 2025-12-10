@@ -1,15 +1,20 @@
+using System.Text.Json;
+using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Core;
 using JIM.PostgresData;
+using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using MudBlazor;
 using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 // Required environment variables:
 // -------------------------------
@@ -22,6 +27,7 @@ using System.Threading.Tasks;
 // SSO_AUTHORITY
 // SSO_CLIENT_ID
 // SSO_SECRET
+// SSO_API_SCOPE - The OAuth scope for API access (e.g., api://client-id/access_as_user for Entra ID)
 // SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE
 // SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME
 // SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE
@@ -41,11 +47,17 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddScoped<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
 
-    // setup OpenID Connect (OIDC) authentication
+    // setup OpenID Connect (OIDC) authentication for Blazor UI
     var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
     var clientId = Environment.GetEnvironmentVariable("SSO_CLIENT_ID");
     var clientSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
+    var apiScope = Environment.GetEnvironmentVariable("SSO_API_SCOPE");
 
+    // Extract the API identifier from the scope for JWT validation
+    var apiAudience = ExtractApiAudience(apiScope, clientId);
+    var validIssuers = GetValidIssuers(authority);
+
+    // Configure dual authentication: Cookies for Blazor UI, JWT Bearer for API
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -55,7 +67,7 @@ try
         .AddOpenIdConnect(options =>
         {
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-            options.UseTokenLifetime = true; // respect the IdP token lifetime and use it as our session lifetime
+            options.UseTokenLifetime = true; // respect the IdP token lifetime and use our session lifetime
             options.Authority = authority;
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
@@ -72,6 +84,22 @@ try
             {
                 await AuthoriseAndUpdateUserAsync(ctx);
             };
+        })
+        .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+        {
+            options.Authority = authority;
+            options.Audience = apiAudience;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuers = validIssuers,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true
+            };
+
+            // Preserve standard OIDC claim names for API requests
+            options.MapInboundClaims = false;
         });
 
     // setup authorisation policies
@@ -86,9 +114,87 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddServerSideBlazor();
 
+    // Add API controller support
+    builder.Services.AddControllers();
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
+
+    // Configure API versioning with URL path segment (e.g., /api/v1/...)
+    builder.Services.AddApiVersioning(options =>
+    {
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.ReportApiVersions = true;
+        options.ApiVersionReader = new UrlSegmentApiVersionReader();
+    }).AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVV";
+        options.SubstituteApiVersionInUrl = true;
+    });
+
+    // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints
+    var oidcConfig = await FetchOidcDiscoveryDocumentAsync(authority!);
+
+    // Setup Swagger with OAuth2 support for testing authenticated API endpoints
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("v1", new OpenApiInfo
+        {
+            Title = "JIM API",
+            Version = "v1",
+            Description = "JIM (Junctional Identity Manager) REST API for managing identity synchronisation.",
+            Contact = new OpenApiContact
+            {
+                Name = "Tetron",
+                Url = new Uri("https://github.com/TetronIO/JIM")
+            }
+        });
+
+        // Include XML comments for API documentation
+        var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+        var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+        if (File.Exists(xmlPath))
+        {
+            options.IncludeXmlComments(xmlPath);
+        }
+
+        options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.OAuth2,
+            Flows = new OpenApiOAuthFlows
+            {
+                AuthorizationCode = new OpenApiOAuthFlow
+                {
+                    AuthorizationUrl = new Uri(oidcConfig.AuthorizationEndpoint),
+                    TokenUrl = new Uri(oidcConfig.TokenEndpoint),
+                    Scopes = new Dictionary<string, string>
+                    {
+                        { "openid", "OpenID Connect" },
+                        { apiScope!, "Access JIM API" }
+                    }
+                }
+            }
+        });
+
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "oauth2"
+                    }
+                },
+                new[] { "openid", apiScope! }
+            }
+        });
+    });
+
     // setup logging properly now (it's been bootstrapped initially)
     builder.Services.AddSerilog(configuration => InitialiseLogging(configuration, false));
-    
+
     // setup MudBlazor
     builder.Services.AddMudServices(config => {
         config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomCenter;
@@ -104,11 +210,43 @@ try
         app.UseHsts();
     }
 
+    // Swagger UI available at /api/swagger in development
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger(c => c.RouteTemplate = "api/swagger/{documentName}/swagger.json");
+        app.UseSwaggerUI(options =>
+        {
+            options.SwaggerEndpoint("/api/swagger/v1/swagger.json", "JIM API v1");
+            options.RoutePrefix = "api/swagger";
+            options.OAuthClientId(clientId);
+            options.OAuthUsePkce();
+        });
+    }
+
     app.UseHttpsRedirection();
     app.UseStaticFiles();
-    app.UseAuthentication();
-    app.UseAuthorization();
     app.UseRouting();
+
+    // Global exception handler for API endpoints
+    app.UseWhen(
+        context => context.Request.Path.StartsWithSegments("/api"),
+        appBuilder => appBuilder.UseGlobalExceptionHandler()
+    );
+
+    app.UseAuthentication();
+
+    // JIM role enrichment for API requests (JWT Bearer auth)
+    app.UseWhen(
+        context => context.Request.Path.StartsWithSegments("/api"),
+        appBuilder => appBuilder.UseJimRoleEnrichment()
+    );
+
+    app.UseAuthorization();
+
+    // Map API controllers
+    app.MapControllers();
+
+    // Map Blazor endpoints
     app.MapBlazorHub();
     app.MapFallbackToPage("/_Host");
 
@@ -136,7 +274,7 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
     var loggingMinimumLevel = Environment.GetEnvironmentVariable("LOGGING_LEVEL");
     if (loggingMinimumLevel == null)
         throw new ApplicationException("LOGGING_LEVEL environment variable not found. Cannot continue");
-    
+
     var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
     if (loggingPath == null)
         throw new ApplicationException("LOGGING_PATH environment variable not found. Cannot continue");
@@ -177,7 +315,7 @@ static async Task InitialiseJimApplicationAsync()
 {
     // Sets up the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
     // then ensure SSO and Initial admin are setup.
-    
+
     // collect auth config variables
     Log.Verbose("InitialiseJimApplicationAsync: Called.");
     var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
@@ -224,11 +362,11 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     // When a user signs in, we need to see if we can map the identity in the received token, to a user in the Metaverse.
     // If we do, then the user's roles are retrieved and added to their identity, if not, they receive no roles and will
     // not be able to access any part of JIM.
-    // 
+    //
     // Also, if the user has claims that map to the user's Metaverse attributes that have no values, then those attributes
     // will be set from the claim values, i.e. assign initial values. This ensures initial admins are represented properly,
     // i.e. have a Display Name.
-    
+
     Log.Verbose("AuthoriseAndUpdateUserAsync: Called.");
 
     if (context.Principal?.Identity == null)
@@ -239,7 +377,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 
     // there's probably a better way to do this, i.e. getting JimApplication from Services somehow
     var jim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
-    var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync() ?? 
+    var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync() ??
         throw new Exception("ServiceSettings was null. Cannot continue.");
 
     if (serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
@@ -258,7 +396,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     Log.Debug($"AuthoriseAndUpdateUserAsync: User '{context.Principal.Identity.Name}' has a '{serviceSettings.SSOUniqueIdentifierClaimType}' claim value of '{uniqueIdClaimValue}'.");
 
     // get the user using their unique id claim value
-    var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false) ?? 
+    var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Users, false) ??
         throw new Exception("Could not retrieve User object type");
 
     var user = await jim.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue);
@@ -289,7 +427,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         // now see if we can supplement the JIM identity with any supplied from the IdP to more fully populate the user.
         await UpdateUserAttributesFromClaimsAsync(jim, user, context.Principal);
     }
-    
+
     // we couldn't map the token user to a Metaverse user. Quit
     // this will be the user will have no roles added, so they won't be able to access JIM.Web
 }
@@ -389,4 +527,95 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
         await jim.Metaverse.UpdateMetaverseObjectAsync(user);
         Log.Debug("UpdateUserAttributesFromClaimsAsync: Updated user with new attribute values from some claims");
     }
+}
+
+/// <summary>
+/// Fetches the OIDC discovery document from the authority's well-known endpoint.
+/// This provides IDP-agnostic endpoint discovery for any OIDC-compliant provider.
+/// </summary>
+static async Task<OidcDiscoveryDocument> FetchOidcDiscoveryDocumentAsync(string authority)
+{
+    using var httpClient = new HttpClient();
+    var discoveryUrl = $"{authority.TrimEnd('/')}/.well-known/openid-configuration";
+
+    Log.Information("Fetching OIDC discovery document from {Url}", discoveryUrl);
+
+    var response = await httpClient.GetStringAsync(discoveryUrl);
+    var doc = JsonSerializer.Deserialize<OidcDiscoveryDocument>(response)
+        ?? throw new ApplicationException("Failed to parse OIDC discovery document");
+
+    Log.Information("OIDC discovery complete. Authorization endpoint: {AuthEndpoint}", doc.AuthorizationEndpoint);
+
+    return doc;
+}
+
+/// <summary>
+/// Extracts the API audience from an OAuth scope.
+/// For Entra ID scopes like "api://client-id/access_as_user", extracts "api://client-id".
+/// For other IDPs, falls back to the client ID.
+/// </summary>
+static string? ExtractApiAudience(string? apiScope, string? clientId)
+{
+    if (string.IsNullOrEmpty(apiScope))
+        return clientId;
+
+    // For scopes like "api://client-id/access_as_user", extract "api://client-id"
+    var lastSlashIndex = apiScope.LastIndexOf('/');
+    if (lastSlashIndex > 0 && apiScope.StartsWith("api://"))
+        return apiScope[..lastSlashIndex];
+
+    return clientId;
+}
+
+/// <summary>
+/// Gets the valid token issuers for JWT validation.
+/// Auto-detects Entra ID and configures both v1 and v2 issuer formats.
+/// For other IDPs, uses the authority as the issuer.
+/// </summary>
+static string[] GetValidIssuers(string? authority)
+{
+    // Check if user has configured explicit issuers
+    var configuredIssuers = Environment.GetEnvironmentVariable("SSO_VALID_ISSUERS");
+    if (!string.IsNullOrEmpty(configuredIssuers))
+    {
+        return configuredIssuers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    if (string.IsNullOrEmpty(authority))
+        return [];
+
+    // Auto-detect Entra ID and handle v1/v2 token format quirks
+    // Entra ID authority format: https://login.microsoftonline.com/{tenant-id}/v2.0
+    if (authority.Contains("login.microsoftonline.com"))
+    {
+        // Extract tenant ID from the authority URL
+        var uri = new Uri(authority);
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length >= 1)
+        {
+            var tenantId = segments[0];
+            Log.Information("Detected Entra ID authority, configuring v1 and v2 issuers for tenant {TenantId}", tenantId);
+
+            return
+            [
+                $"https://sts.windows.net/{tenantId}/",                 // v1 issuer format
+                $"https://login.microsoftonline.com/{tenantId}/v2.0"    // v2 issuer format
+            ];
+        }
+    }
+
+    // For other IDPs, the issuer typically matches the authority
+    return [authority];
+}
+
+/// <summary>
+/// Represents the relevant fields from an OIDC discovery document.
+/// </summary>
+internal class OidcDiscoveryDocument
+{
+    [System.Text.Json.Serialization.JsonPropertyName("authorization_endpoint")]
+    public string AuthorizationEndpoint { get; set; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("token_endpoint")]
+    public string TokenEndpoint { get; set; } = string.Empty;
 }

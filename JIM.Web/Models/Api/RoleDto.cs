@@ -1,6 +1,6 @@
 using JIM.Models.Security;
 
-namespace JIM.Api.Models;
+namespace JIM.Web.Models.Api;
 
 /// <summary>
 /// API representation of a Role for list views.
