@@ -17,13 +17,18 @@ public class FileConnectorExportTests
     public void SetUp()
     {
         _connector = new FileConnector();
-        _testExportPath = Path.Combine(TestContext.CurrentContext.TestDirectory, "TestOutput", "Export");
+        var testOutputDir = Path.Combine(TestContext.CurrentContext.TestDirectory, "TestOutput");
+
+        // Ensure output directory exists
+        if (!Directory.Exists(testOutputDir))
+            Directory.CreateDirectory(testOutputDir);
+
+        _testExportPath = Path.Combine(testOutputDir, "export.csv");
         _logger = new LoggerConfiguration().CreateLogger();
 
-        // Ensure export directory exists and is clean
-        if (Directory.Exists(_testExportPath))
-            Directory.Delete(_testExportPath, true);
-        Directory.CreateDirectory(_testExportPath);
+        // Clean up any existing test file
+        if (File.Exists(_testExportPath))
+            File.Delete(_testExportPath);
     }
 
     [TearDown]
@@ -31,9 +36,9 @@ public class FileConnectorExportTests
     {
         (_logger as IDisposable)?.Dispose();
 
-        // Clean up export directory
-        if (Directory.Exists(_testExportPath))
-            Directory.Delete(_testExportPath, true);
+        // Clean up export file
+        if (File.Exists(_testExportPath))
+            File.Delete(_testExportPath);
     }
 
     #region Export Tests
@@ -49,8 +54,7 @@ public class FileConnectorExportTests
         _connector.Export(settingValues, pendingExports);
 
         // Assert
-        var files = Directory.GetFiles(_testExportPath);
-        Assert.That(files, Is.Empty);
+        Assert.That(File.Exists(_testExportPath), Is.False);
     }
 
     [Test]
@@ -64,47 +68,8 @@ public class FileConnectorExportTests
         _connector.Export(settingValues, pendingExports);
 
         // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        Assert.That(files, Has.Length.EqualTo(1));
-        Assert.That(files[0], Does.EndWith("export.csv"));
-    }
-
-    [Test]
-    public void Export_WithTimestampedFiles_IncludesTimestampInFilename()
-    {
-        // Arrange
-        var settingValues = CreateExportSettingValues(_testExportPath, timestampedFiles: true);
-        var pendingExports = CreateSamplePendingExports();
-
-        // Act
-        _connector.Export(settingValues, pendingExports);
-
-        // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        Assert.That(files, Has.Length.EqualTo(1));
-
-        var filename = Path.GetFileName(files[0]);
-        Assert.That(filename, Does.StartWith("export_"));
-        Assert.That(filename, Does.Match(@"export_\d{8}_\d{6}\.csv"));
-    }
-
-    [Test]
-    public void Export_WithSeparateFilesByObjectType_CreatesMultipleFiles()
-    {
-        // Arrange
-        var settingValues = CreateExportSettingValues(_testExportPath, separateByObjectType: true);
-        var pendingExports = CreateMixedTypePendingExports();
-
-        // Act
-        _connector.Export(settingValues, pendingExports);
-
-        // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        Assert.That(files, Has.Length.EqualTo(2)); // User.csv and Group.csv
-
-        var filenames = files.Select(Path.GetFileName).ToList();
-        Assert.That(filenames, Does.Contain("User.csv"));
-        Assert.That(filenames, Does.Contain("Group.csv"));
+        Assert.That(File.Exists(_testExportPath), Is.True);
+        Assert.That(_testExportPath, Does.EndWith("export.csv"));
     }
 
     [Test]
@@ -118,8 +83,7 @@ public class FileConnectorExportTests
         _connector.Export(settingValues, pendingExports);
 
         // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        var lines = File.ReadAllLines(files[0]);
+        var lines = File.ReadAllLines(_testExportPath);
 
         Assert.That(lines, Has.Length.GreaterThan(0));
         var header = lines[0];
@@ -139,8 +103,7 @@ public class FileConnectorExportTests
         _connector.Export(settingValues, pendingExports);
 
         // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        var content = File.ReadAllText(files[0]);
+        var content = File.ReadAllText(_testExportPath);
 
         Assert.That(content, Does.Contain("User"));
         Assert.That(content, Does.Contain("Create"));
@@ -159,8 +122,7 @@ public class FileConnectorExportTests
         _connector.Export(settingValues, pendingExports);
 
         // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        var header = File.ReadLines(files[0]).First();
+        var header = File.ReadLines(_testExportPath).First();
 
         // Header should use semicolon delimiter
         Assert.That(header, Does.Contain(";"));
@@ -196,8 +158,7 @@ public class FileConnectorExportTests
         _connector.Export(settingValues, pendingExports);
 
         // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        var lines = File.ReadAllLines(files[0]);
+        var lines = File.ReadAllLines(_testExportPath);
 
         Assert.That(lines, Has.Length.GreaterThan(1));
         var dataLine = lines[1];
@@ -216,8 +177,7 @@ public class FileConnectorExportTests
         _connector.Export(settingValues, pendingExports);
 
         // Assert
-        var files = Directory.GetFiles(_testExportPath, "*.csv");
-        var content = File.ReadAllText(files[0]);
+        var content = File.ReadAllText(_testExportPath);
 
         Assert.That(content, Does.Contain("Delete"));
     }
@@ -248,8 +208,6 @@ public class FileConnectorExportTests
         string exportPath,
         string delimiter = ",",
         string multiValueDelimiter = "|",
-        bool timestampedFiles = false,
-        bool separateByObjectType = false,
         bool includeFullState = false,
         bool autoConfirmExports = true)
     {
@@ -269,16 +227,6 @@ public class FileConnectorExportTests
             {
                 Setting = new ConnectorDefinitionSetting { Name = "Multi-Value Delimiter" },
                 StringValue = multiValueDelimiter
-            },
-            new()
-            {
-                Setting = new ConnectorDefinitionSetting { Name = "Timestamped Files" },
-                CheckboxValue = timestampedFiles
-            },
-            new()
-            {
-                Setting = new ConnectorDefinitionSetting { Name = "Separate Files Per Object Type" },
-                CheckboxValue = separateByObjectType
             },
             new()
             {
@@ -336,60 +284,6 @@ public class FileConnectorExportTests
                         Id = Guid.NewGuid(),
                         Attribute = emailAttr,
                         StringValue = "jsmith@example.com"
-                    }
-                }
-            }
-        };
-    }
-
-    private List<PendingExport> CreateMixedTypePendingExports()
-    {
-        var userType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
-        var groupType = new ConnectedSystemObjectType { Id = 2, Name = "Group" };
-
-        var displayNameAttr = new ConnectedSystemObjectTypeAttribute
-        {
-            Id = 1,
-            Name = "displayName",
-            Type = AttributeDataType.Text,
-            ConnectedSystemObjectType = userType
-        };
-
-        var groupNameAttr = new ConnectedSystemObjectTypeAttribute
-        {
-            Id = 2,
-            Name = "groupName",
-            Type = AttributeDataType.Text,
-            ConnectedSystemObjectType = groupType
-        };
-
-        return new List<PendingExport>
-        {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        Attribute = displayNameAttr,
-                        StringValue = "John Smith"
-                    }
-                }
-            },
-            new()
-            {
-                Id = Guid.NewGuid(),
-                ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        Attribute = groupNameAttr,
-                        StringValue = "Admins"
                     }
                 }
             }

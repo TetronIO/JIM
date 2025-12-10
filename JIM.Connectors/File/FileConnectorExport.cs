@@ -4,12 +4,12 @@ using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
-using System.Dynamic;
 using System.Globalization;
 namespace JIM.Connectors.File;
 
 /// <summary>
 /// Handles CSV export functionality for the FileConnector.
+/// Writes pending exports to the configured export file path.
 /// </summary>
 internal class FileConnectorExport
 {
@@ -42,40 +42,22 @@ internal class FileConnectorExport
             return;
         }
 
-        var exportPath = GetSettingValue("Export File Path");
-        if (string.IsNullOrEmpty(exportPath))
+        var exportFilePath = GetSettingValue("Export File Path");
+        if (string.IsNullOrEmpty(exportFilePath))
             throw new InvalidOperationException("Export File Path setting is required for export operations.");
 
         var delimiter = GetSettingValue("Delimiter") ?? ",";
         var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") ?? "|";
-        var timestampedFiles = GetCheckboxValue("Timestamped Files");
-        var separateByObjectType = GetCheckboxValue("Separate Files Per Object Type");
         var includeFullState = GetCheckboxValue("Include Full State");
 
         // Ensure the export directory exists
-        if (!Directory.Exists(exportPath))
-            Directory.CreateDirectory(exportPath);
+        var exportDir = Path.GetDirectoryName(exportFilePath);
+        if (!string.IsNullOrEmpty(exportDir) && !Directory.Exists(exportDir))
+            Directory.CreateDirectory(exportDir);
 
-        if (separateByObjectType)
-        {
-            ExportSeparateFiles(exportPath, delimiter, multiValueDelimiter, timestampedFiles, includeFullState);
-        }
-        else
-        {
-            ExportSingleFile(exportPath, delimiter, multiValueDelimiter, timestampedFiles, includeFullState);
-        }
+        _logger.Debug("FileConnectorExport.Execute: Writing to {Path}", exportFilePath);
 
-        _logger.Information("FileConnectorExport.Execute: Completed export of {Count} pending exports", _pendingExports.Count);
-    }
-
-    private void ExportSingleFile(string exportPath, string delimiter, string multiValueDelimiter, bool timestampedFiles, bool includeFullState)
-    {
-        var filename = GenerateFilename("export", timestampedFiles);
-        var fullPath = Path.Combine(exportPath, filename);
-
-        _logger.Debug("FileConnectorExport.ExportSingleFile: Writing to {Path}", fullPath);
-
-        using var writer = new StreamWriter(fullPath);
+        using var writer = new StreamWriter(exportFilePath);
         using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture)
         {
             Delimiter = delimiter
@@ -93,55 +75,7 @@ internal class FileConnectorExport
             WriteRecord(csv, pendingExport, attributeNames, multiValueDelimiter, includeFullState);
         }
 
-        _logger.Information("FileConnectorExport.ExportSingleFile: Wrote {Count} records to {Path}", _pendingExports.Count, fullPath);
-    }
-
-    private void ExportSeparateFiles(string exportPath, string delimiter, string multiValueDelimiter, bool timestampedFiles, bool includeFullState)
-    {
-        // Group pending exports by object type
-        var exportsByObjectType = _pendingExports
-            .GroupBy(pe => GetObjectTypeName(pe))
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        foreach (var (objectType, exports) in exportsByObjectType)
-        {
-            var filename = GenerateFilename(objectType, timestampedFiles);
-            var fullPath = Path.Combine(exportPath, filename);
-
-            _logger.Debug("FileConnectorExport.ExportSeparateFiles: Writing {Count} {ObjectType} records to {Path}",
-                exports.Count, objectType, fullPath);
-
-            using var writer = new StreamWriter(fullPath);
-            using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture)
-            {
-                Delimiter = delimiter
-            });
-
-            // Collect attribute names for this object type
-            var attributeNames = CollectAttributeNames(exports);
-
-            // Write header
-            WriteHeader(csv, attributeNames);
-
-            // Write records
-            foreach (var pendingExport in exports)
-            {
-                WriteRecord(csv, pendingExport, attributeNames, multiValueDelimiter, includeFullState);
-            }
-
-            _logger.Information("FileConnectorExport.ExportSeparateFiles: Wrote {Count} {ObjectType} records to {Path}",
-                exports.Count, objectType, fullPath);
-        }
-    }
-
-    private static string GenerateFilename(string baseName, bool timestamped)
-    {
-        if (timestamped)
-        {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-            return $"{baseName}_{timestamp}.csv";
-        }
-        return $"{baseName}.csv";
+        _logger.Information("FileConnectorExport.Execute: Wrote {Count} records to {Path}", _pendingExports.Count, exportFilePath);
     }
 
     private static string GetObjectTypeName(PendingExport pendingExport)
