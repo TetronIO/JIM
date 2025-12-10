@@ -8,9 +8,10 @@ namespace JIM.PostgresData;
 
 public class PostgresDataRepository : IRepository
 {
+    public IActivityRepository Activity { get; }
+    public IApiKeyRepository ApiKeys { get; }
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IDataGenerationRepository DataGeneration { get; }
-    public IActivityRepository Activity { get; }
     public IMetaverseRepository Metaverse { get; }
     public ISearchRepository Search { get; }
     public ISecurityRepository Security { get; }
@@ -28,6 +29,7 @@ public class PostgresDataRepository : IRepository
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
         Activity = new ActivityRepository(this);
+        ApiKeys = new ApiKeyRepository(this);
         ConnectedSystems = new ConnectedSystemRepository(this);
         DataGeneration = new DataGenerationRepository(this);
         Database = jimDbContext; // the db context is passed in, so we can unit test jim and the data repository by passing in either a mock or the actual db context.

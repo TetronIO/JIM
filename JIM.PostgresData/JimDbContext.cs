@@ -58,6 +58,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; } = null!;
     public virtual DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; } = null!;
     public virtual DbSet<Role> Roles { get; set; } = null!;
+    public virtual DbSet<ApiKey> ApiKeys { get; set; } = null!;
     public virtual DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
     public virtual DbSet<SyncRule> SyncRules { get; set; } = null!;
     public virtual DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
@@ -140,6 +141,11 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
             .WithMany(r => r.StaticMembers);
+
+        // ApiKey to Role many-to-many relationship
+        modelBuilder.Entity<ApiKey>()
+            .HasMany(ak => ak.Roles)
+            .WithMany();
 
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mvo => mvo.Changes)
