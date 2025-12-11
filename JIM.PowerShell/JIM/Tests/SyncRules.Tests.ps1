@@ -47,6 +47,10 @@ Describe 'Get-JIMSyncRule' {
             $param | Should -Not -BeNullOrEmpty
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have ConnectedSystemName parameter' {
+            $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Requires Connection' {
@@ -93,9 +97,18 @@ Describe 'New-JIMSyncRule' {
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
         }
 
-        It 'Should have a mandatory ConnectedSystemId parameter' {
+        It 'Should have a mandatory ConnectedSystemId parameter in ById set' {
             $param = $command.Parameters['ConnectedSystemId']
-            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+            $paramAttr = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.Mandatory -and
+                $_.ParameterSetName -eq 'ById'
+            }
+            $paramAttr | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a ConnectedSystemName parameter' {
+            $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have a mandatory ConnectedSystemObjectTypeId parameter' {

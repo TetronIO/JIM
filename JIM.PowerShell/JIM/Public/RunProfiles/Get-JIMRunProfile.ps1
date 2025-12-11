@@ -10,7 +10,9 @@ function Get-JIMRunProfile {
 
     .PARAMETER ConnectedSystemId
         The unique identifier of the Connected System to get Run Profiles for.
-        This parameter is required as Run Profiles are always associated with a Connected System.
+
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System to get Run Profiles for. Must be an exact match.
 
     .OUTPUTS
         PSCustomObject representing Run Profile(s).
@@ -19,6 +21,11 @@ function Get-JIMRunProfile {
         Get-JIMRunProfile -ConnectedSystemId 1
 
         Gets all Run Profiles for Connected System ID 1.
+
+    .EXAMPLE
+        Get-JIMRunProfile -ConnectedSystemName 'Contoso AD'
+
+        Gets all Run Profiles for the Connected System named 'Contoso AD'.
 
     .EXAMPLE
         Get-JIMConnectedSystem -Name "HR*" | Get-JIMRunProfile
@@ -30,15 +37,24 @@ function Get-JIMRunProfile {
         New-JIMRunProfile
         Get-JIMConnectedSystem
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('Id')]
-        [int]$ConnectedSystemId
+        [int]$ConnectedSystemId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [string]$ConnectedSystemName
     )
 
     process {
+        # Resolve ConnectedSystemName to ConnectedSystemId if specified
+        if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+            $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
+            $ConnectedSystemId = $connectedSystem.id
+        }
+
         Write-Verbose "Getting Run Profiles for Connected System ID: $ConnectedSystemId"
         $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/run-profiles"
 

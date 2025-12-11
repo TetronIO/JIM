@@ -10,6 +10,9 @@ function New-JIMRunProfile {
     .PARAMETER ConnectedSystemId
         The ID of the Connected System to create the Run Profile for.
 
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System to create the Run Profile for. Must be an exact match.
+
     .PARAMETER Name
         The name for the Run Profile.
 
@@ -42,6 +45,11 @@ function New-JIMRunProfile {
         Creates a Full Import Run Profile for Connected System 1.
 
     .EXAMPLE
+        New-JIMRunProfile -ConnectedSystemName 'Contoso AD' -Name "Full Import" -RunType FullImport
+
+        Creates a Full Import Run Profile for the 'Contoso AD' Connected System.
+
+    .EXAMPLE
         New-JIMRunProfile -ConnectedSystemId 1 -Name "Delta Import" -RunType DeltaImport -PageSize 500 -PassThru
 
         Creates a Delta Import Run Profile with custom page size and returns it.
@@ -59,12 +67,15 @@ function New-JIMRunProfile {
         Remove-JIMRunProfile
         Start-JIMRunProfile
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Alias('Id')]
         [int]$ConnectedSystemId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [string]$ConnectedSystemName,
 
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]
@@ -92,6 +103,12 @@ function New-JIMRunProfile {
         if (-not $script:JIMConnection) {
             Write-Error "Not connected to JIM. Use Connect-JIM first."
             return
+        }
+
+        # Resolve ConnectedSystemName to ConnectedSystemId if specified
+        if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+            $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
+            $ConnectedSystemId = $connectedSystem.id
         }
 
         if ($PSCmdlet.ShouldProcess($Name, "Create Run Profile")) {

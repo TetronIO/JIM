@@ -13,6 +13,9 @@ function Get-JIMSyncRule {
     .PARAMETER ConnectedSystemId
         Filter Sync Rules by Connected System ID.
 
+    .PARAMETER ConnectedSystemName
+        Filter Sync Rules by Connected System name. Must be an exact match.
+
     .OUTPUTS
         PSCustomObject representing Sync Rule(s).
 
@@ -32,6 +35,11 @@ function Get-JIMSyncRule {
         Gets all Sync Rules for Connected System ID 1.
 
     .EXAMPLE
+        Get-JIMSyncRule -ConnectedSystemName 'Contoso AD'
+
+        Gets all Sync Rules for the Connected System named 'Contoso AD'.
+
+    .EXAMPLE
         Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule
 
         Gets all Sync Rules for Connected Systems with names starting with "HR".
@@ -48,10 +56,20 @@ function Get-JIMSyncRule {
         [int]$Id,
 
         [Parameter(ParameterSetName = 'List', ValueFromPipelineByPropertyName)]
-        [int]$ConnectedSystemId
+        [Parameter(ParameterSetName = 'ByConnectedSystemId')]
+        [int]$ConnectedSystemId,
+
+        [Parameter(ParameterSetName = 'ByConnectedSystemName')]
+        [string]$ConnectedSystemName
     )
 
     process {
+        # Resolve ConnectedSystemName to ConnectedSystemId if specified
+        if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+            $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
+            $ConnectedSystemId = $connectedSystem.id
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
             'ById' {
                 Write-Verbose "Getting Sync Rule with ID: $Id"
@@ -59,7 +77,7 @@ function Get-JIMSyncRule {
                 $result
             }
 
-            'List' {
+            default {
                 Write-Verbose "Getting all Sync Rules"
                 $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules"
 
@@ -67,7 +85,7 @@ function Get-JIMSyncRule {
                 $rules = if ($response.items) { $response.items } else { $response }
 
                 # Filter by Connected System if specified
-                if ($PSBoundParameters.ContainsKey('ConnectedSystemId')) {
+                if ($PSBoundParameters.ContainsKey('ConnectedSystemId') -or $PSBoundParameters.ContainsKey('ConnectedSystemName')) {
                     Write-Verbose "Filtering by Connected System ID: $ConnectedSystemId"
                     $rules = $rules | Where-Object { $_.connectedSystemId -eq $ConnectedSystemId }
                 }

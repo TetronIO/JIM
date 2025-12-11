@@ -13,9 +13,15 @@ function Start-JIMRunProfile {
     .PARAMETER ConnectedSystemId
         The unique identifier of the Connected System.
 
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System. Must be an exact match.
+
     .PARAMETER RunProfileId
         The unique identifier of the Run Profile to execute.
         Alias: Id (for pipeline input from Get-JIMRunProfile).
+
+    .PARAMETER RunProfileName
+        The name of the Run Profile to execute. Must be an exact match.
 
     .PARAMETER Wait
         If specified, waits for the Run Profile execution to complete before returning.
@@ -37,6 +43,11 @@ function Start-JIMRunProfile {
         Executes Run Profile ID 1 for Connected System ID 1.
 
     .EXAMPLE
+        Start-JIMRunProfile -ConnectedSystemName 'Contoso AD' -RunProfileName 'Full Import'
+
+        Executes the 'Full Import' Run Profile for the 'Contoso AD' Connected System.
+
+    .EXAMPLE
         Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Wait
 
         Executes the Run Profile and waits for completion with progress display.
@@ -56,15 +67,25 @@ function Start-JIMRunProfile {
         Get-JIMActivity
         Get-JIMActivityStats
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ByIdAndName', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [Parameter(Mandatory, ParameterSetName = 'ByNameAndId')]
+        [string]$ConnectedSystemName,
+
+        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ByNameAndId')]
         [Alias('Id')]
         [int]$RunProfileId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [Parameter(Mandatory, ParameterSetName = 'ByIdAndName')]
+        [string]$RunProfileName,
 
         [switch]$Wait,
 
@@ -75,6 +96,31 @@ function Start-JIMRunProfile {
     )
 
     process {
+        # Resolve ConnectedSystemName to ConnectedSystemId if specified
+        if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+            $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
+            $ConnectedSystemId = $connectedSystem.id
+        }
+
+        # Resolve RunProfileName to RunProfileId if specified
+        if ($PSBoundParameters.ContainsKey('RunProfileName')) {
+            Write-Verbose "Resolving Run Profile name: $RunProfileName"
+            $profiles = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/run-profiles"
+            $matchingProfile = @($profiles | Where-Object { $_.name -eq $RunProfileName })
+
+            if ($matchingProfile.Count -eq 0) {
+                Write-Error "Run Profile not found: '$RunProfileName' for Connected System ID $ConnectedSystemId"
+                return
+            }
+
+            if ($matchingProfile.Count -gt 1) {
+                Write-Error "Multiple Run Profiles found with name '$RunProfileName'. Use -RunProfileId to specify the exact profile."
+                return
+            }
+
+            $RunProfileId = $matchingProfile[0].id
+        }
+
         Write-Verbose "Executing Run Profile ID $RunProfileId for Connected System ID $ConnectedSystemId"
 
         try {

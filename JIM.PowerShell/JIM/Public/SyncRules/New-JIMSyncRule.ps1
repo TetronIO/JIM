@@ -14,6 +14,9 @@ function New-JIMSyncRule {
     .PARAMETER ConnectedSystemId
         The ID of the Connected System this rule applies to.
 
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System this rule applies to. Must be an exact match.
+
     .PARAMETER ConnectedSystemObjectTypeId
         The ID of the Connected System Object Type.
 
@@ -45,6 +48,11 @@ function New-JIMSyncRule {
         Creates an import sync rule that projects users to the Metaverse.
 
     .EXAMPLE
+        New-JIMSyncRule -Name "Import Users" -ConnectedSystemName 'Contoso AD' -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -ProjectToMetaverse
+
+        Creates an import sync rule using the Connected System name.
+
+    .EXAMPLE
         New-JIMSyncRule -Name "Export Users to AD" -ConnectedSystemId 2 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Export -ProvisionToConnectedSystem -PassThru
 
         Creates an export sync rule that provisions users to the Connected System.
@@ -54,15 +62,18 @@ function New-JIMSyncRule {
         Set-JIMSyncRule
         Remove-JIMSyncRule
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]
         [string]$Name,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$ConnectedSystemId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [string]$ConnectedSystemName,
 
         [Parameter(Mandatory)]
         [int]$ConnectedSystemObjectTypeId,
@@ -88,6 +99,12 @@ function New-JIMSyncRule {
         if (-not $script:JIMConnection) {
             Write-Error "Not connected to JIM. Use Connect-JIM first."
             return
+        }
+
+        # Resolve ConnectedSystemName to ConnectedSystemId if specified
+        if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+            $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
+            $ConnectedSystemId = $connectedSystem.id
         }
 
         if ($PSCmdlet.ShouldProcess($Name, "Create Sync Rule")) {

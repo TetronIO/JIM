@@ -9,6 +9,9 @@ function Remove-JIMRunProfile {
     .PARAMETER ConnectedSystemId
         The ID of the Connected System the Run Profile belongs to.
 
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System the Run Profile belongs to. Must be an exact match.
+
     .PARAMETER RunProfileId
         The unique identifier of the Run Profile to delete.
 
@@ -28,6 +31,11 @@ function Remove-JIMRunProfile {
         Remove-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1
 
         Removes the Run Profile (prompts for confirmation).
+
+    .EXAMPLE
+        Remove-JIMRunProfile -ConnectedSystemName 'Contoso AD' -RunProfileId 1 -Force
+
+        Removes the Run Profile using the Connected System name.
 
     .EXAMPLE
         Remove-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Force
@@ -51,7 +59,11 @@ function Remove-JIMRunProfile {
         [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$ConnectedSystemId,
 
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [string]$ConnectedSystemName,
+
         [Parameter(Mandatory, ParameterSetName = 'ById')]
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
         [int]$RunProfileId,
 
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
@@ -67,6 +79,12 @@ function Remove-JIMRunProfile {
         if (-not $script:JIMConnection) {
             Write-Error "Not connected to JIM. Use Connect-JIM first."
             return
+        }
+
+        # Resolve ConnectedSystemName to ConnectedSystemId if specified
+        if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+            $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
+            $ConnectedSystemId = $connectedSystem.id
         }
 
         $csId = if ($InputObject) { $InputObject.connectedSystemId } else { $ConnectedSystemId }

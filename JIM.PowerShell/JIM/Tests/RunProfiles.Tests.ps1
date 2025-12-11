@@ -37,6 +37,10 @@ Describe 'Get-JIMRunProfile' {
             $param = $command.Parameters['ConnectedSystemId']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have a ConnectedSystemName parameter' {
+            $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Requires Connection' {
@@ -101,6 +105,14 @@ Describe 'Start-JIMRunProfile' {
             $param = $command.Parameters['Timeout']
             $param | Should -Not -BeNullOrEmpty
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a ConnectedSystemName parameter' {
+            $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a RunProfileName parameter' {
+            $command.Parameters['RunProfileName'] | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -186,6 +198,10 @@ Describe 'New-JIMRunProfile' {
             $param | Should -Not -BeNullOrEmpty
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] } | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have a ConnectedSystemName parameter' {
+            $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Requires Connection' {
@@ -250,6 +266,10 @@ Describe 'Set-JIMRunProfile' {
             $param = $command.Parameters['InputObject']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipeline } | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have a ConnectedSystemName parameter' {
+            $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Requires Connection' {
@@ -303,6 +323,10 @@ Describe 'Remove-JIMRunProfile' {
         It 'Should have InputObject parameter that accepts pipeline input' {
             $param = $command.Parameters['InputObject']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipeline } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a ConnectedSystemName parameter' {
+            $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
         }
     }
 

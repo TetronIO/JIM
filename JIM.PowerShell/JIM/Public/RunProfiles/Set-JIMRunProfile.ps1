@@ -10,6 +10,9 @@ function Set-JIMRunProfile {
     .PARAMETER ConnectedSystemId
         The ID of the Connected System the Run Profile belongs to.
 
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System the Run Profile belongs to. Must be an exact match.
+
     .PARAMETER RunProfileId
         The unique identifier of the Run Profile to update.
 
@@ -40,6 +43,11 @@ function Set-JIMRunProfile {
         Updates the name of the Run Profile.
 
     .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemName 'Contoso AD' -RunProfileId 1 -PageSize 500
+
+        Updates the page size of a Run Profile using the Connected System name.
+
+    .EXAMPLE
         Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -PageSize 500 -PassThru
 
         Updates the page size and returns the updated object.
@@ -61,7 +69,11 @@ function Set-JIMRunProfile {
         [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$ConnectedSystemId,
 
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [string]$ConnectedSystemName,
+
         [Parameter(Mandatory, ParameterSetName = 'ById')]
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
         [int]$RunProfileId,
 
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
@@ -89,6 +101,12 @@ function Set-JIMRunProfile {
         if (-not $script:JIMConnection) {
             Write-Error "Not connected to JIM. Use Connect-JIM first."
             return
+        }
+
+        # Resolve ConnectedSystemName to ConnectedSystemId if specified
+        if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+            $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
+            $ConnectedSystemId = $connectedSystem.id
         }
 
         $csId = if ($InputObject) { $InputObject.connectedSystemId } else { $ConnectedSystemId }
