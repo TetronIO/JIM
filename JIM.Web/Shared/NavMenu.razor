@@ -21,7 +21,7 @@
         <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All" Class="jim-nowrap">My Activity</MudNavLink>
     </MudNavGroup>
 
-    <AuthorizeView Roles="Administrators">
+    <AuthorizeView Roles="Administrator">
         <MudNavGroup Title="Dashboard" @bind-Expanded="_dashboardExpanded" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All">Daily</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All">Weekly</MudNavLink>
@@ -30,7 +30,7 @@
         </MudNavGroup>
     </AuthorizeView>
 
-    <AuthorizeView Roles="Administrators">
+    <AuthorizeView Roles="Administrator">
         <MudNavGroup Title="Admin" @bind-Expanded="_adminExpanded" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix">Operations</MudNavLink>
             <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.All" Class="jim-nowrap">Connected Systems</MudNavLink>
