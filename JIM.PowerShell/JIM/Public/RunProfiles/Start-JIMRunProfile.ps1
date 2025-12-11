@@ -15,9 +15,7 @@ function Start-JIMRunProfile {
 
     .PARAMETER RunProfileId
         The unique identifier of the Run Profile to execute.
-
-    .PARAMETER Id
-        Alias for RunProfileId when piping from Get-JIMRunProfile.
+        Alias: Id (for pipeline input from Get-JIMRunProfile).
 
     .PARAMETER Wait
         If specified, waits for the Run Profile execution to complete before returning.
@@ -64,12 +62,9 @@ function Start-JIMRunProfile {
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
-        [Parameter(Mandatory, ParameterSetName = 'ByRunProfileId')]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Alias('Id')]
         [int]$RunProfileId,
-
-        [Parameter(Mandatory, ParameterSetName = 'ByPipeline', ValueFromPipelineByPropertyName)]
-        [Alias('RunProfileId')]
-        [int]$Id,
 
         [switch]$Wait,
 
@@ -80,13 +75,10 @@ function Start-JIMRunProfile {
     )
 
     process {
-        # Get the Run Profile ID
-        $profileId = if ($PSBoundParameters.ContainsKey('Id')) { $Id } else { $RunProfileId }
-
-        Write-Verbose "Executing Run Profile ID $profileId for Connected System ID $ConnectedSystemId"
+        Write-Verbose "Executing Run Profile ID $RunProfileId for Connected System ID $ConnectedSystemId"
 
         try {
-            $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/run-profiles/$profileId/execute" -Method 'POST'
+            $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/run-profiles/$RunProfileId/execute" -Method 'POST'
 
             Write-Verbose "Run Profile queued. ActivityId: $($response.activityId), TaskId: $($response.taskId)"
 

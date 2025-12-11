@@ -44,11 +44,10 @@ function Get-JIMSyncRule {
     [CmdletBinding(DefaultParameterSetName = 'List')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$Id,
 
         [Parameter(ParameterSetName = 'List', ValueFromPipelineByPropertyName)]
-        [Alias('Id')]
         [int]$ConnectedSystemId
     )
 
