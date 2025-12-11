@@ -2,7 +2,7 @@ services:
 
   jim.web:
     container_name: jim.web
-    image: ${DOCKER_REGISTRY-}jim.web
+    image: ${DOCKER_REGISTRY-}jim-web${JIM_VERSION:+:${JIM_VERSION}}
     restart: always
     env_file: .env
     environment:
@@ -33,7 +33,7 @@ services:
 
   jim.worker:
     container_name: jim.worker
-    image: ${DOCKER_REGISTRY-}jim.worker
+    image: ${DOCKER_REGISTRY-}jim-worker${JIM_VERSION:+:${JIM_VERSION}}
     restart: always
     env_file: .env
     environment:
@@ -53,7 +53,7 @@ services:
 
   jim.scheduler:
     container_name: jim.scheduler
-    image: ${DOCKER_REGISTRY-}jim.scheduler
+    image: ${DOCKER_REGISTRY-}jim-scheduler${JIM_VERSION:+:${JIM_VERSION}}
     restart: always
     env_file: .env
     environment:

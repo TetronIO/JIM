@@ -1,5 +1,14 @@
 <Project>
   <PropertyGroup>
+    <!-- Version configuration - read from VERSION file or CI environment -->
+    <VersionPrefix>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</VersionPrefix>
+    <VersionSuffix Condition="'$(VersionSuffix)' == '' AND '$(Configuration)' == 'Debug'">dev</VersionSuffix>
+    <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
+    <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
+    <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
+    <FileVersion>$(VersionPrefix).0</FileVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
+
     <!-- Treat all warnings as errors to match CI behaviour -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 

@@ -1,6 +1,15 @@
 #See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
+ARG VERSION=dev
+
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+
+LABEL org.opencontainers.image.title="JIM Web"
+LABEL org.opencontainers.image.description="JIM (Junctional Identity Manager) - Web and API service"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.vendor="Tetron"
+LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
+LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
 EXPOSE 80
 EXPOSE 443

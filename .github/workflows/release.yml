@@ -1,0 +1,283 @@
+# Release workflow for JIM
+# Triggered by pushing a tag like v0.2.0
+#
+# This workflow:
+# 1. Validates the build and runs tests
+# 2. Builds and pushes Docker images to ghcr.io
+# 3. Publishes PowerShell module to PSGallery
+# 4. Creates an air-gapped release bundle
+# 5. Creates a GitHub Release with all assets
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write  # For cosign signing
+
+jobs:
+  # Job 1: Validate build and tests
+  validate:
+    name: Validate Build & Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore JIM.sln
+
+      - name: Build
+        run: dotnet build JIM.sln --no-restore --configuration Release
+
+      - name: Run .NET tests
+        run: dotnet test JIM.sln --no-build --configuration Release --verbosity normal
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
+          $config = New-PesterConfiguration
+          $config.Run.Path = './JIM.PowerShell/JIM/Tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+
+  # Job 2: Build and push Docker images
+  build-containers:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: validate
+
+    strategy:
+      matrix:
+        include:
+          - image: jim-web
+            dockerfile: JIM.Web/Dockerfile
+          - image: jim-worker
+            dockerfile: JIM.Worker/Dockerfile
+          - image: jim-scheduler
+            dockerfile: JIM.Scheduler/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign sign --yes ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+
+  # Job 3: Publish PowerShell module to PSGallery
+  publish-powershell:
+    name: Publish PowerShell Module
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update module version
+        shell: pwsh
+        run: |
+          $manifestPath = './JIM.PowerShell/JIM/JIM.psd1'
+          $version = '${{ steps.version.outputs.VERSION }}'
+
+          # Read the manifest content
+          $content = Get-Content $manifestPath -Raw
+
+          # Update ModuleVersion
+          $content = $content -replace "ModuleVersion\s*=\s*'[^']*'", "ModuleVersion = '$version'"
+
+          # Write back
+          Set-Content $manifestPath -Value $content
+
+          Write-Host "Updated module version to $version"
+
+      - name: Publish to PSGallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_API_KEY) {
+            Write-Warning "PSGALLERY_API_KEY not set - skipping PSGallery publish"
+            exit 0
+          }
+
+          $modulePath = './JIM.PowerShell/JIM'
+
+          # Test the module can be imported
+          Import-Module $modulePath -Force
+
+          # Publish to PSGallery
+          Publish-Module -Path $modulePath -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose
+
+  # Job 4: Create release bundle for air-gapped deployments
+  create-bundle:
+    name: Create Release Bundle
+    runs-on: ubuntu-latest
+    needs: build-containers
+
+    outputs:
+      bundle-name: ${{ steps.bundle.outputs.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release bundle
+        id: bundle
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.VERSION }}'
+          ./scripts/Build-ReleaseBundle.ps1 -Version $version -OutputPath ./release-output
+
+          $bundleName = "jim-release-$version"
+          echo "name=$bundleName" >> $env:GITHUB_OUTPUT
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: ./release-output/jim-release-${{ steps.version.outputs.VERSION }}.tar.gz
+          retention-days: 5
+
+      - name: Upload checksums artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: ./release-output/jim-release-${{ steps.version.outputs.VERSION }}/checksums.sha256
+          retention-days: 5
+
+  # Job 5: Create GitHub Release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-containers, publish-powershell, create-bundle]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: ./artifacts
+
+      - name: Download checksums artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: checksums
+          path: ./artifacts
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.VERSION }}'
+          $changelog = Get-Content ./CHANGELOG.md -Raw
+
+          # Extract section for this version
+          $pattern = "(?ms)## \[$version\].*?(?=## \[|$)"
+          if ($changelog -match $pattern) {
+            $notes = $Matches[0]
+            # Remove the header line
+            $notes = $notes -replace "## \[$version\].*?\n", ""
+            $notes = $notes.Trim()
+          } else {
+            $notes = "Release $version"
+          }
+
+          # Write to file for GitHub CLI
+          $notes | Set-Content ./release-notes.md
+          Write-Host "Release notes:"
+          Write-Host $notes
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+
+          gh release create "v${VERSION}" \
+            --title "JIM v${VERSION}" \
+            --notes-file ./release-notes.md \
+            ./artifacts/jim-release-${VERSION}.tar.gz \
+            ./artifacts/checksums.sha256
