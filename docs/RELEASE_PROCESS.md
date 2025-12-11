@@ -4,7 +4,7 @@ This document describes how to create releases of JIM, including support for air
 
 ## Overview
 
-JIM uses a tag-based release workflow. When you push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
+JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
 1. Validates the build and runs all tests
 2. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
@@ -78,7 +78,7 @@ git push origin main --tags
 
 ## Air-Gapped Deployments
 
-JIM supports deployment in air-gapped (disconnected) environments where there is no internet access.
+JIM supports deployment into air-gapped (disconnected) environments where there is no Internet access.
 
 ### Release Bundle Contents
 
