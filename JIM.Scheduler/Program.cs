@@ -8,11 +8,12 @@
 // the database.
 //
 // Required environment variables:
-// - LOGGING_LEVEL
-// - LOGGING_PATH
+// - JIM_LOG_LEVEL
+// - JIM_LOG_PATH
 //
 // **************************************************************************************
 
+using JIM.Models.Core;
 using Serilog;
 using System.Threading.Tasks;
 InitialiseLogging();
@@ -38,13 +39,13 @@ finally
 static void InitialiseLogging()
 {
     var loggerConfiguration = new LoggerConfiguration();
-    var loggingMinimumLevel = Environment.GetEnvironmentVariable("LOGGING_LEVEL");
-    var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
+    var loggingMinimumLevel = Environment.GetEnvironmentVariable(Constants.Config.LogLevel);
+    var loggingPath = Environment.GetEnvironmentVariable(Constants.Config.LogPath);
 
     if (loggingMinimumLevel == null)
-        throw new ApplicationException("LOGGING_LEVEL environment variable not found. Cannot continue");
+        throw new ApplicationException($"{Constants.Config.LogLevel} environment variable not found. Cannot continue");
     if (loggingPath == null)
-        throw new ApplicationException("LOGGING_PATH environment variable not found. Cannot continue");
+        throw new ApplicationException($"{Constants.Config.LogPath} environment variable not found. Cannot continue");
 
     switch (loggingMinimumLevel)
     {

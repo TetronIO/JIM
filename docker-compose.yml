@@ -6,11 +6,11 @@ services:
     restart: always
     env_file: .env
     environment:
-      # Docker-specific overrides (DB_HOSTNAME set in .env for external DB, or overridden by codespaces file)
-      - DB_HOSTNAME=${DB_HOSTNAME:-jim.database}
-      - LOGGING_PATH=/var/log/jim
-      - LOGGING_LEVEL=Verbose
-      - ENABLE_REQUEST_LOGGING=true
+      # Docker-specific overrides (JIM_DB_HOSTNAME set in .env for external DB, or overridden by codespaces file)
+      - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
+      - JIM_LOG_PATH=/var/log/jim
+      - JIM_LOG_LEVEL=Verbose
+      - JIM_LOG_REQUESTS=true
     volumes:
       - jim-logs-volume:/var/log/jim
     cap_add:
@@ -41,9 +41,9 @@ services:
     env_file: .env
     environment:
       # Docker-specific overrides
-      - DB_HOSTNAME=${DB_HOSTNAME:-jim.database}
-      - LOGGING_PATH=/var/log/jim
-      - LOGGING_LEVEL=Verbose
+      - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
+      - JIM_LOG_PATH=/var/log/jim
+      - JIM_LOG_LEVEL=Verbose
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -63,9 +63,9 @@ services:
     env_file: .env
     environment:
       # Docker-specific overrides
-      - DB_HOSTNAME=${DB_HOSTNAME:-jim.database}
-      - LOGGING_PATH=/var/log/jim
-      - LOGGING_LEVEL=Error
+      - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
+      - JIM_LOG_PATH=/var/log/jim
+      - JIM_LOG_LEVEL=Error
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
@@ -111,9 +111,9 @@ services:
     env_file: .env
     environment:
       # Postgres uses different var names
-      - POSTGRES_DB=${DB_NAME}
-      - POSTGRES_USER=${DB_USERNAME}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${JIM_DB_NAME}
+      - POSTGRES_USER=${JIM_DB_USERNAME}
+      - POSTGRES_PASSWORD=${JIM_DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s

@@ -3,6 +3,7 @@ using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -29,12 +30,12 @@ namespace JIM.Worker;
 //
 // Required environment variables:
 // -------------------------------
-// LOGGING_LEVEL
-// LOGGING_PATH
-// DB_HOSTNAME - validated by data layer
-// DB_NAME - validated by data layer
-// DB_USERNAME - validated by data layer
-// DB_PASSWORD - validated by data layer
+// JIM_LOG_LEVEL
+// JIM_LOG_PATH
+// JIM_DB_HOSTNAME - validated by data layer
+// JIM_DB_NAME - validated by data layer
+// JIM_DB_USERNAME - validated by data layer
+// JIM_DB_PASSWORD - validated by data layer
 //
 // Design Pattern:
 // https://docs.microsoft.com/en-us/dotnet/core/extensions/workers
@@ -313,13 +314,13 @@ public class Worker : BackgroundService
     private static void InitialiseLogging()
     {
         var loggerConfiguration = new LoggerConfiguration();
-        var loggingMinimumLevel = Environment.GetEnvironmentVariable("LOGGING_LEVEL");
-        var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
+        var loggingMinimumLevel = Environment.GetEnvironmentVariable(Constants.Config.LogLevel);
+        var loggingPath = Environment.GetEnvironmentVariable(Constants.Config.LogPath);
 
         if (loggingMinimumLevel == null)
-            throw new ApplicationException("LOGGING_LEVEL environment variable not found. Cannot continue");
+            throw new ApplicationException($"{Constants.Config.LogLevel} environment variable not found. Cannot continue");
         if (loggingPath == null)
-            throw new ApplicationException("LOGGING_PATH environment variable not found. Cannot continue");
+            throw new ApplicationException($"{Constants.Config.LogPath} environment variable not found. Cannot continue");
 
         switch (loggingMinimumLevel)
         {

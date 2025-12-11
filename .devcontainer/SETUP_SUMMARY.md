@@ -73,13 +73,13 @@ Go to: https://github.com/settings/codespaces
 
 Add these secrets:
 ```
-DB_PASSWORD=your-secure-password
-SSO_AUTHORITY=https://login.microsoftonline.com/your-tenant/v2.0
-SSO_CLIENT_ID=your-client-id
-SSO_SECRET=your-client-secret
-SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=preferred_username
-SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=userPrincipalName
-SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=admin@example.com
+JIM_DB_PASSWORD=your-secure-password
+JIM_SSO_AUTHORITY=https://login.microsoftonline.com/your-tenant/v2.0
+JIM_SSO_CLIENT_ID=your-client-id
+JIM_SSO_SECRET=your-client-secret
+JIM_SSO_CLAIM_TYPE=preferred_username
+JIM_SSO_MV_ATTRIBUTE=userPrincipalName
+JIM_SSO_INITIAL_ADMIN=admin@example.com
 ```
 
 ### Option 2: Single Base64 Secret (Easier)

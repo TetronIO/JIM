@@ -3,8 +3,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
-      # Override DB_HOSTNAME from .env to use bundled database container
-      - DB_HOSTNAME=jim.database
+      # Override JIM_DB_HOSTNAME from .env to use bundled database container
+      - JIM_DB_HOSTNAME=jim.database
     ports:
       - "5200:80"
     volumes:
@@ -13,15 +13,15 @@ services:
 
   jim.worker:
     environment:
-      # Override DB_HOSTNAME from .env to use bundled database container
-      - DB_HOSTNAME=jim.database
+      # Override JIM_DB_HOSTNAME from .env to use bundled database container
+      - JIM_DB_HOSTNAME=jim.database
     volumes:
       - ./test/test-data:/var/connector-files/test-data
 
   jim.scheduler:
     environment:
-      # Override DB_HOSTNAME from .env to use bundled database container
-      - DB_HOSTNAME=jim.database
+      # Override JIM_DB_HOSTNAME from .env to use bundled database container
+      - JIM_DB_HOSTNAME=jim.database
 
   # Expose Adminer for database management
   adminer:

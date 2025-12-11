@@ -424,35 +424,35 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 Configuration via environment variables (defined in `.env`). See `.env.example` for detailed documentation.
 
 ### Database
-- `DB_HOSTNAME`: PostgreSQL host
-- `DB_NAME`: Database name
-- `DB_USERNAME`: Database user
-- `DB_PASSWORD`: Database password
-- `DB_LOG_SENSITIVE_INFO`: Log sensitive SQL data (development only)
+- `JIM_DB_HOSTNAME`: PostgreSQL host
+- `JIM_DB_NAME`: Database name
+- `JIM_DB_USERNAME`: Database user
+- `JIM_DB_PASSWORD`: Database password
+- `JIM_DB_LOG_SENSITIVE_INFO`: Log sensitive SQL data (development only)
 
 ### SSO/Authentication (IDP-Agnostic)
 JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keycloak, AD FS, etc.).
 
 For detailed setup instructions, see the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
 
-- `SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
-- `SSO_CLIENT_ID`: OIDC client/application ID
-- `SSO_SECRET`: OIDC client secret
-- `SSO_API_SCOPE`: API scope for JWT bearer authentication (e.g., `api://{client-id}/access_as_user`)
+- `JIM_SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
+- `JIM_SSO_CLIENT_ID`: OIDC client/application ID
+- `JIM_SSO_SECRET`: OIDC client secret
+- `JIM_SSO_API_SCOPE`: API scope for JWT bearer authentication (e.g., `api://{client-id}/access_as_user`)
 
 ### User Identity Mapping
 JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `preferred_username`) for user mapping.
 
-- `SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE`: JWT claim for unique user identification (recommended: `sub`)
-- `SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME`: Metaverse attribute to store the identifier (default: `Subject Identifier`)
-- `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE`: Claim value for initial admin user
+- `JIM_SSO_CLAIM_TYPE`: JWT claim for unique user identification (recommended: `sub`)
+- `JIM_SSO_MV_ATTRIBUTE`: Metaverse attribute to store the identifier (default: `Subject Identifier`)
+- `JIM_SSO_INITIAL_ADMIN`: Claim value for initial admin user
 
 > **Tip**: Log into JIM and visit `/claims` to see your OIDC claims and find your `sub` value.
 
 ### Logging
-- `LOGGING_LEVEL`: Minimum log level (Verbose, Debug, Information, Warning, Error, Fatal)
-- `LOGGING_PATH`: Directory for log files
-- `ENABLE_REQUEST_LOGGING`: Enable verbose HTTP request logging (true/false)
+- `JIM_LOG_LEVEL`: Minimum log level (Verbose, Debug, Information, Warning, Error, Fatal)
+- `JIM_LOG_PATH`: Directory for log files
+- `JIM_LOG_REQUESTS`: Enable verbose HTTP request logging (true/false)
 
 **Rule**: Never hardcode these values. Always use environment variables.
 

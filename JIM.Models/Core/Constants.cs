@@ -4,11 +4,30 @@ public static class Constants
 {
     public static class Config
     {
-        public static string DatabaseHostname => "DB_HOSTNAME";
-        public static string DatabaseName => "DB_NAME";
-        public static string DatabaseUsername => "DB_USERNAME";
-        public static string DatabasePassword => "DB_PASSWORD";
-        public static string DatabaseLogSensitiveInformation => "DB_LOG_SENSITIVE_INFO";
+        // Database
+        public static string DatabaseHostname => "JIM_DB_HOSTNAME";
+        public static string DatabaseName => "JIM_DB_NAME";
+        public static string DatabaseUsername => "JIM_DB_USERNAME";
+        public static string DatabasePassword => "JIM_DB_PASSWORD";
+        public static string DatabaseLogSensitiveInformation => "JIM_DB_LOG_SENSITIVE_INFO";
+
+        // Logging
+        public static string LogLevel => "JIM_LOG_LEVEL";
+        public static string LogPath => "JIM_LOG_PATH";
+        public static string LogRequests => "JIM_LOG_REQUESTS";
+
+        // SSO/OIDC
+        public static string SsoAuthority => "JIM_SSO_AUTHORITY";
+        public static string SsoClientId => "JIM_SSO_CLIENT_ID";
+        public static string SsoSecret => "JIM_SSO_SECRET";
+        public static string SsoApiScope => "JIM_SSO_API_SCOPE";
+        public static string SsoValidIssuers => "JIM_SSO_VALID_ISSUERS";
+        public static string SsoClaimType => "JIM_SSO_CLAIM_TYPE";
+        public static string SsoMvAttribute => "JIM_SSO_MV_ATTRIBUTE";
+        public static string SsoInitialAdmin => "JIM_SSO_INITIAL_ADMIN";
+
+        // API
+        public static string InfrastructureApiKey => "JIM_INFRASTRUCTURE_API_KEY";
     }
 
     public static class BuiltInObjectTypes

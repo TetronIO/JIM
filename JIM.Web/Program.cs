@@ -18,23 +18,23 @@ using System.Security.Claims;
 
 // Required environment variables:
 // -------------------------------
-// LOGGING_LEVEL
-// LOGGING_PATH
-// DB_HOSTNAME - validated by the data layer
-// DB_NAME - validated by the data layer
-// DB_USERNAME - validated by the data layer
-// DB_PASSWORD - validated by the data layer
-// SSO_AUTHORITY
-// SSO_CLIENT_ID
-// SSO_SECRET
-// SSO_API_SCOPE - The OAuth scope for API access (e.g., api://client-id/access_as_user for Entra ID)
-// SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE
-// SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME
-// SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE
+// JIM_LOG_LEVEL
+// JIM_LOG_PATH
+// JIM_DB_HOSTNAME - validated by the data layer
+// JIM_DB_NAME - validated by the data layer
+// JIM_DB_USERNAME - validated by the data layer
+// JIM_DB_PASSWORD - validated by the data layer
+// JIM_SSO_AUTHORITY
+// JIM_SSO_CLIENT_ID
+// JIM_SSO_SECRET
+// JIM_SSO_API_SCOPE - The OAuth scope for API access (e.g., api://client-id/access_as_user for Entra ID)
+// JIM_SSO_CLAIM_TYPE
+// JIM_SSO_MV_ATTRIBUTE
+// JIM_SSO_INITIAL_ADMIN
 
 // Optional environment variables:
 // -------------------------------
-// ENABLE_REQUEST_LOGGING
+// JIM_LOG_REQUESTS
 // JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
@@ -49,10 +49,10 @@ try
     builder.Services.AddScoped<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
 
     // setup OpenID Connect (OIDC) authentication for Blazor UI
-    var authority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
-    var clientId = Environment.GetEnvironmentVariable("SSO_CLIENT_ID");
-    var clientSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
-    var apiScope = Environment.GetEnvironmentVariable("SSO_API_SCOPE");
+    var authority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority);
+    var clientId = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId);
+    var clientSecret = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret);
+    var apiScope = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope);
 
     // Extract the API identifier from the scope for JWT validation
     var apiAudience = ExtractApiAudience(apiScope, clientId);
@@ -275,8 +275,8 @@ try
     app.MapBlazorHub();
     app.MapFallbackToPage("/_Host");
 
-    // only enable request logging if configured to do some from env vars, as it adds a LOT to the logs
-    var enableRequestLogging = Environment.GetEnvironmentVariable("ENABLE_REQUEST_LOGGING");
+    // only enable request logging if configured to do so from env vars, as it adds a LOT to the logs
+    var enableRequestLogging = Environment.GetEnvironmentVariable(Constants.Config.LogRequests);
     if (enableRequestLogging != null && bool.Parse(enableRequestLogging))
         app.UseSerilogRequestLogging();
 
@@ -296,13 +296,13 @@ finally
 
 static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assignLogLogger)
 {
-    var loggingMinimumLevel = Environment.GetEnvironmentVariable("LOGGING_LEVEL");
+    var loggingMinimumLevel = Environment.GetEnvironmentVariable(Constants.Config.LogLevel);
     if (loggingMinimumLevel == null)
-        throw new ApplicationException("LOGGING_LEVEL environment variable not found. Cannot continue");
+        throw new ApplicationException($"{Constants.Config.LogLevel} environment variable not found. Cannot continue");
 
-    var loggingPath = Environment.GetEnvironmentVariable("LOGGING_PATH");
+    var loggingPath = Environment.GetEnvironmentVariable(Constants.Config.LogPath);
     if (loggingPath == null)
-        throw new ApplicationException("LOGGING_PATH environment variable not found. Cannot continue");
+        throw new ApplicationException($"{Constants.Config.LogPath} environment variable not found. Cannot continue");
 
     switch (loggingMinimumLevel)
     {
@@ -343,30 +343,30 @@ static async Task InitialiseJimApplicationAsync()
 
     // collect auth config variables
     Log.Verbose("InitialiseJimApplicationAsync: Called.");
-    var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY");
+    var ssoAuthority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority);
     if (string.IsNullOrEmpty(ssoAuthority))
-        throw new Exception("SSO_AUTHORITY environment variable missing");
+        throw new Exception($"{Constants.Config.SsoAuthority} environment variable missing");
 
-    var ssoClientId = Environment.GetEnvironmentVariable("SSO_CLIENT_ID");
+    var ssoClientId = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId);
     if (string.IsNullOrEmpty(ssoClientId))
-        throw new Exception("SSO_CLIENT_ID environment variable missing");
+        throw new Exception($"{Constants.Config.SsoClientId} environment variable missing");
 
-    var ssoSecret = Environment.GetEnvironmentVariable("SSO_SECRET");
+    var ssoSecret = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret);
     if (string.IsNullOrEmpty(ssoSecret))
-        throw new Exception("SSO_SECRET environment variable missing");
+        throw new Exception($"{Constants.Config.SsoSecret} environment variable missing");
 
     // collect claim mapping config variables
-    var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE");
+    var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType);
     if (string.IsNullOrEmpty(uniqueIdentifierClaimType))
-        throw new Exception("SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE environment variable missing");
+        throw new Exception($"{Constants.Config.SsoClaimType} environment variable missing");
 
-    var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME");
+    var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute);
     if (string.IsNullOrEmpty(uniqueIdentifierMetaverseAttributeName))
-        throw new Exception("SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME environment variable missing");
+        throw new Exception($"{Constants.Config.SsoMvAttribute} environment variable missing");
 
-    var initialAdminClaimValue = Environment.GetEnvironmentVariable("SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE");
+    var initialAdminClaimValue = Environment.GetEnvironmentVariable(Constants.Config.SsoInitialAdmin);
     if (string.IsNullOrEmpty(initialAdminClaimValue))
-        throw new Exception("SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE environment variable missing");
+        throw new Exception($"{Constants.Config.SsoInitialAdmin} environment variable missing");
 
     while (true)
     {
@@ -386,24 +386,25 @@ static async Task InitialiseJimApplicationAsync()
 static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
 {
     // Check if an infrastructure API key should be created from environment variable
-    var infrastructureApiKey = Environment.GetEnvironmentVariable("JIM_INFRASTRUCTURE_API_KEY");
+    var infrastructureApiKey = Environment.GetEnvironmentVariable(Constants.Config.InfrastructureApiKey);
     if (string.IsNullOrEmpty(infrastructureApiKey))
     {
-        Log.Verbose("InitialiseInfrastructureApiKeyAsync: No JIM_INFRASTRUCTURE_API_KEY environment variable set.");
+        Log.Verbose("InitialiseInfrastructureApiKeyAsync: No {EnvVar} environment variable set.", Constants.Config.InfrastructureApiKey);
         return;
     }
 
     // Validate the key format
     if (!infrastructureApiKey.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix))
     {
-        Log.Warning("InitialiseInfrastructureApiKeyAsync: JIM_INFRASTRUCTURE_API_KEY must start with '{Prefix}'. Key not created.",
-            ApiKeyAuthenticationHandler.ApiKeyPrefix);
+        Log.Warning("InitialiseInfrastructureApiKeyAsync: {EnvVar} must start with '{Prefix}'. Key not created.",
+            Constants.Config.InfrastructureApiKey, ApiKeyAuthenticationHandler.ApiKeyPrefix);
         return;
     }
 
     if (infrastructureApiKey.Length < 32)
     {
-        Log.Warning("InitialiseInfrastructureApiKeyAsync: JIM_INFRASTRUCTURE_API_KEY is too short. Use at least 32 characters. Key not created.");
+        Log.Warning("InitialiseInfrastructureApiKeyAsync: {EnvVar} is too short. Use at least 32 characters. Key not created.",
+            Constants.Config.InfrastructureApiKey);
         return;
     }
 
@@ -669,7 +670,7 @@ static string? ExtractApiAudience(string? apiScope, string? clientId)
 static string[] GetValidIssuers(string? authority)
 {
     // Check if user has configured explicit issuers
-    var configuredIssuers = Environment.GetEnvironmentVariable("SSO_VALID_ISSUERS");
+    var configuredIssuers = Environment.GetEnvironmentVariable(Constants.Config.SsoValidIssuers);
     if (!string.IsNullOrEmpty(configuredIssuers))
     {
         return configuredIssuers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

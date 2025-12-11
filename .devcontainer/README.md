@@ -112,10 +112,10 @@ Set secrets at: https://github.com/settings/codespaces
 
 **Individual Secrets:**
 ```
-DB_PASSWORD=your-secure-password
-SSO_AUTHORITY=https://login.microsoftonline.com/your-tenant/v2.0
-SSO_CLIENT_ID=your-client-id
-SSO_SECRET=your-client-secret
+JIM_DB_PASSWORD=your-secure-password
+JIM_SSO_AUTHORITY=https://login.microsoftonline.com/your-tenant/v2.0
+JIM_SSO_CLIENT_ID=your-client-id
+JIM_SSO_SECRET=your-client-secret
 ```
 
 **OR Entire .env as Base64:**

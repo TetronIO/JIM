@@ -51,7 +51,7 @@ JIM runs in a Docker stack using containers and can be deployed to on-premises i
 
 **Database Options:**
 - **Bundled PostgreSQL** - A PostgreSQL container is included for simple deployments. Start with `docker compose --profile with-db up -d`
-- **External PostgreSQL** - Connect to your existing PostgreSQL server by configuring `DB_HOSTNAME` in `.env` and running `docker compose up -d` (without the profile)
+- **External PostgreSQL** - Connect to your existing PostgreSQL server by configuring `JIM_DB_HOSTNAME` in `.env` and running `docker compose up -d` (without the profile)
 
 Each release includes a downloadable bundle containing pre-built Docker images, compose files, the PowerShell module, and documentation. See [Release Process](docs/RELEASE_PROCESS.md) for details on air-gapped deployment.
 
@@ -105,22 +105,22 @@ Replace `<...>` elements with your real values. See `.env.example` for detailed 
 
 ```
 # Database
-DB_NAME=jim
-DB_USERNAME=jim
-DB_PASSWORD=password
-DB_LOG_SENSITIVE_INFO=true
+JIM_DB_NAME=jim
+JIM_DB_USERNAME=jim
+JIM_DB_PASSWORD=password
+JIM_DB_LOG_SENSITIVE_INFO=true
 
 # SSO/OIDC - works with any OIDC-compliant provider
-SSO_AUTHORITY=<your IDP URL, e.g. https://login.microsoftonline.com/{tenant-id}/v2.0>
-SSO_CLIENT_ID=<your client id>
-SSO_SECRET=<your client secret>
-SSO_API_SCOPE=<your API scope, e.g. api://{client-id}/access_as_user>
+JIM_SSO_AUTHORITY=<your IDP URL, e.g. https://login.microsoftonline.com/{tenant-id}/v2.0>
+JIM_SSO_CLIENT_ID=<your client id>
+JIM_SSO_SECRET=<your client secret>
+JIM_SSO_API_SCOPE=<your API scope, e.g. api://{client-id}/access_as_user>
 
 # User Identity Mapping
 # JIM uses standard OIDC claims (sub, name, given_name, family_name, preferred_username)
-SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=sub
-SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=Subject Identifier
-SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your sub claim value>
+JIM_SSO_CLAIM_TYPE=sub
+JIM_SSO_MV_ATTRIBUTE=Subject Identifier
+JIM_SSO_INITIAL_ADMIN=<your sub claim value>
 ```
 
 **Finding Your `sub` Claim Value**:
