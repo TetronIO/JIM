@@ -149,3 +149,8 @@ html, body {
     color: var(--mud-palette-text-primary) !important;
     opacity: 0.8 !important;
 }
+
+/* Dialog actions padding - ensure consistent padding with dialog content */
+.mud-dialog-actions {
+    padding: 24px !important;
+}

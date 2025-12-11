@@ -22,34 +22,60 @@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
         Choose how to add a certificate to the store.
     </MudText>
-    <MudButtonGroup Variant="Variant.Outlined" Class="mt-3" DropShadow="false">
-        <MudButton OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload">Upload Certificate</MudButton>
-        <MudButton OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder">Reference File Path</MudButton>
+    <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary" Class="mt-3">
+        <MudButton OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload">Upload
+            Certificate</MudButton>
+        <MudButton OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder">Reference
+            File Path
+        </MudButton>
     </MudButtonGroup>
 </MudPaper>
 
 <MudTable Items="@_certificates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
-          Filter="new Func<TrustedCertificate,bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
+    Filter="new Func<TrustedCertificate, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
     <ToolBarContent>
         <MudText Typo="Typo.h6">Certificates</MudText>
         <MudSpacer />
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
         <MudTh>Actions</MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Subject)"><MudText Typo="Typo.button">Subject</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.SourceType)"><MudText Typo="Typo.button">Source</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.ValidTo)"><MudText Typo="Typo.button">Expires</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.IsEnabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Name)">
+                <MudText Typo="Typo.button">Name</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Subject)">
+                <MudText Typo="Typo.button">Subject</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.SourceType)">
+                <MudText Typo="Typo.button">Source</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.ValidTo)">
+                <MudText Typo="Typo.button">Expires</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.IsEnabled)">
+                <MudText Typo="Typo.button">Status</MudText>
+            </MudTableSortLabel>
+        </MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd>
             <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context)">View Details</MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit</MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context)">View
+                    Details</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete
+                </MudMenuItem>
             </MudMenu>
         </MudTd>
         <MudTd DataLabel="Name">@context.Name</MudTd>
@@ -107,11 +133,12 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_uploadName" Label="Name" Required="true"
-                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
-                      HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
+            RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+            HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
             <ActivatorContent>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5">
                     @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")
                 </MudButton>
             </ActivatorContent>
@@ -119,15 +146,14 @@
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
             Supported formats: PEM (.pem, .crt) or DER (.cer, .der)
         </MudText>
-        <MudTextField T="string" @bind-Value="_uploadNotes" Label="Notes" Lines="3"
-                      Variant="Variant.Outlined" Class="mt-5"
-                      HelperText="Optional notes about this certificate" />
+        <MudTextField T="string" @bind-Value="_uploadNotes" Label="Notes" Lines="3" Variant="Variant.Outlined"
+            Class="mt-5" HelperText="Optional notes about this certificate" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _uploadDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-                   Disabled="@(string.IsNullOrWhiteSpace(_uploadName) || _uploadFile == null || _uploading)"
-                   OnClick="HandleUploadAsync">
+            Disabled="@(string.IsNullOrWhiteSpace(_uploadName) || _uploadFile == null || _uploading)"
+            OnClick="HandleUploadAsync">
             @if (_uploading)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -150,20 +176,19 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_filePathName" Label="Name" Required="true"
-                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
-                      HelperText="A friendly name for this certificate" />
+            RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+            HelperText="A friendly name for this certificate" />
         <MudTextField T="string" @bind-Value="_filePath" Label="File Path" Required="true"
-                      RequiredError="A file path is required" Variant="Variant.Outlined" Class="mt-5"
-                      HelperText="Full path to the certificate file (e.g., /var/connector-files/certs/root-ca.pem)" />
-        <MudTextField T="string" @bind-Value="_filePathNotes" Label="Notes" Lines="3"
-                      Variant="Variant.Outlined" Class="mt-5"
-                      HelperText="Optional notes about this certificate" />
+            RequiredError="A file path is required" Variant="Variant.Outlined" Class="mt-5"
+            HelperText="Full path to the certificate file (e.g., /var/connector-files/certs/root-ca.pem)" />
+        <MudTextField T="string" @bind-Value="_filePathNotes" Label="Notes" Lines="3" Variant="Variant.Outlined"
+            Class="mt-5" HelperText="Optional notes about this certificate" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _filePathDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-                   Disabled="@(string.IsNullOrWhiteSpace(_filePathName) || string.IsNullOrWhiteSpace(_filePath) || _addingFromPath)"
-                   OnClick="HandleAddFromPathAsync">
+            Disabled="@(string.IsNullOrWhiteSpace(_filePathName) || string.IsNullOrWhiteSpace(_filePath) || _addingFromPath)"
+            OnClick="HandleAddFromPathAsync">
             @if (_addingFromPath)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -198,10 +223,12 @@
                     <MudField Label="Issuer" Variant="Variant.Outlined">@_selectedCertificate.Issuer</MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Valid From" Variant="Variant.Outlined">@_selectedCertificate.ValidFrom.ToFriendlyDate()</MudField>
+                    <MudField Label="Valid From" Variant="Variant.Outlined">@_selectedCertificate.ValidFrom.ToFriendlyDate()
+                    </MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Valid To" Variant="Variant.Outlined">@_selectedCertificate.ValidTo.ToFriendlyDate()</MudField>
+                    <MudField Label="Valid To" Variant="Variant.Outlined">@_selectedCertificate.ValidTo.ToFriendlyDate()
+                    </MudField>
                 </MudItem>
                 <MudItem xs="12">
                     <MudField Label="Thumbprint" Variant="Variant.Outlined">@_selectedCertificate.Thumbprint</MudField>
@@ -219,10 +246,12 @@
                     </MudItem>
                 }
                 <MudItem xs="6">
-                    <MudField Label="Created At" Variant="Variant.Outlined">@_selectedCertificate.CreatedAt.ToFriendlyDate()</MudField>
+                    <MudField Label="Created At" Variant="Variant.Outlined">@_selectedCertificate.CreatedAt.ToFriendlyDate()
+                    </MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Created By" Variant="Variant.Outlined">@(_selectedCertificate.CreatedBy ?? "-")</MudField>
+                    <MudField Label="Created By" Variant="Variant.Outlined">@(_selectedCertificate.CreatedBy ?? "-")
+                    </MudField>
                 </MudItem>
                 @if (!string.IsNullOrEmpty(_selectedCertificate.Notes))
                 {
@@ -246,17 +275,16 @@
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true"
-                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3" />
-        <MudTextField T="string" @bind-Value="_editNotes" Label="Notes" Lines="3"
-                      Variant="Variant.Outlined" Class="mt-5" />
+        <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true" RequiredError="A name is required"
+            Variant="Variant.Outlined" Class="mt-3" />
+        <MudTextField T="string" @bind-Value="_editNotes" Label="Notes" Lines="3" Variant="Variant.Outlined"
+            Class="mt-5" />
         <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="Enabled" Class="mt-5" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-                   Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)"
-                   OnClick="HandleSaveEditAsync">
+            Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)" OnClick="HandleSaveEditAsync">
             @if (_saving)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -279,11 +307,11 @@
     private bool _loading = true;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
-    {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Admin", href: "/admin/operations"),
-        new("Certificates", href: null, disabled: true)
-    };
+{
+new("Home", href: "/", icon: Icons.Material.Filled.Home),
+new("Admin", href: "/admin/operations"),
+new("Certificates", href: null, disabled: true)
+};
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
 
@@ -471,11 +499,11 @@
         {
             var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
             await Jim.Certificates.UpdateAsync(
-                _editingCertificate.Id,
-                user,
-                _editName,
-                _editNotes,
-                _editEnabled);
+            _editingCertificate.Id,
+            user,
+            _editName,
+            _editNotes,
+            _editEnabled);
 
             Snackbar.Add("Certificate updated successfully.", Severity.Success);
             _editDialogVisible = false;
@@ -494,10 +522,10 @@
     private async Task HandleDeleteAsync(TrustedCertificate certificate)
     {
         var result = await DialogService.ShowMessageBox(
-            "Delete Certificate",
-            $"Are you sure you want to delete the certificate '{certificate.Name}'? This action cannot be undone.",
-            yesText: "Delete",
-            cancelText: "Cancel");
+        "Delete Certificate",
+        $"Are you sure you want to delete the certificate '{certificate.Name}'? This action cannot be undone.",
+        yesText: "Delete",
+        cancelText: "Cancel");
 
         if (result != true)
             return;
