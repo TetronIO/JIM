@@ -61,6 +61,12 @@ public class ApiKey
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
+    /// Whether this is an infrastructure key created automatically from the JIM_INFRASTRUCTURE_API_KEY environment variable.
+    /// Infrastructure keys are intended for initial CI/CD setup and should be deleted after the environment is configured.
+    /// </summary>
+    public bool IsInfrastructureKey { get; set; }
+
+    /// <summary>
     /// The roles assigned to this API key. These determine what actions the key can perform.
     /// </summary>
     public List<Role> Roles { get; set; } = [];

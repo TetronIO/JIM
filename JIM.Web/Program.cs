@@ -35,6 +35,7 @@ using System.Security.Claims;
 // Optional environment variables:
 // -------------------------------
 // ENABLE_REQUEST_LOGGING
+// JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
@@ -372,12 +373,81 @@ static async Task InitialiseJimApplicationAsync()
         if (await jimApplication.IsApplicationReadyAsync())
         {
             await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
+            await InitialiseInfrastructureApiKeyAsync(jimApplication);
             break;
         }
 
         Log.Information("JIM.Application is not ready yet. Sleeping...");
         await Task.Delay(1000);
     }
+}
+
+static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
+{
+    // Check if an infrastructure API key should be created from environment variable
+    var infrastructureApiKey = Environment.GetEnvironmentVariable("JIM_INFRASTRUCTURE_API_KEY");
+    if (string.IsNullOrEmpty(infrastructureApiKey))
+    {
+        Log.Verbose("InitialiseInfrastructureApiKeyAsync: No JIM_INFRASTRUCTURE_API_KEY environment variable set.");
+        return;
+    }
+
+    // Validate the key format
+    if (!infrastructureApiKey.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix))
+    {
+        Log.Warning("InitialiseInfrastructureApiKeyAsync: JIM_INFRASTRUCTURE_API_KEY must start with '{Prefix}'. Key not created.",
+            ApiKeyAuthenticationHandler.ApiKeyPrefix);
+        return;
+    }
+
+    if (infrastructureApiKey.Length < 32)
+    {
+        Log.Warning("InitialiseInfrastructureApiKeyAsync: JIM_INFRASTRUCTURE_API_KEY is too short. Use at least 32 characters. Key not created.");
+        return;
+    }
+
+    // Check if this key already exists (by hash)
+    var keyHash = ApiKeyAuthenticationHandler.HashApiKey(infrastructureApiKey);
+    var existingKey = await jim.Repository.ApiKeys.GetByHashAsync(keyHash);
+
+    if (existingKey != null)
+    {
+        Log.Information("InitialiseInfrastructureApiKeyAsync: Infrastructure API key already exists (prefix: {Prefix}).", existingKey.KeyPrefix);
+        return;
+    }
+
+    // Get the Administrators role
+    var roles = await jim.Security.GetRolesAsync();
+    var adminRole = roles.FirstOrDefault(r => r.Name == "Administrators");
+
+    if (adminRole == null)
+    {
+        Log.Error("InitialiseInfrastructureApiKeyAsync: Administrators role not found. Cannot create infrastructure key.");
+        return;
+    }
+
+    // Create the infrastructure API key with 24-hour expiry
+    var keyPrefix = infrastructureApiKey.Length >= 12
+        ? infrastructureApiKey[..12]
+        : infrastructureApiKey;
+
+    var apiKey = new JIM.Models.Security.ApiKey
+    {
+        Id = Guid.NewGuid(),
+        Name = "Infrastructure Key",
+        Description = "Auto-created from JIM_INFRASTRUCTURE_API_KEY environment variable. This key expires 24 hours after creation and should be deleted after initial setup is complete.",
+        KeyHash = keyHash,
+        KeyPrefix = keyPrefix,
+        CreatedAt = DateTime.UtcNow,
+        ExpiresAt = DateTime.UtcNow.AddHours(24),
+        IsEnabled = true,
+        IsInfrastructureKey = true,
+        Roles = [adminRole]
+    };
+
+    await jim.Repository.ApiKeys.CreateAsync(apiKey);
+    Log.Information("InitialiseInfrastructureApiKeyAsync: Created infrastructure API key (prefix: {Prefix}, expires: {Expiry}).",
+        keyPrefix, apiKey.ExpiresAt);
 }
 
 static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)

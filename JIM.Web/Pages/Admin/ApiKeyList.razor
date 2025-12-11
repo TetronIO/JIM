@@ -3,6 +3,7 @@
 @using JIM.Application
 @using JIM.Models.Security
 @using JIM.Web.Middleware.Api
+@using Humanizer
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -22,36 +23,70 @@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
         Create a new API key for automated access to the JIM API.
     </MudText>
-    <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add"
-               Variant="Variant.Outlined" Class="mt-3">Create API Key</MudButton>
+    <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined"
+        Class="mt-3">Create API Key</MudButton>
 </MudPaper>
 
 <MudTable Items="@_apiKeys" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
-          Filter="new Func<ApiKey,bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
+    Filter="new Func<ApiKey, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
     <ToolBarContent>
         <MudText Typo="Typo.h6">API Keys</MudText>
         <MudSpacer />
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
         <MudTh>Actions</MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.KeyPrefix)"><MudText Typo="Typo.button">Key Prefix</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudText Typo="Typo.button">Roles</MudText></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.LastUsedAt ?? DateTime.MinValue)"><MudText Typo="Typo.button">Last Used</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.ExpiresAt ?? DateTime.MaxValue)"><MudText Typo="Typo.button">Expires</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.IsEnabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.Name)">
+                <MudText Typo="Typo.button">Name</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.KeyPrefix)">
+                <MudText Typo="Typo.button">Key Prefix</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Roles</MudText>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.LastUsedAt ?? DateTime.MinValue)">
+                <MudText Typo="Typo.button">Last Used</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.ExpiresAt ?? DateTime.MaxValue)">
+                <MudText Typo="Typo.button">Expires</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.IsEnabled)">
+                <MudText Typo="Typo.button">Status</MudText>
+            </MudTableSortLabel>
+        </MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd>
             <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit</MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete
+                </MudMenuItem>
             </MudMenu>
         </MudTd>
         <MudTd DataLabel="Name">
-            <MudText Typo="Typo.body2">@context.Name</MudText>
+            <div class="d-flex align-center gap-2">
+                <MudText Typo="Typo.body2">@context.Name</MudText>
+                @if (context.IsInfrastructureKey)
+                {
+                    <MudTooltip
+                        Text="Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable.">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                            Icon="@Icons.Material.Filled.Construction">Infrastructure</MudChip>
+                    </MudTooltip>
+                }
+            </div>
             @if (!string.IsNullOrEmpty(context.Description))
             {
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Description</MudText>
@@ -87,15 +122,25 @@
             {
                 @if (context.ExpiresAt.Value < DateTime.UtcNow)
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Expired</MudChip>
+                    <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToString("dddd, d MMMM yyyy 'at' HH:mm")"
+                        Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Expired</MudChip>
+                    </MudTooltip>
                 }
-                else if (context.ExpiresAt.Value < DateTime.UtcNow.AddDays(30))
+                else if (context.ExpiresAt.Value < DateTime.UtcNow.AddDays(7))
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@((context.ExpiresAt.Value - DateTime.UtcNow).Days) days</MudChip>
+                    <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToString("dddd, d MMMM yyyy 'at' HH:mm")"
+                        Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@((context.ExpiresAt.Value -
+                                                DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Minute))</MudChip>
+                    </MudTooltip>
                 }
                 else
                 {
-                    <MudText Typo="Typo.body2">@context.ExpiresAt.Value.ToString("yyyy-MM-dd")</MudText>
+                    <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToString("dddd, d MMMM yyyy 'at' HH:mm")"
+                        Arrow="true" Placement="Placement.Top">
+                        <MudText Typo="Typo.body2">@context.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd")</MudText>
+                    </MudTooltip>
                 }
             }
             else
@@ -128,11 +173,10 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_createName" Label="Name" Required="true"
-                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
-                      HelperText="A friendly name for this API key (e.g., 'CI/CD Pipeline')" />
+            RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+            HelperText="A friendly name for this API key (e.g., 'CI/CD Pipeline')" />
         <MudTextField T="string" @bind-Value="_createDescription" Label="Description" Lines="2"
-                      Variant="Variant.Outlined" Class="mt-4"
-                      HelperText="Optional description of what this key is used for" />
+            Variant="Variant.Outlined" Class="mt-4" HelperText="Optional description of what this key is used for" />
         <MudText Typo="Typo.subtitle2" Class="mt-5 mb-2">Roles</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
             Select the roles to assign to this API key. Roles determine what actions the key can perform.
@@ -140,18 +184,15 @@
         @foreach (var role in _availableRoles)
         {
             <MudCheckBox T="bool" Value="@_createSelectedRoleIds.Contains(role.Id)"
-                         ValueChanged="@(value => ToggleRole(role.Id, value))"
-                         Label="@role.Name" Class="ml-n2" />
+                ValueChanged="@(value => ToggleRole(role.Id, value))" Label="@role.Name" Class="ml-n2" />
         }
-        <MudDatePicker @bind-Date="_createExpiresAt" Label="Expires (Optional)"
-                       Variant="Variant.Outlined" Class="mt-4"
-                       HelperText="Leave empty for no expiration" Clearable="true" />
+        <MudDatePicker @bind-Date="_createExpiresAt" Label="Expires (Optional)" Variant="Variant.Outlined" Class="mt-4"
+            HelperText="Leave empty for no expiration" Clearable="true" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _createDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-                   Disabled="@(string.IsNullOrWhiteSpace(_createName) || _creating)"
-                   OnClick="HandleCreateAsync">
+            Disabled="@(string.IsNullOrWhiteSpace(_createName) || _creating)" OnClick="HandleCreateAsync">
             @if (_creating)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -176,10 +217,9 @@
         <MudAlert Severity="Severity.Warning" Class="mb-4">
             Copy this API key now. You won't be able to see it again!
         </MudAlert>
-        <MudTextField T="string" Value="@_createdFullKey" Label="API Key" ReadOnly="true"
-                      Variant="Variant.Outlined" Adornment="Adornment.End"
-                      AdornmentIcon="@Icons.Material.Filled.ContentCopy"
-                      OnAdornmentClick="CopyKeyToClipboard" />
+        <MudTextField T="string" Value="@_createdFullKey" Label="API Key" ReadOnly="true" Variant="Variant.Outlined"
+            Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+            OnAdornmentClick="CopyKeyToClipboard" />
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
             Use this key in the X-API-Key header when making API requests.
         </MudText>
@@ -188,13 +228,13 @@
         </MudText>
         <MudPaper Elevation="0" Class="pa-3 mt-2" Style="background-color: var(--mud-palette-background-gray);">
             <MudText Typo="Typo.body2" Class="mud-text-code" Style="white-space: pre-wrap; word-break: break-all;">
-curl -H "X-API-Key: @_createdFullKey" \
-     https://your-jim-server/api/v1/metaverse/objects</MudText>
+                curl -H "X-API-Key: @_createdFullKey" \
+                https://your-jim-server/api/v1/metaverse/objects</MudText>
         </MudPaper>
     </DialogContent>
     <DialogActions>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-                   OnClick="() => _createdKeyDialogVisible = false">Done</MudButton>
+            OnClick="() => _createdKeyDialogVisible = false">Done</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -206,27 +246,24 @@ curl -H "X-API-Key: @_createdFullKey" \
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true"
-                      RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3" />
-        <MudTextField T="string" @bind-Value="_editDescription" Label="Description" Lines="2"
-                      Variant="Variant.Outlined" Class="mt-4" />
+        <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true" RequiredError="A name is required"
+            Variant="Variant.Outlined" Class="mt-3" />
+        <MudTextField T="string" @bind-Value="_editDescription" Label="Description" Lines="2" Variant="Variant.Outlined"
+            Class="mt-4" />
         <MudText Typo="Typo.subtitle2" Class="mt-5 mb-2">Roles</MudText>
         @foreach (var role in _availableRoles)
         {
             <MudCheckBox T="bool" Value="@_editSelectedRoleIds.Contains(role.Id)"
-                         ValueChanged="@(value => ToggleEditRole(role.Id, value))"
-                         Label="@role.Name" Class="ml-n2" />
+                ValueChanged="@(value => ToggleEditRole(role.Id, value))" Label="@role.Name" Class="ml-n2" />
         }
-        <MudDatePicker @bind-Date="_editExpiresAt" Label="Expires (Optional)"
-                       Variant="Variant.Outlined" Class="mt-4"
-                       HelperText="Leave empty for no expiration" Clearable="true" />
+        <MudDatePicker @bind-Date="_editExpiresAt" Label="Expires (Optional)" Variant="Variant.Outlined" Class="mt-4"
+            HelperText="Leave empty for no expiration" Clearable="true" />
         <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="Enabled" Class="mt-4" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-                   Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)"
-                   OnClick="HandleSaveEditAsync">
+            Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)" OnClick="HandleSaveEditAsync">
             @if (_saving)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -247,11 +284,11 @@ curl -H "X-API-Key: @_createdFullKey" \
     private bool _loading = true;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
-    {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Admin", href: "/admin/operations"),
-        new("API Keys", href: null, disabled: true)
-    };
+{
+new("Home", href: "/", icon: Icons.Material.Filled.Home),
+new("Admin", href: "/admin/operations"),
+new("API Keys", href: null, disabled: true)
+};
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
 
@@ -448,10 +485,10 @@ curl -H "X-API-Key: @_createdFullKey" \
     private async Task HandleDeleteAsync(ApiKey apiKey)
     {
         var result = await DialogService.ShowMessageBox(
-            "Delete API Key",
-            $"Are you sure you want to delete the API key '{apiKey.Name}'? Any requests using this key will immediately fail.",
-            yesText: "Delete",
-            cancelText: "Cancel");
+        "Delete API Key",
+        $"Are you sure you want to delete the API key '{apiKey.Name}'? Any requests using this key will immediately fail.",
+        yesText: "Delete",
+        cancelText: "Cancel");
 
         if (result != true)
             return;

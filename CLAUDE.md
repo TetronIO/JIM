@@ -82,8 +82,15 @@ If you cannot build/test locally due to environment constraints, you MUST:
 **Docker (Manual Commands):**
 - `docker compose -f db.yml up -d` - Start database only (same as jim-db)
 - `docker compose -f db.yml down` - Stop database
-- `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml up -d` - Start full stack in Codespaces (same as jim-stack)
+- `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d` - Start full stack in Codespaces (same as jim-stack)
 - `docker compose logs [service]` - View service logs
+
+**IMPORTANT - Rebuilding Containers After Code Changes:**
+When running the Docker stack (`jim-stack`) and you make code changes to JIM.Web, JIM.Worker, or JIM.Scheduler, you MUST rebuild the affected container(s) for changes to take effect:
+- `jim-stack-build` - Rebuild and restart all containers
+- Or rebuild specific service: `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.web`
+
+Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
 ## Key Project Locations
 
