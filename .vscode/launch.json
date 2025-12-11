@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "JIM Web (Blazor)",
+      "name": "JIM Web",
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build-web",
@@ -18,33 +18,10 @@
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "ASPNETCORE_URLS": "https://localhost:5201;http://localhost:5200"
+        "ASPNETCORE_URLS": "https://localhost:7000;http://localhost:5200"
       },
       "sourceFileMap": {
         "/Views": "${workspaceFolder}/Views"
-      },
-      "logging": {
-        "moduleLoad": false
-      }
-    },
-    {
-      "name": "JIM API",
-      "type": "coreclr",
-      "request": "launch",
-      "preLaunchTask": "build-api",
-      "program": "${workspaceFolder}/JIM.Api/bin/Debug/net9.0/JIM.Api.dll",
-      "args": [],
-      "cwd": "${workspaceFolder}/JIM.Api",
-      "stopAtEntry": false,
-      "serverReadyAction": {
-        "action": "openExternally",
-        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
-        "uriFormat": "%s/swagger"
-      },
-      "envFile": "${workspaceFolder}/.env",
-      "env": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "ASPNETCORE_URLS": "https://localhost:5203;http://localhost:5202"
       },
       "logging": {
         "moduleLoad": false
@@ -89,29 +66,15 @@
   ],
   "compounds": [
     {
-      "name": "JIM Full Stack (Web + API + Worker)",
+      "name": "JIM Full Stack",
       "configurations": [
-        "JIM Web (Blazor)",
-        "JIM API",
+        "JIM Web",
         "JIM Worker"
       ],
       "presentation": {
         "hidden": false,
         "group": "Full Stack",
         "order": 1
-      },
-      "stopAll": true
-    },
-    {
-      "name": "JIM Web Stack (Web + API)",
-      "configurations": [
-        "JIM Web (Blazor)",
-        "JIM API"
-      ],
-      "presentation": {
-        "hidden": false,
-        "group": "Web Stack",
-        "order": 2
       },
       "stopAll": true
     }

@@ -144,7 +144,12 @@ docker load -i images/postgres.tar
 
 **Option A: Use the bundled PostgreSQL container** (simpler, suitable for smaller deployments)
 
-The included `docker-compose.yml` contains a PostgreSQL service. No additional setup required.
+The `docker-compose.yml` uses Docker Compose profiles to make the database service optional. To include the bundled PostgreSQL:
+
+```bash
+# Start with bundled database
+docker compose --profile with-db up -d
+```
 
 **Option B: Use an external PostgreSQL server** (recommended for production)
 
@@ -157,15 +162,21 @@ If you have an existing PostgreSQL server:
    GRANT ALL PRIVILEGES ON DATABASE jim TO jim;
    ```
 
-2. Comment out or remove the `jim.database` service from `docker-compose.yml`
-
-3. Update `.env` with your database connection:
+2. Update `.env` with your database connection:
    ```
    DB_HOSTNAME=your-postgres-server.local
    DB_NAME=jim
    DB_USERNAME=jim
    DB_PASSWORD=your_secure_password
    ```
+
+3. Start JIM without the database profile:
+   ```bash
+   # Start without bundled database (uses external)
+   docker compose up -d
+   ```
+
+The JIM services will connect to your external PostgreSQL server using the `DB_HOSTNAME` from `.env`.
 
 #### Step 4: Configure Environment
 
@@ -269,6 +280,10 @@ If you plan to use the File Connector to import/export CSV files, configure a vo
 #### Step 8: Start Services
 
 ```bash
+# With bundled PostgreSQL:
+docker compose --profile with-db up -d
+
+# With external PostgreSQL:
 docker compose up -d
 
 # Check all services are running

@@ -14,19 +14,6 @@ services:
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
       - c:/temp/jim-connector-files:/var/connector-files
 
-  jim.api:
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=https://+:443;http://+:80
-      - ASPNETCORE_Kestrel__Certificates__Default__Path=/root/.aspnet/https/aspnetapp.pfx
-      - ASPNETCORE_Kestrel__Certificates__Default__Password=SecurePassword123!
-    ports:
-      - "5202:80"
-      - "5203:443"
-    volumes:
-      - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
-      - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
-
   jim.worker:
     volumes:
       - c:/temp/jim-connector-files:/var/connector-files

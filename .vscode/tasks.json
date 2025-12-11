@@ -16,19 +16,6 @@
       "group": "build"
     },
     {
-      "label": "build-api",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "build",
-        "${workspaceFolder}/JIM.Api/JIM.Api.csproj",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary"
-      ],
-      "problemMatcher": "$msCompile",
-      "group": "build"
-    },
-    {
       "label": "build-worker",
       "command": "dotnet",
       "type": "process",

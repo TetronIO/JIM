@@ -193,11 +193,11 @@ alias jim-db='docker compose -f db.yml up -d'
 alias jim-db-stop='docker compose -f db.yml down'
 alias jim-db-logs='docker compose -f db.yml logs -f'
 alias jim-adminer='echo "Adminer running at http://localhost:8080"'
-alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml up -d'
-alias jim-stack-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml up -d --build'
-alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml logs -f'
-alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml down'
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-stack-build to start fresh."'
+alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
+alias jim-stack-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
+alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
+alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down'
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-stack-build to start fresh."'
 EOF
 
 print_success "Shell aliases created (restart terminal or run: source ~/.zshrc)"

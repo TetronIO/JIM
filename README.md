@@ -49,6 +49,10 @@ JIM is a container-based distributed application. It is comprised of:
 ## Deployment
 JIM runs in a Docker stack using containers and can be deployed to on-premises infrastructure or cloud container services. JIM is designed for air-gapped deployments - no internet connection is required.
 
+**Database Options:**
+- **Bundled PostgreSQL** - A PostgreSQL container is included for simple deployments. Start with `docker compose --profile with-db up -d`
+- **External PostgreSQL** - Connect to your existing PostgreSQL server by configuring `DB_HOSTNAME` in `.env` and running `docker compose up -d` (without the profile)
+
 Each release includes a downloadable bundle containing pre-built Docker images, compose files, the PowerShell module, and documentation. See [Release Process](docs/RELEASE_PROCESS.md) for details on air-gapped deployment.
 
 ## Connectors
