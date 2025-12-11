@@ -115,9 +115,16 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(metaverseObjectType.Id, page, pageSize);
     }
 
-    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(PredefinedSearch predefinedSearch, int page = 1, int pageSize = 20)
+    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
+        PredefinedSearch predefinedSearch,
+        int page = 1,
+        int pageSize = 20,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(predefinedSearch, page, pageSize);
+        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(
+            predefinedSearch, page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
     /// <summary>

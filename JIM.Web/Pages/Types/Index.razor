@@ -1,4 +1,4 @@
-﻿@page "/t/{TypeNameUrlParam}"
+@page "/t/{TypeNameUrlParam}"
 @page "/t/{TypeNameUrlParam}/s/{PredefinedSearchUri}"
 @attribute [Authorize(Roles = "Users")]
 @using JIM.Application
@@ -15,43 +15,46 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
-@if (PredefinedSearch != null)
+@if (_isInitialised && PredefinedSearch != null)
 {
-    <MetaverseObjectHeaderPaginator Results="@MetaverseObjectHeaders" />
-    
-    <MudSimpleTable Style="overflow-x: auto;" Hover="true" Bordered="false" Striped="false" Class="mt-5" Outlined="true" Elevation="0">
-        <thead>
-            <tr>
-                @foreach (var psa in PredefinedSearch.Attributes)
-                {
-                    <th><MudText Typo="Typo.button">@psa.MetaverseAttribute.Name</MudText></th>
-                }
-            </tr>
-        </thead>
-        <tbody>
-            @if (MetaverseObjectHeaders is { Results.Count: > 0 })
+    <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" Hover="true"
+        Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick"
+        RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="Search..."
+                Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
+                Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            @foreach (var psa in PredefinedSearch.Attributes)
             {
-                foreach (var moh in MetaverseObjectHeaders.Results)
-                {
-                    <tr>
-                        <td><MudLink Href="@Utilities.GetMetaverseObjectHref(moh)">@Utilities.GetMetaverseObjectHrefText(moh)</MudLink></td>
-                        @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
-                        {
-                            <td>@moh.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</td>
-                        }
-                    </tr>
-                }
+                <MudTh>
+                    <MudTableSortLabel SortLabel="@psa.MetaverseAttribute.Name" T="MetaverseObjectHeader"
+                        InitialDirection="@(psa.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName ? SortDirection.Ascending : SortDirection.None)">
+                        <MudText Typo="Typo.button">@psa.MetaverseAttribute.Name</MudText>
+                    </MudTableSortLabel>
+                </MudTh>
             }
-            else
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="@Constants.BuiltInAttributes.DisplayName">
+                <MudLink Href="@Utilities.GetMetaverseObjectHref(context)">@Utilities.GetMetaverseObjectHrefText(context)</MudLink>
+            </MudTd>
+            @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
             {
-                <tr>
-                    <td colspan="@PredefinedSearch.Attributes.Count" class="light text-center">No results</td>
-                </tr>
+                <MudTd DataLabel="@psa.MetaverseAttribute.Name">@context.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</MudTd>
             }
-        </tbody>
-    </MudSimpleTable>
+        </RowTemplate>
+        <NoRecordsContent>
+            No results
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
 }
-else
+else if (_isInitialised)
 {
     if (!string.IsNullOrEmpty(PredefinedSearchUri))
     {
@@ -59,7 +62,7 @@ else
     }
     else
     {
-        <b>Please create a default Predefined Search for this Metaverse Object Type</b>    
+        <b>Please create a default Predefined Search for this Metaverse Object Type</b>
     }
 }
 
@@ -70,11 +73,11 @@ else
     [Parameter]
     public string? PredefinedSearchUri { get; set; }
 
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "p")]
-    public int? Page { get; set; }
+    private MudTable<MetaverseObjectHeader>? _table;
+    private string _searchString = "";
+    private bool _loading;
+    private bool _isInitialised;
 
-    private PagedResultSet<MetaverseObjectHeader>? MetaverseObjectHeaders { get; set; }
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private PredefinedSearch? PredefinedSearch { get; set; }
     private string? PageTitle { get; set; }
@@ -83,8 +86,8 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Page is null or < 1)
-            Page = 1;
+        // Reset state when parameters change (e.g., navigating between types)
+        _isInitialised = false;
 
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
@@ -110,8 +113,6 @@ else
 
         if (PredefinedSearch != null)
         {
-            // get a page of results for the metaverse objects matching this type...
-            MetaverseObjectHeaders = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(PredefinedSearch, Page.Value);
             PageTitle = PredefinedSearch.Name;
             ObjectTypeName = PredefinedSearch.Name.ToLower();
         }
@@ -133,5 +134,72 @@ else
                 new(PredefinedSearch.Name, href: null, disabled: true)
             };
         }
+
+        // Mark as initialised - now the table can render and load data
+        _isInitialised = true;
+    }
+
+    private async Task<TableData<MetaverseObjectHeader>> ServerReload(TableState state, CancellationToken token)
+    {
+        if (PredefinedSearch == null)
+        {
+            return new TableData<MetaverseObjectHeader> { TotalItems = 0, Items = [] };
+        }
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Convert MudBlazor's 0-indexed page to our 1-indexed page
+            var page = state.Page + 1;
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+
+            // Update URL with current page (without triggering navigation/reload)
+            UpdateUrlWithPage(page);
+
+            var result = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(
+                PredefinedSearch,
+                page,
+                state.PageSize,
+                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                state.SortLabel,
+                sortDescending);
+
+            return new TableData<MetaverseObjectHeader>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void UpdateUrlWithPage(int page)
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var baseUrl = uri.GetLeftPart(UriPartial.Path);
+
+        // Only add ?p= if not on page 1
+        var newUrl = page > 1 ? $"{baseUrl}?p={page}" : baseUrl;
+
+        // Update URL without navigation (replace current history entry)
+        NavManager.NavigateTo(newUrl, replace: true);
+    }
+
+    private void OnSearch(string text)
+    {
+        _searchString = text;
+        _table?.ReloadServerData();
+    }
+
+    private void HandleRowClick(TableRowClickEventArgs<MetaverseObjectHeader> args)
+    {
+        if (args.Item != null)
+            NavManager.NavigateTo(Utilities.GetMetaverseObjectHref(args.Item));
     }
 }

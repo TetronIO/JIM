@@ -259,8 +259,9 @@ public class MetaverseRepository : IMetaverseRepository
         PredefinedSearch predefinedSearch,
         int page,
         int pageSize,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever)
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -317,7 +318,7 @@ public class MetaverseRepository : IMetaverseRepository
 
             if (group.Type == SearchGroupType.All)
             {
-                // err?    
+                // err?
             }
             else
             {
@@ -328,38 +329,43 @@ public class MetaverseRepository : IMetaverseRepository
             // todo: handle group nesting as well
         }
 
-        if (queryRange != QueryRange.Forever)
+        // Apply search filter - searches across all attribute values
+        if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            switch (queryRange)
-            {
-                case QueryRange.LastYear:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(365));
-                    break;
-                case QueryRange.LastMonth:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(30));
-                    break;
-                case QueryRange.LastWeek:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(7));
-                    break;
-            }
+            var searchLower = searchQuery.ToLower();
+            objects = objects.Where(o => o.AttributeValues.Any(av =>
+                av.StringValue != null && av.StringValue.ToLower().Contains(searchLower)));
         }
 
-        switch (querySortBy)
+        // Apply sorting - sort by attribute value if specified, otherwise by Created date
+        // The sortBy parameter corresponds to the attribute name
+        if (!string.IsNullOrWhiteSpace(sortBy))
         {
-            case QuerySortBy.DateCreated:
-                objects = objects.OrderByDescending(q => q.Created);
-                break;
-
-            // todo: support more ways of sorting, i.e. by attribute value
+            // Sort by the specified attribute's string value
+            objects = sortDescending
+                ? objects.OrderByDescending(o => o.AttributeValues
+                    .Where(av => av.Attribute.Name == sortBy)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault())
+                : objects.OrderBy(o => o.AttributeValues
+                    .Where(av => av.Attribute.Name == sortBy)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault());
+        }
+        else
+        {
+            // Default sort by Created date
+            objects = sortDescending
+                ? objects.OrderByDescending(q => q.Created)
+                : objects.OrderBy(q => q.Created);
         }
 
-        // now just retrieve a page's worth of images from the results
-        var grossCount = objects.Count();
+        // Get total count for pagination
+        var grossCount = await objects.CountAsync();
         var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
 
         // select just the attributes we need into a header and just enough objects for the desired page
-        var results = await objects.Skip(offset).Take(itemsToGet).Select(d => new MetaverseObjectHeader
+        var results = await objects.Skip(offset).Take(pageSize).Select(d => new MetaverseObjectHeader
         {
             Id = d.Id,
             Created = d.Created,
@@ -376,8 +382,6 @@ public class MetaverseRepository : IMetaverseRepository
             PageSize = pageSize,
             TotalResults = grossCount,
             CurrentPage = page,
-            QuerySortBy = querySortBy,
-            QueryRange = queryRange,
             Results = results
         };
 
@@ -385,9 +389,9 @@ public class MetaverseRepository : IMetaverseRepository
             return pagedResultSet;
 
         // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
+        if (page <= pagedResultSet.TotalPages)
             return pagedResultSet;
-            
+
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;

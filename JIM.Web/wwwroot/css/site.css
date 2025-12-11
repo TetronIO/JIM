@@ -24,6 +24,23 @@ html, body {
     font-weight: normal;
 }
 
+/* Normalize MudTable text size to match body text */
+.mud-table-root .mud-table-body .mud-table-cell {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-toolbar {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-select {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-caption {
+    font-size: 1rem;
+}
+
 /* JIM CUSTOM */
 .jim-header-title {
     font-weight: 300;

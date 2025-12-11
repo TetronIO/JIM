@@ -48,8 +48,9 @@ public interface IMetaverseRepository
         PredefinedSearch predefinedSearch,
         int page,
         int pageSize,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever);
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true);
 
     /// <summary>
     /// Gets a paginated list of metaverse objects with optional filtering by type and search query.
