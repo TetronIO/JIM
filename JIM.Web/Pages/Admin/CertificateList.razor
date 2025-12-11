@@ -55,7 +55,7 @@
         <MudTd DataLabel="Name">@context.Name</MudTd>
         <MudTd DataLabel="Subject">
             <MudTooltip Text="@context.Subject">
-                <MudText Typo="Typo.body2">@TruncateSubject(context.Subject)</MudText>
+                @TruncateSubject(context.Subject)
             </MudTooltip>
         </MudTd>
         <MudTd DataLabel="Source">
@@ -79,7 +79,7 @@
             }
             else
             {
-                <MudText Typo="Typo.body2">@context.ValidTo.ToString("yyyy-MM-dd")</MudText>
+                @context.ValidTo.ToFriendlyDate()
             }
         </MudTd>
         <MudTd DataLabel="Status">
@@ -198,10 +198,10 @@
                     <MudField Label="Issuer" Variant="Variant.Outlined">@_selectedCertificate.Issuer</MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Valid From" Variant="Variant.Outlined">@_selectedCertificate.ValidFrom.ToString("yyyy-MM-dd HH:mm:ss")</MudField>
+                    <MudField Label="Valid From" Variant="Variant.Outlined">@_selectedCertificate.ValidFrom.ToFriendlyDate()</MudField>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudField Label="Valid To" Variant="Variant.Outlined">@_selectedCertificate.ValidTo.ToString("yyyy-MM-dd HH:mm:ss")</MudField>
+                    <MudField Label="Valid To" Variant="Variant.Outlined">@_selectedCertificate.ValidTo.ToFriendlyDate()</MudField>
                 </MudItem>
                 <MudItem xs="12">
                     <MudField Label="Thumbprint" Variant="Variant.Outlined">@_selectedCertificate.Thumbprint</MudField>
@@ -219,7 +219,7 @@
                     </MudItem>
                 }
                 <MudItem xs="6">
-                    <MudField Label="Created At" Variant="Variant.Outlined">@_selectedCertificate.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</MudField>
+                    <MudField Label="Created At" Variant="Variant.Outlined">@_selectedCertificate.CreatedAt.ToFriendlyDate()</MudField>
                 </MudItem>
                 <MudItem xs="6">
                     <MudField Label="Created By" Variant="Variant.Outlined">@(_selectedCertificate.CreatedBy ?? "-")</MudField>

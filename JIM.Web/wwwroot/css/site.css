@@ -33,11 +33,23 @@ html, body {
     font-size: 1rem;
 }
 
+.mud-table-root .mud-table-pagination-toolbar * {
+    font-size: 1rem;
+}
+
 .mud-table-root .mud-table-pagination-select {
     font-size: 1rem;
 }
 
 .mud-table-root .mud-table-pagination-caption {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-display {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-information {
     font-size: 1rem;
 }
 
