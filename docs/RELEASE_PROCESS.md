@@ -105,43 +105,222 @@ jim-release-X.Y.Z/
 
 ### Deploying in an Air-Gapped Environment
 
-1. **Transfer the bundle**: Copy `jim-release-X.Y.Z.tar.gz` to the target environment via approved media (USB, DVD, etc.)
+#### Prerequisites
 
-2. **Verify integrity**:
+Before deploying JIM, ensure you have:
+
+- **Docker Engine** (20.10+) and **Docker Compose** (v2+) installed
+- **PostgreSQL 18** - either as a container or external database server
+- A DNS name or IP address for the JIM server
+- TLS certificates if enabling HTTPS (recommended for production)
+- An OIDC identity provider accessible from the air-gapped network (e.g., AD FS, Keycloak)
+
+#### Step 1: Transfer and Verify the Bundle
+
+```bash
+# Transfer jim-release-X.Y.Z.tar.gz via approved media (USB, DVD, etc.)
+
+# Extract the bundle
+tar -xzf jim-release-X.Y.Z.tar.gz
+cd jim-release-X.Y.Z
+
+# Verify checksums
+sha256sum -c checksums.sha256
+```
+
+#### Step 2: Load Docker Images
+
+```bash
+# Load JIM images
+docker load -i images/jim-web.tar
+docker load -i images/jim-worker.tar
+docker load -i images/jim-scheduler.tar
+
+# If using bundled PostgreSQL (optional)
+docker load -i images/postgres.tar
+```
+
+#### Step 3: Set Up PostgreSQL
+
+**Option A: Use the bundled PostgreSQL container** (simpler, suitable for smaller deployments)
+
+The included `docker-compose.yml` contains a PostgreSQL service. No additional setup required.
+
+**Option B: Use an external PostgreSQL server** (recommended for production)
+
+If you have an existing PostgreSQL server:
+
+1. Create a database and user:
+   ```sql
+   CREATE DATABASE jim;
+   CREATE USER jim WITH ENCRYPTED PASSWORD 'your_secure_password';
+   GRANT ALL PRIVILEGES ON DATABASE jim TO jim;
+   ```
+
+2. Comment out or remove the `jim.database` service from `docker-compose.yml`
+
+3. Update `.env` with your database connection:
+   ```
+   DB_HOSTNAME=your-postgres-server.local
+   DB_NAME=jim
+   DB_USERNAME=jim
+   DB_PASSWORD=your_secure_password
+   ```
+
+#### Step 4: Configure Environment
+
+```bash
+cd compose
+cp .env.example .env
+```
+
+Edit `.env` with your settings:
+
+```bash
+# Database (if using external PostgreSQL)
+DB_HOSTNAME=your-postgres-server.local
+DB_NAME=jim
+DB_USERNAME=jim
+DB_PASSWORD=your_secure_password
+
+# SSO/OIDC - Configure for your air-gapped identity provider
+SSO_AUTHORITY=https://adfs.your-domain.local/adfs
+SSO_CLIENT_ID=your-client-id
+SSO_SECRET=your-client-secret
+SSO_API_SCOPE=api://your-client-id/access_as_user
+
+# User identity mapping
+SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=sub
+SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=Subject Identifier
+SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=your-admin-identifier
+
+# Logging
+LOGGING_LEVEL=Information
+LOGGING_PATH=/var/log/jim
+```
+
+#### Step 5: Configure TLS (Recommended for Production)
+
+JIM can be deployed behind a reverse proxy (nginx, Traefik, HAProxy) for TLS termination, or you can configure TLS directly.
+
+**Option A: Reverse Proxy (Recommended)**
+
+Deploy nginx or another reverse proxy in front of JIM:
+
+```nginx
+# /etc/nginx/sites-available/jim
+server {
+    listen 443 ssl;
+    server_name jim.your-domain.local;
+
+    ssl_certificate /etc/ssl/certs/jim.crt;
+    ssl_certificate_key /etc/ssl/private/jim.key;
+
+    location / {
+        proxy_pass http://localhost:5200;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**Option B: Direct TLS in Docker**
+
+Mount certificates into the container and configure ASP.NET Core to use them (requires additional configuration in `docker-compose.yml`).
+
+#### Step 6: Configure DNS
+
+Ensure your JIM server is resolvable by name in your network:
+
+1. Add a DNS A record pointing to your JIM server's IP address
+2. Or add an entry to `/etc/hosts` on client machines:
+   ```
+   192.168.1.100  jim.your-domain.local
+   ```
+
+The OIDC redirect URIs configured in your identity provider must match the JIM server's accessible URL.
+
+#### Step 7: Configure File Connector Volumes (If Using File Connector)
+
+If you plan to use the File Connector to import/export CSV files, configure a volume mount:
+
+1. Create a directory on the host for connector files:
    ```bash
-   # Extract the bundle
-   tar -xzf jim-release-X.Y.Z.tar.gz
-   cd jim-release-X.Y.Z
-
-   # Verify checksums
-   sha256sum -c checksums.sha256
+   mkdir -p /opt/jim/connector-files
    ```
 
-3. **Load Docker images**:
-   ```bash
-   docker load -i images/jim-web.tar
-   docker load -i images/jim-worker.tar
-   docker load -i images/jim-scheduler.tar
+2. Add a volume mount to `docker-compose.yml` for the `jim.worker` service:
+   ```yaml
+   jim.worker:
+     volumes:
+       - jim-logs-volume:/var/log/jim
+       - /opt/jim/connector-files:/var/connector-files
    ```
 
-4. **Configure environment**:
-   ```bash
-   cd compose
-   cp .env.example .env
-   # Edit .env with your settings
-   ```
+3. Place CSV files in `/opt/jim/connector-files/` on the host
 
-5. **Start services**:
-   ```bash
-   docker compose up -d
-   ```
+4. In JIM, configure the File Connector with the container path: `/var/connector-files/yourfile.csv`
 
-6. **Install PowerShell module** (optional):
-   ```powershell
-   # Copy the module to a PowerShell module path
-   Copy-Item -Recurse ./powershell/JIM $env:PSModulePath.Split(':')[0]/
-   Import-Module JIM
-   ```
+#### Step 8: Start Services
+
+```bash
+docker compose up -d
+
+# Check all services are running
+docker compose ps
+
+# View logs
+docker compose logs -f
+```
+
+#### Step 9: Apply Database Migrations
+
+On first run, apply database migrations:
+
+```bash
+docker compose exec jim.web dotnet ef database update
+```
+
+#### Step 10: Access JIM
+
+1. Open your browser to `https://jim.your-domain.local` (or `http://localhost:5200` if no TLS)
+2. Log in with your SSO credentials
+3. The initial admin user (configured via `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE`) will have full access
+
+#### Step 11: Install PowerShell Module (Optional)
+
+For automation and scripting:
+
+```powershell
+# Copy the module to a PowerShell module path
+Copy-Item -Recurse ./powershell/JIM "$env:USERPROFILE\Documents\PowerShell\Modules\"
+
+# Or for Linux/macOS
+Copy-Item -Recurse ./powershell/JIM ~/.local/share/powershell/Modules/
+
+# Import and connect
+Import-Module JIM
+Connect-JIM -BaseUrl "https://jim.your-domain.local" -ApiKey "your-api-key"
+```
+
+### Air-Gapped Network Checklist
+
+Before going live, verify:
+
+- [ ] All Docker images loaded successfully (`docker images | grep jim`)
+- [ ] PostgreSQL is accessible and migrations applied
+- [ ] SSO/OIDC identity provider is accessible from JIM server
+- [ ] DNS resolves JIM server name correctly
+- [ ] TLS certificates are valid and trusted (if using HTTPS)
+- [ ] Firewall allows traffic on required ports (5200/HTTP, 443/HTTPS, 5432/PostgreSQL)
+- [ ] File connector volumes mounted (if using File Connector)
+- [ ] Initial admin user can log in
+- [ ] Logs are being written to configured path
 
 ### Building a Release Bundle Locally
 
