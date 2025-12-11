@@ -46,7 +46,34 @@
 
         # Activities
         'Get-JIMActivity',
-        'Get-JIMActivityStats'
+        'Get-JIMActivityStats',
+
+        # Metaverse
+        'Get-JIMMetaverseObject',
+        'Get-JIMMetaverseObjectType',
+        'Get-JIMMetaverseAttribute',
+
+        # API Keys
+        'Get-JIMApiKey',
+        'New-JIMApiKey',
+        'Set-JIMApiKey',
+        'Remove-JIMApiKey',
+
+        # Certificates
+        'Get-JIMCertificate',
+        'Add-JIMCertificate',
+        'Set-JIMCertificate',
+        'Remove-JIMCertificate',
+        'Test-JIMCertificate',
+        'Export-JIMCertificate',
+
+        # Security
+        'Get-JIMRole',
+
+        # Data Generation
+        'Get-JIMExampleDataSet',
+        'Get-JIMDataGenerationTemplate',
+        'Invoke-JIMDataGenerationTemplate'
     )
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
@@ -76,13 +103,55 @@
             # ReleaseNotes of this module
             ReleaseNotes = @'
 ## 0.1.0 - Initial Release
+
+### Connection
 - Connect-JIM: Connect to JIM instance with API key authentication
 - Disconnect-JIM: Disconnect from JIM instance
 - Test-JIMConnection: Test connection to JIM instance
 
-This is an early preview release. More cmdlets will be added in future releases.
+### Connected Systems
+- Get-JIMConnectedSystem: Get connected systems (list, by ID, by name)
+- Remove-JIMConnectedSystem: Remove a connected system
 
-For full documentation, see: https://github.com/TetronIO/JIM
+### Sync Rules
+- Get-JIMSyncRule: Get synchronisation rules
+
+### Run Profiles
+- Get-JIMRunProfile: Get run profiles for a connected system
+- Start-JIMRunProfile: Execute a run profile with optional wait
+
+### Activities
+- Get-JIMActivity: Get activities with pagination and filtering
+- Get-JIMActivityStats: Get execution statistics for activities
+
+### Metaverse
+- Get-JIMMetaverseObject: Get metaverse objects with attribute selection
+- Get-JIMMetaverseObjectType: Get metaverse object type definitions
+- Get-JIMMetaverseAttribute: Get metaverse attribute definitions
+
+### API Keys
+- Get-JIMApiKey: Get API keys
+- New-JIMApiKey: Create a new API key
+- Set-JIMApiKey: Update an API key
+- Remove-JIMApiKey: Delete an API key
+
+### Certificates
+- Get-JIMCertificate: Get trusted certificates
+- Add-JIMCertificate: Add a certificate to the store
+- Set-JIMCertificate: Update certificate properties
+- Remove-JIMCertificate: Remove a certificate
+- Test-JIMCertificate: Validate a certificate
+- Export-JIMCertificate: Download certificate data
+
+### Security
+- Get-JIMRole: Get security role definitions
+
+### Data Generation
+- Get-JIMExampleDataSet: Get example data sets
+- Get-JIMDataGenerationTemplate: Get data generation templates
+- Invoke-JIMDataGenerationTemplate: Execute a data generation template
+
+This is an early preview release. For full documentation, see: https://github.com/TetronIO/JIM
 '@
 
             # Prerelease string of this module
