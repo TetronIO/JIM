@@ -35,13 +35,21 @@
 
         # Connected Systems
         'Get-JIMConnectedSystem',
+        'New-JIMConnectedSystem',
+        'Set-JIMConnectedSystem',
         'Remove-JIMConnectedSystem',
 
         # Sync Rules
         'Get-JIMSyncRule',
+        'New-JIMSyncRule',
+        'Set-JIMSyncRule',
+        'Remove-JIMSyncRule',
 
         # Run Profiles
         'Get-JIMRunProfile',
+        'New-JIMRunProfile',
+        'Set-JIMRunProfile',
+        'Remove-JIMRunProfile',
         'Start-JIMRunProfile',
 
         # Activities
@@ -111,13 +119,21 @@
 
 ### Connected Systems
 - Get-JIMConnectedSystem: Get connected systems (list, by ID, by name)
+- New-JIMConnectedSystem: Create a new connected system
+- Set-JIMConnectedSystem: Update connected system properties and settings
 - Remove-JIMConnectedSystem: Remove a connected system
 
 ### Sync Rules
 - Get-JIMSyncRule: Get synchronisation rules
+- New-JIMSyncRule: Create a new sync rule
+- Set-JIMSyncRule: Update sync rule properties
+- Remove-JIMSyncRule: Delete a sync rule
 
 ### Run Profiles
 - Get-JIMRunProfile: Get run profiles for a connected system
+- New-JIMRunProfile: Create a new run profile
+- Set-JIMRunProfile: Update run profile properties
+- Remove-JIMRunProfile: Delete a run profile
 - Start-JIMRunProfile: Execute a run profile with optional wait
 
 ### Activities
