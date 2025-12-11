@@ -52,6 +52,15 @@ Describe 'Get-JIMMetaverseObject' {
             $command.Parameters['ObjectTypeId'] | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should have ObjectTypeName parameter' {
+            $command.Parameters['ObjectTypeName'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have ObjectTypeName parameter with validation' {
+            $param = $command.Parameters['ObjectTypeName']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] } | Should -Not -BeNullOrEmpty
+        }
+
         It 'Should have Search parameter that supports wildcards' {
             $param = $command.Parameters['Search']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.SupportsWildcardsAttribute] } | Should -Not -BeNullOrEmpty
@@ -119,6 +128,10 @@ Describe 'Get-JIMMetaverseObjectType' {
         It 'Should have a ById parameter set' {
             $command.ParameterSets.Name | Should -Contain 'ById'
         }
+
+        It 'Should have a ByName parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ByName'
+        }
     }
 
     Context 'Parameter Validation' {
@@ -129,6 +142,15 @@ Describe 'Get-JIMMetaverseObjectType' {
 
         It 'Should have Id parameter' {
             $command.Parameters['Id'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Name parameter' {
+            $command.Parameters['Name'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Name parameter with validation' {
+            $param = $command.Parameters['Name']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] } | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have IncludeChildObjects switch parameter' {
@@ -178,6 +200,10 @@ Describe 'Get-JIMMetaverseAttribute' {
         It 'Should have a ById parameter set' {
             $command.ParameterSets.Name | Should -Contain 'ById'
         }
+
+        It 'Should have a ByName parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ByName'
+        }
     }
 
     Context 'Parameter Validation' {
@@ -188,6 +214,15 @@ Describe 'Get-JIMMetaverseAttribute' {
 
         It 'Should have Id parameter' {
             $command.Parameters['Id'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Name parameter' {
+            $command.Parameters['Name'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Name parameter with validation' {
+            $param = $command.Parameters['Name']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] } | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have Id parameter that accepts pipeline by property name' {

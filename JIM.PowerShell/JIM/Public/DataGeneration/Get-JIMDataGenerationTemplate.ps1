@@ -11,6 +11,9 @@ function Get-JIMDataGenerationTemplate {
     .PARAMETER Id
         The unique identifier of a specific template to retrieve.
 
+    .PARAMETER Name
+        The name of a specific template to retrieve.
+
     .PARAMETER Page
         Page number for paginated results. Defaults to 1.
 
@@ -31,6 +34,11 @@ function Get-JIMDataGenerationTemplate {
         Gets a specific template by ID.
 
     .EXAMPLE
+        Get-JIMDataGenerationTemplate -Name 'Test Users'
+
+        Gets a specific template by name.
+
+    .EXAMPLE
         Get-JIMDataGenerationTemplate | Select-Object Id, Name, Description
 
         Gets all templates with specific properties.
@@ -45,6 +53,10 @@ function Get-JIMDataGenerationTemplate {
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
 
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
         [Parameter(ParameterSetName = 'List')]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$Page = 1,
@@ -55,8 +67,20 @@ function Get-JIMDataGenerationTemplate {
     )
 
     process {
+        # Resolve name to ID if using ByName parameter set
+        if ($PSCmdlet.ParameterSetName -eq 'ByName') {
+            try {
+                $resolvedTemplate = Resolve-JIMDataGenerationTemplate -Name $Name
+                $Id = $resolvedTemplate.id
+            }
+            catch {
+                Write-Error $_
+                return
+            }
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
-            'ById' {
+            { $_ -in 'ById', 'ByName' } {
                 Write-Verbose "Getting data generation template with ID: $Id"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/data-generation/templates/$Id"
                 $result

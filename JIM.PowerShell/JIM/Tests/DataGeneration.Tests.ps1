@@ -80,6 +80,10 @@ Describe 'Get-JIMDataGenerationTemplate' {
         It 'Should have a ById parameter set' {
             $command.ParameterSets.Name | Should -Contain 'ById'
         }
+
+        It 'Should have a ByName parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ByName'
+        }
     }
 
     Context 'Parameter Validation' {
@@ -90,6 +94,15 @@ Describe 'Get-JIMDataGenerationTemplate' {
 
         It 'Should have Id parameter' {
             $command.Parameters['Id'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Name parameter' {
+            $command.Parameters['Name'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Name parameter with validation' {
+            $param = $command.Parameters['Name']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] } | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have Id parameter that accepts pipeline by property name' {
@@ -131,6 +144,21 @@ Describe 'Get-JIMDataGenerationTemplate' {
 
 Describe 'Invoke-JIMDataGenerationTemplate' {
 
+    Context 'Parameter Sets' {
+
+        BeforeAll {
+            $command = Get-Command Invoke-JIMDataGenerationTemplate
+        }
+
+        It 'Should have a ById parameter set as default' {
+            $command.DefaultParameterSet | Should -Be 'ById'
+        }
+
+        It 'Should have a ByName parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ByName'
+        }
+    }
+
     Context 'Parameter Validation' {
 
         BeforeAll {
@@ -140,6 +168,16 @@ Describe 'Invoke-JIMDataGenerationTemplate' {
         It 'Should have a mandatory Id parameter' {
             $param = $command.Parameters['Id']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a mandatory Name parameter' {
+            $param = $command.Parameters['Name']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Name parameter with validation' {
+            $param = $command.Parameters['Name']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] } | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have Id parameter that accepts pipeline by property name' {

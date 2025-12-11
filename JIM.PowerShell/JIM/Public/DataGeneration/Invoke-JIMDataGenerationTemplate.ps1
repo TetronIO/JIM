@@ -11,6 +11,9 @@ function Invoke-JIMDataGenerationTemplate {
     .PARAMETER Id
         The unique identifier of the template to execute.
 
+    .PARAMETER Name
+        The name of the template to execute.
+
     .PARAMETER Wait
         If specified, waits for the operation to complete before returning.
         Note: The API returns 202 Accepted immediately; this parameter will
@@ -28,9 +31,14 @@ function Invoke-JIMDataGenerationTemplate {
         Executes the data generation template with ID 1.
 
     .EXAMPLE
+        Invoke-JIMDataGenerationTemplate -Name 'Test Users'
+
+        Executes the data generation template named 'Test Users'.
+
+    .EXAMPLE
         Get-JIMDataGenerationTemplate | Where-Object { $_.name -eq "Test Users" } | Invoke-JIMDataGenerationTemplate
 
-        Executes a template by name.
+        Executes a template from the pipeline.
 
     .EXAMPLE
         Invoke-JIMDataGenerationTemplate -Id 1 -PassThru
@@ -41,11 +49,15 @@ function Invoke-JIMDataGenerationTemplate {
         Get-JIMDataGenerationTemplate
         Get-JIMExampleDataSet
     #>
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
 
         [switch]$Wait,
 
@@ -53,7 +65,21 @@ function Invoke-JIMDataGenerationTemplate {
     )
 
     process {
-        if ($PSCmdlet.ShouldProcess("Template ID: $Id", "Execute Data Generation Template")) {
+        # Resolve name to ID if using ByName parameter set
+        if ($PSCmdlet.ParameterSetName -eq 'ByName') {
+            try {
+                $resolvedTemplate = Resolve-JIMDataGenerationTemplate -Name $Name
+                $Id = $resolvedTemplate.id
+            }
+            catch {
+                Write-Error $_
+                return
+            }
+        }
+
+        $displayName = if ($Name) { $Name } else { "Template ID: $Id" }
+
+        if ($PSCmdlet.ShouldProcess($displayName, "Execute Data Generation Template")) {
             Write-Verbose "Executing data generation template: $Id"
 
             try {

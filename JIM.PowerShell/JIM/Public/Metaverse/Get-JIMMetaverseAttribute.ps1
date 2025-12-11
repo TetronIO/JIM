@@ -5,10 +5,13 @@ function Get-JIMMetaverseAttribute {
 
     .DESCRIPTION
         Retrieves Metaverse Attribute definitions from JIM. Can retrieve all attributes
-        or a specific attribute by ID.
+        or a specific attribute by ID or name.
 
     .PARAMETER Id
         The unique identifier of a specific Attribute to retrieve.
+
+    .PARAMETER Name
+        The name of a specific Attribute to retrieve.
 
     .PARAMETER Page
         Page number for paginated results. Defaults to 1.
@@ -29,6 +32,11 @@ function Get-JIMMetaverseAttribute {
 
         Gets the Attribute with ID 1.
 
+    .EXAMPLE
+        Get-JIMMetaverseAttribute -Name 'DisplayName'
+
+        Gets the Attribute named 'DisplayName'.
+
     .LINK
         Get-JIMMetaverseObject
         Get-JIMMetaverseObjectType
@@ -38,6 +46,10 @@ function Get-JIMMetaverseAttribute {
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
 
         [Parameter(ParameterSetName = 'List')]
         [ValidateRange(1, [int]::MaxValue)]
@@ -49,8 +61,20 @@ function Get-JIMMetaverseAttribute {
     )
 
     process {
+        # Resolve name to ID if using ByName parameter set
+        if ($PSCmdlet.ParameterSetName -eq 'ByName') {
+            try {
+                $resolvedAttr = Resolve-JIMMetaverseAttribute -Name $Name
+                $Id = $resolvedAttr.id
+            }
+            catch {
+                Write-Error $_
+                return
+            }
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
-            'ById' {
+            { $_ -in 'ById', 'ByName' } {
                 Write-Verbose "Getting Metaverse Attribute with ID: $Id"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$Id"
                 $result

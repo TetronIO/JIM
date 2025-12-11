@@ -14,6 +14,9 @@ function Get-JIMMetaverseObject {
     .PARAMETER ObjectTypeId
         Filter objects by Metaverse Object Type ID.
 
+    .PARAMETER ObjectTypeName
+        Filter objects by Metaverse Object Type name.
+
     .PARAMETER Search
         Search query to filter objects by display name (supports wildcards).
 
@@ -46,6 +49,11 @@ function Get-JIMMetaverseObject {
         Gets all Metaverse Objects of type ID 1.
 
     .EXAMPLE
+        Get-JIMMetaverseObject -ObjectTypeName 'Person'
+
+        Gets all Metaverse Objects of type 'Person'.
+
+    .EXAMPLE
         Get-JIMMetaverseObject -Search "john*"
 
         Searches for objects with display name matching "john*".
@@ -74,6 +82,10 @@ function Get-JIMMetaverseObject {
         [int]$ObjectTypeId,
 
         [Parameter(ParameterSetName = 'List')]
+        [ValidateNotNullOrEmpty()]
+        [string]$ObjectTypeName,
+
+        [Parameter(ParameterSetName = 'List')]
         [SupportsWildcards()]
         [string]$Search,
 
@@ -90,6 +102,18 @@ function Get-JIMMetaverseObject {
     )
 
     process {
+        # Resolve ObjectTypeName to ObjectTypeId if provided
+        if ($ObjectTypeName) {
+            try {
+                $resolvedType = Resolve-JIMMetaverseObjectType -Name $ObjectTypeName
+                $ObjectTypeId = $resolvedType.id
+            }
+            catch {
+                Write-Error $_
+                return
+            }
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
             'ById' {
                 Write-Verbose "Getting Metaverse Object with ID: $Id"
@@ -105,7 +129,7 @@ function Get-JIMMetaverseObject {
                     "pageSize=$PageSize"
                 )
 
-                if ($PSBoundParameters.ContainsKey('ObjectTypeId')) {
+                if ($PSBoundParameters.ContainsKey('ObjectTypeId') -or $ObjectTypeName) {
                     $queryParams += "objectTypeId=$ObjectTypeId"
                 }
 

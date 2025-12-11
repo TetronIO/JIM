@@ -5,10 +5,13 @@ function Get-JIMMetaverseObjectType {
 
     .DESCRIPTION
         Retrieves Metaverse Object Type definitions from JIM. Can retrieve all types
-        or a specific type by ID.
+        or a specific type by ID or name.
 
     .PARAMETER Id
         The unique identifier of a specific Object Type to retrieve.
+
+    .PARAMETER Name
+        The name of a specific Object Type to retrieve.
 
     .PARAMETER IncludeChildObjects
         If specified, includes child object counts in the response.
@@ -33,6 +36,11 @@ function Get-JIMMetaverseObjectType {
         Gets the Object Type with ID 1.
 
     .EXAMPLE
+        Get-JIMMetaverseObjectType -Name 'Person'
+
+        Gets the Object Type named 'Person'.
+
+    .EXAMPLE
         Get-JIMMetaverseObjectType -Id 1 -IncludeChildObjects
 
         Gets Object Type ID 1 with child object counts.
@@ -47,6 +55,10 @@ function Get-JIMMetaverseObjectType {
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
 
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
         [switch]$IncludeChildObjects,
 
         [Parameter(ParameterSetName = 'List')]
@@ -59,8 +71,20 @@ function Get-JIMMetaverseObjectType {
     )
 
     process {
+        # Resolve name to ID if using ByName parameter set
+        if ($PSCmdlet.ParameterSetName -eq 'ByName') {
+            try {
+                $resolvedType = Resolve-JIMMetaverseObjectType -Name $Name
+                $Id = $resolvedType.id
+            }
+            catch {
+                Write-Error $_
+                return
+            }
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
-            'ById' {
+            { $_ -in 'ById', 'ByName' } {
                 Write-Verbose "Getting Metaverse Object Type with ID: $Id"
                 $queryParams = @()
                 if ($IncludeChildObjects) {
