@@ -220,7 +220,8 @@ try
     builder.Services.AddSerilog(configuration => InitialiseLogging(configuration, false));
 
     // setup MudBlazor
-    builder.Services.AddMudServices(config => {
+    builder.Services.AddMudServices(config =>
+    {
         config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomCenter;
     });
 
@@ -435,7 +436,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
     {
         Id = Guid.NewGuid(),
         Name = "Infrastructure Key",
-        Description = "Auto-created from JIM_INFRASTRUCTURE_API_KEY environment variable. This key expires 24 hours after creation and should be deleted after initial setup is complete.",
+        Description = "Auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable. This key expires 24 hours after creation.",
         KeyHash = keyHash,
         KeyPrefix = keyPrefix,
         CreatedAt = DateTime.UtcNow,
