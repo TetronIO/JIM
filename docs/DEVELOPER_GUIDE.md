@@ -585,6 +585,173 @@ ln -s /mnt/jim_share/Users.csv /tmp/jim-connector-files/Users.csv
 
 For production deployments, consider using Docker volume drivers or bind mounts to network storage.
 
+## PowerShell Module Development
+
+The JIM PowerShell module (`JIM.PowerShell/JIM/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
+
+### Module Structure
+
+```
+JIM.PowerShell/
+└── JIM/
+    ├── JIM.psd1              # Module manifest
+    ├── JIM.psm1              # Module loader
+    ├── Public/               # Exported cmdlets
+    │   ├── Activities/       # Get-JIMActivity, Get-JIMActivityItem
+    │   ├── ApiKeys/          # *-JIMApiKey cmdlets
+    │   ├── Certificates/     # *-JIMCertificate cmdlets
+    │   ├── Connection/       # Connect-JIM, Disconnect-JIM, Test-JIMConnection
+    │   ├── ConnectedSystems/ # *-JIMConnectedSystem cmdlets
+    │   ├── DataGeneration/   # *-JIMDataGeneration* cmdlets
+    │   ├── Metaverse/        # *-JIMMetaverse* cmdlets
+    │   ├── RunProfiles/      # *-JIMRunProfile cmdlets
+    │   └── SyncRules/        # *-JIMSyncRule cmdlets
+    ├── Private/              # Internal helper functions
+    └── Tests/                # Pester tests
+```
+
+### Loading the Module in Devcontainer
+
+The module is automatically available. Import it with:
+
+```powershell
+# Import from the repository
+Import-Module ./JIM.PowerShell/JIM -Force
+
+# Verify it loaded
+Get-Module JIM
+```
+
+### Connecting to JIM
+
+```powershell
+# Connect using an API key (recommended for automation)
+Connect-JIM -BaseUrl "http://localhost:5200" -ApiKey "jim_xxxxxxxxxxxx"
+
+# Test the connection
+Test-JIMConnection
+
+# Disconnect when done
+Disconnect-JIM
+```
+
+### Running Pester Tests
+
+```powershell
+# Run all PowerShell module tests
+pwsh -NoProfile -Command "
+    Import-Module Pester -MinimumVersion 5.0 -Force
+    \$config = New-PesterConfiguration
+    \$config.Run.Path = './JIM.PowerShell/JIM/Tests'
+    \$config.Run.Exit = \$true
+    \$config.Output.Verbosity = 'Detailed'
+    Invoke-Pester -Configuration \$config
+"
+```
+
+Or use the simpler form:
+
+```powershell
+cd JIM.PowerShell/JIM
+Invoke-Pester -Path ./Tests -Output Detailed
+```
+
+### Adding a New Cmdlet
+
+1. **Create the cmdlet file** in the appropriate `Public/` subdirectory:
+   ```powershell
+   # Public/MyCategory/Verb-JIMNoun.ps1
+   function Verb-JIMNoun {
+       [CmdletBinding()]
+       param(
+           [Parameter(Mandatory = $true)]
+           [string]$RequiredParam,
+
+           [Parameter()]
+           [string]$OptionalParam
+       )
+
+       # Ensure connected
+       if (-not $script:JIMConnection) {
+           throw "Not connected to JIM. Use Connect-JIM first."
+       }
+
+       # Make API call
+       $response = Invoke-JIMApiRequest -Method Get -Endpoint "api/v1/endpoint"
+       return $response
+   }
+   ```
+
+2. **Add to module manifest** (`JIM.psd1`):
+   - Add to `FunctionsToExport` array
+
+3. **Write Pester tests** in `Tests/`:
+   ```powershell
+   # Tests/MyCategory.Tests.ps1
+   Describe "Verb-JIMNoun" {
+       BeforeAll {
+           Import-Module $PSScriptRoot/../JIM.psd1 -Force
+       }
+
+       It "Should throw when not connected" {
+           { Verb-JIMNoun -RequiredParam "test" } | Should -Throw "*Not connected*"
+       }
+
+       # More tests...
+   }
+   ```
+
+4. **Test the cmdlet**:
+   ```powershell
+   Import-Module ./JIM.PowerShell/JIM -Force
+   # Start JIM stack first: jim-stack
+   Connect-JIM -BaseUrl "http://localhost:5200" -ApiKey "your-api-key"
+   Verb-JIMNoun -RequiredParam "value"
+   ```
+
+### Naming Conventions
+
+- **Cmdlet names**: Use approved PowerShell verbs (`Get`, `Set`, `New`, `Remove`, `Invoke`, `Start`, `Stop`)
+- **Noun prefix**: Always use `JIM` prefix (e.g., `Get-JIMActivity`, `New-JIMSyncRule`)
+- **Parameters**: Use PascalCase, support both ID and Name where applicable
+- **British English**: Use British spelling in descriptions and comments
+
+### Common Patterns
+
+**Name-based parameter alternatives**:
+```powershell
+# Support both -ConnectedSystemId and -ConnectedSystemName
+param(
+    [Parameter(Mandatory = $true, ParameterSetName = "ById")]
+    [Guid]$ConnectedSystemId,
+
+    [Parameter(Mandatory = $true, ParameterSetName = "ByName")]
+    [string]$ConnectedSystemName
+)
+
+# Resolve name to ID if needed
+if ($PSCmdlet.ParameterSetName -eq "ByName") {
+    $system = Get-JIMConnectedSystem -Name $ConnectedSystemName
+    if (-not $system) {
+        throw "Connected system '$ConnectedSystemName' not found"
+    }
+    $ConnectedSystemId = $system.Id
+}
+```
+
+**Using the internal API helper**:
+```powershell
+# GET request
+$result = Invoke-JIMApiRequest -Method Get -Endpoint "api/v1/connected-systems"
+
+# POST with body
+$body = @{ Name = "Test"; Description = "Test system" }
+$result = Invoke-JIMApiRequest -Method Post -Endpoint "api/v1/connected-systems" -Body $body
+
+# DELETE
+Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
+```
+
 ## Common Development Tasks
 
 > **Note**: All `dotnet` commands below work out of the box in Codespaces. Use shell aliases like `jim-build`, `jim-test`, and `jim-migrate` for convenience.
@@ -674,6 +841,6 @@ For production deployments, consider using Docker volume drivers or bind mounts 
 
 ---
 
-**Last Updated**: 2025-12-01
-**Version**: 1.1
+**Last Updated**: 2025-12-11
+**Version**: 1.2
 **Applies to**: JIM v1.x (NET 9.0)
