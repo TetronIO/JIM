@@ -21,7 +21,7 @@ namespace JIM.Web.Controllers.Api;
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
 [ApiVersion("1.0")]
-[Authorize(Roles = "Administrators")]
+[Authorize(Roles = "Administrator")]
 [Produces("application/json")]
 public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication application) : ControllerBase
 {

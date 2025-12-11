@@ -142,8 +142,8 @@ public static class Constants
 
     public static class BuiltInRoles
     {
-        public static string Administrators => "Administrators";
-        public static string Users => "Users";
+        public static string Administrator => "Administrator";
+        public static string User => "User";
         public static string RoleClaimType => "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
     }
 

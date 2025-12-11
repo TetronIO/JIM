@@ -21,7 +21,7 @@ namespace JIM.Web.Controllers.Api;
 [Route("api/v{version:apiVersion}/data-generation")]
 [ApiController]
 [ApiVersion("1.0")]
-[Authorize(Roles = "Administrators")]
+[Authorize(Roles = "Administrator")]
 [Produces("application/json")]
 public class DataGenerationController(ILogger<DataGenerationController> logger, JimApplication application) : ControllerBase
 {

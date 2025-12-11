@@ -418,13 +418,13 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
         return;
     }
 
-    // Get the Administrators role
+    // Get the Administrator role
     var roles = await jim.Security.GetRolesAsync();
-    var adminRole = roles.FirstOrDefault(r => r.Name == "Administrators");
+    var adminRole = roles.FirstOrDefault(r => r.Name == "Administrator");
 
     if (adminRole == null)
     {
-        Log.Error("InitialiseInfrastructureApiKeyAsync: Administrators role not found. Cannot create infrastructure key.");
+        Log.Error("InitialiseInfrastructureApiKeyAsync: Administrator role not found. Cannot create infrastructure key.");
         return;
     }
 
@@ -509,7 +509,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 
         // add a virtual-role claim for user.
         // this role provides basic access to JIM.Web. If we can't map a user, they don't get this role, and therefore they can't access much.
-        userRoleClaims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
+        userRoleClaims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
 
         // add their metaverse object id claim to the new identity as well.
         // we'll use this to attribute user actions to the claims identity.

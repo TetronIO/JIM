@@ -460,16 +460,16 @@ internal class SeedingServer
 
         #region Roles
         // create the built-in roles
-        var administratorsRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrators);
-        if (administratorsRole == null)
+        var administratorRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrator);
+        if (administratorRole == null)
         {
-            administratorsRole = new Role
+            administratorRole = new Role
             {
                 BuiltIn = true,
-                Name = Constants.BuiltInRoles.Administrators
+                Name = Constants.BuiltInRoles.Administrator
             };
-            rolesToCreate.Add(administratorsRole);
-            Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrators}");
+            rolesToCreate.Add(administratorRole);
+            Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrator}");
         }
         #endregion
 

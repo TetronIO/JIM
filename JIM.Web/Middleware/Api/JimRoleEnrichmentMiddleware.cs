@@ -94,8 +94,8 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
                 .Select(role => new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name))
                 .ToList();
 
-            // Add the virtual "Users" role (basic access)
-            roleClaims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Users));
+            // Add the virtual "User" role (basic access)
+            roleClaims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
 
             // Add the Metaverse object ID claim
             roleClaims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));

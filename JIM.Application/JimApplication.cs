@@ -128,9 +128,9 @@ public class JimApplication
         var user = await Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(objectType, uniqueIdentifierMetaverseAttribute, initialAdminUniqueIdentifierClaimValue);
         if (user != null)
         {
-            // we have a matching user, do they have the Administrators role?
-            if (!await Security.IsObjectInRoleAsync(user, Constants.BuiltInRoles.Administrators))
-                await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrators);
+            // we have a matching user, do they have the Administrator role?
+            if (!await Security.IsObjectInRoleAsync(user, Constants.BuiltInRoles.Administrator))
+                await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
         }
         else
         {
@@ -153,9 +153,9 @@ public class JimApplication
                 StringValue = "Person"
             });
 
-            Log.Information($"InitialiseSSOAsync: Creating metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigning the {Constants.BuiltInRoles.Administrators} role.");
+            Log.Information($"InitialiseSSOAsync: Creating metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigning the {Constants.BuiltInRoles.Administrator} role.");
             await Metaverse.CreateMetaverseObjectAsync(user);
-            await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrators);
+            await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
         }
     }
 

@@ -211,7 +211,7 @@ public class ApiKeysControllerTests
     [Test]
     public async Task CreateAsync_WithValidRoles_AssignsRoles()
     {
-        var adminRole = new Role { Id = 1, Name = "Administrators" };
+        var adminRole = new Role { Id = 1, Name = "Administrator" };
         var request = new ApiKeyCreateRequestDto
         {
             Name = "New Key",
@@ -230,7 +230,7 @@ public class ApiKeysControllerTests
 
         Assert.That(capturedKey, Is.Not.Null);
         Assert.That(capturedKey!.Roles.Count, Is.EqualTo(1));
-        Assert.That(capturedKey.Roles[0].Name, Is.EqualTo("Administrators"));
+        Assert.That(capturedKey.Roles[0].Name, Is.EqualTo("Administrator"));
     }
 
     #endregion
