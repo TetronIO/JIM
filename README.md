@@ -35,23 +35,21 @@ Why choose JIM?
 ## Architecture
 JIM is a container-based distributed application. It is comprised of:
 
-- **JIM.Web** - A website with integrated REST API, built using ﻿[﻿ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/` with Swagger documentation at `/api/swagger`.
+- **JIM.Web** - A website with integrated REST API, built using [ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/` with Swagger documentation at `/api/swagger`.
 - **JIM.Scheduler** - A console app, built using .NET
 - **JIM.Worker** - A console app, built using .NET
+- **JIM.PowerShell** - A PowerShell module for scripting and automation
 - A database - PostgreSQL
 - A database admin website - Adminer
-  
-## Dependencies:
-- A container host, i.e. Docker.
+
+## Dependencies
+- A container host, i.e. Docker
 - An OpenID Connect (OIDC) identity provider, i.e. Entra ID, Keycloak, etc.
 
 ## Deployment
-JIM runs in a Docker stack using containers and can be deployed to on-premises infrastructure (no Internet connection required for air-gapped networks), or Cloud container services, such as Microsoft Azure or AWS.
+JIM runs in a Docker stack using containers and can be deployed to on-premises infrastructure or cloud container services. JIM is designed for air-gapped deployments - no internet connection is required.
 
-Various topologies are planned, depending on your needs:
-- **Standalone (single-server, built-in database):** Perfect for smaller organisations or pre-production environments. The current topology.
-- **External database:** Use an existing database platform for resiliency and scale.
-- **Scaled-out web frontends:** For organisations who need redundancy and/or to support a larger number of users accessing the web app.
+Each release includes a downloadable bundle containing pre-built Docker images, compose files, the PowerShell module, and documentation. See [Release Process](docs/RELEASE_PROCESS.md) for details on air-gapped deployment.
 
 ## Connectors
 JIM is currently targeting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will also be able to develop their own custom Connectors for use with JIM to support bespoke scenarios.
@@ -129,7 +127,7 @@ SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=<your sub claim value>
 The `sub` (subject identifier) claim is the standard OIDC claim for uniquely identifying users. It's guaranteed to be unique and stable per user per application across all OIDC-compliant providers.
 
 ## State of Development
-JIM is approximately 81% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
+JIM is approximately 88% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
 
 **Connectors (Complete):**
 - **LDAP/Active Directory** - Full import and export, schema discovery, LDAPS support with certificate validation, auto-detection of default naming context
@@ -155,9 +153,25 @@ JIM is approximately 81% complete towards MVP status with core identity synchron
 **Security (Complete):**
 - SSO/OIDC authentication for Web UI
 - JWT Bearer token authentication for API
+- API Key authentication for automation and CI/CD
 - Role-based authorisation (basic model)
 
-**Web UI:**
+**API (Complete):**
+- Activity monitoring and run profile execution
+- Connected Systems, Sync Rules, and Run Profiles CRUD
+- Metaverse Object querying with filtering and pagination
+- Data generation for testing
+- Certificate management
+
+**PowerShell Module (Complete):**
+- 35 cmdlets covering all major JIM operations
+- Connection management with API key support
+- Full CRUD for Connected Systems, Sync Rules, Run Profiles
+- Metaverse Object querying and inspection
+- Run profile execution and activity monitoring
+- Data generation for testing scenarios
+
+**Web UI (Complete):**
 - Operations view for manual run profile execution and task monitoring
 - Activity history with server-side sorting, filtering, and pagination
 - Connected Systems management and connector configuration
@@ -165,6 +179,12 @@ JIM is approximately 81% complete towards MVP status with core identity synchron
 - Metaverse Object browsing and inspection
 - Pending Export list and detail views
 - Certificate management for secure connections
+
+**Release & Deployment (Complete):**
+- Automated release workflow with GitHub Actions
+- Docker images published to GitHub Container Registry
+- Air-gapped deployment bundles with SHA256 checksums
+- PowerShell module auto-published to PSGallery
 
 **In Progress:**
 - Scheduler service for automated run profile execution (critical path for MVP)

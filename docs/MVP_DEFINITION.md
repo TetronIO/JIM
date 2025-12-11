@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.5
-> **Last Updated**: 2025-12-10
-> **Status**: In Progress (~85% Complete)
+> **Version**: 1.6
+> **Last Updated**: 2025-12-11
+> **Status**: In Progress (~88% Complete)
 
 ---
 
@@ -16,9 +16,10 @@
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
 | Admin UI | `█████████░` | 13 | 15 | 87% |
 | Security | `███████░░░` | 5 | 7 | 71% |
-| Operations | `████████░░` | 5 | 7 | 71% |
-| API Coverage | `░░░░░░░░░░` | 0 | 7 | 0% |
-| **Overall** | `████████░░` | **66** | **85** | **78%** |
+| Operations | `██████████` | 7 | 7 | 100% |
+| API Coverage | `██████████` | 7 | 7 | 100% |
+| PowerShell | `██████████` | 3 | 3 | 100% |
+| **Overall** | `█████████░` | **78** | **88** | **89%** |
 
 ### Priority Order for Remaining Work
 
@@ -29,17 +30,18 @@
 2. Background job for scheduled MVO deletions (#120)
 3. Dashboard admin home page (#169)
 4. **Connector credential encryption** - Encrypt passwords at rest (#171)
-5. **API Coverage Gaps** (#183) - Activity monitoring, run profile execution, MVO query
 
 **Nice to Have (Can follow MVP):**
 - Full RBAC (#21)
 - Change history (#14)
 - Sync preview
 - Delta sync support
-- PowerShell Module (#176)
 - End-to-End Integration Testing Framework (#173)
 
 ### Recently Completed ✓
+- ~~PowerShell Module (#176)~~ - 35 cmdlets with full CRUD operations and name-based parameters
+- ~~API Coverage (#183)~~ - Activity, Run Profiles, Connected Systems, Sync Rules, MVO query, Data Generation
+- ~~Release Process (#188)~~ - GitHub Actions workflow, air-gapped bundles, PSGallery publishing
 - ~~API Key Authentication (#175)~~ - X-API-Key header auth for CI/CD and automation
 - ~~Server-side file browser (#177)~~ - File path selection for connector settings
 - ~~Merged API into Web (#180)~~ - Simplified deployment architecture
@@ -202,29 +204,46 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Error capture and display
 - [ ] Change history / audit trail (#14)
 
-### 8. API Coverage Expansion (#183)
+### 8. API Coverage (#183)
 
 #### 8.1 Priority 1 - Critical for Automation
-- [ ] Activity Controller - Monitor sync operations via API
-- [ ] Run Profile Execution - Trigger syncs via API
-- [ ] MVO List/Search - Query metaverse objects via API
+- [x] Activity Controller - Monitor sync operations via API
+- [x] Run Profile Execution - Trigger syncs via API
+- [x] MVO List/Search - Query metaverse objects via API
 
 #### 8.2 Priority 2 - Full Automation
-- [ ] Connected System CRUD - Full API management
-- [ ] Sync Rule CRUD - Full API management
-- [ ] Run Profile CRUD - Full API management
-- [ ] Pending Export Read - Monitor pending exports via API
+- [x] Connected System CRUD - Full API management
+- [x] Sync Rule CRUD - Full API management
+- [x] Run Profile CRUD - Full API management
+- [x] Pending Export Read - Monitor pending exports via API
 
-### 9. Tooling & Automation (Post-MVP)
+### 9. Tooling & Automation
 
 #### 9.1 PowerShell Module (#176)
-- [ ] Cmdlets for common administration tasks
-- [ ] API key authentication support
-- [ ] Script-based automation
+- [x] Cmdlets for common administration tasks (35 cmdlets)
+- [x] API key authentication support
+- [x] Script-based automation with name-based parameters
 
 #### 9.2 Testing Framework (#173)
 - [ ] End-to-end integration tests with real connected systems
 - [ ] Automated test scenarios
+
+### 10. Release & Deployment (#188)
+
+#### 10.1 Release Process
+- [x] VERSION file for centralised version management
+- [x] CHANGELOG.md following Keep a Changelog format
+- [x] GitHub Actions release workflow
+
+#### 10.2 Air-Gapped Deployment
+- [x] Release bundle script (Build-ReleaseBundle.ps1)
+- [x] Docker image export/import support
+- [x] SHA256 checksums for integrity verification
+
+#### 10.3 Distribution
+- [x] Docker images to GitHub Container Registry
+- [x] PowerShell module to PSGallery
+- [x] GitHub Releases with downloadable bundles
 
 ---
 
