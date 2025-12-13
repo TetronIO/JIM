@@ -242,11 +242,5 @@ function Get-LDAPUserCount {
     return $count
 }
 
-# Export functions
-Export-ModuleMember -Function @(
-    'Test-LDAPConnection',
-    'Invoke-LDAPSearch',
-    'Get-LDAPUser',
-    'Test-LDAPUserExists',
-    'Get-LDAPUserCount'
-)
+# Functions are automatically available when dot-sourced
+# No need for Export-ModuleMember

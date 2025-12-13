@@ -269,15 +269,5 @@ function Get-RandomSubset {
     return $shuffled[0..($Count - 1)]
 }
 
-# Export functions
-Export-ModuleMember -Function @(
-    'Assert-Condition',
-    'Assert-Equal',
-    'Assert-NotNull',
-    'Write-TestSection',
-    'Write-TestStep',
-    'Wait-ForCondition',
-    'Get-TemplateScale',
-    'New-TestUser',
-    'Get-RandomSubset'
-)
+# Functions are automatically available when dot-sourced
+# No need for Export-ModuleMember

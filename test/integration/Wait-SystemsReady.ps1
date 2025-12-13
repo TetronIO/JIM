@@ -95,7 +95,7 @@ if ($Phase -eq 2) {
     $systemsToCheck += $phase2Systems
 }
 
-Write-Host "`nChecking ${systemsToCheck.Count} systems..." -ForegroundColor Gray
+Write-Host "`nChecking $($systemsToCheck.Count) systems..." -ForegroundColor Gray
 
 foreach ($system in $systemsToCheck) {
     Write-Host "`nWaiting for $($system.Description)..." -ForegroundColor Yellow
