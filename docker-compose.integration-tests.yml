@@ -6,25 +6,20 @@ services:
   # Phase 1 - Scenario 1 & 3: HR to Directory, GALSYNC
   # Primary Samba AD instance for most scenarios
   samba-ad-primary:
-    image: fmstrat/samba-domain
+    image: nowsci/samba-domain
     container_name: samba-ad-primary
     environment:
-      - DOMAIN=TESTDOMAIN
+      - DOMAIN=TESTDOMAIN.LOCAL
       - ADMIN_PASSWORD=Test@123!
       - DNS_FORWARDER=8.8.8.8
       - INSECURE_LDAP=true
-    ports:
-      - "389:389"     # LDAP
-      - "636:636"     # LDAPS
-      - "88:88"       # Kerberos
-      - "53:53/udp"   # DNS
-      - "53:53/tcp"   # DNS
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - samba-primary-data:/var/lib/samba
       - test-csv-data:/connector-files
     hostname: dc1.testdomain.local
     networks:
-      - integration-test-net
+      - jim-network
     healthcheck:
       test: ["CMD", "samba-tool", "domain", "info", "localhost"]
       interval: 30s
@@ -34,24 +29,19 @@ services:
 
   # Phase 1 - Scenario 2: Directory to Directory Sync (Source)
   samba-ad-source:
-    image: fmstrat/samba-domain
+    image: nowsci/samba-domain
     container_name: samba-ad-source
     environment:
-      - DOMAIN=SOURCEDOMAIN
+      - DOMAIN=SOURCEDOMAIN.LOCAL
       - ADMIN_PASSWORD=Test@123!
       - DNS_FORWARDER=8.8.8.8
       - INSECURE_LDAP=true
-    ports:
-      - "10389:389"   # LDAP (offset to avoid conflicts)
-      - "10636:636"   # LDAPS
-      - "10088:88"    # Kerberos
-      - "10053:53/udp" # DNS
-      - "10053:53/tcp" # DNS
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - samba-source-data:/var/lib/samba
     hostname: dc1.sourcedomain.local
     networks:
-      - integration-test-net
+      - jim-network
     profiles:
       - scenario2
     healthcheck:
@@ -63,24 +53,19 @@ services:
 
   # Phase 1 - Scenario 2: Directory to Directory Sync (Target)
   samba-ad-target:
-    image: fmstrat/samba-domain
+    image: nowsci/samba-domain
     container_name: samba-ad-target
     environment:
-      - DOMAIN=TARGETDOMAIN
+      - DOMAIN=TARGETDOMAIN.LOCAL
       - ADMIN_PASSWORD=Test@123!
       - DNS_FORWARDER=8.8.8.8
       - INSECURE_LDAP=true
-    ports:
-      - "11389:389"   # LDAP (offset to avoid conflicts)
-      - "11636:636"   # LDAPS
-      - "11088:88"    # Kerberos
-      - "11053:53/udp" # DNS
-      - "11053:53/tcp" # DNS
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - samba-target-data:/var/lib/samba
     hostname: dc1.targetdomain.local
     networks:
-      - integration-test-net
+      - jim-network
     profiles:
       - scenario2
     healthcheck:
@@ -98,12 +83,11 @@ services:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=Test@123!
       - MSSQL_PID=Developer
-    ports:
-      - "1433:1433"
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - sqlserver-data:/var/opt/mssql
     networks:
-      - integration-test-net
+      - jim-network
     profiles:
       - phase2
     healthcheck:
@@ -120,12 +104,11 @@ services:
     environment:
       - ORACLE_PWD=Test@123!
       - ORACLE_CHARACTERSET=AL32UTF8
-    ports:
-      - "1521:1521"
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - oracle-data:/opt/oracle/oradata
     networks:
-      - integration-test-net
+      - jim-network
     profiles:
       - phase2
     healthcheck:
@@ -143,12 +126,11 @@ services:
       - POSTGRES_PASSWORD=Test@123!
       - POSTGRES_USER=jimtest
       - POSTGRES_DB=jimtest
-    ports:
-      - "5433:5432"   # Offset to avoid conflict with JIM's PostgreSQL
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - postgres-test-data:/var/lib/postgresql/data
     networks:
-      - integration-test-net
+      - jim-network
     profiles:
       - phase2
     healthcheck:
@@ -168,14 +150,12 @@ services:
       - LDAP_CONFIG_PASSWORD=config
       - LDAP_READONLY_USER=false
       - LDAP_TLS=false
-    ports:
-      - "12389:389"
-      - "12636:636"
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - openldap-data:/var/lib/ldap
       - openldap-config:/etc/ldap/slapd.d
     networks:
-      - integration-test-net
+      - jim-network
     profiles:
       - phase2
     healthcheck:
@@ -193,12 +173,11 @@ services:
       - MYSQL_DATABASE=jimtest
       - MYSQL_USER=jimtest
       - MYSQL_PASSWORD=Test@123!
-    ports:
-      - "3306:3306"
+    # No ports exposed - internal to Docker network only for testing
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
-      - integration-test-net
+      - jim-network
     profiles:
       - phase2
     healthcheck:
@@ -230,6 +209,6 @@ volumes:
     name: jim-integration-oracle-data
 
 networks:
-  integration-test-net:
-    name: jim-integration-test-net
-    driver: bridge
+  jim-network:
+    external: true
+    name: jim-network
