@@ -5,12 +5,12 @@ services:
       - ASPNETCORE_URLS=http://+:80
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
+      - JIM_INFRASTRUCTURE_API_KEY=jim_ak_sq8XP3B0r1BfUDCKmTbXTuXqgEpd1iI99nk2fJSqRQ
     ports:
       - "5200:80"
     volumes:
       # Map repo test data to connector-files/test-data for development
       - ./test/test-data:/var/connector-files/test-data
-
   jim.worker:
     environment:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container

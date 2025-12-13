@@ -86,8 +86,8 @@ catch {
 Write-TestStep "Step 3" "Getting connector definitions"
 
 try {
-    # Get all connector definitions via API
-    $connectorDefs = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connector-definitions"
+    # Get all connector definitions
+    $connectorDefs = Get-JIMConnectorDefinition
 
     $csvConnector = $connectorDefs | Where-Object { $_.name -eq "CSV File" }
     $ldapConnector = $connectorDefs | Where-Object { $_.name -eq "LDAP" }
@@ -131,7 +131,7 @@ try {
 
     # Configure CSV settings
     # Get settings from the connector definition to find setting IDs
-    $csvConnectorFull = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connector-definitions/$($csvConnector.id)"
+    $csvConnectorFull = Get-JIMConnectorDefinition -Id $csvConnector.id
     $filePathSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "FilePath" }
     $delimiterSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "Delimiter" }
     $hasHeadersSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "HasHeaders" }
@@ -177,7 +177,7 @@ try {
     }
 
     # Configure LDAP settings
-    $ldapConnectorFull = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connector-definitions/$($ldapConnector.id)"
+    $ldapConnectorFull = Get-JIMConnectorDefinition -Id $ldapConnector.id
 
     # Find setting IDs by name
     $serverSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Server" }
