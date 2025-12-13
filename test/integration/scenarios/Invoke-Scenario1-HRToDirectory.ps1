@@ -87,7 +87,7 @@ try {
     Write-Host "  LDAP System ID: $($config.LDAPSystemId)" -ForegroundColor Gray
 
     # Re-import module to ensure we have connection
-    $modulePath = "$PSScriptRoot/../../JIM.PowerShell/JIM/JIM.psd1"
+    $modulePath = "$PSScriptRoot/../../../JIM.PowerShell/JIM/JIM.psd1"
     Import-Module $modulePath -Force -ErrorAction Stop
 
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
@@ -117,9 +117,9 @@ try {
 
         # Trigger CSV Import
         Write-Host "Triggering CSV import..." -ForegroundColor Gray
-        $importResult = Start-JIMRunProfile -Id $config.CSVImportProfileId -PassThru
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -PassThru
 
-        Write-Host "  ✓ CSV import started (Run: $($importResult.id))" -ForegroundColor Green
+        Write-Host "  ✓ CSV import started (Activity: $($importResult.activityId))" -ForegroundColor Green
 
         # Wait for processing
         Write-Host "Waiting $WaitSeconds seconds for processing..." -ForegroundColor Gray
@@ -127,9 +127,9 @@ try {
 
         # Trigger LDAP Export
         Write-Host "Triggering LDAP export..." -ForegroundColor Gray
-        $exportResult = Start-JIMRunProfile -Id $config.LDAPExportProfileId -PassThru
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -PassThru
 
-        Write-Host "  ✓ LDAP export started (Run: $($exportResult.id))" -ForegroundColor Green
+        Write-Host "  ✓ LDAP export started (Activity: $($exportResult.activityId))" -ForegroundColor Green
 
         # Wait for export
         Start-Sleep -Seconds $WaitSeconds

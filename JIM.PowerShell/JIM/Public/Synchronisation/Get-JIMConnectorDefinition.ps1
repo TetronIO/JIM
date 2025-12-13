@@ -24,14 +24,14 @@ function Get-JIMConnectorDefinition {
         Gets the CSV File connector definition.
 
     .EXAMPLE
-        Get-JIMConnectorDefinition -Id "12345678-1234-1234-1234-123456789012"
+        Get-JIMConnectorDefinition -Id 2
 
         Gets a specific connector definition by ID.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
-        [Guid]$Id
+        [int]$Id
     )
 
     process {

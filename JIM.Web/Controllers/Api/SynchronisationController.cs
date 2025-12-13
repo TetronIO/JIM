@@ -161,12 +161,17 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Creating connected system: {Name} with connector {ConnectorId}", request.Name, request.ConnectorDefinitionId);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for connected system creation");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        if (IsApiKeyAuthenticated())
+        {
+            _logger.LogInformation("Connected system creation initiated via API key: {ApiKeyName}", GetApiKeyName());
         }
 
         // Get the connector definition
@@ -222,9 +227,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Updating connected system: {Id}", connectedSystemId);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for connected system update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -303,9 +308,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Deletion requested for connected system: {Id}", connectedSystemId);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for deletion request");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -447,16 +452,19 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
         if (runProfile == null)
             return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for connected system {connectedSystemId}."));
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for run profile execution");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
         // Create and queue the synchronisation task
-        var workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, initiatedBy);
+        // Use two-parameter constructor when initiatedBy is null (API key auth)
+        var workerTask = initiatedBy != null
+            ? new SynchronisationWorkerTask(connectedSystemId, runProfileId, initiatedBy)
+            : new SynchronisationWorkerTask(connectedSystemId, runProfileId);
 
         await _application.Tasking.CreateWorkerTaskAsync(workerTask);
 
@@ -492,9 +500,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Creating run profile: {Name} for connected system {SystemId}", request.Name, connectedSystemId);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for run profile creation");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -560,9 +568,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Updating run profile: {Id} for connected system {SystemId}", runProfileId, connectedSystemId);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for run profile update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -631,9 +639,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Deleting run profile: {Id} for connected system {SystemId}", runProfileId, connectedSystemId);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for run profile deletion");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -722,9 +730,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Creating sync rule: {Name}", request.Name);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for sync rule creation");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -796,9 +804,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Updating sync rule: {Id}", id);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for sync rule update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -853,9 +861,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     {
         _logger.LogInformation("Deleting sync rule: {Id}", id);
 
-        // Get the current user from the JWT claims
+        // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
-        if (initiatedBy == null)
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for sync rule deletion");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
@@ -878,12 +886,40 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     #region Private Helpers
 
     /// <summary>
+    /// Checks if the current authentication is via API key.
+    /// </summary>
+    private bool IsApiKeyAuthenticated()
+    {
+        return User.HasClaim("auth_method", "api_key");
+    }
+
+    /// <summary>
+    /// Gets the API key name if authenticated via API key.
+    /// </summary>
+    private string? GetApiKeyName()
+    {
+        if (!IsApiKeyAuthenticated())
+            return null;
+
+        return User.Identity?.Name;
+    }
+
+    /// <summary>
     /// Resolves the current user from JWT claims by looking up their SSO identifier in the Metaverse.
+    /// Returns null for API key authentication (which is valid - use IsApiKeyAuthenticated() to check).
     /// </summary>
     private async Task<JIM.Models.Core.MetaverseObject?> GetCurrentUserAsync()
     {
         if (User.Identity?.IsAuthenticated != true)
             return null;
+
+        // API key authentication doesn't map to a Metaverse user object
+        // This is valid - the caller should check IsApiKeyAuthenticated() separately
+        if (IsApiKeyAuthenticated())
+        {
+            _logger.LogDebug("API key authentication detected - no Metaverse user lookup needed");
+            return null;
+        }
 
         // Get the service settings to know which claim type contains the unique identifier
         var serviceSettings = await _application.ServiceSettings.GetServiceSettingsAsync();

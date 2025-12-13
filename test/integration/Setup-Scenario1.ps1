@@ -97,18 +97,18 @@ try {
     # Get all connector definitions
     $connectorDefs = Get-JIMConnectorDefinition
 
-    $csvConnector = $connectorDefs | Where-Object { $_.name -eq "CSV File" }
-    $ldapConnector = $connectorDefs | Where-Object { $_.name -eq "LDAP" }
+    $csvConnector = $connectorDefs | Where-Object { $_.name -eq "JIM File Connector" }
+    $ldapConnector = $connectorDefs | Where-Object { $_.name -eq "JIM LDAP Connector" }
 
     if (-not $csvConnector) {
-        throw "CSV File connector definition not found"
+        throw "JIM File Connector definition not found"
     }
 
     if (-not $ldapConnector) {
-        throw "LDAP connector definition not found"
+        throw "JIM LDAP Connector definition not found"
     }
 
-    Write-Host "  ✓ Found CSV connector (ID: $($csvConnector.id))" -ForegroundColor Green
+    Write-Host "  ✓ Found File connector (ID: $($csvConnector.id))" -ForegroundColor Green
     Write-Host "  ✓ Found LDAP connector (ID: $($ldapConnector.id))" -ForegroundColor Green
 }
 catch {
@@ -225,72 +225,31 @@ catch {
     throw
 }
 
-# Step 6: Create Sync Rules
-Write-TestStep "Step 6" "Creating Sync Rules"
+# Step 6: Sync Rules
+Write-TestStep "Step 6" "Sync Rules (skipped - configure via UI)"
 
-try {
-    # Get existing sync rules
-    $existingRules = Get-JIMSyncRule
-
-    # Define sync rules for attribute mappings
-    $ruleMappings = @(
-        @{ SourceAttr = "employeeId"; TargetAttr = "employeeNumber"; Description = "Employee ID mapping" }
-        @{ SourceAttr = "firstName"; TargetAttr = "givenName"; Description = "First name mapping" }
-        @{ SourceAttr = "lastName"; TargetAttr = "sn"; Description = "Last name mapping" }
-        @{ SourceAttr = "email"; TargetAttr = "mail"; Description = "Email mapping" }
-        @{ SourceAttr = "department"; TargetAttr = "department"; Description = "Department mapping" }
-        @{ SourceAttr = "samAccountName"; TargetAttr = "sAMAccountName"; Description = "Sam account name mapping" }
-        @{ SourceAttr = "displayName"; TargetAttr = "displayName"; Description = "Display name mapping" }
-    )
-
-    $createdRules = 0
-    foreach ($mapping in $ruleMappings) {
-        $ruleName = "HR-AD: $($mapping.SourceAttr) → $($mapping.TargetAttr)"
-
-        $existingRule = $existingRules | Where-Object { $_.name -eq $ruleName }
-
-        if ($existingRule) {
-            Write-Host "  Sync Rule '$ruleName' already exists" -ForegroundColor Gray
-        }
-        else {
-            New-JIMSyncRule `
-                -Name $ruleName `
-                -Description $mapping.Description `
-                -SourceSystemId $csvSystem.id `
-                -TargetSystemId $ldapSystem.id `
-                -SourceAttribute $mapping.SourceAttr `
-                -TargetAttribute $mapping.TargetAttr | Out-Null
-
-            $createdRules++
-        }
-    }
-
-    if ($createdRules -gt 0) {
-        Write-Host "  ✓ Created $createdRules sync rule(s)" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  All sync rules already exist" -ForegroundColor Gray
-    }
-}
-catch {
-    Write-Host "  ✗ Failed to create sync rules: $_" -ForegroundColor Red
-    Write-Host "  Error details: $($_.Exception.Message)" -ForegroundColor Red
-    # Continue - sync rules might need manual configuration
-}
+# Note: Sync rules in JIM define flows between Connected Systems and the Metaverse,
+# not directly between two connected systems. They require object type IDs which
+# depend on the connector's schema. For now, sync rules should be configured
+# manually via the JIM web UI after importing the connector schema.
+Write-Host "  ⚠ Sync rules should be configured via the JIM web UI" -ForegroundColor Yellow
+Write-Host "    Steps: Connected System > Schema > Import > Configure Sync Rules" -ForegroundColor Gray
 
 # Step 7: Create Run Profiles
 Write-TestStep "Step 7" "Creating Run Profiles"
 
 try {
-    $existingProfiles = Get-JIMRunProfile
+    # Get existing run profiles for each connected system
+    $csvProfiles = Get-JIMRunProfile -ConnectedSystemId $csvSystem.id
+    $ldapProfiles = Get-JIMRunProfile -ConnectedSystemId $ldapSystem.id
 
     # Full Import from CSV
-    $csvImportProfile = $existingProfiles | Where-Object { $_.name -eq "HR CSV - Full Import" -and $_.connectedSystemId -eq $csvSystem.id }
+    $csvImportProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Full Import" }
     if (-not $csvImportProfile) {
         $csvImportProfile = New-JIMRunProfile `
             -Name "HR CSV - Full Import" `
             -ConnectedSystemId $csvSystem.id `
-            -ProfileType "FullImport" `
+            -RunType "FullImport" `
             -PassThru
         Write-Host "  ✓ Created 'HR CSV - Full Import' run profile" -ForegroundColor Green
     }
@@ -298,18 +257,18 @@ try {
         Write-Host "  Run profile 'HR CSV - Full Import' already exists" -ForegroundColor Gray
     }
 
-    # Full Export to LDAP
-    $ldapExportProfile = $existingProfiles | Where-Object { $_.name -eq "Samba AD - Full Export" -and $_.connectedSystemId -eq $ldapSystem.id }
+    # Export to LDAP (Note: 'Export' is the correct RunType, not 'FullExport')
+    $ldapExportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Export" }
     if (-not $ldapExportProfile) {
         $ldapExportProfile = New-JIMRunProfile `
-            -Name "Samba AD - Full Export" `
+            -Name "Samba AD - Export" `
             -ConnectedSystemId $ldapSystem.id `
-            -ProfileType "FullExport" `
+            -RunType "Export" `
             -PassThru
-        Write-Host "  ✓ Created 'Samba AD - Full Export' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Samba AD - Export' run profile" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Samba AD - Full Export' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Samba AD - Export' already exists" -ForegroundColor Gray
     }
 }
 catch {

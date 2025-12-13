@@ -228,7 +228,7 @@ function New-TestUser {
     $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")
 
     $firstName = $firstNames[$Index % $firstNames.Length]
-    $lastName = $lastNames[($Index / $firstNames.Length) % $lastNames.Length]
+    $lastName = $lastNames[[int][Math]::Floor($Index / $firstNames.Length) % $lastNames.Length]
     $department = $departments[$Index % $departments.Length]
     $title = $titles[$Index % $titles.Length]
 

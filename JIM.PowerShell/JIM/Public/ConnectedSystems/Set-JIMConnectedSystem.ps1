@@ -102,7 +102,13 @@ function Set-JIMConnectedSystem {
         }
 
         if ($SettingValues) {
-            $body.settingValues = $SettingValues
+            # Convert hashtable keys to strings for JSON serialization
+            # JSON requires string keys, but PowerShell hashtables can have integer keys
+            $stringKeyedSettings = @{}
+            foreach ($key in $SettingValues.Keys) {
+                $stringKeyedSettings[$key.ToString()] = $SettingValues[$key]
+            }
+            $body.settingValues = $stringKeyedSettings
         }
 
         if ($body.Count -eq 0) {
