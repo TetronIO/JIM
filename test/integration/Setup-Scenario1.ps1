@@ -60,8 +60,16 @@ if (-not (Test-Path $modulePath)) {
     throw "JIM PowerShell module not found at: $modulePath"
 }
 
+# Remove any existing module to ensure fresh import with latest cmdlets
+Remove-Module JIM -Force -ErrorAction SilentlyContinue
+
 Import-Module $modulePath -Force -ErrorAction Stop
 Write-Host "  ✓ JIM PowerShell module imported" -ForegroundColor Green
+
+# Verify Get-JIMConnectorDefinition is available
+if (-not (Get-Command Get-JIMConnectorDefinition -ErrorAction SilentlyContinue)) {
+    throw "Get-JIMConnectorDefinition cmdlet not found. Module may not have loaded correctly."
+}
 
 # Step 2: Connect to JIM
 Write-TestStep "Step 2" "Connecting to JIM at $JIMUrl"
