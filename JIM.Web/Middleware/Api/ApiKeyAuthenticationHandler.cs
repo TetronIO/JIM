@@ -31,16 +31,16 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// </summary>
     public const string ApiKeyPrefix = "jim_ak_";
 
-    private readonly JimApplication _jim;
+    private readonly IServiceProvider _serviceProvider;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<ApiKeyAuthenticationOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        JimApplication jim)
+        IServiceProvider serviceProvider)
         : base(options, logger, encoder)
     {
-        _jim = jim;
+        _serviceProvider = serviceProvider;
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -66,9 +66,14 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
         try
         {
+            // Create a scope to get a fresh DbContext for this authentication operation
+            // This prevents DbContext threading issues when the controller also uses the same context
+            using var scope = _serviceProvider.CreateScope();
+            var jim = scope.ServiceProvider.GetRequiredService<JimApplication>();
+
             // Hash the provided key to look it up
             var keyHash = HashApiKey(providedKey);
-            var apiKey = await _jim.Repository.ApiKeys.GetByHashAsync(keyHash);
+            var apiKey = await jim.Repository.ApiKeys.GetByHashAsync(keyHash);
 
             if (apiKey == null)
             {
@@ -96,11 +101,15 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
             // Record usage (fire and forget - don't block authentication)
             var ipAddress = Context.Connection.RemoteIpAddress?.ToString();
+            var apiKeyId = apiKey.Id;
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _jim.Repository.ApiKeys.RecordUsageAsync(apiKey.Id, ipAddress);
+                    // Create a new scope for the background task since the original scope will be disposed
+                    using var usageScope = _serviceProvider.CreateScope();
+                    var usageJim = usageScope.ServiceProvider.GetRequiredService<JimApplication>();
+                    await usageJim.Repository.ApiKeys.RecordUsageAsync(apiKeyId, ipAddress);
                 }
                 catch (Exception ex)
                 {

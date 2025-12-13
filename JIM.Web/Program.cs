@@ -60,14 +60,28 @@ try
     var validIssuers = GetValidIssuers(authority);
 
     // Configure triple authentication: Cookies for Blazor UI, JWT Bearer for SSO API, API Key for non-interactive API
-    // NOTE: API Key is registered FIRST so it gets priority in the authentication pipeline
+    // Configure authentication with multiple schemes
+    // Cookie is default for Blazor UI, but forwards to API Key when X-API-Key header is present
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
     })
         .AddApiKeyAuthentication()
-        .AddCookie()
+        .AddCookie(options =>
+        {
+            // Forward to API Key authentication when X-API-Key header is present
+            options.ForwardDefaultSelector = context =>
+            {
+                // Check if the request has an API key header
+                if (context.Request.Headers.ContainsKey("X-API-Key"))
+                {
+                    return ApiKeyAuthenticationHandler.SchemeName;
+                }
+                // Otherwise use default Cookie authentication
+                return null;
+            };
+        })
         .AddOpenIdConnect(options =>
         {
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;

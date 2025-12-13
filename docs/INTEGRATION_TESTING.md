@@ -637,10 +637,12 @@ Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
 
 | Dependency | Issue | Status | Notes |
 |------------|-------|--------|-------|
-| API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | **In Progress** | ✅ Endpoints created + PowerShell cmdlet added; ⚠️ Handler not invoked for `[Authorize]` protected endpoints |
+| API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | **✅ Complete** | API key authentication fully functional for all endpoints |
 | PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | In Progress | ✅ Core functions implemented; needs connector definitions cmdlet + testing |
 
 #### API Key Authentication Status (Issue #175)
+
+**✅ RESOLVED** - API key authentication is now fully functional.
 
 **Completed:**
 - ✅ Created 3 connector definition API endpoints (GET list, GET by ID, GET by name)
@@ -648,19 +650,18 @@ Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
 - ✅ Added cmdlet to module manifest exports
 - ✅ OIDC redirect suppressed for API requests (returns 401 JSON instead of 302)
 - ✅ Added detailed logging to API key authentication handler
-- ✅ Build succeeds, all 125 unit tests pass
+- ✅ **Fixed**: API key handler now invoked for `[Authorize]` protected endpoints
+- ✅ **Fixed**: DbContext threading issues in authentication handler
+- ✅ Build succeeds, all 395 unit tests pass
 
-**Known Issue - Blocker:**
-- ⚠️ **API key handler not invoked for `[Authorize(Roles = "Administrator")]` endpoints**
-  - Handler **IS called** for `[AllowAnonymous]` endpoints and successfully authenticates (logs show successful authentication)
-  - Handler **IS NOT called** for endpoints with `[Authorize]` attributes, returns 401 immediately
-  - Likely a middleware ordering or authorization policy configuration issue
-  - Requires investigation by different LLM model or manual debugging
+**Root Cause & Fix:**
+The issue was that ASP.NET Core's authentication pipeline only runs the DefaultScheme (Cookie) by default. Other schemes are only tried when explicitly requested. The fix was to add `ForwardDefaultSelector` to Cookie authentication options, which conditionally forwards to API Key authentication when the `X-API-Key` header is present.
 
-**Next Steps:**
-- Investigate why authentication handler is skipped for authorized endpoints
-- Possibly try alternative authentication configuration approaches
-- Review ASP.NET Core authentication/authorization middleware interaction
+**Technical Details:**
+- Added `ForwardDefaultSelector` in Program.cs Cookie options
+- Changed `ApiKeyAuthenticationHandler` to inject `IServiceProvider` instead of `JimApplication`
+- Create new DI scope for each database operation to prevent DbContext threading issues
+- Separate scope for background usage tracking task
 
 ---
 
