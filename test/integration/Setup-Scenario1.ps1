@@ -185,6 +185,8 @@ try {
     }
 
     # Configure LDAP settings
+    # Note: Using LDAPS (port 636) with Simple authentication over TLS
+    # This satisfies AD's strong authentication requirement
     $ldapConnectorFull = Get-JIMConnectorDefinition -Id $ldapConnector.id
 
     # Find setting IDs by name (using actual setting names from connector definition)
@@ -193,6 +195,7 @@ try {
     $usernameSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Username" }
     $passwordSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Password" }
     $useSSLSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Use Secure Connection (LDAPS)?" }
+    $certValidationSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Certificate Validation" }
     $connectionTimeoutSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Connection Timeout" }
     $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
 
@@ -201,23 +204,30 @@ try {
         $ldapSettings[$hostSetting.id] = @{ stringValue = "samba-ad-primary" }
     }
     if ($portSetting) {
-        $ldapSettings[$portSetting.id] = @{ intValue = 389 }
+        # Use LDAPS port 636 for encrypted connection
+        $ldapSettings[$portSetting.id] = @{ intValue = 636 }
     }
     if ($usernameSetting) {
-        $ldapSettings[$usernameSetting.id] = @{ stringValue = "cn=Administrator,cn=Users,dc=testdomain,dc=local" }
+        # DN format for Simple bind
+        $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=testdomain,DC=local" }
     }
     if ($passwordSetting) {
-        # Password setting uses stringEncryptedValue
-        $ldapSettings[$passwordSetting.id] = @{ stringEncryptedValue = "Test@123!" }
+        # Password setting uses stringValue - API stores it encrypted based on setting type
+        $ldapSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" }
     }
     if ($useSSLSetting) {
-        $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $false }
+        # Enable LDAPS for encrypted connection
+        $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $true }
+    }
+    if ($certValidationSetting) {
+        # Skip cert validation for self-signed test certificates
+        $ldapSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" }
     }
     if ($connectionTimeoutSetting) {
         $ldapSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 }
     }
     if ($authTypeSetting) {
-        # Authentication type: "Anonymous", "Simple", or "NTLM" (string value)
+        # Simple authentication over TLS satisfies AD strong auth requirement
         $ldapSettings[$authTypeSetting.id] = @{ stringValue = "Simple" }
     }
 

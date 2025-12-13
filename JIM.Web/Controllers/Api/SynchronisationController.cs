@@ -256,7 +256,13 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
                 if (settingValue != null)
                 {
                     if (update.StringValue != null)
-                        settingValue.StringValue = update.StringValue;
+                    {
+                        // For encrypted settings (like Password), store in StringEncryptedValue
+                        if (settingValue.Setting?.Type == ConnectedSystemSettingType.StringEncrypted)
+                            settingValue.StringEncryptedValue = update.StringValue;
+                        else
+                            settingValue.StringValue = update.StringValue;
+                    }
                     if (update.IntValue.HasValue)
                         settingValue.IntValue = update.IntValue.Value;
                     if (update.CheckboxValue.HasValue)

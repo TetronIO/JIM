@@ -214,7 +214,16 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 if (skipCertValidation)
                 {
                     logger.Warning("Certificate validation is disabled. This is not recommended for production environments.");
-                    _connection.SessionOptions.VerifyServerCertificate = (connection, certificate) => true;
+                    // On Linux, setting VerifyServerCertificate can fail. Use LDAPTLS_REQCERT=never
+                    // environment variable instead. On Windows, set the callback directly.
+                    if (OperatingSystem.IsWindows())
+                    {
+                        _connection.SessionOptions.VerifyServerCertificate = (connection, certificate) => true;
+                    }
+                    else
+                    {
+                        logger.Debug("Skipping VerifyServerCertificate callback on Linux - using LDAPTLS_REQCERT environment variable");
+                    }
                 }
                 else if (_trustedCertificates != null && _trustedCertificates.Count > 0)
                 {

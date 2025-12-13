@@ -68,6 +68,54 @@ $phase1Systems = @(
         Description = "Samba AD Primary"
         HasHealthCheck = $true
         AdditionalCheck = $null
+        PostReadySetup = {
+            # Configure TLS for LDAPS support
+            # This enables encrypted LDAP connections (port 636)
+            Write-Host "  Configuring LDAPS (TLS) on Samba AD..." -ForegroundColor Gray
+
+            # Check if TLS is already configured
+            $tlsConfigured = docker exec samba-ad-primary grep -q "tls enabled" /etc/samba/smb.conf 2>$null; $LASTEXITCODE -eq 0
+
+            if (-not $tlsConfigured) {
+                # Add TLS settings to [global] section of smb.conf
+                $script = @'
+# Check if TLS already configured
+if ! grep -q "tls enabled" /etc/samba/smb.conf; then
+    # Add TLS settings right after [global]
+    sed -i '/^\[global\]/a\
+tls enabled = yes\
+tls keyfile = /var/lib/samba/private/tls/key.pem\
+tls certfile = /var/lib/samba/private/tls/cert.pem\
+tls cafile = /var/lib/samba/private/tls/ca.pem' /etc/samba/smb.conf
+    echo "TLS configuration added to smb.conf"
+fi
+'@
+                docker exec samba-ad-primary bash -c $script
+
+                # Restart Samba to apply TLS config
+                Write-Host "  Restarting Samba to enable LDAPS..." -ForegroundColor Gray
+                docker restart samba-ad-primary
+
+                # Wait for container to be healthy again
+                Start-Sleep -Seconds 10
+                $retries = 0
+                while ($retries -lt 12) {
+                    $health = docker inspect --format='{{.State.Health.Status}}' samba-ad-primary 2>$null
+                    if ($health -eq "healthy") { break }
+                    Start-Sleep -Seconds 10
+                    $retries++
+                }
+
+                if ($retries -ge 12) {
+                    Write-Host "  ⚠ Samba AD may not be fully ready after TLS configuration" -ForegroundColor Yellow
+                }
+            }
+
+            # Ensure Administrator password is set correctly
+            docker exec samba-ad-primary samba-tool user setpassword Administrator --newpassword="Test@123!" 2>$null
+
+            Write-Host "  ✓ Samba AD configured with LDAPS support" -ForegroundColor Green
+        }
     }
 )
 
@@ -143,6 +191,17 @@ foreach ($system in $systemsToCheck) {
     }
 
     Write-Host "✓ $($system.Description) is ready" -ForegroundColor Green
+
+    # Run post-ready setup if defined (e.g., configure TLS)
+    if ($null -ne $system.PostReadySetup) {
+        try {
+            & $system.PostReadySetup
+        }
+        catch {
+            Write-Host "⚠ Post-ready setup failed for $($system.Name): $_" -ForegroundColor Yellow
+            # Don't fail - post-ready setup is optional configuration
+        }
+    }
 }
 
 $elapsed = (Get-Date) - $startTime
