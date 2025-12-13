@@ -348,6 +348,214 @@ catch {
     # Continue - sync rules can be created manually if needed
 }
 
+# Step 6c: Configure Attribute Flow Mappings
+Write-TestStep "Step 6c" "Configuring Attribute Flow Mappings"
+
+try {
+    if ($importRule -and $exportRule) {
+        Write-Host "  Configuring attribute mappings via database..." -ForegroundColor Gray
+
+        # Get attribute IDs for mapping
+        $importMappings = @(
+            @{ CsAttr = "employeeId";    MvAttr = "Employee ID";    CsId = $null; MvId = $null }
+            @{ CsAttr = "firstName";     MvAttr = "First Name";     CsId = $null; MvId = $null }
+            @{ CsAttr = "lastName";      MvAttr = "Last Name";      CsId = $null; MvId = $null }
+            @{ CsAttr = "displayName";   MvAttr = "Display Name";   CsId = $null; MvId = $null }
+            @{ CsAttr = "email";         MvAttr = "Email";          CsId = $null; MvId = $null }
+            @{ CsAttr = "title";         MvAttr = "Job Title";      CsId = $null; MvId = $null }
+            @{ CsAttr = "department";    MvAttr = "Department";     CsId = $null; MvId = $null }
+            @{ CsAttr = "samAccountName"; MvAttr = "Account Name";  CsId = $null; MvId = $null }
+        )
+
+        $exportMappings = @(
+            @{ MvAttr = "Account Name";  LdapAttr = "sAMAccountName"; MvId = $null; LdapId = $null }
+            @{ MvAttr = "First Name";    LdapAttr = "givenName";      MvId = $null; LdapId = $null }
+            @{ MvAttr = "Last Name";     LdapAttr = "sn";             MvId = $null; LdapId = $null }
+            @{ MvAttr = "Display Name";  LdapAttr = "displayName";    MvId = $null; LdapId = $null }
+            @{ MvAttr = "Display Name";  LdapAttr = "cn";             MvId = $null; LdapId = $null }
+            @{ MvAttr = "Email";         LdapAttr = "mail";           MvId = $null; LdapId = $null }
+            @{ MvAttr = "Job Title";     LdapAttr = "title";          MvId = $null; LdapId = $null }
+            @{ MvAttr = "Department";    LdapAttr = "department";     MvId = $null; LdapId = $null }
+        )
+
+        # SQL to add import mappings (CSV → Metaverse)
+        $importSql = @"
+-- Import attribute flow mappings (CSV → Metaverse)
+DO `$`$
+DECLARE
+    mapping_id INT;
+    csv_attr_id INT;
+    mv_attr_id INT;
+    mapping_order INT := 0;
+BEGIN
+"@
+
+        foreach ($mapping in $importMappings) {
+            $importSql += @"
+
+    -- Map CSV.$($mapping.CsAttr) → Metaverse.$($mapping.MvAttr)
+    SELECT ca."Id" INTO csv_attr_id
+    FROM "ConnectedSystemAttributes" ca
+    WHERE ca."ConnectedSystemObjectTypeId" = $($csvUserType.id) AND ca."Name" = '$($mapping.CsAttr)';
+
+    SELECT ma."Id" INTO mv_attr_id
+    FROM "MetaverseAttributes" ma
+    WHERE ma."Name" = '$($mapping.MvAttr)';
+
+    IF csv_attr_id IS NOT NULL AND mv_attr_id IS NOT NULL THEN
+        -- Check if mapping already exists
+        IF NOT EXISTS (
+            SELECT 1 FROM "SyncRuleMappings" srm
+            JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
+            WHERE srm."AttributeFlowSynchronisationRuleId" = $($importRule.id)
+              AND srm."TargetMetaverseAttributeId" = mv_attr_id
+              AND srms."ConnectedSystemAttributeId" = csv_attr_id
+        ) THEN
+            INSERT INTO "SyncRuleMappings" ("Created", "Order", "AttributeFlowSynchronisationRuleId", "Type", "TargetMetaverseAttributeId")
+            VALUES (NOW(), mapping_order, $($importRule.id), 1, mv_attr_id)
+            RETURNING "Id" INTO mapping_id;
+
+            INSERT INTO "SyncRuleMappingSources" ("Order", "ConnectedSystemAttributeId", "SyncRuleMappingId")
+            VALUES (0, csv_attr_id, mapping_id);
+
+            mapping_order := mapping_order + 1;
+        END IF;
+    END IF;
+"@
+        }
+
+        $importSql += @"
+
+END `$`$;
+"@
+
+        # SQL to add export mappings (Metaverse → LDAP)
+        $exportSql = @"
+-- Export attribute flow mappings (Metaverse → LDAP)
+DO `$`$
+DECLARE
+    mapping_id INT;
+    ldap_attr_id INT;
+    mv_attr_id INT;
+    mapping_order INT := 0;
+BEGIN
+"@
+
+        foreach ($mapping in $exportMappings) {
+            $exportSql += @"
+
+    -- Map Metaverse.$($mapping.MvAttr) → LDAP.$($mapping.LdapAttr)
+    SELECT ca."Id" INTO ldap_attr_id
+    FROM "ConnectedSystemAttributes" ca
+    WHERE ca."ConnectedSystemObjectTypeId" = $($ldapUserType.id) AND ca."Name" = '$($mapping.LdapAttr)';
+
+    SELECT ma."Id" INTO mv_attr_id
+    FROM "MetaverseAttributes" ma
+    WHERE ma."Name" = '$($mapping.MvAttr)';
+
+    IF ldap_attr_id IS NOT NULL AND mv_attr_id IS NOT NULL THEN
+        -- Check if mapping already exists
+        IF NOT EXISTS (
+            SELECT 1 FROM "SyncRuleMappings" srm
+            JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
+            WHERE srm."AttributeFlowSynchronisationRuleId" = $($exportRule.id)
+              AND srm."TargetConnectedSystemAttributeId" = ldap_attr_id
+              AND srms."MetaverseAttributeId" = mv_attr_id
+        ) THEN
+            INSERT INTO "SyncRuleMappings" ("Created", "Order", "AttributeFlowSynchronisationRuleId", "Type", "TargetConnectedSystemAttributeId")
+            VALUES (NOW(), mapping_order, $($exportRule.id), 1, ldap_attr_id)
+            RETURNING "Id" INTO mapping_id;
+
+            INSERT INTO "SyncRuleMappingSources" ("Order", "MetaverseAttributeId", "SyncRuleMappingId")
+            VALUES (0, mv_attr_id, mapping_id);
+
+            mapping_order := mapping_order + 1;
+        END IF;
+    END IF;
+"@
+        }
+
+        $exportSql += @"
+
+END `$`$;
+"@
+
+        # Execute SQL via docker exec
+        $importSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ Import attribute mappings configured" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Failed to configure import mappings" -ForegroundColor Yellow
+        }
+
+        $exportSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ Export attribute mappings configured" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Failed to configure export mappings" -ForegroundColor Yellow
+        }
+
+        # Add join criteria (object matching) for import rule
+        Write-Host "  Configuring join criteria..." -ForegroundColor Gray
+
+        $joinCriteriaSql = @"
+-- Join criteria for import sync rule (how to match CSOs to existing MVOs)
+DO `$`$
+DECLARE
+    mapping_id INT;
+    csv_employeeid_attr_id INT;
+    mv_employeeid_attr_id INT;
+BEGIN
+    -- Get attribute IDs for employeeId (CSV) and Employee ID (Metaverse)
+    SELECT ca."Id" INTO csv_employeeid_attr_id
+    FROM "ConnectedSystemAttributes" ca
+    WHERE ca."ConnectedSystemObjectTypeId" = $($csvUserType.id) AND ca."Name" = 'employeeId';
+
+    SELECT ma."Id" INTO mv_employeeid_attr_id
+    FROM "MetaverseAttributes" ma
+    WHERE ma."Name" = 'Employee ID';
+
+    IF csv_employeeid_attr_id IS NOT NULL AND mv_employeeid_attr_id IS NOT NULL THEN
+        -- Check if join criteria already exists
+        IF NOT EXISTS (
+            SELECT 1 FROM "SyncRuleMappings" srm
+            JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
+            WHERE srm."ObjectMatchingSynchronisationRuleId" = $($importRule.id)
+              AND srm."TargetMetaverseAttributeId" = mv_employeeid_attr_id
+              AND srms."ConnectedSystemAttributeId" = csv_employeeid_attr_id
+        ) THEN
+            -- Create join criteria: Match on employeeId = Employee ID
+            INSERT INTO "SyncRuleMappings" ("Created", "Order", "ObjectMatchingSynchronisationRuleId", "Type", "TargetMetaverseAttributeId")
+            VALUES (NOW(), 0, $($importRule.id), 2, mv_employeeid_attr_id)
+            RETURNING "Id" INTO mapping_id;
+
+            INSERT INTO "SyncRuleMappingSources" ("Order", "ConnectedSystemAttributeId", "SyncRuleMappingId")
+            VALUES (0, csv_employeeid_attr_id, mapping_id);
+        END IF;
+    END IF;
+END `$`$;
+"@
+
+        $joinCriteriaSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ Join criteria configured" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Failed to configure join criteria" -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host "  ⚠ Sync rules not found, skipping attribute mappings" -ForegroundColor Yellow
+    }
+}
+catch {
+    Write-Host "  ✗ Failed to configure attribute mappings: $_" -ForegroundColor Red
+    Write-Host "  Error details: $($_.Exception.Message)" -ForegroundColor Red
+    # Continue - mappings can be configured manually if needed
+}
+
 # Step 7: Create Run Profiles
 Write-TestStep "Step 7" "Creating Run Profiles"
 

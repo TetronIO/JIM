@@ -404,7 +404,11 @@ public class SyncFullSyncTaskProcessor
 
             // have we created a new MVO that needs persisting?
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
+            {
                 await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
+                // After save, EF has assigned an Id to the MVO - update the CSO's FK
+                connectedSystemObject.MetaverseObjectId = connectedSystemObject.MetaverseObject.Id;
+            }
 
             // Q1 Decision: Evaluate export rules immediately when MVO changes
             // This creates PendingExports for any other connected systems that need to be updated
@@ -525,14 +529,14 @@ public class SyncFullSyncTaskProcessor
             return;
 
         // create the MVO using type from the Sync Rule.
-        var mvo = new MetaverseObject
-        {
-            Id = Guid.NewGuid()
-        };
+        // Note: Do NOT assign Id here - let it remain Guid.Empty so that
+        // ProcessMetaverseObjectChangesAsync knows to call CreateMetaverseObjectAsync.
+        // The Id will be assigned by EF when the MVO is saved to the database.
+        var mvo = new MetaverseObject();
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
         mvo.Type = projectionSyncRule.MetaverseObjectType;
         connectedSystemObject.MetaverseObject = mvo;
-        connectedSystemObject.MetaverseObjectId = mvo.Id;
+        // Don't set MetaverseObjectId yet - it will be set after the MVO is persisted
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         connectedSystemObject.DateJoined = DateTime.UtcNow;
 

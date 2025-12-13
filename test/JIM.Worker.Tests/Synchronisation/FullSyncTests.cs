@@ -85,6 +85,15 @@ public class FullSyncTests
         // set up the Metaverse Objects mock
         MetaverseObjectsData = TestUtilities.GetMetaverseObjectData();
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
+
+        // Configure the mock to generate IDs when MVOs are added (simulating EF's ValueGeneratedOnAdd)
+        MockDbSetMetaverseObjects.Setup(m => m.Add(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(mvo =>
+            {
+                if (mvo.Id == Guid.Empty)
+                    mvo.Id = Guid.NewGuid();
+                MetaverseObjectsData.Add(mvo);
+            });
         
         // set up the Sync Rule stub mocks. they will be customised to specific use-cases in individual tests.
         SyncRulesData = TestUtilities.GetSyncRuleData();
