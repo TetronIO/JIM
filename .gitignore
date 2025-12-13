@@ -449,3 +449,7 @@ env
 
 # Local connector files directory (contains symlinks to test data)
 connector-files/
+
+# Integration test artifacts
+test/integration/results/
+test/integration/test-data/
