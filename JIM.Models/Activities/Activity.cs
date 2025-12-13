@@ -18,13 +18,13 @@ public class Activity
     public Guid? ParentActivityId { get; set; }
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
-    
+
     /// <summary>
     /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to get to a task for the activity will have an Executed time.
     /// noticeably later than the created time for the Activity. This enables you to see what the overall, user-experienced activity completion time is,
     /// and the actual system execution time.
     /// </summary>
-    public DateTime Executed {  get; set; }
+    public DateTime Executed { get; set; }
 
     /// <summary>
     /// A link to the Metaverse Object for a user if this activity was initiated by a person.
@@ -38,7 +38,7 @@ public class Activity
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
-    /// When the activity is complete, a value for how long the activity took to complete should be stored here. 
+    /// When the activity is complete, a value for how long the activity took to complete should be stored here.
     /// This may be a noticeably smaller value than the total activity time, as some activities take a while before they are executed, i.e. those processed by JIM.Service which
     /// employs a queue and may take time to get round to executing the task the activity is for.
     /// </summary>
@@ -50,7 +50,7 @@ public class Activity
     public TimeSpan? TotalActivityTime { get; set; }
 
     public ActivityStatus Status { get; set; } = ActivityStatus.NotSet;
-    
+
     /// <summary>
     /// Enables the user to be kept abreast of what is going on as part of this Activity.
     /// </summary>
@@ -62,16 +62,16 @@ public class Activity
 
     /// <summary>
     /// The name of the target object. The name is copied here from the object to enable it make identifying it easier if/when the target object is deleted and cannot be referenced
-    /// anymore. The value is not kept up to date with the target object, it's just a point in time copy. 
+    /// any more. The value is not kept up to date with the target object, it's just a point in time copy.
     /// Note: Not all objects will have to support a name, so it's optional.
     /// </summary>
     public string? TargetName { get; set; }
-    
+
     /// <summary>
     /// Used to calculate a progress bar.
     /// </summary>
     public int ObjectsToProcess { get; set; }
-    
+
     /// <summary>
     /// Used to calculate a progress bar.
     /// </summary>
@@ -87,7 +87,7 @@ public class Activity
 
     public int? SyncRuleId { get; set; }
 
-    public Guid? MetaverseObjectId {  get; set; }
+    public Guid? MetaverseObjectId { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // run profile execution related...
@@ -119,7 +119,7 @@ public class Activity
     // todo:
     // - json blob that contains object changes (might regret this later, but it seems quicker to get going this way)
     // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the
-    //   audit log be able to see sensitive attribute values? 
+    //   audit log be able to see sensitive attribute values?
 
     public ActivityRunProfileExecutionItem AddRunProfileExecutionItem()
     {
@@ -127,7 +127,7 @@ public class Activity
         RunProfileExecutionItems.Add(activityRunProfileExecutionItem);
         return activityRunProfileExecutionItem;
     }
-    
+
     /// <summary>
     /// If you want to prepare ActivityRunProfileExecutionItems separate from the activity to be able to update the activity without creating a dependency on the item's dependencies
     /// then use this method to bulk add them to this Activity. It will make sure the items are associated with the activity.
@@ -141,14 +141,15 @@ public class Activity
             RunProfileExecutionItems.Add(item);
         }
     }
-    
+
     /// <summary>
     /// Prepares a Run Profile Execution Item that relates to the Activity, but has not yet been added to it.
     /// This enables items to be prepared, but a decision on whether to persist it or not can come later at the caller's discretion.
     /// </summary>
     public ActivityRunProfileExecutionItem PrepareRunProfileExecutionItem()
     {
-        var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem {
+        var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem
+        {
             Activity = this,
             ActivityId = Id
         };

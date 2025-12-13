@@ -157,12 +157,9 @@ public class Worker : BackgroundService
                                 }
                                 case SynchronisationWorkerTask syncWorkerTask:
                                 {
-                                    Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: " + syncWorkerTask.ConnectedSystemRunProfileId);
-                                    if (newWorkerTask.InitiatedBy == null)
-                                    {
-                                        Log.Error("ExecuteAsync: syncWorkerTask.InitiatedBy was null. Cannot execute sync task");
-                                    }
-                                    else
+                                    var initiatedByDisplay = newWorkerTask.InitiatedBy?.DisplayName ?? newWorkerTask.InitiatedByName ?? "Unknown";
+                                    Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
+                                        syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     {
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
                                         if (connectedSystem != null)

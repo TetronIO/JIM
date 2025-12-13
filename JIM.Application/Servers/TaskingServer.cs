@@ -48,7 +48,7 @@ namespace JIM.Application.Servers
                     ConnectedSystemId = synchronisationWorkerTask.ConnectedSystemId,
                     ConnectedSystemRunProfileId = runProfile.Id
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
@@ -66,7 +66,7 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Execute,
                     DataGenerationTemplateId = template.Id                    
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
@@ -82,7 +82,7 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Clear,
                     ConnectedSystemId = clearConnectedSystemObjectsTask.ConnectedSystemId,
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
@@ -99,7 +99,7 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Delete,
                     ConnectedSystemId = deleteConnectedSystemTask.ConnectedSystemId,
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy);
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;

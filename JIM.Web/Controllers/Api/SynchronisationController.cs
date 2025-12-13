@@ -523,10 +523,17 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
         }
 
         // Create and queue the synchronisation task
-        // Use two-parameter constructor when initiatedBy is null (API key auth)
-        var workerTask = initiatedBy != null
-            ? new SynchronisationWorkerTask(connectedSystemId, runProfileId, initiatedBy)
-            : new SynchronisationWorkerTask(connectedSystemId, runProfileId);
+        // Use API key name for attribution when authenticated via API key
+        SynchronisationWorkerTask workerTask;
+        if (initiatedBy != null)
+        {
+            workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, initiatedBy);
+        }
+        else
+        {
+            var apiKeyName = GetApiKeyName() ?? "Unknown";
+            workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, apiKeyName);
+        }
 
         await _application.Tasking.CreateWorkerTaskAsync(workerTask);
 
