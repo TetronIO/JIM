@@ -119,19 +119,97 @@ To complete Phase 1:
 4. Create GitHub Actions workflow for CI/CD
 5. Document manual testing procedures until automation is ready
 
-## Manual Testing
+## Manual Testing (Validated)
 
-Until scenarios are automated, you can:
+The Phase 1 infrastructure has been validated end-to-end. You can now manually test JIM integration:
 
-1. Start the integration test containers
-2. Use the populated test data
-3. Configure JIM manually via web UI
-4. Create Connected Systems for:
-   - CSV file at `/connector-files/hr-users.csv` (in container)
-   - Samba AD at `samba-ad-primary:389`
-5. Create Sync Rules for attribute flows
-6. Trigger Run Profiles manually
-7. Validate results using LDAP queries or web UI
+### 1. Start Test Environment
+
+```powershell
+cd test/integration
+./Invoke-IntegrationTests.ps1 -Template Small -Phase 1 -SkipTearDown
+```
+
+This will:
+- ✅ Start Samba AD container and wait for healthy status
+- ✅ Create 100 test users in AD (`bob.smith1` through `kevin.smith100`)
+- ✅ Create 20 test groups (`Group-HR-1`, `Group-Sales-2`, etc.)
+- ✅ Add 196 group memberships
+- ✅ Generate CSV files at `test-data/hr-users.csv` and `departments.csv`
+- ✅ Copy CSV files to container volume at `/connector-files/`
+
+### 2. Configure JIM Connected Systems
+
+Via JIM web UI (http://localhost:5200 or https://localhost:7000):
+
+**CSV Source Connector:**
+- Type: CSV
+- File Path: `/connector-files/hr-users.csv` (accessible from JIM.Worker container)
+- Delimiter: `,`
+- Has Headers: `true`
+
+**Samba AD Target Connector:**
+- Type: LDAP
+- Server: `samba-ad-primary` (container hostname on jim-network)
+- Port: `389`
+- Base DN: `dc=testdomain,dc=local`
+- Bind DN: `cn=Administrator,cn=Users,dc=testdomain,dc=local`
+- Password: `Test@123!`
+
+### 3. Create Sync Rules
+
+Map attributes between CSV and AD:
+- `employeeId` → `employeeNumber`
+- `firstName` → `givenName`
+- `lastName` → `sn`
+- `email` → `mail`
+- `department` → `department`
+- `samAccountName` → `sAMAccountName`
+- `displayName` → `displayName`
+
+### 4. Execute Sync and Validate
+
+1. Trigger Run Profile manually via JIM UI
+2. View sync results in web UI
+
+Validate using LDAP queries:
+```bash
+# Count users (should be 100 + default accounts)
+docker exec samba-ad-primary samba-tool user list | wc -l
+
+# List test groups
+docker exec samba-ad-primary samba-tool group list | grep "^Group-"
+
+# View specific user
+docker exec samba-ad-primary samba-tool user show bob.smith1
+```
+
+### 5. Test Update Scenarios
+
+Modify CSV data:
+```powershell
+# Edit test-data/hr-users.csv - change department for bob.smith1
+# Copy updated file to container
+docker cp test-data/hr-users.csv samba-ad-primary:/connector-files/
+```
+
+Re-run sync and validate changes propagated.
+
+### 6. Reset Environment
+
+```bash
+# Stop and remove all containers and volumes for fresh start
+docker compose -f ../../docker-compose.integration-tests.yml down -v
+```
+
+### Validated Scale Templates
+
+| Template | Users | Groups | Memberships | Duration |
+|----------|-------|--------|-------------|----------|
+| **Micro** | 10 | 3 | 3 | ~20s |
+| **Small** | 100 | 20 | 196 | ~2m 20s |
+
+Larger templates (Medium, Large, XLarge, XXLarge) should work but execution time increases significantly.
 
 ## Documentation
 
