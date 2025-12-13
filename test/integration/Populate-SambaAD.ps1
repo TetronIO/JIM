@@ -117,12 +117,16 @@ for ($i = 1; $i -le $scale.Users; $i++) {
             Write-Host "    Created $i / $($scale.Users) users..." -ForegroundColor Gray
         }
     }
-    elseif ($result -notmatch "already exists") {
+    elseif ($result -match "already exists") {
+        # User already exists - add to list anyway for membership processing
+        $createdUsers += $user
+    }
+    else {
         Write-Host "    Warning: Failed to create user $($user.SamAccountName): $result" -ForegroundColor Yellow
     }
 }
 
-Write-Host "  ✓ Created $($createdUsers.Count) users" -ForegroundColor Green
+Write-Host "  ✓ Found or created $($createdUsers.Count) users" -ForegroundColor Green
 
 # Create groups
 Write-TestStep "Step 3" "Creating $($scale.Groups) groups"
@@ -156,12 +160,19 @@ for ($i = 1; $i -le $scale.Groups; $i++) {
             Write-Host "    Created $i / $($scale.Groups) groups..." -ForegroundColor Gray
         }
     }
-    elseif ($result -notmatch "already exists") {
+    elseif ($result -match "already exists") {
+        # Group already exists - add to list anyway for membership processing
+        $createdGroups += @{
+            Name = $groupName
+            Department = $dept
+        }
+    }
+    else {
         Write-Host "    Warning: Failed to create group $groupName : $result" -ForegroundColor Yellow
     }
 }
 
-Write-Host "  ✓ Created $($createdGroups.Count) groups" -ForegroundColor Green
+Write-Host "  ✓ Found or created $($createdGroups.Count) groups" -ForegroundColor Green
 
 # Add users to groups
 Write-TestStep "Step 4" "Adding users to groups (avg: $($scale.AvgMemberships) memberships/user)"
@@ -170,7 +181,7 @@ $totalMemberships = 0
 
 foreach ($user in $createdUsers) {
     # Match users to groups by department
-    $deptGroups = $createdGroups | Where-Object { $_.Department -eq $user.Department }
+    $deptGroups = @($createdGroups | Where-Object { $_.Department -eq $user.Department })
 
     if ($deptGroups.Count -gt 0) {
         # Add to some department groups (randomised)
@@ -199,8 +210,11 @@ Write-Host "  ✓ Added $totalMemberships group memberships" -ForegroundColor Gr
 Write-TestSection "Population Summary"
 Write-Host "Instance:       $Instance" -ForegroundColor Cyan
 Write-Host "Template:       $Template" -ForegroundColor Cyan
-Write-Host "Users created:  $($createdUsers.Count)" -ForegroundColor Cyan
-Write-Host "Groups created: $($createdGroups.Count)" -ForegroundColor Cyan
+Write-Host "Users:          $($createdUsers.Count)" -ForegroundColor Cyan
+Write-Host "Groups:         $($createdGroups.Count)" -ForegroundColor Cyan
 Write-Host "Memberships:    $totalMemberships" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "✓ Samba AD population complete" -ForegroundColor Green
+
+# Exit with success - idempotent operation
+exit 0

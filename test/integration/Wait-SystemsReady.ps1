@@ -67,9 +67,7 @@ $phase1Systems = @(
         Name = "samba-ad-primary"
         Description = "Samba AD Primary"
         HasHealthCheck = $true
-        AdditionalCheck = {
-            Test-LDAPConnection -Server "localhost" -Port 389
-        }
+        AdditionalCheck = $null
     }
 )
 

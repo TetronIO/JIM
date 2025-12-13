@@ -1,0 +1,25 @@
+{
+  "Duration": {
+    "Ticks": 195647658,
+    "Days": 0,
+    "Hours": 0,
+    "Milliseconds": 564,
+    "Microseconds": 765,
+    "Nanoseconds": 800,
+    "Minutes": 0,
+    "Seconds": 19,
+    "TotalDays": 0.0002264440486111111,
+    "TotalHours": 0.0054346571666666664,
+    "TotalMilliseconds": 19564.7658,
+    "TotalMicroseconds": 19564765.8,
+    "TotalNanoseconds": 19564765800.0,
+    "TotalMinutes": 0.32607943,
+    "TotalSeconds": 19.5647658
+  },
+  "StartTime": "2025-12-13T09:44:44.4506961+00:00",
+  "Scenarios": [],
+  "Phase": 1,
+  "Template": "Micro",
+  "Success": true,
+  "EndTime": "2025-12-13T09:45:04.0154619+00:00"
+}

@@ -80,11 +80,11 @@ try {
 
         if ($Phase -eq 1) {
             Write-Host "Starting Phase 1 systems (Samba AD)..." -ForegroundColor Gray
-            docker compose -f docker-compose.integration-tests.yml up -d
+            docker compose -f ../../docker-compose.integration-tests.yml up -d
         }
         elseif ($Phase -eq 2) {
             Write-Host "Starting Phase 2 systems (all)..." -ForegroundColor Gray
-            docker compose -f docker-compose.integration-tests.yml --profile phase2 up -d
+            docker compose -f ../../docker-compose.integration-tests.yml --profile phase2 up -d
         }
 
         if ($LASTEXITCODE -ne 0) {
@@ -186,10 +186,10 @@ finally {
         Write-Host "Stopping and removing containers and volumes..." -ForegroundColor Gray
 
         if ($Phase -eq 1) {
-            docker compose -f docker-compose.integration-tests.yml down -v
+            docker compose -f ../../docker-compose.integration-tests.yml down -v
         }
         elseif ($Phase -eq 2) {
-            docker compose -f docker-compose.integration-tests.yml --profile phase2 down -v
+            docker compose -f ../../docker-compose.integration-tests.yml --profile phase2 down -v
         }
 
         Write-Host "✓ Systems torn down" -ForegroundColor Green
@@ -198,7 +198,7 @@ finally {
         Write-Host ""
         Write-Host "⚠ Skipping tear-down (containers still running)" -ForegroundColor Yellow
         Write-Host "  Run this to tear down manually:" -ForegroundColor Gray
-        Write-Host "  docker compose -f docker-compose.integration-tests.yml down -v" -ForegroundColor Gray
+        Write-Host "  docker compose -f ../../docker-compose.integration-tests.yml down -v" -ForegroundColor Gray
     }
 
     # Summary
