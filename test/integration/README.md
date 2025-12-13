@@ -28,18 +28,20 @@ docker compose -f ../../docker-compose.integration-tests.yml down -v
 - **Test Utilities** - Helper functions for assertions and LDAP queries
 - **Lifecycle Management** - Stand up, populate, tear down
 
+### ✅ Complete (Phase 1 Scenarios)
+
+**Dependencies Resolved:**
+1. ✅ **API Key Authentication** ([#175](https://github.com/TetronIO/JIM/issues/175)) - Closed 2025-12-10
+2. ✅ **PowerShell Module** ([#176](https://github.com/TetronIO/JIM/issues/176)) - Closed 2025-12-11
+
+**Implemented Scenarios:**
+- ✅ `scenarios/Invoke-Scenario1-HRToDirectory.ps1` - HR to AD provisioning (Joiner, Mover, Leaver, Reconnection)
+- ✅ `Setup-Scenario1.ps1` - Automated JIM configuration for Scenario 1
+
 ### ⏳ Pending (Phase 1 Scenarios)
 
-Scenario test scripts require:
-
-1. **API Key Authentication** ([#175](https://github.com/TetronIO/JIM/issues/175))
-2. **PowerShell Module** ([#176](https://github.com/TetronIO/JIM/issues/176))
-
-Once these are implemented, the scenario scripts will be completed:
-
-- `scenarios/Invoke-Scenario1-HRToDirectory.ps1` - HR to AD provisioning
-- `scenarios/Invoke-Scenario2-DirectorySync.ps1` - Directory to directory sync
-- `scenarios/Invoke-Scenario3-GALSYNC.ps1` - AD to CSV export
+- `scenarios/Invoke-Scenario2-DirectorySync.ps1` - Directory to directory sync (placeholder)
+- `scenarios/Invoke-Scenario3-GALSYNC.ps1` - AD to CSV export (placeholder)
 
 ### 📋 Planned (Phase 2)
 
@@ -105,23 +107,89 @@ Manual trigger via GitHub Actions workflow (see `.github/workflows/integration-t
 
 ## Current Limitations
 
-1. **No Automated Scenarios** - Require API Key Auth and PowerShell Module
-2. **Manual JIM Configuration** - Must configure Connected Systems via UI
-3. **No CI/CD Workflow** - GitHub Actions workflow not yet created
+1. **Scenarios 2 & 3 Not Implemented** - Directory-to-directory and GALSYNC scenarios are placeholders
+2. **No CI/CD Workflow** - GitHub Actions workflow not yet created
+3. **API Key Required** - Must create API key via JIM UI before running automated scenarios
 
 ## Next Steps
 
 To complete Phase 1:
 
-1. Implement API Key Authentication ([#175](https://github.com/TetronIO/JIM/issues/175))
-2. Implement PowerShell Module ([#176](https://github.com/TetronIO/JIM/issues/176))
-3. Complete scenario test scripts with actual assertions
-4. Create GitHub Actions workflow for CI/CD
-5. Document manual testing procedures until automation is ready
+1. ✅ ~~Implement API Key Authentication ([#175](https://github.com/TetronIO/JIM/issues/175))~~
+2. ✅ ~~Implement PowerShell Module ([#176](https://github.com/TetronIO/JIM/issues/176))~~
+3. ✅ ~~Complete Scenario 1 test script (HR to Directory)~~
+4. Implement Scenario 2 test script (Directory to Directory Sync)
+5. Implement Scenario 3 test script (GALSYNC)
+6. Create GitHub Actions workflow for CI/CD
+7. Document automated testing procedures
+
+## Automated Testing (Scenario 1)
+
+**Scenario 1: HR to Enterprise Directory** is now fully automated!
+
+### Prerequisites
+
+1. **Create API Key**:
+   - Access JIM web UI (http://localhost:5200 or https://localhost:7000)
+   - Navigate to Admin > API Keys
+   - Create a new API key
+   - Copy the key value
+
+2. **Set Environment Variable**:
+   ```powershell
+   $env:JIM_API_KEY = "jim_..."
+   ```
+
+### Run Automated Test
+
+```powershell
+cd test/integration
+
+# Full test lifecycle with Scenario 1
+./Invoke-IntegrationTests.ps1 -Template Small -Phase 1
+
+# Or run Scenario 1 standalone (assumes systems already running)
+./scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Small -ApiKey $env:JIM_API_KEY
+```
+
+### What Gets Tested
+
+Scenario 1 validates the complete ILM lifecycle:
+
+1. **Setup** - Automatically configures JIM with:
+   - CSV Connected System (HR source at `/connector-files/hr-users.csv`)
+   - LDAP Connected System (Samba AD at `samba-ad-primary:389`)
+   - 7 Sync Rules (employeeId, firstName, lastName, email, department, etc.)
+   - Run Profiles (CSV Import, LDAP Export)
+
+2. **Joiner Test** - New hire provisioning:
+   - Adds `test.joiner` to CSV
+   - Triggers import and export
+   - Validates user created in Samba AD
+
+3. **Mover Test** - Attribute updates:
+   - Changes bob.smith1 department from HR to IT
+   - Triggers sync
+   - Validates department updated in AD
+
+4. **Leaver Test** - Deprovisioning:
+   - Removes user from CSV
+   - Triggers sync
+   - Validates user deprovisioned in AD
+
+5. **Reconnection Test** - Deletion cancellation:
+   - Creates test.reconnect user
+   - Removes from CSV (simulating quit)
+   - Restores to CSV within grace period (simulating rehire)
+   - Validates user preserved (not deleted)
+
+### Test Results
+
+Results saved to `test/integration/results/results-[timestamp].json`
 
 ## Manual Testing (Validated)
 
-The Phase 1 infrastructure has been validated end-to-end. You can now manually test JIM integration:
+The Phase 1 infrastructure has been validated end-to-end. You can also manually test JIM integration:
 
 ### 1. Start Test Environment
 

@@ -126,35 +126,71 @@ try {
     Write-TestSection "Step 4: Run Test Scenarios"
 
     Write-Host ""
-    Write-Host "===========================================" -ForegroundColor Yellow
-    Write-Host " SCENARIO TESTS NOT YET IMPLEMENTED" -ForegroundColor Yellow
-    Write-Host "===========================================" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "The integration test framework infrastructure is complete:" -ForegroundColor Green
-    Write-Host "  ✓ Docker Compose configuration" -ForegroundColor Green
-    Write-Host "  ✓ Container orchestration" -ForegroundColor Green
-    Write-Host "  ✓ Test data population" -ForegroundColor Green
-    Write-Host "  ✓ Health checks and readiness validation" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Next steps to complete Phase 1:" -ForegroundColor Cyan
-    Write-Host "  1. Implement API Key Authentication (Issue #175)" -ForegroundColor Gray
-    Write-Host "  2. Implement PowerShell Module (Issue #176)" -ForegroundColor Gray
-    Write-Host "  3. Implement scenario test scripts:" -ForegroundColor Gray
-    Write-Host "     - Scenario 1: HR to Enterprise Directory" -ForegroundColor Gray
-    Write-Host "     - Scenario 2: Directory to Directory Sync" -ForegroundColor Gray
-    Write-Host "     - Scenario 3: GALSYNC" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "For now, you can:" -ForegroundColor Cyan
-    Write-Host "  - Configure JIM manually via web UI" -ForegroundColor Gray
-    Write-Host "  - Test synchronisation with the populated test data" -ForegroundColor Gray
-    Write-Host "  - Validate connectors against the running test systems" -ForegroundColor Gray
+    Write-Host "NOTE: Scenarios require an API key from JIM" -ForegroundColor Yellow
+    Write-Host "  Create one via: Admin > API Keys in the JIM web UI" -ForegroundColor Gray
+    Write-Host "  Then set environment variable: JIM_API_KEY" -ForegroundColor Gray
     Write-Host ""
 
-    # TODO: Once scenarios are implemented, run them
-    # $scenario1Result = & "$PSScriptRoot/scenarios/Invoke-Scenario1-HRToDirectory.ps1" -Template $Template -Step All
-    # $results.Scenarios += $scenario1Result
+    $apiKey = $env:JIM_API_KEY
+    if (-not $apiKey) {
+        Write-Host "⚠ No API key provided (JIM_API_KEY not set)" -ForegroundColor Yellow
+        Write-Host "  Skipping scenario tests" -ForegroundColor Yellow
+        Write-Host ""
+        $results.Success = $true
+        return
+    }
 
-    $results.Success = $true
+    # Determine JIM URL (internal Docker network for containers)
+    $jimUrl = "http://jim.web:80"
+
+    Write-Host "Running Scenario 1: HR to Enterprise Directory" -ForegroundColor Cyan
+    Write-Host ""
+
+    try {
+        & "$PSScriptRoot/scenarios/Invoke-Scenario1-HRToDirectory.ps1" `
+            -Template $Template `
+            -Step All `
+            -JIMUrl $jimUrl `
+            -ApiKey $apiKey
+
+        if ($LASTEXITCODE -eq 0) {
+            $results.Scenarios += @{
+                Name = "Scenario 1: HR to Enterprise Directory"
+                Success = $true
+            }
+            Write-Host ""
+            Write-Host "✓ Scenario 1 passed" -ForegroundColor Green
+        }
+        else {
+            $results.Scenarios += @{
+                Name = "Scenario 1: HR to Enterprise Directory"
+                Success = $false
+                Error = "Test failed with exit code $LASTEXITCODE"
+            }
+            Write-Host ""
+            Write-Host "✗ Scenario 1 failed" -ForegroundColor Red
+        }
+    }
+    catch {
+        $results.Scenarios += @{
+            Name = "Scenario 1: HR to Enterprise Directory"
+            Success = $false
+            Error = $_.Exception.Message
+        }
+        Write-Host ""
+        Write-Host "✗ Scenario 1 failed: $_" -ForegroundColor Red
+    }
+
+    Write-Host ""
+    Write-Host "Scenarios 2 and 3 not yet implemented:" -ForegroundColor Gray
+    Write-Host "  - Scenario 2: Directory to Directory Sync (placeholder)" -ForegroundColor Gray
+    Write-Host "  - Scenario 3: GALSYNC (placeholder)" -ForegroundColor Gray
+    Write-Host ""
+
+    # Determine overall success
+    $scenariosPassed = ($results.Scenarios | Where-Object { $_.Success }).Count
+    $scenariosTotal = $results.Scenarios.Count
+    $results.Success = ($scenariosPassed -eq $scenariosTotal)
 }
 catch {
     Write-Host ""
