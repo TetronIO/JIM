@@ -29,7 +29,7 @@
     This script requires the JIM PowerShell module and assumes:
     - JIM is running and accessible
     - Samba AD container is running on jim-network
-    - CSV files exist at /connector-files/hr-users.csv
+    - CSV files exist at /var/connector-files/test-data/hr-users.csv
 #>
 
 param(
@@ -140,19 +140,19 @@ try {
     # Configure CSV settings
     # Get settings from the connector definition to find setting IDs
     $csvConnectorFull = Get-JIMConnectorDefinition -Id $csvConnector.id
-    $filePathSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "FilePath" }
+    $filePathSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "File Path" }
     $delimiterSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "Delimiter" }
-    $hasHeadersSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "HasHeaders" }
+    $objectTypeSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "Object Type" }
 
     $settingValues = @{}
     if ($filePathSetting) {
-        $settingValues[$filePathSetting.id] = @{ stringValue = "/connector-files/hr-users.csv" }
+        $settingValues[$filePathSetting.id] = @{ stringValue = "/var/connector-files/test-data/hr-users.csv" }
     }
     if ($delimiterSetting) {
         $settingValues[$delimiterSetting.id] = @{ stringValue = "," }
     }
-    if ($hasHeadersSetting) {
-        $settingValues[$hasHeadersSetting.id] = @{ checkboxValue = $true }
+    if ($objectTypeSetting) {
+        $settingValues[$objectTypeSetting.id] = @{ stringValue = "person" }
     }
 
     if ($settingValues.Count -gt 0) {
@@ -187,32 +187,38 @@ try {
     # Configure LDAP settings
     $ldapConnectorFull = Get-JIMConnectorDefinition -Id $ldapConnector.id
 
-    # Find setting IDs by name
-    $serverSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Server" }
+    # Find setting IDs by name (using actual setting names from connector definition)
+    $hostSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Host" }
     $portSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Port" }
-    $baseDnSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "BaseDN" }
-    $bindDnSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "BindDN" }
+    $usernameSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Username" }
     $passwordSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Password" }
-    $useSSLSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "UseSSL" }
+    $useSSLSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Use Secure Connection (LDAPS)?" }
+    $connectionTimeoutSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Connection Timeout" }
+    $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
 
     $ldapSettings = @{}
-    if ($serverSetting) {
-        $ldapSettings[$serverSetting.id] = @{ stringValue = "samba-ad-primary" }
+    if ($hostSetting) {
+        $ldapSettings[$hostSetting.id] = @{ stringValue = "samba-ad-primary" }
     }
     if ($portSetting) {
         $ldapSettings[$portSetting.id] = @{ intValue = 389 }
     }
-    if ($baseDnSetting) {
-        $ldapSettings[$baseDnSetting.id] = @{ stringValue = "dc=testdomain,dc=local" }
-    }
-    if ($bindDnSetting) {
-        $ldapSettings[$bindDnSetting.id] = @{ stringValue = "cn=Administrator,cn=Users,dc=testdomain,dc=local" }
+    if ($usernameSetting) {
+        $ldapSettings[$usernameSetting.id] = @{ stringValue = "cn=Administrator,cn=Users,dc=testdomain,dc=local" }
     }
     if ($passwordSetting) {
-        $ldapSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" }
+        # Password setting uses stringEncryptedValue
+        $ldapSettings[$passwordSetting.id] = @{ stringEncryptedValue = "Test@123!" }
     }
     if ($useSSLSetting) {
         $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $false }
+    }
+    if ($connectionTimeoutSetting) {
+        $ldapSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 }
+    }
+    if ($authTypeSetting) {
+        # Authentication type: "Anonymous", "Simple", or "NTLM" (string value)
+        $ldapSettings[$authTypeSetting.id] = @{ stringValue = "Simple" }
     }
 
     if ($ldapSettings.Count -gt 0) {
@@ -225,15 +231,112 @@ catch {
     throw
 }
 
-# Step 6: Sync Rules
-Write-TestStep "Step 6" "Sync Rules (skipped - configure via UI)"
+# Step 6: Import Schemas
+Write-TestStep "Step 6" "Importing Connected System Schemas"
 
-# Note: Sync rules in JIM define flows between Connected Systems and the Metaverse,
-# not directly between two connected systems. They require object type IDs which
-# depend on the connector's schema. For now, sync rules should be configured
-# manually via the JIM web UI after importing the connector schema.
-Write-Host "  ⚠ Sync rules should be configured via the JIM web UI" -ForegroundColor Yellow
-Write-Host "    Steps: Connected System > Schema > Import > Configure Sync Rules" -ForegroundColor Gray
+try {
+    # Import CSV schema
+    Write-Host "  Importing CSV schema..." -ForegroundColor Gray
+    $csvSystemUpdated = Import-JIMConnectedSystemSchema -Id $csvSystem.id -PassThru
+    $csvObjectTypes = Get-JIMConnectedSystem -Id $csvSystem.id -ObjectTypes
+    Write-Host "  ✓ CSV schema imported ($($csvObjectTypes.Count) object types)" -ForegroundColor Green
+}
+catch {
+    Write-Host "  ✗ Failed to import CSV schema: $_" -ForegroundColor Red
+    Write-Host "    Ensure connected system is properly configured before importing schema" -ForegroundColor Yellow
+    throw
+}
+
+try {
+    # Import LDAP schema
+    Write-Host "  Importing LDAP schema..." -ForegroundColor Gray
+    $ldapSystemUpdated = Import-JIMConnectedSystemSchema -Id $ldapSystem.id -PassThru
+    $ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
+    Write-Host "  ✓ LDAP schema imported ($($ldapObjectTypes.Count) object types)" -ForegroundColor Green
+}
+catch {
+    Write-Host "  ⚠ LDAP schema import failed: $_" -ForegroundColor Yellow
+    Write-Host "    LDAP export sync rules will be skipped. Continuing with CSV import only." -ForegroundColor Yellow
+    $ldapObjectTypes = @()
+}
+
+# Step 6b: Create Sync Rules
+Write-TestStep "Step 6b" "Creating Sync Rules"
+
+try {
+    # Get the "user" object type from both systems (common in identity management)
+    # For CSV, it might be "Person" or similar; for LDAP it's typically "user"
+    $csvUserType = $csvObjectTypes | Where-Object { $_.name -match "^(user|person|record)$" } | Select-Object -First 1
+    $ldapUserType = $ldapObjectTypes | Where-Object { $_.name -eq "user" } | Select-Object -First 1
+
+    # Get the Metaverse "User" object type
+    $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+
+    if (-not $csvUserType) {
+        Write-Host "  ⚠ No user/person object type found in CSV schema. Available types:" -ForegroundColor Yellow
+        $csvObjectTypes | ForEach-Object { Write-Host "    - $($_.name)" -ForegroundColor Gray }
+        Write-Host "  Skipping sync rule creation" -ForegroundColor Yellow
+    }
+    elseif (-not $ldapUserType) {
+        Write-Host "  ⚠ No 'user' object type found in LDAP schema. Available types:" -ForegroundColor Yellow
+        $ldapObjectTypes | ForEach-Object { Write-Host "    - $($_.name)" -ForegroundColor Gray }
+        Write-Host "  Skipping sync rule creation" -ForegroundColor Yellow
+    }
+    elseif (-not $mvUserType) {
+        Write-Host "  ⚠ No 'User' object type found in Metaverse" -ForegroundColor Yellow
+        Write-Host "  Skipping sync rule creation" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "  Found object types:" -ForegroundColor Gray
+        Write-Host "    CSV: $($csvUserType.name) (ID: $($csvUserType.id))" -ForegroundColor Gray
+        Write-Host "    LDAP: $($ldapUserType.name) (ID: $($ldapUserType.id))" -ForegroundColor Gray
+        Write-Host "    Metaverse: $($mvUserType.name) (ID: $($mvUserType.id))" -ForegroundColor Gray
+
+        # Create Import sync rule (CSV -> Metaverse)
+        $existingRules = Get-JIMSyncRule
+        $importRuleName = "HR CSV Import Users"
+        $importRule = $existingRules | Where-Object { $_.name -eq $importRuleName }
+
+        if (-not $importRule) {
+            $importRule = New-JIMSyncRule `
+                -Name $importRuleName `
+                -ConnectedSystemId $csvSystem.id `
+                -ConnectedSystemObjectTypeId $csvUserType.id `
+                -MetaverseObjectTypeId $mvUserType.id `
+                -Direction Import `
+                -ProjectToMetaverse `
+                -PassThru
+            Write-Host "  ✓ Created import sync rule: $importRuleName" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Import sync rule '$importRuleName' already exists" -ForegroundColor Gray
+        }
+
+        # Create Export sync rule (Metaverse -> LDAP)
+        $exportRuleName = "Samba AD Export Users"
+        $exportRule = $existingRules | Where-Object { $_.name -eq $exportRuleName }
+
+        if (-not $exportRule) {
+            $exportRule = New-JIMSyncRule `
+                -Name $exportRuleName `
+                -ConnectedSystemId $ldapSystem.id `
+                -ConnectedSystemObjectTypeId $ldapUserType.id `
+                -MetaverseObjectTypeId $mvUserType.id `
+                -Direction Export `
+                -ProvisionToConnectedSystem `
+                -PassThru
+            Write-Host "  ✓ Created export sync rule: $exportRuleName" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Export sync rule '$exportRuleName' already exists" -ForegroundColor Gray
+        }
+    }
+}
+catch {
+    Write-Host "  ✗ Failed to create sync rules: $_" -ForegroundColor Red
+    Write-Host "    Error details: $($_.Exception.Message)" -ForegroundColor Red
+    # Continue - sync rules can be created manually if needed
+}
 
 # Step 7: Create Run Profiles
 Write-TestStep "Step 7" "Creating Run Profiles"

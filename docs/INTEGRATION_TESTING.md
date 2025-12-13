@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Planned |
+| **Status** | **In Progress** |
 | **Phase 1 Target** | MVP Validation |
 | **Phase 2 Target** | Post-MVP (after Database Connector #170) |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
@@ -638,11 +638,11 @@ Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
 | Dependency | Issue | Status | Notes |
 |------------|-------|--------|-------|
 | API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | **✅ Complete** | API key authentication fully functional for all endpoints |
-| PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | In Progress | ✅ Core functions implemented; needs connector definitions cmdlet + testing |
+| PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | **✅ Complete** | Core cmdlets implemented and tested |
 
 #### API Key Authentication Status (Issue #175)
 
-**✅ RESOLVED** - API key authentication is now fully functional.
+**✅ RESOLVED** - API key authentication is now fully functional for both GET and POST/PUT/DELETE operations.
 
 **Completed:**
 - ✅ Created 3 connector definition API endpoints (GET list, GET by ID, GET by name)
@@ -652,6 +652,8 @@ Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
 - ✅ Added detailed logging to API key authentication handler
 - ✅ **Fixed**: API key handler now invoked for `[Authorize]` protected endpoints
 - ✅ **Fixed**: DbContext threading issues in authentication handler
+- ✅ **Fixed**: Write operations (POST/PUT/DELETE) now work with API key auth
+- ✅ **Fixed**: Null initiatedBy handling for API key authentication
 - ✅ Build succeeds, all 395 unit tests pass
 
 **Root Cause & Fix:**
@@ -662,6 +664,27 @@ The issue was that ASP.NET Core's authentication pipeline only runs the DefaultS
 - Changed `ApiKeyAuthenticationHandler` to inject `IServiceProvider` instead of `JimApplication`
 - Create new DI scope for each database operation to prevent DbContext threading issues
 - Separate scope for background usage tracking task
+- Allow null `initiatedBy` for API key auth in SynchronisationController
+- Use appropriate constructors for worker tasks when user context unavailable
+
+#### PowerShell Module Status (Issue #176)
+
+**✅ Core cmdlets implemented and tested.**
+
+**Completed Cmdlets:**
+- ✅ `Connect-JIM` - API key authentication
+- ✅ `Get-JIMConnectorDefinition` - List and retrieve connector definitions
+- ✅ `Get-JIMConnectedSystem` / `New-JIMConnectedSystem` / `Set-JIMConnectedSystem` - Manage connected systems
+- ✅ `Get-JIMRunProfile` / `New-JIMRunProfile` / `Start-JIMRunProfile` - Manage and execute run profiles
+- ✅ `Get-JIMSyncRule` / `New-JIMSyncRule` - Manage sync rules
+
+**Fixes Applied:**
+- ✅ Fixed pagination handling for empty arrays (Get-JIMConnectedSystem, Get-JIMSyncRule)
+- ✅ Fixed parameter types (Get-JIMConnectorDefinition -Id uses int, not Guid)
+- ✅ Fixed JSON serialization of hashtable keys (Set-JIMConnectedSystem)
+
+**Remaining Work:**
+- Sync rules require object type IDs from imported connector schema (needs schema import cmdlet)
 
 ---
 

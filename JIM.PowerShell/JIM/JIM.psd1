@@ -38,6 +38,7 @@
         'New-JIMConnectedSystem',
         'Set-JIMConnectedSystem',
         'Remove-JIMConnectedSystem',
+        'Import-JIMConnectedSystemSchema',
         'Get-JIMConnectorDefinition',
 
         # Sync Rules
