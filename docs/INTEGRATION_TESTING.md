@@ -635,10 +635,32 @@ Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
 
 #### Dependencies
 
-| Dependency | Issue | Status | Required For |
-|------------|-------|--------|--------------|
-| API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | Planned | Non-interactive auth |
-| PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | Planned | JIM configuration |
+| Dependency | Issue | Status | Notes |
+|------------|-------|--------|-------|
+| API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | **In Progress** | ✅ Endpoints created + PowerShell cmdlet added; ⚠️ Handler not invoked for `[Authorize]` protected endpoints |
+| PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | In Progress | ✅ Core functions implemented; needs connector definitions cmdlet + testing |
+
+#### API Key Authentication Status (Issue #175)
+
+**Completed:**
+- ✅ Created 3 connector definition API endpoints (GET list, GET by ID, GET by name)
+- ✅ Created `Get-JIMConnectorDefinition` PowerShell cmdlet
+- ✅ Added cmdlet to module manifest exports
+- ✅ OIDC redirect suppressed for API requests (returns 401 JSON instead of 302)
+- ✅ Added detailed logging to API key authentication handler
+- ✅ Build succeeds, all 125 unit tests pass
+
+**Known Issue - Blocker:**
+- ⚠️ **API key handler not invoked for `[Authorize(Roles = "Administrator")]` endpoints**
+  - Handler **IS called** for `[AllowAnonymous]` endpoints and successfully authenticates (logs show successful authentication)
+  - Handler **IS NOT called** for endpoints with `[Authorize]` attributes, returns 401 immediately
+  - Likely a middleware ordering or authorization policy configuration issue
+  - Requires investigation by different LLM model or manual debugging
+
+**Next Steps:**
+- Investigate why authentication handler is skipped for authorized endpoints
+- Possibly try alternative authentication configuration approaches
+- Review ASP.NET Core authentication/authorization middleware interaction
 
 ---
 
