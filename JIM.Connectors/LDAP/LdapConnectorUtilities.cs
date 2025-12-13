@@ -18,7 +18,21 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count != 1) return null;
-        return (bool)entry.Attributes[attributeName][0];
+
+        var value = entry.Attributes[attributeName][0];
+
+        // LDAP returns Boolean values as strings ("TRUE"/"FALSE")
+        if (value is string stringValue)
+        {
+            return stringValue.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (value is bool boolValue)
+        {
+            return boolValue;
+        }
+
+        return null;
     }
 
     internal static List<Guid>? GetEntryAttributeGuidValues(SearchResultEntry entry, string attributeName)
@@ -52,7 +66,36 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count != 1) return null;
-        return (DateTime)entry.Attributes[attributeName][0];
+
+        var value = entry.Attributes[attributeName][0];
+
+        // LDAP returns DateTime values as strings in GeneralizedTime format (yyyyMMddHHmmss.fZ)
+        if (value is string stringValue)
+        {
+            // Handle LDAP GeneralizedTime format: yyyyMMddHHmmss.fZ
+            // Common formats: "20231215143000.0Z" or "20231215143000Z"
+            if (DateTime.TryParseExact(stringValue.TrimEnd('Z'),
+                new[] { "yyyyMMddHHmmss.f", "yyyyMMddHHmmss" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal,
+                out var parsedDate))
+            {
+                return parsedDate.ToUniversalTime();
+            }
+            // Fallback: try standard parsing
+            if (DateTime.TryParse(stringValue, out parsedDate))
+            {
+                return parsedDate;
+            }
+            return null;
+        }
+
+        if (value is DateTime dateValue)
+        {
+            return dateValue;
+        }
+
+        return null;
     }
 
     internal static List<string>? GetEntryAttributeStringValues(SearchResultEntry entry, string attributeName)
@@ -60,8 +103,9 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
+        // PostgreSQL cannot store null bytes (0x00) in text columns, so strip them
         return (from string value in entry.Attributes[attributeName].GetValues(typeof(string))
-            select value).ToList();
+            select value.Replace("\0", string.Empty)).ToList();
     }
 
     internal static List<byte[]>? GetEntryAttributeBinaryValues(SearchResultEntry entry, string attributeName)
@@ -78,8 +122,19 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
-        return (from int value in entry.Attributes[attributeName].GetValues(typeof(int))
-            select value).ToList();
+        // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
+        // Some AD attributes (like Large Integer syntax) may exceed Int32 range, so use TryParse
+        var result = new List<int>();
+        foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
+        {
+            if (int.TryParse(value, out var intValue))
+            {
+                result.Add(intValue);
+            }
+            // Values that overflow Int32 are silently skipped - this is a limitation
+            // of JIM's current data model which doesn't have a separate Int64 type
+        }
+        return result.Count > 0 ? result : null;
     }
 
     internal static int? GetEntryAttributeIntValue(SearchResultEntry entry, string attributeName)

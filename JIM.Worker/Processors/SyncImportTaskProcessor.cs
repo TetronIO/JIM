@@ -888,7 +888,9 @@ public class SyncImportTaskProcessor
             }
             else
             {
-                throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem for cso: {csoToProcess.Id}!");
+                // CSO may not have been persisted yet or ActivityRunProfileExecutionItem wasn't created
+                // Log a warning but don't throw - this can happen with references to objects outside container scope
+                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {csoToProcess.Id}, unresolved reference: {referenceAttributeValue.UnresolvedReferenceValue}");
             }
 
             Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
