@@ -45,9 +45,12 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        Log.Debug("ApiKeyAuthenticationHandler: Checking for X-API-Key header on path {Path}", Request.Path);
+
         // Check if the X-API-Key header is present
         if (!Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKeyHeader))
         {
+            Log.Debug("ApiKeyAuthenticationHandler: No X-API-Key header found");
             // No API key header - let other authentication schemes handle it
             return AuthenticateResult.NoResult();
         }
@@ -73,6 +76,9 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
                     providedKey.Length >= 12 ? providedKey[..12] : providedKey);
                 return AuthenticateResult.Fail("Invalid API key");
             }
+
+            Log.Debug("ApiKeyAuthenticationHandler: Found key '{Name}', IsEnabled={IsEnabled}, Roles={RoleCount}",
+                apiKey.Name, apiKey.IsEnabled, apiKey.Roles.Count);
 
             // Check if the key is enabled
             if (!apiKey.IsEnabled)
@@ -124,8 +130,9 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, SchemeName);
 
-            Log.Debug("ApiKeyAuthenticationHandler: Authenticated API key '{KeyName}' (prefix: {KeyPrefix}) with roles: {Roles}",
-                apiKey.Name, apiKey.KeyPrefix, string.Join(", ", apiKey.Roles.Select(r => r.Name)));
+            var rolesList = string.Join(", ", apiKey.Roles.Select(r => r.Name));
+            Log.Information("ApiKeyAuthenticationHandler: Successfully authenticated API key '{KeyName}' (prefix: {KeyPrefix}) with roles: {Roles}",
+                apiKey.Name, apiKey.KeyPrefix, rolesList);
 
             return AuthenticateResult.Success(ticket);
         }

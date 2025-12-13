@@ -6,6 +6,7 @@ using JIM.PostgresData;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -59,11 +60,13 @@ try
     var validIssuers = GetValidIssuers(authority);
 
     // Configure triple authentication: Cookies for Blazor UI, JWT Bearer for SSO API, API Key for non-interactive API
+    // NOTE: API Key is registered FIRST so it gets priority in the authentication pipeline
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
     })
+        .AddApiKeyAuthentication()
         .AddCookie()
         .AddOpenIdConnect(options =>
         {
@@ -85,6 +88,19 @@ try
             {
                 await AuthoriseAndUpdateUserAsync(ctx);
             };
+
+            // Prevent OIDC redirects for API requests - they should return 401 instead
+            options.Events.OnRedirectToIdentityProvider = async ctx =>
+            {
+                if (ctx.Request.Path.StartsWithSegments("/api"))
+                {
+                    Log.Debug("Suppressing OIDC redirect for API request: {Path}, returning 401", ctx.Request.Path);
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.WriteAsJsonAsync(new { error = "Unauthorized", message = "Authentication required" });
+                    ctx.HandleResponse(); // Mark response as handled
+                }
+            };
         })
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
         {
@@ -101,16 +117,10 @@ try
 
             // Preserve standard OIDC claim names for API requests
             options.MapInboundClaims = false;
-        })
-        .AddApiKeyAuthentication();
+        });
 
     // setup authorisation policies
-    builder.Services.AddAuthorization(options =>
-    {
-        // require all users to be authenticated with our IdP
-        // eventually this will probably have to change, so we can make some pages anonymous for things like load-balance health monitors
-        options.FallbackPolicy = options.DefaultPolicy;
-    });
+    builder.Services.AddAuthorization();
 
     // Add services to the container.
     builder.Services.AddRazorPages();

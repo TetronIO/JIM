@@ -328,6 +328,66 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
 
     #endregion
 
+    #region Connector Definitions
+
+    /// <summary>
+    /// Gets all available connector definitions.
+    /// </summary>
+    /// <remarks>
+    /// Connector definitions describe the available connector types that can be used when creating Connected Systems.
+    /// Each connector definition includes metadata about capabilities, settings, and configuration options.
+    /// </remarks>
+    /// <returns>A list of all available connector definitions.</returns>
+    [HttpGet("connector-definitions", Name = "GetConnectorDefinitions")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectorDefinitionHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectorDefinitionsAsync()
+    {
+        _logger.LogTrace("Requested connector definitions");
+        var headers = await _application.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+        return Ok(headers);
+    }
+
+    /// <summary>
+    /// Gets a specific connector definition by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the connector definition.</param>
+    /// <returns>The connector definition details including all settings and capabilities.</returns>
+    [HttpGet("connector-definitions/{id:int}", Name = "GetConnectorDefinition")]
+    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectorDefinitionAsync(int id)
+    {
+        _logger.LogTrace("Requested connector definition: {Id}", id);
+        var definition = await _application.ConnectedSystems.GetConnectorDefinitionAsync(id);
+        if (definition == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connector definition with ID {id} not found."));
+
+        return Ok(definition);
+    }
+
+    /// <summary>
+    /// Gets a specific connector definition by name.
+    /// </summary>
+    /// <param name="name">The name of the connector definition (e.g., "CSV File", "LDAP").</param>
+    /// <returns>The connector definition details including all settings and capabilities.</returns>
+    [HttpGet("connector-definitions/by-name/{name}", Name = "GetConnectorDefinitionByName")]
+    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectorDefinitionByNameAsync(string name)
+    {
+        _logger.LogTrace("Requested connector definition by name: {Name}", name);
+        var definition = await _application.ConnectedSystems.GetConnectorDefinitionAsync(name);
+        if (definition == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connector definition with name '{name}' not found."));
+
+        return Ok(definition);
+    }
+
+    #endregion
+
     #region Run Profiles
 
     /// <summary>

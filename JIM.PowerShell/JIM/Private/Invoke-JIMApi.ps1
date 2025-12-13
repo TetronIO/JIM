@@ -74,7 +74,7 @@ function Invoke-JIMApi {
     }
 
     try {
-        $response = Invoke-RestMethod @params -ErrorAction Stop
+        $response = Invoke-RestMethod @params -ErrorAction Stop -MaximumRedirection 0
         Write-Debug "API response received successfully"
         return $response
     }
