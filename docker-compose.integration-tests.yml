@@ -6,22 +6,26 @@ services:
   # Phase 1 - Scenario 1 & 3: HR to Directory, GALSYNC
   # Primary Samba AD instance for most scenarios
   samba-ad-primary:
-    image: nowsci/samba-domain
+    image: servercontainers/samba
     container_name: samba-ad-primary
     environment:
-      - DOMAIN=TESTDOMAIN.LOCAL
-      - ADMIN_PASSWORD=Test@123!
-      - DNS_FORWARDER=8.8.8.8
-      - INSECURE_LDAP=true
+      - SAMBA_CONF_LOG_LEVEL=1
+      - SAMBA_DOMAIN_NAME=testdomain.local
+      - SAMBA_DC_ADMIN_PASSWD=Test@123!
+      - SAMBA_DC_DNS_BACKEND=SAMBA_INTERNAL
+      - SAMBA_DC_REALM=TESTDOMAIN.LOCAL
+      - SAMBA_SERVER_STRING=Samba AD DC Primary
     # No ports exposed - internal to Docker network only for testing
     volumes:
       - samba-primary-data:/var/lib/samba
       - test-csv-data:/connector-files
-    hostname: dc1.testdomain.local
+    hostname: dc1
     networks:
       - jim-network
+    cap_add:
+      - SYS_ADMIN
     healthcheck:
-      test: ["CMD", "samba-tool", "domain", "info", "localhost"]
+      test: ["CMD", "smbclient", "-L", "localhost", "-U", "%", "-N"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -29,23 +33,27 @@ services:
 
   # Phase 1 - Scenario 2: Directory to Directory Sync (Source)
   samba-ad-source:
-    image: nowsci/samba-domain
+    image: servercontainers/samba
     container_name: samba-ad-source
     environment:
-      - DOMAIN=SOURCEDOMAIN.LOCAL
-      - ADMIN_PASSWORD=Test@123!
-      - DNS_FORWARDER=8.8.8.8
-      - INSECURE_LDAP=true
+      - SAMBA_CONF_LOG_LEVEL=1
+      - SAMBA_DOMAIN_NAME=sourcedomain.local
+      - SAMBA_DC_ADMIN_PASSWD=Test@123!
+      - SAMBA_DC_DNS_BACKEND=SAMBA_INTERNAL
+      - SAMBA_DC_REALM=SOURCEDOMAIN.LOCAL
+      - SAMBA_SERVER_STRING=Samba AD DC Source
     # No ports exposed - internal to Docker network only for testing
     volumes:
       - samba-source-data:/var/lib/samba
-    hostname: dc1.sourcedomain.local
+    hostname: dc1-source
     networks:
       - jim-network
+    cap_add:
+      - SYS_ADMIN
     profiles:
       - scenario2
     healthcheck:
-      test: ["CMD", "samba-tool", "domain", "info", "localhost"]
+      test: ["CMD", "smbclient", "-L", "localhost", "-U", "%", "-N"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -53,23 +61,27 @@ services:
 
   # Phase 1 - Scenario 2: Directory to Directory Sync (Target)
   samba-ad-target:
-    image: nowsci/samba-domain
+    image: servercontainers/samba
     container_name: samba-ad-target
     environment:
-      - DOMAIN=TARGETDOMAIN.LOCAL
-      - ADMIN_PASSWORD=Test@123!
-      - DNS_FORWARDER=8.8.8.8
-      - INSECURE_LDAP=true
+      - SAMBA_CONF_LOG_LEVEL=1
+      - SAMBA_DOMAIN_NAME=targetdomain.local
+      - SAMBA_DC_ADMIN_PASSWD=Test@123!
+      - SAMBA_DC_DNS_BACKEND=SAMBA_INTERNAL
+      - SAMBA_DC_REALM=TARGETDOMAIN.LOCAL
+      - SAMBA_SERVER_STRING=Samba AD DC Target
     # No ports exposed - internal to Docker network only for testing
     volumes:
       - samba-target-data:/var/lib/samba
-    hostname: dc1.targetdomain.local
+    hostname: dc1-target
     networks:
       - jim-network
+    cap_add:
+      - SYS_ADMIN
     profiles:
       - scenario2
     healthcheck:
-      test: ["CMD", "samba-tool", "domain", "info", "localhost"]
+      test: ["CMD", "smbclient", "-L", "localhost", "-U", "%", "-N"]
       interval: 30s
       timeout: 10s
       retries: 5
