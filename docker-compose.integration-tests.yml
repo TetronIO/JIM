@@ -1,0 +1,235 @@
+# Integration Testing Systems
+# This compose file defines external systems used for integration testing
+# See docs/INTEGRATION_TESTING.md for usage instructions
+
+services:
+  # Phase 1 - Scenario 1 & 3: HR to Directory, GALSYNC
+  # Primary Samba AD instance for most scenarios
+  samba-ad-primary:
+    image: fmstrat/samba-domain
+    container_name: samba-ad-primary
+    environment:
+      - DOMAIN=TESTDOMAIN
+      - ADMIN_PASSWORD=Test@123!
+      - DNS_FORWARDER=8.8.8.8
+      - INSECURE_LDAP=true
+    ports:
+      - "389:389"     # LDAP
+      - "636:636"     # LDAPS
+      - "88:88"       # Kerberos
+      - "53:53/udp"   # DNS
+      - "53:53/tcp"   # DNS
+    volumes:
+      - samba-primary-data:/var/lib/samba
+      - test-csv-data:/connector-files
+    hostname: dc1.testdomain.local
+    networks:
+      - integration-test-net
+    healthcheck:
+      test: ["CMD", "samba-tool", "domain", "info", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # Phase 1 - Scenario 2: Directory to Directory Sync (Source)
+  samba-ad-source:
+    image: fmstrat/samba-domain
+    container_name: samba-ad-source
+    environment:
+      - DOMAIN=SOURCEDOMAIN
+      - ADMIN_PASSWORD=Test@123!
+      - DNS_FORWARDER=8.8.8.8
+      - INSECURE_LDAP=true
+    ports:
+      - "10389:389"   # LDAP (offset to avoid conflicts)
+      - "10636:636"   # LDAPS
+      - "10088:88"    # Kerberos
+      - "10053:53/udp" # DNS
+      - "10053:53/tcp" # DNS
+    volumes:
+      - samba-source-data:/var/lib/samba
+    hostname: dc1.sourcedomain.local
+    networks:
+      - integration-test-net
+    profiles:
+      - scenario2
+    healthcheck:
+      test: ["CMD", "samba-tool", "domain", "info", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # Phase 1 - Scenario 2: Directory to Directory Sync (Target)
+  samba-ad-target:
+    image: fmstrat/samba-domain
+    container_name: samba-ad-target
+    environment:
+      - DOMAIN=TARGETDOMAIN
+      - ADMIN_PASSWORD=Test@123!
+      - DNS_FORWARDER=8.8.8.8
+      - INSECURE_LDAP=true
+    ports:
+      - "11389:389"   # LDAP (offset to avoid conflicts)
+      - "11636:636"   # LDAPS
+      - "11088:88"    # Kerberos
+      - "11053:53/udp" # DNS
+      - "11053:53/tcp" # DNS
+    volumes:
+      - samba-target-data:/var/lib/samba
+    hostname: dc1.targetdomain.local
+    networks:
+      - integration-test-net
+    profiles:
+      - scenario2
+    healthcheck:
+      test: ["CMD", "samba-tool", "domain", "info", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # Phase 2 - Scenario 4: Multi-Source (SQL Server - HRIS A)
+  sqlserver-hris-a:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver-hris-a
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=Test@123!
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - integration-test-net
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "Test@123!", "-Q", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Phase 2 - Scenario 4: Multi-Source (Oracle - HRIS B)
+  oracle-hris-b:
+    image: container-registry.oracle.com/database/express:21c-slim
+    container_name: oracle-hris-b
+    environment:
+      - ORACLE_PWD=Test@123!
+      - ORACLE_CHARACTERSET=AL32UTF8
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    networks:
+      - integration-test-net
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "sh", "-c", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s sys/Test@123!@localhost/XE as sysdba"]
+      interval: 60s
+      timeout: 30s
+      retries: 10
+      start_period: 300s
+
+  # Phase 2 - Scenario 5: Database Target
+  postgres-test:
+    image: postgres:16
+    container_name: postgres-target
+    environment:
+      - POSTGRES_PASSWORD=Test@123!
+      - POSTGRES_USER=jimtest
+      - POSTGRES_DB=jimtest
+    ports:
+      - "5433:5432"   # Offset to avoid conflict with JIM's PostgreSQL
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    networks:
+      - integration-test-net
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "jimtest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Phase 2 - Additional LDAP validation
+  openldap:
+    image: osixia/openldap:latest
+    container_name: openldap-test
+    environment:
+      - LDAP_ORGANISATION=TestOrg
+      - LDAP_DOMAIN=test.local
+      - LDAP_ADMIN_PASSWORD=admin
+      - LDAP_CONFIG_PASSWORD=config
+      - LDAP_READONLY_USER=false
+      - LDAP_TLS=false
+    ports:
+      - "12389:389"
+      - "12636:636"
+    volumes:
+      - openldap-data:/var/lib/ldap
+      - openldap-config:/etc/ldap/slapd.d
+    networks:
+      - integration-test-net
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost", "-b", "dc=test,dc=local", "-D", "cn=admin,dc=test,dc=local", "-w", "admin"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Phase 2 - MySQL testing
+  mysql-test:
+    image: mysql:8
+    container_name: mysql-test
+    environment:
+      - MYSQL_ROOT_PASSWORD=Test@123!
+      - MYSQL_DATABASE=jimtest
+      - MYSQL_USER=jimtest
+      - MYSQL_PASSWORD=Test@123!
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - integration-test-net
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pTest@123!"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  samba-primary-data:
+    name: jim-integration-samba-primary
+  samba-source-data:
+    name: jim-integration-samba-source
+  samba-target-data:
+    name: jim-integration-samba-target
+  test-csv-data:
+    name: jim-integration-csv-data
+  openldap-data:
+    name: jim-integration-openldap-data
+  openldap-config:
+    name: jim-integration-openldap-config
+  sqlserver-data:
+    name: jim-integration-sqlserver-data
+  postgres-test-data:
+    name: jim-integration-postgres-test-data
+  mysql-data:
+    name: jim-integration-mysql-data
+  oracle-data:
+    name: jim-integration-oracle-data
+
+networks:
+  integration-test-net:
+    name: jim-integration-test-net
+    driver: bridge

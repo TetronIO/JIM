@@ -11,15 +11,146 @@
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Data Scale Templates](#data-scale-templates)
-4. [Test Scenarios](#test-scenarios)
-5. [Setup & Configuration](#setup--configuration)
-6. [Running Tests Locally](#running-tests-locally)
-7. [CI/CD Integration](#cicd-integration)
-8. [Writing New Scenarios](#writing-new-scenarios)
-9. [Troubleshooting](#troubleshooting)
+1. [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference)
+2. [Overview](#overview)
+3. [Architecture](#architecture)
+4. [Data Scale Templates](#data-scale-templates)
+5. [Test Scenarios](#test-scenarios)
+6. [Setup & Configuration](#setup--configuration)
+7. [Running Tests Locally](#running-tests-locally)
+8. [CI/CD Integration](#cicd-integration)
+9. [Writing New Scenarios](#writing-new-scenarios)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Test Lifecycle Quick Reference
+
+Integration tests require a complete environment reset between runs to ensure repeatable, idempotent results. This includes resetting **both** external systems (Samba AD, databases) **and** JIM itself (metaverse, configuration).
+
+### DevContainer / Local Development
+
+For developers running tests locally in a DevContainer or development environment:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         LOCAL DEVELOPMENT LIFECYCLE                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. STAND UP                     2. POPULATE                                │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐                │
+│  │ # Start external systems│     │ # Populate test data    │                │
+│  │ docker compose -f       │     │ ./Populate-SambaAD.ps1  │                │
+│  │   docker-compose.       │ ──▶ │   -Template Small       │                │
+│  │   integration-tests.yml │     │ ./Generate-TestCSV.ps1  │                │
+│  │   up -d                 │     │   -Template Small       │                │
+│  └─────────────────────────┘     └─────────────────────────┘                │
+│                                            │                                │
+│                                            ▼                                │
+│  3. CONFIGURE JIM                4. EXECUTE TESTS                           │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐                │
+│  │ # Configure via API     │     │ # Run scenario steps    │                │
+│  │ ./Setup-Scenario1.ps1   │ ──▶ │ ./Invoke-Scenario1...   │                │
+│  │   -ApiKey $key          │     │   -Step All             │                │
+│  │                         │     │   -Template Small       │                │
+│  └─────────────────────────┘     └─────────────────────────┘                │
+│                                            │                                │
+│                                            ▼                                │
+│  5. RESET (for next run)                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ # Reset BOTH external systems AND JIM database                      │    │
+│  │ docker compose -f docker-compose.integration-tests.yml down -v      │    │
+│  │ docker compose -f docker-compose.yml down -v  # Reset JIM's DB      │    │
+│  │                                                                     │    │
+│  │ # Then stand up fresh for next test run                             │    │
+│  │ docker compose -f docker-compose.yml up -d    # JIM stack           │    │
+│  │ docker compose -f docker-compose.integration-tests.yml up -d        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Commands:**
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| Stand up external systems | `docker compose -f docker-compose.integration-tests.yml up -d` | Start Samba AD, databases |
+| Stand up JIM | `jim-stack` or `docker compose up -d` | Start JIM services |
+| Populate test data | `./Populate-SambaAD.ps1 -Template Small` | Create users/groups in external systems |
+| Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Sync Rules |
+| Run tests | `./Invoke-Scenario1-HRToDirectory.ps1 -Step All` | Execute test scenario |
+| Reset external systems | `docker compose -f docker-compose.integration-tests.yml down -v` | Remove external system data |
+| Reset JIM | `docker compose -f docker-compose.yml down -v` | Remove JIM database (metaverse, config) |
+
+### CI/CD Pipeline
+
+For automated testing in GitHub Actions:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            CI/CD PIPELINE LIFECYCLE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ WORKFLOW TRIGGER (Manual via workflow_dispatch)                      │   │
+│  │ - Select Template: Micro / Small / Medium / Large / XLarge / XXLarge │   │
+│  │ - Select Phase: 1 (MVP) or 2 (Post-MVP)                              │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                     │                                       │
+│                                     ▼                                       │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
+│  │ 1. STAND UP     │  │ 2. BUILD JIM    │  │ 3. CONFIGURE    │              │
+│  │ - JIM stack     │─▶│ - dotnet build  │─▶│ - Setup scripts │              │
+│  │ - External sys  │  │ - Wait ready    │  │ - Populate data │              │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
+│                                                    │                        │
+│                                                    ▼                        │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
+│  │ 6. TEAR DOWN    │  │ 5. COLLECT      │  │ 4. EXECUTE      │              │
+│  │ (always runs)   │◀─│ - Test results  │◀─│ - Run scenarios │              │
+│  │ - down -v ALL   │  │ - Upload artefacts│ │ - Validate      │              │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
+│         │                                                                   │
+│         ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ CLEAN STATE: Runner is fresh for next workflow run                   │   │
+│  │ No persistent volumes = automatic reset                              │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**CI/CD Characteristics:**
+
+| Aspect | Behaviour |
+|--------|-----------|
+| **Trigger** | Manual only (`workflow_dispatch`) - not on every commit |
+| **Isolation** | Fresh GitHub runner = clean state guaranteed |
+| **Reset** | `docker compose down -v` in `always()` step ensures cleanup even on failure |
+| **Idempotency** | Each run is fully independent; no state persists between runs |
+| **Timeout** | 2 hours maximum to prevent runaway costs |
+
+### Why Reset JIM's Database?
+
+Integration tests create real data in JIM:
+
+- **Metaverse Objects** - Identity records from imports
+- **Connected System Objects** - Links to external systems
+- **Sync Rules** - Attribute flow configurations
+- **Run Profiles** - Execution schedules
+- **Activity History** - Sync operation logs
+
+Without resetting JIM, subsequent test runs would:
+- Fail join rules (objects already exist)
+- Have incorrect object counts
+- Accumulate stale configuration
+- Produce non-deterministic results
+
+**The `-v` flag removes Docker volumes**, which contain:
+- JIM's PostgreSQL database (all metaverse data, configuration)
+- External system data (Samba AD, SQL Server, etc.)
+
+This guarantees a clean slate for each test run.
 
 ---
 
@@ -887,6 +1018,7 @@ JIM/
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.3     | 2025-12-13 | Added Test Lifecycle Quick Reference section for DevContainer and CI/CD |
 | 1.2     | 2025-12-09 | Added JIM configuration section, step-based execution, dependencies |
 | 1.1     | 2025-12-08 | Updated file paths to use existing test/ folder |
 | 1.0     | 2025-12-08 | Initial version - Phase 1 & 2 specification     |
