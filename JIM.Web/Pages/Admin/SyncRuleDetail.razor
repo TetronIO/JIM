@@ -637,8 +637,8 @@
 
     private bool _addMatchingRuleDialogVisible;
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
-    private SyncRuleMapping? _matchingRuleMapping;
-    private SyncRuleMappingSource? _matchingRuleMappingSource;
+    private ObjectMatchingRule? _matchingRuleMapping;
+    private ObjectMatchingRuleSource? _matchingRuleMappingSource;
     private string? _matchingRuleMappingSourceType;
 
     private bool _syncRuleScopingFiltered;
@@ -722,11 +722,10 @@
 
         if (_matchingRuleMapping == null)
         {
-            _matchingRuleMapping = new SyncRuleMapping {
-                    Type = SyncRuleMappingType.ObjectMatching,
+            _matchingRuleMapping = new ObjectMatchingRule {
                     Order = _syncRule.ObjectMatchingRules.Count == 0 ? 0 : _syncRule.ObjectMatchingRules.Select(q => q.Order).Max() + 1
             };
-            _matchingRuleMappingSource = new SyncRuleMappingSource();
+            _matchingRuleMappingSource = new ObjectMatchingRuleSource();
         }
         else
         {
@@ -740,7 +739,7 @@
 
     private void HandleAddMatchingRuleMappingTypeValueChange(string mappingType)
     {
-        _matchingRuleMappingSource ??= new SyncRuleMappingSource();
+        _matchingRuleMappingSource ??= new ObjectMatchingRuleSource();
         _matchingRuleMappingSourceType = mappingType;
     }
 
@@ -761,12 +760,6 @@
         if (_matchingRuleMapping.TargetMetaverseAttribute == null)
         {
             Console.WriteLine("DisableAddMappingButton: syncRuleMapping.TargetMetaverseAttribute NULL");
-            return true;
-        }
-
-        if (_matchingRuleMapping.Type != SyncRuleMappingType.ObjectMatching)
-        {
-            Console.WriteLine("DisableAddMappingButton: syncRuleMapping.Type != SyncRuleMappingType.ObjectMatching");
             return true;
         }
 
@@ -796,7 +789,7 @@
         _matchingRuleMappingSource = null;
     }
 
-    private async Task HandleObjectMatchingRuleDeleteClickAsync(SyncRuleMapping objectMatchingRule)
+    private async Task HandleObjectMatchingRuleDeleteClickAsync(ObjectMatchingRule objectMatchingRule)
     {
         if (_syncRule == null)
             return;
@@ -813,7 +806,7 @@
         }
     }
 
-    private void HandleObjectMatchingRuleChangeOrder(SyncRuleMapping objectMatchingRule, string direction)
+    private void HandleObjectMatchingRuleChangeOrder(ObjectMatchingRule objectMatchingRule, string direction)
     {
         // invalid scenarios
         if (_syncRule == null || _syncRule.ObjectMatchingRules.Count == 1)
@@ -841,7 +834,7 @@
         }
     }
 
-    private bool DisableObjectMatchingMappingRuleOrderButton(SyncRuleMapping objectMatchingRule, string direction)
+    private bool DisableObjectMatchingMappingRuleOrderButton(ObjectMatchingRule objectMatchingRule, string direction)
     {
         if (_syncRule == null)
             return true;
@@ -941,9 +934,7 @@
         if (_syncRule == null)
             return;
         
-        _attributeFlowMapping = new SyncRuleMapping {
-            Type = SyncRuleMappingType.AttributeFlow
-        };
+        _attributeFlowMapping = new SyncRuleMapping();
         _attributeFlowMappingSource = new SyncRuleMappingSource();
         _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
         _addAttributeFlowRuleDialogVisible = true;

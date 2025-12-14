@@ -7,12 +7,6 @@ public enum SyncRuleDirection
     Export = 2
 }
 
-public enum SyncRuleMappingType
-{
-    NotSet = 0,
-    AttributeFlow = 1,
-    ObjectMatching = 2
-}
 
 /// <summary>
 /// Used to provide some context to the user on what type of sources configuration has been used in a sync rule mapping.

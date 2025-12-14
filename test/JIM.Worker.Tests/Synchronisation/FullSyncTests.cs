@@ -397,16 +397,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         
         // add test-specific matching rules to it
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -445,16 +444,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         
         // add test-specific matching rules to it
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeNumber)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
@@ -493,16 +491,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         
         // add test-specific matching rules to it
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.HrId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
@@ -591,18 +588,15 @@ public class FullSyncTests
         var displayNameMapping = new SyncRuleMapping
         {
             Id = 100,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName,
-            Order = 1
         };
         displayNameMapping.Sources.Add(new SyncRuleMappingSource
         {
             Id = 1000,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(displayNameMapping);
 
@@ -610,8 +604,7 @@ public class FullSyncTests
         var startDateMapping = new SyncRuleMapping
         {
             Id = 101,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeStartDate),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeStartDate
         };
@@ -620,7 +613,6 @@ public class FullSyncTests
             Id = 1001,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.START_DATE,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.START_DATE),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(startDateMapping);
 
@@ -628,8 +620,7 @@ public class FullSyncTests
         var employeeNumberMapping = new SyncRuleMapping
         {
             Id = 102,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeNumber),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeNumber
         };
@@ -638,7 +629,6 @@ public class FullSyncTests
             Id = 1002,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(employeeNumberMapping);
 
@@ -646,8 +636,7 @@ public class FullSyncTests
         var hrIdMapping = new SyncRuleMapping
         {
             Id = 103,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.HrId),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.HrId
         };
@@ -656,7 +645,6 @@ public class FullSyncTests
             Id = 1003,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(hrIdMapping);
 
@@ -664,8 +652,7 @@ public class FullSyncTests
         var managerMapping = new SyncRuleMapping
         {
             Id = 104,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Manager),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.Manager
         };
@@ -674,7 +661,6 @@ public class FullSyncTests
             Id = 1004,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.MANAGER,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.MANAGER),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(managerMapping);
 
@@ -748,16 +734,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -773,8 +758,7 @@ public class FullSyncTests
         var displayNameMapping = new SyncRuleMapping
         {
             Id = 100,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
         };
@@ -783,7 +767,6 @@ public class FullSyncTests
             Id = 1000,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(displayNameMapping);
 
@@ -904,16 +887,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -954,16 +936,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule that will match both CSOs to the same MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1183,16 +1164,15 @@ public class FullSyncTests
         importSyncRule.ProjectToMetaverse = true;
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1353,16 +1333,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1378,8 +1357,7 @@ public class FullSyncTests
         var displayNameMapping = new SyncRuleMapping
         {
             Id = 100,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
         };
@@ -1388,7 +1366,6 @@ public class FullSyncTests
             Id = 1000,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(displayNameMapping);
 
@@ -1442,16 +1419,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1468,8 +1444,7 @@ public class FullSyncTests
         var startDateMapping = new SyncRuleMapping
         {
             Id = 101,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeStartDate),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeStartDate
         };
@@ -1478,7 +1453,6 @@ public class FullSyncTests
             Id = 1001,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.START_DATE,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.START_DATE),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(startDateMapping);
 
@@ -1529,16 +1503,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1554,8 +1527,7 @@ public class FullSyncTests
         var displayNameMapping = new SyncRuleMapping
         {
             Id = 100,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
         };
@@ -1564,7 +1536,6 @@ public class FullSyncTests
             Id = 1000,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(displayNameMapping);
 
@@ -1611,16 +1582,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1636,8 +1606,7 @@ public class FullSyncTests
         var employeeNumberMapping = new SyncRuleMapping
         {
             Id = 102,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeNumber),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeNumber
         };
@@ -1646,7 +1615,6 @@ public class FullSyncTests
             Id = 1002,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(employeeNumberMapping);
 
@@ -1694,16 +1662,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1719,8 +1686,7 @@ public class FullSyncTests
         var hrIdMapping = new SyncRuleMapping
         {
             Id = 103,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.HrId),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.HrId
         };
@@ -1729,7 +1695,6 @@ public class FullSyncTests
             Id = 1003,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(hrIdMapping);
 
@@ -1777,16 +1742,15 @@ public class FullSyncTests
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add object matching rule to join CSO to existing MVO
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 1,
-            Type = SyncRuleMappingType.ObjectMatching,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
         objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 1,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
@@ -1802,8 +1766,7 @@ public class FullSyncTests
         var employeeNumberMapping = new SyncRuleMapping
         {
             Id = 102,
-            Type = SyncRuleMappingType.AttributeFlow,
-            AttributeFlowSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeNumber),
             TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.EmployeeNumber
         };
@@ -1812,7 +1775,6 @@ public class FullSyncTests
             Id = 1002,
             ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
             ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER),
-            Order = 1
         });
         importSyncRule.AttributeFlowRules.Add(employeeNumberMapping);
 
@@ -2123,14 +2085,14 @@ public class FullSyncTests
         var csotAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
             .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID);
         importSyncRule.ObjectMatchingRules.Clear();
-        var objectMatchingRule = new SyncRuleMapping
+        var objectMatchingRule = new ObjectMatchingRule
         {
             Id = 100,
-            ObjectMatchingSynchronisationRule = importSyncRule,
+            SyncRule = importSyncRule,
             TargetMetaverseAttribute = mvoHrIdAttr,
             TargetMetaverseAttributeId = mvoHrIdAttr.Id
         };
-        objectMatchingRule.Sources.Add(new SyncRuleMappingSource
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
         {
             Id = 100,
             Order = 1,

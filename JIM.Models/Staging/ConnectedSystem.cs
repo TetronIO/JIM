@@ -54,6 +54,13 @@ public class ConnectedSystem
     public string? PersistedConnectorData { get; set; }
 
     /// <summary>
+    /// Determines where object matching rules are configured for this Connected System.
+    /// ConnectedSystem (default): Rules are defined per object type and shared across sync rules.
+    /// SyncRule: Rules are defined per sync rule for advanced scenarios.
+    /// </summary>
+    public ObjectMatchingRuleMode ObjectMatchingRuleMode { get; set; } = ObjectMatchingRuleMode.ConnectedSystem;
+
+    /// <summary>
     /// EF back-link.
     /// </summary>
     public List<Activity>? Activities { get; set; }

@@ -1,4 +1,5 @@
-﻿namespace JIM.Models.Staging;
+﻿using JIM.Models.Logic;
+namespace JIM.Models.Staging;
 
 public class ConnectedSystemObjectType
 {
@@ -24,6 +25,12 @@ public class ConnectedSystemObjectType
     /// will be added to PendingAttributeValueRemovals. When false, attributes remain on the MVO.
     /// </summary>
     public bool RemoveContributedAttributesOnObsoletion { get; set; } = true;
+
+    /// <summary>
+    /// Object matching rules for this object type. Used when the Connected System's ObjectMatchingRuleMode
+    /// is set to ConnectedSystem (the default). These rules are shared across all sync rules for this object type.
+    /// </summary>
+    public List<ObjectMatchingRule> ObjectMatchingRules { get; set; } = new();
 
     public override string ToString()
     {

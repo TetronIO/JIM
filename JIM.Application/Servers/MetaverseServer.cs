@@ -154,19 +154,19 @@ public class MetaverseServer
     /// </summary>
     /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
     /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="syncRuleMapping">The Sync Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
+    /// <param name="objectMatchingRule">The Object Matching Rule contains the logic needed to construct a Metaverse Object query.</param>
     /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
     /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified. This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the sync rule mapping source connected system attribute is null.</exception>
-    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the sync rule mapping. These are not yet supported.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the object matching rule source connected system attribute is null.</exception>
+    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the matching rule. These are not yet supported.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
-    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the sync rule mapping criteria.</exception>
-    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, SyncRuleMapping syncRuleMapping)
+    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
+    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
     {
-        if (syncRuleMapping.Sources == null || syncRuleMapping.Sources.Count == 0)
-            throw new ArgumentOutOfRangeException($"{nameof(syncRuleMapping)}.Sources is null or empty. Cannot continue.");
-        
-        return await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, syncRuleMapping);
+        if (objectMatchingRule.Sources == null || objectMatchingRule.Sources.Count == 0)
+            throw new ArgumentOutOfRangeException($"{nameof(objectMatchingRule)}.Sources is null or empty. Cannot continue.");
+
+        return await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
     }
     #endregion
 }

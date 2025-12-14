@@ -569,7 +569,7 @@ public class SyncFullSyncTaskProcessor
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
 
-        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.OrderBy(q => q.Order))
+        foreach (var syncRuleMapping in syncRule.AttributeFlowRules)
         {
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");

@@ -72,9 +72,11 @@ public class SyncRule: IValidated
     public List<SyncRuleMapping> AttributeFlowRules { get; set; } = new();
 
     /// <summary>
-    /// Contains all the logic that determines how Connected System Objects should match a counterpart in the Metaverse for inbound sync rules.
+    /// Contains all the logic that determines how Connected System Objects should match a counterpart in the Metaverse.
+    /// Used when the Connected System's ObjectMatchingRuleMode is set to SyncRule (advanced mode).
+    /// When ObjectMatchingRuleMode is ConnectedSystem (default), rules are defined on the ConnectedSystemObjectType instead.
     /// </summary>
-    public List<SyncRuleMapping> ObjectMatchingRules { get; } = new();
+    public List<ObjectMatchingRule> ObjectMatchingRules { get; set; } = new();
     
     /// <summary>
     /// Backlink for Entity Framework purposes to all Activities for this SyncRule.
