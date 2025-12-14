@@ -133,6 +133,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // doing it in one giant include tree query will make it timeout.
 
         var connectedSystem = await Repository.Database.ConnectedSystems.
+            AsNoTracking().
             Include(cs => cs.ConnectorDefinition).
             Include(cs => cs.SettingValues).
             ThenInclude(sv => sv.Setting).
@@ -141,7 +142,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystem == null)
             return null;
 
-        var runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
+        var runProfiles = await Repository.Database.ConnectedSystemRunProfiles.AsNoTracking().Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         var types = await Repository.Database.ConnectedSystemObjectTypes
             .AsNoTracking()
@@ -158,6 +159,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
         var partitions = await Repository.Database.ConnectedSystemPartitions
+            .AsNoTracking()
             .Include(p => p.Containers)!
             .ThenInclude(c => c.ChildContainers)
             .ThenInclude(c => c.ChildContainers)

@@ -5,7 +5,7 @@ services:
       - ASPNETCORE_URLS=http://+:80
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
-      - JIM_INFRASTRUCTURE_API_KEY=jim_ak_qaa5GYuWDV8wRe0OgSUfpzMFDtCmJ0pBrwaxfR1yo
+      - JIM_INFRASTRUCTURE_API_KEY=jim_ak_KYLtzorsDYsHwyJF47s6VXpQJQryVaYC9cGmBZ4tw
       # OpenLDAP TLS configuration for LDAPS connections
       - LDAPTLS_REQCERT=never
     ports:
