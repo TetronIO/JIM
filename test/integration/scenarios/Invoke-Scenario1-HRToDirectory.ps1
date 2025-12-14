@@ -176,10 +176,10 @@ try {
 
         # Trigger sync
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -Id $config.CSVImportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
-        Start-JIMRunProfile -Id $config.LDAPExportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
         # Validate department change
@@ -219,10 +219,10 @@ try {
 
         # Trigger sync
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -Id $config.CSVImportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
-        Start-JIMRunProfile -Id $config.LDAPExportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
         # Validate user removed/disabled in AD
@@ -261,9 +261,9 @@ try {
 
         # Initial sync
         Write-Host "  Initial sync..." -ForegroundColor Gray
-        Start-JIMRunProfile -Id $config.CSVImportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -Id $config.LDAPExportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
         # Remove user (simulating quit)
@@ -272,7 +272,7 @@ try {
         $csvContent | Set-Content $csvPath
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        Start-JIMRunProfile -Id $config.CSVImportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
         Start-Sleep -Seconds 10  # Short wait
 
         # Restore user (simulating rehire before grace period)
@@ -280,9 +280,9 @@ try {
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        Start-JIMRunProfile -Id $config.CSVImportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -Id $config.LDAPExportProfileId | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
         # Verify user still exists (reconnection should preserve AD account)

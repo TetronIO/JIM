@@ -77,8 +77,10 @@ if ($composeContent -match "JIM_INFRASTRUCTURE_API_KEY") {
     Write-Host "  JIM_INFRASTRUCTURE_API_KEY already present in compose file" -ForegroundColor Yellow
     Write-Host "  Updating value..." -ForegroundColor Gray
 
-    # Replace the existing value
-    $composeContent = $composeContent -replace "JIM_INFRASTRUCTURE_API_KEY:.*", "JIM_INFRASTRUCTURE_API_KEY: `"$KeyValue`""
+    # Replace the existing value - handles both formats:
+    # - JIM_INFRASTRUCTURE_API_KEY=value (array format)
+    # - JIM_INFRASTRUCTURE_API_KEY: "value" (map format)
+    $composeContent = $composeContent -replace "JIM_INFRASTRUCTURE_API_KEY[=:].*", "JIM_INFRASTRUCTURE_API_KEY=$KeyValue"
     $composeContent | Set-Content $composeOverridePath -NoNewline
 
     Write-Host "  ✓ Updated JIM_INFRASTRUCTURE_API_KEY in compose file" -ForegroundColor Green
@@ -107,18 +109,20 @@ else {
     }
 }
 
-# Restart jim.web to pick up the new environment variable
+# Recreate jim.web to pick up the new environment variable
+# Note: 'restart' just restarts the existing container (with old env vars)
+#       'up --force-recreate' creates a new container with updated env vars
 Write-Host ""
-Write-Host "Restarting JIM.Web to apply changes..." -ForegroundColor Gray
+Write-Host "Recreating JIM.Web to apply changes..." -ForegroundColor Gray
 
-docker compose -f /workspaces/JIM/docker-compose.yml -f $composeOverridePath restart jim.web | Out-Null
+docker compose -f /workspaces/JIM/docker-compose.yml -f $composeOverridePath --profile with-db up -d --force-recreate jim.web 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "  ✗ Failed to restart jim.web" -ForegroundColor Red
+    Write-Host "  ✗ Failed to recreate jim.web" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "  ✓ JIM.Web restarted" -ForegroundColor Green
+Write-Host "  ✓ JIM.Web recreated" -ForegroundColor Green
 
 # Wait for JIM to be ready
 Write-Host ""
@@ -160,6 +164,10 @@ Write-Host ""
 Write-Host "Exporting JIM_API_KEY to environment..." -ForegroundColor Gray
 
 $env:JIM_API_KEY = $KeyValue
+
+# Also write to a file so parent scripts can read it
+$keyFilePath = "$PSScriptRoot/.api-key"
+$KeyValue | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
 
 Write-Host "  ✓ JIM_API_KEY exported" -ForegroundColor Green
 

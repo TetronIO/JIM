@@ -302,6 +302,24 @@ try {
         Write-Host "    LDAP: $($ldapUserType.name) (ID: $($ldapUserType.id))" -ForegroundColor Gray
         Write-Host "    Metaverse: $($mvUserType.name) (ID: $($mvUserType.id))" -ForegroundColor Gray
 
+        # Mark the required object types as selected (required for import/export to work)
+        $selectObjectTypesSql = @"
+UPDATE "ConnectedSystemObjectTypes"
+SET "Selected" = true
+WHERE "Id" IN ($($csvUserType.id), $($ldapUserType.id));
+"@
+        $selectObjectTypesSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        Write-Host "  ✓ Selected CSV 'person' and LDAP 'User' object types" -ForegroundColor Green
+
+        # Mark employeeId as the External ID (anchor) for CSV object type
+        $setExternalIdSql = @"
+UPDATE "ConnectedSystemAttributes"
+SET "IsExternalId" = true
+WHERE "ConnectedSystemObjectTypeId" = $($csvUserType.id) AND "Name" = 'employeeId';
+"@
+        $setExternalIdSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        Write-Host "  ✓ Set 'employeeId' as External ID for CSV object type" -ForegroundColor Green
+
         # Create Import sync rule (CSV -> Metaverse)
         $existingRules = Get-JIMSyncRule
         $importRuleName = "HR CSV Import Users"
@@ -386,7 +404,6 @@ DECLARE
     mapping_id INT;
     csv_attr_id INT;
     mv_attr_id INT;
-    mapping_order INT := 0;
 BEGIN
 "@
 
@@ -407,18 +424,16 @@ BEGIN
         IF NOT EXISTS (
             SELECT 1 FROM "SyncRuleMappings" srm
             JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
-            WHERE srm."AttributeFlowSynchronisationRuleId" = $($importRule.id)
+            WHERE srm."SyncRuleId" = $($importRule.id)
               AND srm."TargetMetaverseAttributeId" = mv_attr_id
               AND srms."ConnectedSystemAttributeId" = csv_attr_id
         ) THEN
-            INSERT INTO "SyncRuleMappings" ("Created", "Order", "AttributeFlowSynchronisationRuleId", "Type", "TargetMetaverseAttributeId")
-            VALUES (NOW(), mapping_order, $($importRule.id), 1, mv_attr_id)
+            INSERT INTO "SyncRuleMappings" ("Created", "SyncRuleId", "TargetMetaverseAttributeId")
+            VALUES (NOW(), $($importRule.id), mv_attr_id)
             RETURNING "Id" INTO mapping_id;
 
             INSERT INTO "SyncRuleMappingSources" ("Order", "ConnectedSystemAttributeId", "SyncRuleMappingId")
             VALUES (0, csv_attr_id, mapping_id);
-
-            mapping_order := mapping_order + 1;
         END IF;
     END IF;
 "@
@@ -437,7 +452,6 @@ DECLARE
     mapping_id INT;
     ldap_attr_id INT;
     mv_attr_id INT;
-    mapping_order INT := 0;
 BEGIN
 "@
 
@@ -458,18 +472,16 @@ BEGIN
         IF NOT EXISTS (
             SELECT 1 FROM "SyncRuleMappings" srm
             JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
-            WHERE srm."AttributeFlowSynchronisationRuleId" = $($exportRule.id)
+            WHERE srm."SyncRuleId" = $($exportRule.id)
               AND srm."TargetConnectedSystemAttributeId" = ldap_attr_id
               AND srms."MetaverseAttributeId" = mv_attr_id
         ) THEN
-            INSERT INTO "SyncRuleMappings" ("Created", "Order", "AttributeFlowSynchronisationRuleId", "Type", "TargetConnectedSystemAttributeId")
-            VALUES (NOW(), mapping_order, $($exportRule.id), 1, ldap_attr_id)
+            INSERT INTO "SyncRuleMappings" ("Created", "SyncRuleId", "TargetConnectedSystemAttributeId")
+            VALUES (NOW(), $($exportRule.id), ldap_attr_id)
             RETURNING "Id" INTO mapping_id;
 
             INSERT INTO "SyncRuleMappingSources" ("Order", "MetaverseAttributeId", "SyncRuleMappingId")
             VALUES (0, mv_attr_id, mapping_id);
-
-            mapping_order := mapping_order + 1;
         END IF;
     END IF;
 "@
@@ -500,37 +512,57 @@ END `$`$;
         # Add object matching rule for CSV object type (how to match CSOs to existing MVOs during import)
         Write-Host "  Configuring object matching rule..." -ForegroundColor Gray
 
-        # Get attribute IDs
-        $csvEmployeeIdAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'employeeId' }
+        # Use SQL to create matching rule since the API endpoint may not return attributes with object types
+        $matchingRuleSql = @"
+-- Object matching rule: employeeId → Employee ID
+DO `$`$
+DECLARE
+    csv_attr_id INT;
+    mv_attr_id INT;
+    rule_id INT;
+BEGIN
+    -- Get CSV employeeId attribute
+    SELECT ca."Id" INTO csv_attr_id
+    FROM "ConnectedSystemAttributes" ca
+    WHERE ca."ConnectedSystemObjectTypeId" = $($csvUserType.id) AND ca."Name" = 'employeeId';
 
-        # Get MV attributes
-        $mvAttributes = Invoke-JIMApi -Endpoint '/api/v1/metaverse/attributes'
-        $mvEmployeeIdAttr = $mvAttributes | Where-Object { $_.name -eq 'Employee ID' }
+    -- Get MV Employee ID attribute
+    SELECT ma."Id" INTO mv_attr_id
+    FROM "MetaverseAttributes" ma
+    WHERE ma."Name" = 'Employee ID';
 
-        if ($csvEmployeeIdAttr -and $mvEmployeeIdAttr) {
-            # Check if matching rule already exists
-            $existingRules = Get-JIMMatchingRule -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id
-            $existingRule = $existingRules | Where-Object {
-                $_.sources[0].connectedSystemAttributeId -eq $csvEmployeeIdAttr.id -and
-                $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id
-            }
+    IF csv_attr_id IS NOT NULL AND mv_attr_id IS NOT NULL THEN
+        -- Check if matching rule already exists
+        IF NOT EXISTS (
+            SELECT 1 FROM "ObjectMatchingRules" omr
+            JOIN "ObjectMatchingRuleSources" omrs ON omr."Id" = omrs."ObjectMatchingRuleId"
+            WHERE omr."ConnectedSystemObjectTypeId" = $($csvUserType.id)
+              AND omr."TargetMetaverseAttributeId" = mv_attr_id
+              AND omrs."ConnectedSystemAttributeId" = csv_attr_id
+        ) THEN
+            INSERT INTO "ObjectMatchingRules" ("Created", "Order", "ConnectedSystemObjectTypeId", "TargetMetaverseAttributeId")
+            VALUES (NOW(), 0, $($csvUserType.id), mv_attr_id)
+            RETURNING "Id" INTO rule_id;
 
-            if (-not $existingRule) {
-                # Create object matching rule: employeeId → Employee ID
-                New-JIMMatchingRule `
-                    -ConnectedSystemId $csvSystem.id `
-                    -ObjectTypeId $csvUserType.id `
-                    -SourceAttributeId $csvEmployeeIdAttr.id `
-                    -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
+            INSERT INTO "ObjectMatchingRuleSources" ("Order", "ConnectedSystemAttributeId", "ObjectMatchingRuleId")
+            VALUES (0, csv_attr_id, rule_id);
 
-                Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
-            }
-            else {
-                Write-Host "  Object matching rule already exists" -ForegroundColor Gray
-            }
+            RAISE NOTICE 'Created matching rule for employeeId → Employee ID';
+        ELSE
+            RAISE NOTICE 'Matching rule already exists';
+        END IF;
+    ELSE
+        RAISE NOTICE 'Could not find required attributes (csv_attr_id=%, mv_attr_id=%)', csv_attr_id, mv_attr_id;
+    END IF;
+END `$`$;
+"@
+
+        $matchingRuleSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
         }
         else {
-            Write-Host "  ⚠ Could not find required attributes for matching rule" -ForegroundColor Yellow
+            Write-Host "  ⚠ Could not configure object matching rule" -ForegroundColor Yellow
         }
     }
     else {
@@ -551,13 +583,15 @@ try {
     $csvProfiles = Get-JIMRunProfile -ConnectedSystemId $csvSystem.id
     $ldapProfiles = Get-JIMRunProfile -ConnectedSystemId $ldapSystem.id
 
-    # Full Import from CSV
+    # Full Import from CSV - FilePath is required for file-based connectors
+    $csvFilePath = "/var/connector-files/test-data/hr-users.csv"
     $csvImportProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Full Import" }
     if (-not $csvImportProfile) {
         $csvImportProfile = New-JIMRunProfile `
             -Name "HR CSV - Full Import" `
             -ConnectedSystemId $csvSystem.id `
             -RunType "FullImport" `
+            -FilePath $csvFilePath `
             -PassThru
         Write-Host "  ✓ Created 'HR CSV - Full Import' run profile" -ForegroundColor Green
     }

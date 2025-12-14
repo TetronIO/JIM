@@ -4,12 +4,14 @@
 
 .DESCRIPTION
     Orchestrates the complete integration test lifecycle:
-    1. Stand up external systems
-    2. Wait for systems to be ready
-    3. Populate test data
-    4. Run test scenarios
-    5. Collect results
-    6. Tear down systems
+    1. Reset environment (optional)
+    2. Stand up JIM and external systems
+    3. Wait for systems to be ready
+    4. Set up infrastructure API key
+    5. Populate test data
+    6. Run test scenarios
+    7. Collect results
+    8. Tear down systems (optional)
 
 .PARAMETER Template
     Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
@@ -23,11 +25,20 @@
 .PARAMETER ScenariosOnly
     Skip stand-up/populate and only run scenarios (assumes systems already configured)
 
+.PARAMETER SkipReset
+    Skip initial reset (useful when you know the environment is clean)
+
+.PARAMETER ApiKey
+    Use a specific API key instead of auto-creating infrastructure key
+
 .EXAMPLE
     ./Invoke-IntegrationTests.ps1 -Template Small -Phase 1
 
 .EXAMPLE
     ./Invoke-IntegrationTests.ps1 -Template Medium -Phase 1 -SkipTearDown
+
+.EXAMPLE
+    ./Invoke-IntegrationTests.ps1 -ScenariosOnly -ApiKey "jim_ak_..."
 #>
 
 param(
@@ -43,26 +54,40 @@ param(
     [switch]$SkipTearDown,
 
     [Parameter(Mandatory=$false)]
-    [switch]$ScenariosOnly
+    [switch]$ScenariosOnly,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipReset,
+
+    [Parameter(Mandatory=$false)]
+    [string]$ApiKey
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Resolve paths using $PSScriptRoot (this script is in test/integration)
+$scriptRoot = $PSScriptRoot
+$repoRoot = (Resolve-Path "$scriptRoot/../..").Path
+$integrationCompose = Join-Path $repoRoot "docker-compose.integration-tests.yml"
+$jimCompose = Join-Path $repoRoot "docker-compose.yml"
+$jimComposeOverride = Join-Path $repoRoot "docker-compose.override.codespaces.yml"
+
 # Import helpers
-. "$PSScriptRoot/utils/Test-Helpers.ps1"
+. "$scriptRoot/utils/Test-Helpers.ps1"
 
 $startTime = Get-Date
 
 Write-Host ""
-Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " JIM Integration Test Suite" -ForegroundColor Cyan
-Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Template:       $Template" -ForegroundColor White
 Write-Host "  Phase:          $Phase" -ForegroundColor White
 Write-Host "  Skip tear-down: $SkipTearDown" -ForegroundColor White
 Write-Host "  Scenarios only: $ScenariosOnly" -ForegroundColor White
+Write-Host "  Skip reset:     $SkipReset" -ForegroundColor White
 Write-Host ""
 
 $results = @{
@@ -73,85 +98,186 @@ $results = @{
     Success = $false
 }
 
+# Use provided API key or environment variable
+$effectiveApiKey = $ApiKey
+if (-not $effectiveApiKey) {
+    $effectiveApiKey = $env:JIM_API_KEY
+}
+
 try {
     if (-not $ScenariosOnly) {
-        # Step 1: Stand up systems
-        Write-TestSection "Step 1: Stand Up External Systems"
+        # Step 0: Reset environment (optional)
+        if (-not $SkipReset) {
+            Write-TestSection "Step 0: Reset Environment"
 
+            Write-Host "Tearing down any existing containers and volumes..." -ForegroundColor Gray
+
+            # Tear down JIM
+            $jimComposeArgs = @("-f", $jimCompose)
+            if (Test-Path $jimComposeOverride) {
+                $jimComposeArgs += @("-f", $jimComposeOverride)
+            }
+            $jimComposeArgs += @("--profile", "with-db", "down", "-v", "--remove-orphans")
+            docker compose @jimComposeArgs 2>&1 | Out-Null
+
+            # Tear down external systems
+            docker compose -f $integrationCompose down -v --remove-orphans 2>&1 | Out-Null
+
+            Write-Host "  Environment reset complete" -ForegroundColor Green
+        }
+
+        # Step 1: Stand up JIM (must start first to create jim-network)
+        Write-TestSection "Step 1: Stand Up Systems"
+
+        Write-Host "Starting JIM (creates jim-network)..." -ForegroundColor Gray
+
+        $jimComposeArgs = @("-f", $jimCompose)
+        if (Test-Path $jimComposeOverride) {
+            $jimComposeArgs += @("-f", $jimComposeOverride)
+        }
+        $jimComposeArgs += @("--profile", "with-db", "up", "-d")
+        docker compose @jimComposeArgs 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to start JIM containers"
+        }
+
+        Write-Host "  JIM started" -ForegroundColor Green
+
+        # Step 1b: Stand up external systems (requires jim-network from JIM)
+        Write-Host ""
         if ($Phase -eq 1) {
-            Write-Host "Starting Phase 1 systems (Samba AD)..." -ForegroundColor Gray
-            docker compose -f ../../docker-compose.integration-tests.yml up -d
+            Write-Host "Starting Phase 1 external systems (Samba AD)..." -ForegroundColor Gray
+            docker compose -f $integrationCompose up -d
         }
         elseif ($Phase -eq 2) {
-            Write-Host "Starting Phase 2 systems (all)..." -ForegroundColor Gray
-            docker compose -f ../../docker-compose.integration-tests.yml --profile phase2 up -d
+            Write-Host "Starting Phase 2 external systems (all)..." -ForegroundColor Gray
+            docker compose -f $integrationCompose --profile phase2 up -d
         }
 
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to start containers"
+            throw "Failed to start external system containers"
         }
 
-        Write-Host "✓ Containers started" -ForegroundColor Green
+        Write-Host "  External systems started" -ForegroundColor Green
 
         # Step 2: Wait for systems to be ready
         Write-TestSection "Step 2: Wait for Systems Ready"
 
-        & "$PSScriptRoot/Wait-SystemsReady.ps1" -Phase $Phase
+        & "$scriptRoot/Wait-SystemsReady.ps1" -Phase $Phase
 
         if ($LASTEXITCODE -ne 0) {
-            throw "Systems not ready"
+            throw "External systems not ready"
+        }
+
+        # Wait for JIM
+        Write-Host "Waiting for JIM to be ready..." -ForegroundColor Gray
+        $maxAttempts = 60
+        $attempt = 0
+        $jimReady = $false
+
+        while ($attempt -lt $maxAttempts -and -not $jimReady) {
+            $attempt++
+            try {
+                $response = Invoke-WebRequest -Uri "http://localhost:5200" -Method GET -TimeoutSec 2 -ErrorAction SilentlyContinue
+                if ($response.StatusCode -in @(200, 302)) {
+                    $jimReady = $true
+                }
+            } catch {
+                # Ignore, keep trying
+            }
+
+            if (-not $jimReady) {
+                if ($attempt % 10 -eq 0) {
+                    Write-Host "  Still waiting... ($attempt/$maxAttempts)" -ForegroundColor Gray
+                }
+                Start-Sleep -Seconds 2
+            }
+        }
+
+        if (-not $jimReady) {
+            throw "JIM did not become ready within timeout"
+        }
+
+        Write-Host "  JIM is ready" -ForegroundColor Green
+
+        # Step 2b: Set up infrastructure API key (if not provided)
+        if (-not $effectiveApiKey) {
+            Write-TestSection "Step 2b: Set Up Infrastructure API Key"
+
+            Write-Host "Creating infrastructure API key..." -ForegroundColor Gray
+
+            & "$scriptRoot/Setup-InfrastructureApiKey.ps1"
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to set up infrastructure API key"
+            }
+
+            # Read the API key from the file (child process can't set parent env vars)
+            $keyFilePath = "$scriptRoot/.api-key"
+            if (Test-Path $keyFilePath) {
+                $effectiveApiKey = Get-Content $keyFilePath -Raw
+                $effectiveApiKey = $effectiveApiKey.Trim()
+            } else {
+                # Fallback to env var in case script was dot-sourced
+                $effectiveApiKey = $env:JIM_API_KEY
+            }
+
+            if (-not $effectiveApiKey) {
+                throw "Infrastructure API key was not set after running Setup-InfrastructureApiKey.ps1"
+            }
+
+            Write-Host "  Infrastructure API key configured" -ForegroundColor Green
         }
 
         # Step 3: Populate test data
         Write-TestSection "Step 3: Populate Test Data"
 
         Write-Host "Populating Samba AD Primary..." -ForegroundColor Gray
-        & "$PSScriptRoot/Populate-SambaAD.ps1" -Template $Template -Instance Primary
+        & "$scriptRoot/Populate-SambaAD.ps1" -Template $Template -Instance Primary
 
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to populate Samba AD"
         }
 
-        Write-Host "`nGenerating test CSV files..." -ForegroundColor Gray
-        & "$PSScriptRoot/Generate-TestCSV.ps1" -Template $Template
+        Write-Host ""
+        Write-Host "Generating test CSV files..." -ForegroundColor Gray
+        & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template
 
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to generate CSV files"
         }
 
-        Write-Host "`n✓ Test data populated" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "  Test data populated" -ForegroundColor Green
     }
 
     # Step 4: Run scenarios
     Write-TestSection "Step 4: Run Test Scenarios"
 
-    Write-Host ""
-    Write-Host "NOTE: Scenarios require an API key from JIM" -ForegroundColor Yellow
-    Write-Host "  Create one via: Admin > API Keys in the JIM web UI" -ForegroundColor Gray
-    Write-Host "  Then set environment variable: JIM_API_KEY" -ForegroundColor Gray
-    Write-Host ""
-
-    $apiKey = $env:JIM_API_KEY
-    if (-not $apiKey) {
-        Write-Host "⚠ No API key provided (JIM_API_KEY not set)" -ForegroundColor Yellow
+    # Final API key check
+    if (-not $effectiveApiKey) {
+        Write-Host ""
+        Write-Host "WARNING: No API key available" -ForegroundColor Yellow
+        Write-Host "  Either provide -ApiKey parameter or set JIM_API_KEY environment variable" -ForegroundColor Yellow
         Write-Host "  Skipping scenario tests" -ForegroundColor Yellow
         Write-Host ""
         $results.Success = $true
         return
     }
 
-    # Determine JIM URL (internal Docker network for containers)
-    $jimUrl = "http://jim.web:80"
+    # Use localhost URL since PowerShell scripts run on the host, not in containers
+    $jimUrl = "http://localhost:5200"
 
     Write-Host "Running Scenario 1: HR to Enterprise Directory" -ForegroundColor Cyan
     Write-Host ""
 
     try {
-        & "$PSScriptRoot/scenarios/Invoke-Scenario1-HRToDirectory.ps1" `
+        & "$scriptRoot/scenarios/Invoke-Scenario1-HRToDirectory.ps1" `
             -Template $Template `
             -Step All `
             -JIMUrl $jimUrl `
-            -ApiKey $apiKey
+            -ApiKey $effectiveApiKey
 
         if ($LASTEXITCODE -eq 0) {
             $results.Scenarios += @{
@@ -159,7 +285,7 @@ try {
                 Success = $true
             }
             Write-Host ""
-            Write-Host "✓ Scenario 1 passed" -ForegroundColor Green
+            Write-Host "  Scenario 1 passed" -ForegroundColor Green
         }
         else {
             $results.Scenarios += @{
@@ -168,7 +294,7 @@ try {
                 Error = "Test failed with exit code $LASTEXITCODE"
             }
             Write-Host ""
-            Write-Host "✗ Scenario 1 failed" -ForegroundColor Red
+            Write-Host "  Scenario 1 failed" -ForegroundColor Red
         }
     }
     catch {
@@ -178,7 +304,7 @@ try {
             Error = $_.Exception.Message
         }
         Write-Host ""
-        Write-Host "✗ Scenario 1 failed: $_" -ForegroundColor Red
+        Write-Host "  Scenario 1 failed: $_" -ForegroundColor Red
     }
 
     Write-Host ""
@@ -190,11 +316,11 @@ try {
     # Determine overall success
     $scenariosPassed = ($results.Scenarios | Where-Object { $_.Success }).Count
     $scenariosTotal = $results.Scenarios.Count
-    $results.Success = ($scenariosPassed -eq $scenariosTotal)
+    $results.Success = ($scenariosTotal -gt 0 -and $scenariosPassed -eq $scenariosTotal)
 }
 catch {
     Write-Host ""
-    Write-Host "✗ Integration tests failed: $_" -ForegroundColor Red
+    Write-Host "Integration tests failed: $_" -ForegroundColor Red
     $results.Success = $false
     $results.Error = $_.Exception.Message
 }
@@ -205,7 +331,7 @@ finally {
     $results.EndTime = Get-Date
     $results.Duration = $results.EndTime - $results.StartTime
 
-    $resultsPath = "$PSScriptRoot/results"
+    $resultsPath = "$scriptRoot/results"
     if (-not (Test-Path $resultsPath)) {
         New-Item -ItemType Directory -Path $resultsPath -Force | Out-Null
     }
@@ -221,33 +347,52 @@ finally {
 
         Write-Host "Stopping and removing containers and volumes..." -ForegroundColor Gray
 
+        # Tear down external systems
         if ($Phase -eq 1) {
-            docker compose -f ../../docker-compose.integration-tests.yml down -v
+            docker compose -f $integrationCompose down -v 2>&1 | Out-Null
         }
         elseif ($Phase -eq 2) {
-            docker compose -f ../../docker-compose.integration-tests.yml --profile phase2 down -v
+            docker compose -f $integrationCompose --profile phase2 down -v 2>&1 | Out-Null
         }
 
-        Write-Host "✓ Systems torn down" -ForegroundColor Green
+        # Tear down JIM
+        $jimComposeArgs = @("-f", $jimCompose)
+        if (Test-Path $jimComposeOverride) {
+            $jimComposeArgs += @("-f", $jimComposeOverride)
+        }
+        $jimComposeArgs += @("--profile", "with-db", "down", "-v", "--remove-orphans")
+        docker compose @jimComposeArgs 2>&1 | Out-Null
+
+        Write-Host "  Systems torn down" -ForegroundColor Green
     }
     elseif ($SkipTearDown) {
         Write-Host ""
-        Write-Host "⚠ Skipping tear-down (containers still running)" -ForegroundColor Yellow
-        Write-Host "  Run this to tear down manually:" -ForegroundColor Gray
-        Write-Host "  docker compose -f ../../docker-compose.integration-tests.yml down -v" -ForegroundColor Gray
+        Write-Host "Skipping tear-down (containers still running)" -ForegroundColor Yellow
+        Write-Host "  To tear down manually, run:" -ForegroundColor Gray
+        Write-Host "  ./Reset-JIM.ps1" -ForegroundColor Gray
     }
 
     # Summary
     Write-Host ""
-    Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "=======================================================" -ForegroundColor Cyan
     Write-Host " Test Summary" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "=======================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Template:     $Template" -ForegroundColor White
     Write-Host "  Phase:        $Phase" -ForegroundColor White
     Write-Host "  Duration:     $($results.Duration.ToString('hh\:mm\:ss'))" -ForegroundColor White
     Write-Host "  Success:      $($results.Success)" -ForegroundColor $(if ($results.Success) { "Green" } else { "Red" })
     Write-Host ""
+
+    if ($results.Scenarios.Count -gt 0) {
+        Write-Host "  Scenarios:" -ForegroundColor White
+        foreach ($scenario in $results.Scenarios) {
+            $status = if ($scenario.Success) { "[PASS]" } else { "[FAIL]" }
+            $color = if ($scenario.Success) { "Green" } else { "Red" }
+            Write-Host "    $status $($scenario.Name)" -ForegroundColor $color
+        }
+        Write-Host ""
+    }
 
     if (-not $results.Success) {
         exit 1
