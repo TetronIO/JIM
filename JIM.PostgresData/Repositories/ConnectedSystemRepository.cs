@@ -144,6 +144,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         var types = await Repository.Database.ConnectedSystemObjectTypes
+            .AsNoTracking()
             .Include(ot => ot.Attributes.OrderBy(a => a.Name))
             .Include(ot => ot.ObjectMatchingRules)
                 .ThenInclude(omr => omr.Sources)
