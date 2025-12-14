@@ -289,12 +289,17 @@
 
                 </DialogContent>
                 <DialogActions>
-                    <MudButton 
-                        Disabled="!_objectTypeAttributeBeingEditedIsEditable" 
-                        DropShadow="false" 
-                        Variant="Variant.Filled" 
-                        Color="Color.Primary" 
-                        OnClick="HandleEditAttributeDataTypeButtonClick" 
+                    <MudButton
+                        DropShadow="false"
+                        Variant="Variant.Text"
+                        OnClick="@(() => _editSchemaAttributeDialogVisible = false)"
+                        Class="ma-4">Cancel</MudButton>
+                    <MudButton
+                        Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+                        DropShadow="false"
+                        Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        OnClick="HandleEditAttributeDataTypeButtonClick"
                         Class="ma-4">Confirm Change</MudButton>
                 </DialogActions>
             </MudDialog>
