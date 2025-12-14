@@ -11,7 +11,7 @@
     - Run Profiles for synchronisation
 
 .PARAMETER JIMUrl
-    The URL of the JIM instance (default: http://jim.web:80 for internal Docker network)
+    The URL of the JIM instance (default: http://localhost:5200 for host access)
 
 .PARAMETER ApiKey
     API key for authentication (if not provided, will attempt to create one)
@@ -20,7 +20,7 @@
     Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .EXAMPLE
-    ./Setup-Scenario1.ps1 -JIMUrl "http://jim.web:80" -ApiKey "jim_abc123..."
+    ./Setup-Scenario1.ps1 -JIMUrl "http://localhost:5200" -ApiKey "jim_abc123..."
 
 .EXAMPLE
     ./Setup-Scenario1.ps1 -Template Small
@@ -34,7 +34,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://jim.web:80",
+    [string]$JIMUrl = "http://localhost:5200",
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,

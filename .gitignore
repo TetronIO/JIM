@@ -454,3 +454,4 @@ connector-files/
 test/integration/results/
 test/integration/test-data/
 test/integration/.api-key
+test-data/

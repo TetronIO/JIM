@@ -13,7 +13,7 @@
     Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .PARAMETER JIMUrl
-    The URL of the JIM instance (default: http://jim.web:80 for internal Docker network)
+    The URL of the JIM instance (default: http://localhost:5200 for host access)
 
 .PARAMETER ApiKey
     API key for authentication
@@ -38,7 +38,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://jim.web:80",
+    [string]$JIMUrl = "http://localhost:5200",
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
