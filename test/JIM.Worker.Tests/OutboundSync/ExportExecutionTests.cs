@@ -634,4 +634,237 @@ public class ExportExecutionTests
         Assert.That(result.Previews[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
         Assert.That(result.Previews[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
     }
+
+    #region Provisioning Flow End-to-End Tests
+
+    /// <summary>
+    /// End-to-end test: When export fails, the CSO should remain in PendingProvisioning status.
+    /// This ensures the CSO↔MVO relationship is preserved for retry, and the CSO doesn't become
+    /// orphaned in an inconsistent state.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenExportFails_CsoRemainsInPendingProvisioningAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        // Create a CSO in PendingProvisioning state (simulating the state after export evaluation)
+        var pendingProvisioningCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(pendingProvisioningCso);
+
+        // Create a pending Create export that references the CSO
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = pendingProvisioningCso,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Add,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "John Doe"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Mock connector that implements both IConnector and IConnectorExportUsingCalls
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
+        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
+            .Returns(new List<ExportResult>
+            {
+                ExportResult.Failed("Connection to target system failed")
+            });
+
+        // Mock update methods
+        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
+            .Callback((PendingExport pe) =>
+            {
+                var existingPe = PendingExportsData.Find(p => p.Id == pe.Id);
+                if (existingPe != null)
+                {
+                    existingPe.Status = pe.Status;
+                    existingPe.ErrorCount = pe.ErrorCount;
+                    existingPe.LastErrorMessage = pe.LastErrorMessage;
+                }
+            });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert - Export should have failed
+        Assert.That(result.FailedCount, Is.EqualTo(1), "Export should have failed");
+        Assert.That(result.SuccessCount, Is.EqualTo(0), "No exports should have succeeded");
+
+        // Assert - CSO should still be in PendingProvisioning status (not Normal, not deleted)
+        Assert.That(pendingProvisioningCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            "CSO should remain in PendingProvisioning status after export failure");
+
+        // Assert - CSO should still be linked to MVO
+        Assert.That(pendingProvisioningCso.MetaverseObjectId, Is.EqualTo(mvo.Id),
+            "CSO should still be linked to MVO after export failure");
+        Assert.That(pendingProvisioningCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned),
+            "CSO JoinType should remain Provisioned");
+    }
+
+    /// <summary>
+    /// End-to-end test: When export succeeds, the CSO should transition from PendingProvisioning to Normal.
+    /// This validates the complete provisioning flow where a new object is successfully created in the target system.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenExportSucceeds_CsoTransitionsToNormalAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        // Create objectGUID attribute for external ID
+        var objectGuidAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 999,
+            Name = "objectGUID",
+            Type = AttributeDataType.Guid,
+            ConnectedSystemObjectType = targetUserType
+        };
+        targetUserType.Attributes.Add(objectGuidAttr);
+
+        // Create a CSO in PendingProvisioning state with ExternalIdAttributeId set
+        var pendingProvisioningCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            DateJoined = DateTime.UtcNow,
+            ExternalIdAttributeId = objectGuidAttr.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(pendingProvisioningCso);
+
+        // Create a pending Create export
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = pendingProvisioningCso,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Add,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "John Doe"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Mock connector that implements both IConnector and IConnectorExportUsingCalls
+        var generatedObjectGuid = Guid.NewGuid();
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Successful Connector");
+        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
+            .Returns(new List<ExportResult>
+            {
+                ExportResult.Succeeded(generatedObjectGuid.ToString())
+            });
+
+        // Track deleted pending exports
+        var deletedExportIds = new List<Guid>();
+        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>()))
+            .Callback((PendingExport pe) =>
+            {
+                deletedExportIds.Add(pe.Id);
+                PendingExportsData.RemoveAll(p => p.Id == pe.Id);
+            });
+
+        // Track CSO updates
+        var updatedCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(set => set.Update(It.IsAny<ConnectedSystemObject>()))
+            .Callback((ConnectedSystemObject cso) =>
+            {
+                updatedCsos.Add(cso);
+            });
+
+        // Also need to mock PendingExport updates
+        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert - Export should have succeeded
+        Assert.That(result.SuccessCount, Is.EqualTo(1), "Export should have succeeded");
+        Assert.That(result.FailedCount, Is.EqualTo(0), "No exports should have failed");
+
+        // Assert - CSO should have transitioned to Normal status
+        Assert.That(pendingProvisioningCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal),
+            "CSO should transition from PendingProvisioning to Normal after successful export");
+
+        // Assert - CSO should still be linked to MVO
+        Assert.That(pendingProvisioningCso.MetaverseObjectId, Is.EqualTo(mvo.Id),
+            "CSO should remain linked to MVO after successful export");
+        Assert.That(pendingProvisioningCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned),
+            "CSO JoinType should remain Provisioned");
+
+        // Assert - External ID attribute should be populated
+        var externalIdAttrValue = pendingProvisioningCso.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == objectGuidAttr.Id);
+        Assert.That(externalIdAttrValue, Is.Not.Null, "External ID attribute should be created");
+        Assert.That(externalIdAttrValue!.GuidValue, Is.EqualTo(generatedObjectGuid),
+            "External ID should be set to the objectGUID returned by the connector");
+
+        // Assert - PendingExport should have been deleted (cleaned up)
+        Assert.That(deletedExportIds, Does.Contain(pendingExport.Id),
+            "PendingExport should be deleted after successful export");
+    }
+
+    #endregion
 }

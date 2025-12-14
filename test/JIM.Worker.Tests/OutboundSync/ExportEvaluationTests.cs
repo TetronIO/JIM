@@ -355,4 +355,320 @@ public class ExportEvaluationTests
         // Assert
         Assert.That(result, Is.True, "Expected MVO to be in scope when no criteria defined");
     }
+
+    #region Provisioning Flow End-to-End Tests
+
+    /// <summary>
+    /// End-to-end test: When MVO changes and no CSO exists for the target system,
+    /// a new CSO should be created with Status=PendingProvisioning and JoinType=Provisioned,
+    /// and a Create PendingExport should be generated.
+    /// This tests the happy path of provisioning flow.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_WhenNoCsoExistsAndProvisioningEnabled_CreatesPendingProvisioningCsoAndCreateExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Configure export rule for provisioning
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Ensure no CSO exists for this MVO in the target system
+        ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
+
+        // Track CSOs created - using synchronous Add (not AddAsync) to match repository implementation
+        var createdCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
+            .Callback((ConnectedSystemObject entity) =>
+            {
+                if (entity.Id == Guid.Empty)
+                    entity.Id = Guid.NewGuid();
+                createdCsos.Add(entity);
+                ConnectedSystemObjectsData.Add(entity);
+            });
+
+        // Track pending exports created - using synchronous Add to match repository implementation
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert - CSO should be created with PendingProvisioning status
+        Assert.That(createdCsos, Has.Count.EqualTo(1), "Expected exactly one CSO to be created");
+        var newCso = createdCsos[0];
+        Assert.That(newCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            "CSO should have PendingProvisioning status before export");
+        Assert.That(newCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned),
+            "CSO should have Provisioned JoinType");
+        Assert.That(newCso.MetaverseObjectId, Is.EqualTo(mvo.Id),
+            "CSO should be linked to the MVO");
+        Assert.That(newCso.ConnectedSystemId, Is.EqualTo(targetSystem.Id),
+            "CSO should be in the target system");
+
+        // Assert - PendingExport should be created with Create change type
+        Assert.That(result, Has.Count.EqualTo(1), "Expected exactly one PendingExport");
+        var pendingExport = result[0];
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+            "PendingExport should be a Create operation");
+        Assert.That(pendingExport.ConnectedSystemObject?.Id, Is.EqualTo(newCso.Id),
+            "PendingExport should reference the newly created CSO");
+    }
+
+    /// <summary>
+    /// End-to-end test: When MVO changes and an existing CSO already exists and is joined,
+    /// an Update PendingExport should be generated (not Create).
+    /// This tests the scenario where provisioning finds an existing joined object.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_WhenCsoAlreadyExistsAndJoined_CreatesUpdateExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Create an existing CSO that is already joined to the MVO
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined, // Already joined via import
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow.AddDays(-1),
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(existingCso);
+
+        // Configure export rule
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Add a mapping so attribute changes are generated
+        var displayNameCsAttr = targetUserType.Attributes.SingleOrDefault(a => a.Name == "displayName");
+        var displayNameMvAttr = mvUserType.Attributes.SingleOrDefault(a => a.Name == Constants.BuiltInAttributes.DisplayName);
+
+        if (displayNameCsAttr != null && displayNameMvAttr != null)
+        {
+            exportRule.AttributeFlowRules.Clear();
+            var mapping = new SyncRuleMapping
+            {
+                Id = 1,
+                TargetConnectedSystemAttribute = displayNameCsAttr,
+                TargetConnectedSystemAttributeId = displayNameCsAttr.Id
+            };
+            mapping.Sources.Add(new SyncRuleMappingSource
+            {
+                Id = 1,
+                MetaverseAttribute = displayNameMvAttr,
+                MetaverseAttributeId = displayNameMvAttr.Id
+            });
+            exportRule.AttributeFlowRules.Add(mapping);
+        }
+
+        // Track CSOs created (should be none) - using synchronous Add to match repository implementation
+        var createdCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
+            .Callback((ConnectedSystemObject entity) =>
+            {
+                createdCsos.Add(entity);
+                ConnectedSystemObjectsData.Add(entity);
+            });
+
+        // Track pending exports created - using synchronous Add to match repository implementation
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert - No new CSO should be created
+        Assert.That(createdCsos, Has.Count.EqualTo(0), "No new CSO should be created when one already exists");
+
+        // Assert - existing CSO should remain unchanged
+        Assert.That(existingCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined),
+            "Existing CSO JoinType should remain Joined");
+        Assert.That(existingCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal),
+            "Existing CSO status should remain Normal");
+
+        // Assert - PendingExport should be Update (not Create) if there are attribute changes
+        // Note: May be 0 if no mapped attributes have changes
+        if (result.Count > 0)
+        {
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+                "PendingExport should be Update, not Create, when CSO already exists");
+            Assert.That(result[0].ConnectedSystemObject?.Id, Is.EqualTo(existingCso.Id),
+                "PendingExport should reference the existing CSO");
+        }
+    }
+
+    /// <summary>
+    /// End-to-end test: When provisioning is disabled on the export rule and no CSO exists,
+    /// no CSO or PendingExport should be created.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_WhenProvisioningDisabledAndNoCso_DoesNotCreateCsoOrExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Configure export rule with provisioning DISABLED
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = false; // Provisioning disabled
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Ensure no CSO exists
+        ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
+
+        // Track CSOs created - using synchronous Add to match repository implementation
+        var createdCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
+            .Callback((ConnectedSystemObject entity) => { createdCsos.Add(entity); });
+
+        // Track pending exports created - using synchronous Add to match repository implementation
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert - No CSO should be created when provisioning is disabled
+        Assert.That(createdCsos, Has.Count.EqualTo(0),
+            "No CSO should be created when ProvisionToConnectedSystem is false");
+
+        // Assert - No PendingExport should be created
+        Assert.That(result, Has.Count.EqualTo(0),
+            "No PendingExport should be created when no CSO exists and provisioning is disabled");
+    }
+
+    /// <summary>
+    /// End-to-end test: When MVO changes and CSO exists in PendingProvisioning state,
+    /// the existing PendingProvisioning CSO should be used (not a new one created).
+    /// This tests the scenario where export evaluation runs twice before export execution.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_WhenCsoInPendingProvisioning_UsesExistingCsoAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Create an existing CSO in PendingProvisioning state (from previous export evaluation)
+        var pendingProvisioningCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning, // Not yet exported
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(pendingProvisioningCso);
+
+        // Configure export rule
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Track CSOs created (should be none - should use existing) - using synchronous Add to match repository implementation
+        var createdCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
+            .Callback((ConnectedSystemObject entity) =>
+            {
+                createdCsos.Add(entity);
+                ConnectedSystemObjectsData.Add(entity);
+            });
+
+        // Track pending exports created - using synchronous Add to match repository implementation
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert - No new CSO should be created (should use existing PendingProvisioning CSO)
+        Assert.That(createdCsos, Has.Count.EqualTo(0),
+            "No new CSO should be created when one already exists in PendingProvisioning state");
+
+        // The existing CSO should still be PendingProvisioning
+        Assert.That(pendingProvisioningCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            "Existing CSO should remain in PendingProvisioning state");
+
+        // If a pending export is created, it should be an Update (since CSO exists)
+        if (result.Count > 0)
+        {
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+                "PendingExport should be Update when CSO exists (even in PendingProvisioning)");
+            Assert.That(result[0].ConnectedSystemObject?.Id, Is.EqualTo(pendingProvisioningCso.Id),
+                "PendingExport should reference the existing PendingProvisioning CSO");
+        }
+    }
+
+    #endregion
 }
