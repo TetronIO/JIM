@@ -1,4 +1,5 @@
-﻿using JIM.Models.Enums;
+﻿using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
@@ -93,6 +94,22 @@ public interface IConnectedSystemRepository
     /// <param name="metaverseObjectId">The MVO ID.</param>
     /// <param name="connectedSystemId">The Connected System ID.</param>
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
+
+    /// <summary>
+    /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
+    /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
+    /// Used during export evaluation to find existing CSOs for provisioning decisions.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to find a matching CSO for.</param>
+    /// <param name="connectedSystem">The target Connected System.</param>
+    /// <param name="connectedSystemObjectType">The target CSO type.</param>
+    /// <param name="objectMatchingRule">The matching rule defining how to match.</param>
+    /// <returns>The matching CSO, or null if no match found.</returns>
+    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ObjectMatchingRule objectMatchingRule);
 
     /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.

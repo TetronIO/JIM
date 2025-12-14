@@ -289,6 +289,8 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// Creates or updates a PendingExport for an MVO change to a target system.
+    /// For provisioning (Create) scenarios, also creates a CSO with Status=PendingProvisioning
+    /// to establish the CSO↔MVO relationship before the object exists in the target system.
     /// </summary>
     private async Task<PendingExport?> CreateOrUpdatePendingExportAsync(
         MetaverseObject mvo,
@@ -300,6 +302,7 @@ public class ExportEvaluationServer
             .GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
 
         PendingExportChangeType changeType;
+        ConnectedSystemObject? csoForExport = existingCso;
 
         if (existingCso == null)
         {
@@ -311,6 +314,8 @@ public class ExportEvaluationServer
                 return null;
             }
 
+            // Create CSO with PendingProvisioning status to establish the relationship before export
+            csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule);
             changeType = PendingExportChangeType.Create;
         }
         else
@@ -332,7 +337,7 @@ public class ExportEvaluationServer
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
-            ConnectedSystemObject = existingCso,
+            ConnectedSystemObject = csoForExport,
             ChangeType = changeType,
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
@@ -346,6 +351,41 @@ public class ExportEvaluationServer
             changeType, pendingExport.Id, mvo.Id, exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(), attributeChanges.Count);
 
         return pendingExport;
+    }
+
+    /// <summary>
+    /// Creates a Connected System Object with PendingProvisioning status for provisioning scenarios.
+    /// This establishes the CSO↔MVO relationship before the object exists in the target system,
+    /// ensuring that the subsequent import will correctly join rather than create a duplicate.
+    /// </summary>
+    private async Task<ConnectedSystemObject> CreatePendingProvisioningCsoAsync(MetaverseObject mvo, SyncRule exportRule)
+    {
+        if (exportRule.ConnectedSystemObjectType == null)
+            throw new InvalidOperationException($"Export rule {exportRule.Name} has no ConnectedSystemObjectType configured.");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = exportRule.ConnectedSystemId,
+            TypeId = exportRule.ConnectedSystemObjectType.Id,
+            Type = exportRule.ConnectedSystemObjectType,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            DateJoined = DateTime.UtcNow,
+            Created = DateTime.UtcNow
+        };
+
+        // Add the CSO to the MVO's collection for navigation
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
+
+        Log.Information("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId}",
+            cso.Id, mvo.Id, exportRule.ConnectedSystemId);
+
+        return cso;
     }
 
     /// <summary>

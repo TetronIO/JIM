@@ -904,6 +904,89 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjects
             .FirstOrDefaultAsync(cso => cso.MetaverseObjectId == metaverseObjectId && cso.ConnectedSystemId == connectedSystemId);
     }
+
+    /// <summary>
+    /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
+    /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
+    /// Used during export evaluation to find existing CSOs for provisioning decisions.
+    /// </summary>
+    public async Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ObjectMatchingRule objectMatchingRule)
+    {
+        if (objectMatchingRule.Sources.Count == 0)
+            throw new InvalidDataException("ObjectMatchingRule has no sources.");
+
+        if (objectMatchingRule.Sources.Count > 1)
+            throw new NotImplementedException("Object Matching Rules with more than one Source are not yet supported (i.e. functions).");
+
+        var source = objectMatchingRule.Sources[0];
+
+        // For export matching, the source should reference an MVO attribute
+        if (source.MetaverseAttribute == null)
+        {
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Source does not have a MetaverseAttribute, skipping rule {RuleId}", objectMatchingRule.Id);
+            return null;
+        }
+
+        // Get the source attribute value from the MVO
+        var mvoAttributeValue = metaverseObject.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id || av.Attribute?.Id == source.MetaverseAttribute.Id);
+
+        if (mvoAttributeValue == null)
+        {
+            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: MVO {MvoId} does not have a value for attribute {AttrId}",
+                metaverseObject.Id, source.MetaverseAttribute.Id);
+            return null;
+        }
+
+        // The target is a CS attribute (what we're looking for on the CSO)
+        var targetCsAttribute = objectMatchingRule.TargetMetaverseAttribute;
+        if (targetCsAttribute == null)
+        {
+            // For export matching, we need to find the corresponding CS attribute
+            // Since the matching rule's target is the MV attribute during import,
+            // for export we look at what CS attribute maps to that value
+            // This is typically the external ID attribute of the object type
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: No target attribute configured on rule {RuleId}", objectMatchingRule.Id);
+            return null;
+        }
+
+        // Query CSOs that match the value
+        var query = Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id && cso.TypeId == connectedSystemObjectType.Id);
+
+        // Match based on attribute type
+        switch (source.MetaverseAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.StringValue == mvoAttributeValue.StringValue));
+                break;
+            case AttributeDataType.Number:
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.IntValue == mvoAttributeValue.IntValue));
+                break;
+            case AttributeDataType.Guid:
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.GuidValue == mvoAttributeValue.GuidValue));
+                break;
+            default:
+                throw new NotSupportedException($"Attribute type {source.MetaverseAttribute.Type} is not supported for export matching.");
+        }
+
+        return await query.FirstOrDefaultAsync();
+    }
     #endregion
 
     #region Sync Rules

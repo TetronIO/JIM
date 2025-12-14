@@ -16,6 +16,7 @@ public class JimApplication
     public ExportExecutionServer ExportExecution { get; }
     public FileSystemServer FileSystem { get; }
     public MetaverseServer Metaverse { get; }
+    public ObjectMatchingServer ObjectMatching { get; }
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
     public ServiceSettingsServer ServiceSettings { get; }
@@ -31,6 +32,7 @@ public class JimApplication
         ExportExecution = new ExportExecutionServer(this);
         FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);
+        ObjectMatching = new ObjectMatchingServer(this);
         Repository = dataRepository;
         Search = new SearchServer(this);
         Security = new SecurityServer(this);
