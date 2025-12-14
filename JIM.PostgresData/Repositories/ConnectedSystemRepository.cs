@@ -145,6 +145,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var types = await Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes.OrderBy(a => a.Name))
+            .Include(ot => ot.ObjectMatchingRules)
+                .ThenInclude(omr => omr.Sources)
+                    .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(ot => ot.ObjectMatchingRules)
+                .ThenInclude(omr => omr.Sources)
+                    .ThenInclude(s => s.MetaverseAttribute)
+            .Include(ot => ot.ObjectMatchingRules)
+                .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
@@ -180,6 +188,52 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         Repository.Database.Update(connectedSystem);
         await Repository.Database.SaveChangesAsync();
+    }
+    #endregion
+
+    #region Object Matching Rules
+    /// <summary>
+    /// Creates a new object matching rule for a Connected System Object Type.
+    /// </summary>
+    public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule)
+    {
+        Repository.Database.ObjectMatchingRules.Add(rule);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Updates an existing object matching rule.
+    /// </summary>
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule)
+    {
+        Repository.Database.Update(rule);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources.
+    /// </summary>
+    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule)
+    {
+        // Remove all sources first
+        Repository.Database.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
+        Repository.Database.ObjectMatchingRules.Remove(rule);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Gets an object matching rule by ID with all related entities loaded.
+    /// </summary>
+    public async Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id)
+    {
+        return await Repository.Database.ObjectMatchingRules
+            .Include(omr => omr.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(omr => omr.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(omr => omr.TargetMetaverseAttribute)
+            .Include(omr => omr.ConnectedSystemObjectType)
+            .SingleOrDefaultAsync(omr => omr.Id == id);
     }
     #endregion
 

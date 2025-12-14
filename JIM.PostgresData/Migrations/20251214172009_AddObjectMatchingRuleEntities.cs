@@ -28,6 +28,31 @@ namespace JIM.PostgresData.Migrations
                 name: "IX_SyncRuleMappings_ObjectMatchingSynchronisationRuleId",
                 table: "SyncRuleMappings");
 
+            // First, add the new SyncRuleId column (nullable initially)
+            migrationBuilder.AddColumn<int>(
+                name: "SyncRuleId",
+                table: "SyncRuleMappings",
+                type: "integer",
+                nullable: true);
+
+            // Migrate data: copy AttributeFlowSynchronisationRuleId to SyncRuleId
+            // (AttributeFlow mappings are the ones we want to keep - ObjectMatching mappings move to new table)
+            migrationBuilder.Sql(
+                @"UPDATE ""SyncRuleMappings""
+                  SET ""SyncRuleId"" = COALESCE(""AttributeFlowSynchronisationRuleId"", ""ObjectMatchingSynchronisationRuleId"")");
+
+            // Delete sources for any orphaned mappings first (to handle FK constraints)
+            migrationBuilder.Sql(
+                @"DELETE FROM ""SyncRuleMappingSources""
+                  WHERE ""SyncRuleMappingId"" IN (
+                      SELECT ""Id"" FROM ""SyncRuleMappings"" WHERE ""SyncRuleId"" IS NULL
+                  )");
+
+            // Now delete any orphaned mappings that don't have a valid SyncRuleId
+            migrationBuilder.Sql(
+                @"DELETE FROM ""SyncRuleMappings"" WHERE ""SyncRuleId"" IS NULL");
+
+            // Now drop the old columns
             migrationBuilder.DropColumn(
                 name: "AttributeFlowSynchronisationRuleId",
                 table: "SyncRuleMappings");
@@ -40,10 +65,9 @@ namespace JIM.PostgresData.Migrations
                 name: "Type",
                 table: "SyncRuleMappings");
 
-            migrationBuilder.RenameColumn(
+            migrationBuilder.DropColumn(
                 name: "Order",
-                table: "SyncRuleMappings",
-                newName: "SyncRuleId");
+                table: "SyncRuleMappings");
 
             migrationBuilder.AddColumn<int>(
                 name: "ObjectMatchingRuleMode",
@@ -257,10 +281,13 @@ namespace JIM.PostgresData.Migrations
                 name: "ObjectMatchingRuleMode",
                 table: "ConnectedSystems");
 
-            migrationBuilder.RenameColumn(
-                name: "SyncRuleId",
+            // Restore old columns
+            migrationBuilder.AddColumn<int>(
+                name: "Order",
                 table: "SyncRuleMappings",
-                newName: "Order");
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "AttributeFlowSynchronisationRuleId",
@@ -280,6 +307,17 @@ namespace JIM.PostgresData.Migrations
                 type: "integer",
                 nullable: false,
                 defaultValue: 0);
+
+            // Migrate data back: copy SyncRuleId to AttributeFlowSynchronisationRuleId
+            migrationBuilder.Sql(
+                @"UPDATE ""SyncRuleMappings""
+                  SET ""AttributeFlowSynchronisationRuleId"" = ""SyncRuleId"",
+                      ""Type"" = 1");
+
+            // Drop SyncRuleId column
+            migrationBuilder.DropColumn(
+                name: "SyncRuleId",
+                table: "SyncRuleMappings");
 
             migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleMappings_AttributeFlowSynchronisationRuleId",

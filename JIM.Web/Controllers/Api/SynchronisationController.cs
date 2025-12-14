@@ -952,6 +952,329 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
 
     #endregion
 
+    #region Object Matching Rules
+
+    /// <summary>
+    /// Gets all object matching rules for a Connected System Object Type.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="objectTypeId">The unique identifier of the object type.</param>
+    /// <returns>A list of object matching rules.</returns>
+    /// <response code="200">Returns the list of object matching rules.</response>
+    /// <response code="404">Connected system or object type not found.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/matching-rules", Name = "GetObjectMatchingRules")]
+    [ProducesResponseType(typeof(IEnumerable<ObjectMatchingRuleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetObjectMatchingRulesAsync(int connectedSystemId, int objectTypeId)
+    {
+        _logger.LogInformation("Getting object matching rules for connected system {SystemId}, object type {TypeId}", connectedSystemId, objectTypeId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == objectTypeId);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in connected system {connectedSystemId}."));
+
+        var rules = objectType.ObjectMatchingRules
+            .OrderBy(r => r.Order)
+            .Select(ObjectMatchingRuleDto.FromEntity)
+            .ToList();
+
+        return Ok(rules);
+    }
+
+    /// <summary>
+    /// Gets a specific object matching rule by ID.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <returns>The object matching rule.</returns>
+    /// <response code="200">Returns the object matching rule.</response>
+    /// <response code="404">Connected system or matching rule not found.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}", Name = "GetObjectMatchingRule")]
+    [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetObjectMatchingRuleAsync(int connectedSystemId, int ruleId)
+    {
+        _logger.LogInformation("Getting object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        if (rule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+
+        // Verify the rule belongs to this connected system
+        if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in connected system {connectedSystemId}."));
+
+        return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+    }
+
+    /// <summary>
+    /// Creates a new object matching rule.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="request">The rule creation request.</param>
+    /// <returns>The created object matching rule.</returns>
+    /// <response code="201">Object matching rule created successfully.</response>
+    /// <response code="400">Invalid request data.</response>
+    /// <response code="404">Connected system or referenced entities not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/matching-rules", Name = "CreateObjectMatchingRule")]
+    [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateObjectMatchingRuleAsync(int connectedSystemId, [FromBody] CreateObjectMatchingRuleRequest request)
+    {
+        _logger.LogInformation("Creating object matching rule for connected system {SystemId}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for matching rule creation");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == request.ConnectedSystemObjectTypeId);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {request.ConnectedSystemObjectTypeId} not found in connected system {connectedSystemId}."));
+
+        // Validate target MV attribute exists
+        var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
+        var targetMvAttr = mvAttributes.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId);
+        if (targetMvAttr == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.TargetMetaverseAttributeId} not found."));
+
+        // Calculate order if not specified
+        var order = request.Order ?? (objectType.ObjectMatchingRules.Count > 0
+            ? objectType.ObjectMatchingRules.Max(r => r.Order) + 1
+            : 0);
+
+        var rule = new ObjectMatchingRule
+        {
+            Order = order,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttributeId = targetMvAttr.Id,
+            TargetMetaverseAttribute = targetMvAttr
+        };
+
+        // Add sources
+        foreach (var sourceRequest in request.Sources)
+        {
+            var source = new ObjectMatchingRuleSource
+            {
+                Order = sourceRequest.Order
+            };
+
+            if (sourceRequest.ConnectedSystemAttributeId.HasValue)
+            {
+                var csAttr = objectType.Attributes.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
+                if (csAttr == null)
+                    return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
+                source.ConnectedSystemAttributeId = csAttr.Id;
+                source.ConnectedSystemAttribute = csAttr;
+            }
+            else if (sourceRequest.MetaverseAttributeId.HasValue)
+            {
+                var mvAttr = mvAttributes.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
+                if (mvAttr == null)
+                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
+                source.MetaverseAttributeId = mvAttr.Id;
+                source.MetaverseAttribute = mvAttr;
+            }
+            else
+            {
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+            }
+
+            rule.Sources.Add(source);
+        }
+
+        try
+        {
+            await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, initiatedBy);
+
+            _logger.LogInformation("Created object matching rule {RuleId} for connected system {SystemId}", rule.Id, connectedSystemId);
+
+            return CreatedAtRoute("GetObjectMatchingRule",
+                new { connectedSystemId, ruleId = rule.Id },
+                ObjectMatchingRuleDto.FromEntity(rule));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create object matching rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Updates an existing object matching rule.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <param name="request">The update request.</param>
+    /// <returns>The updated object matching rule.</returns>
+    /// <response code="200">Object matching rule updated successfully.</response>
+    /// <response code="400">Invalid request data.</response>
+    /// <response code="404">Connected system or matching rule not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}", Name = "UpdateObjectMatchingRule")]
+    [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateObjectMatchingRuleAsync(int connectedSystemId, int ruleId, [FromBody] UpdateObjectMatchingRuleRequest request)
+    {
+        _logger.LogInformation("Updating object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for matching rule update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        if (rule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+
+        // Verify the rule belongs to this connected system
+        if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in connected system {connectedSystemId}."));
+
+        // Update order if specified
+        if (request.Order.HasValue)
+            rule.Order = request.Order.Value;
+
+        // Update target MV attribute if specified
+        if (request.TargetMetaverseAttributeId.HasValue)
+        {
+            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
+            var targetMvAttr = mvAttributes.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId.Value);
+            if (targetMvAttr == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.TargetMetaverseAttributeId} not found."));
+
+            rule.TargetMetaverseAttributeId = targetMvAttr.Id;
+            rule.TargetMetaverseAttribute = targetMvAttr;
+        }
+
+        // Update sources if specified
+        if (request.Sources != null)
+        {
+            var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == rule.ConnectedSystemObjectTypeId);
+            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
+
+            // Clear existing sources and add new ones
+            rule.Sources.Clear();
+
+            foreach (var sourceRequest in request.Sources)
+            {
+                var source = new ObjectMatchingRuleSource
+                {
+                    Order = sourceRequest.Order,
+                    ObjectMatchingRuleId = rule.Id
+                };
+
+                if (sourceRequest.ConnectedSystemAttributeId.HasValue)
+                {
+                    var csAttr = objectType?.Attributes.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
+                    if (csAttr == null)
+                        return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
+                    source.ConnectedSystemAttributeId = csAttr.Id;
+                    source.ConnectedSystemAttribute = csAttr;
+                }
+                else if (sourceRequest.MetaverseAttributeId.HasValue)
+                {
+                    var mvAttr = mvAttributes.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
+                    if (mvAttr == null)
+                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
+                    source.MetaverseAttributeId = mvAttr.Id;
+                    source.MetaverseAttribute = mvAttr;
+                }
+                else
+                {
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                }
+
+                rule.Sources.Add(source);
+            }
+        }
+
+        try
+        {
+            await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
+
+            _logger.LogInformation("Updated object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+
+            return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update object matching rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Object matching rule deleted successfully.</response>
+    /// <response code="404">Connected system or matching rule not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpDelete("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}", Name = "DeleteObjectMatchingRule")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteObjectMatchingRuleAsync(int connectedSystemId, int ruleId)
+    {
+        _logger.LogInformation("Deleting object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for matching rule deletion");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        if (rule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+
+        // Verify the rule belongs to this connected system
+        if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in connected system {connectedSystemId}."));
+
+        await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, initiatedBy);
+
+        _logger.LogInformation("Deleted object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+
+        return NoContent();
+    }
+
+    #endregion
+
     #region Private Helpers
 
     /// <summary>

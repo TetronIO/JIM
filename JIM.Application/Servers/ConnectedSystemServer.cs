@@ -117,7 +117,11 @@ public class ConnectedSystemServer
             if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
                 settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
 
-            if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String && !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
+            // Apply default string values for String, DropDown, and File settings
+            if ((connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String ||
+                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.DropDown ||
+                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.File) &&
+                !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
                 settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
 
             if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
@@ -1343,6 +1347,64 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+    #endregion
+
+    #region Object Matching Rules
+    /// <summary>
+    /// Creates a new object matching rule for a Connected System Object Type.
+    /// </summary>
+    public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject initiatedBy)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates an existing object matching rule.
+    /// </summary>
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject initiatedBy)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources.
+    /// </summary>
+    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject initiatedBy)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Gets an object matching rule by ID.
+    /// </summary>
+    public async Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(id);
     }
     #endregion
 

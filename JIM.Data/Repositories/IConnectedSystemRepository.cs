@@ -222,6 +222,28 @@ public interface IConnectedSystemRepository
 
     public Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute);
 
+    #region Object Matching Rules
+    /// <summary>
+    /// Creates a new object matching rule for a Connected System Object Type.
+    /// </summary>
+    Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule);
+
+    /// <summary>
+    /// Updates an existing object matching rule.
+    /// </summary>
+    Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule);
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources.
+    /// </summary>
+    Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule);
+
+    /// <summary>
+    /// Gets an object matching rule by ID with all related entities loaded.
+    /// </summary>
+    Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id);
+    #endregion
+
     #region Connected System Deletion
     /// <summary>
     /// Deletes all Connected System Objects and their dependencies for a Connected System.

@@ -8,5 +8,6 @@ public enum ActivityTargetType
     ConnectedSystemRunProfile = 3,
     SyncRule = 4,
     MetaverseObject = 5,
-    TrustedCertificate = 6
+    TrustedCertificate = 6,
+    ObjectMatchingRule = 7
 }
