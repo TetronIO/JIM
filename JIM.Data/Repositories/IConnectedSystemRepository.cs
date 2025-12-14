@@ -112,6 +112,17 @@ public interface IConnectedSystemRepository
         ObjectMatchingRule objectMatchingRule);
 
     /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value.
+    /// Used to find PendingProvisioning CSOs during import reconciliation when the
+    /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System ID.</param>
+    /// <param name="objectTypeId">The object type ID.</param>
+    /// <param name="secondaryExternalIdValue">The secondary external ID value (e.g., DN for LDAP).</param>
+    /// <returns>The matching CSO, or null if not found.</returns>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
+
+    /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
     /// Includes Attributes.
     /// </summary>

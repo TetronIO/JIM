@@ -457,7 +457,7 @@ public class SyncImportTaskProcessor
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
 
         // find the matching import object attribute
-        var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ?? 
+        var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ??
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
         if (importObjectAttribute.IntValues.Count > 1 ||
@@ -465,28 +465,55 @@ public class SyncImportTaskProcessor
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
-        switch (externalIdAttribute.Type)
+        // First, try to find CSO by primary external ID
+        ConnectedSystemObject? cso = externalIdAttribute.Type switch
         {
-            case AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0:
-                throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value.");
-            case AttributeDataType.Text:
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]);
-            case AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0:
-                throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value.");
-            case AttributeDataType.Number:
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]);
-            case AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0:
-                throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value.");
-            case AttributeDataType.Guid:
-                return await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]);
-            case AttributeDataType.NotSet:
-            case AttributeDataType.DateTime:
-            case AttributeDataType.Binary:
-            case AttributeDataType.Reference:
-            case AttributeDataType.Boolean:
-            default:
-                throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}");
+            AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
+                throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
+            AttributeDataType.Text =>
+                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]),
+            AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0 =>
+                throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
+            AttributeDataType.Number =>
+                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]),
+            AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
+                throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
+            AttributeDataType.Guid =>
+                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]),
+            _ => throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}")
+        };
+
+        if (cso != null)
+            return cso;
+
+        // No match found by primary external ID. Check for PendingProvisioning CSOs by secondary external ID.
+        // This handles the case where a CSO was created during provisioning evaluation but the object
+        // hasn't been imported yet with its system-assigned external ID (e.g., LDAP objectGUID).
+        var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId);
+        if (secondaryExternalIdAttribute == null)
+            return null;
+
+        var secondaryIdImportAttr = connectedSystemImportObject.Attributes.SingleOrDefault(
+            csioa => csioa.Name.Equals(secondaryExternalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
+        if (secondaryIdImportAttr == null)
+            return null;
+
+        cso = secondaryExternalIdAttribute.Type switch
+        {
+            AttributeDataType.Text when secondaryIdImportAttr.StringValues.Count > 0 =>
+                await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(_connectedSystem.Id, connectedSystemObjectType.Id, secondaryIdImportAttr.StringValues[0]),
+            _ => null
+        };
+
+        // Only return PendingProvisioning CSOs - if it's already Normal, the primary ID lookup should have found it
+        if (cso != null && cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+        {
+            Log.Information("TryAndFindMatchingConnectedSystemObjectAsync: Found PendingProvisioning CSO {CsoId} by secondary external ID '{SecondaryId}'. This confirms a provisioned object.",
+                cso.Id, secondaryIdImportAttr.StringValues[0]);
+            return cso;
         }
+
+        return null;
     }
 
     private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)

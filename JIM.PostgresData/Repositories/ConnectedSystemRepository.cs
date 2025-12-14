@@ -453,6 +453,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue));
     }
 
+    /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value.
+    /// Used to find PendingProvisioning CSOs during import reconciliation when the
+    /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.
+    /// </summary>
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.MetaverseObject)
+            .SingleOrDefaultAsync(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.TypeId == objectTypeId &&
+                cso.SecondaryExternalIdAttributeId != null &&
+                cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    av.StringValue.Equals(secondaryExternalIdValue, StringComparison.OrdinalIgnoreCase)));
+    }
+
     public async Task<int> GetConnectedSystemObjectCountAsync()
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync();

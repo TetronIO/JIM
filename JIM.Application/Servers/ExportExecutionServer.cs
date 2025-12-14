@@ -429,9 +429,32 @@ public class ExportExecutionServer
         foreach (var export in batch)
         {
             export.Status = PendingExportStatus.Exported;
+
+            // For Create exports, update the CSO status from PendingProvisioning to Normal
+            if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
+            {
+                await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject);
+            }
+
             await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
             result.SuccessCount++;
             Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}", export.Id);
+        }
+    }
+
+    /// <summary>
+    /// Updates the CSO after a successful export.
+    /// For Create exports, transitions the CSO from PendingProvisioning to Normal status.
+    /// </summary>
+    private async Task UpdateCsoAfterSuccessfulExportAsync(ConnectedSystemObject cso)
+    {
+        if (cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+        {
+            cso.Status = ConnectedSystemObjectStatus.Normal;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+
+            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Updated CSO {CsoId} status from PendingProvisioning to Normal",
+                cso.Id);
         }
     }
 
@@ -474,6 +497,12 @@ public class ExportExecutionServer
             // Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc)
             foreach (var export in pendingExports)
             {
+                // For Create exports, update the CSO status from PendingProvisioning to Normal
+                if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
+                {
+                    await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject);
+                }
+
                 if (autoConfirm)
                 {
                     // Auto-confirm: delete the pending export immediately (confirmed)
@@ -602,6 +631,12 @@ public class ExportExecutionServer
     private async Task ProcessExportSuccessAsync(PendingExport export, ExportExecutionResult result)
     {
         export.Status = PendingExportStatus.Exported;
+
+        // For Create exports, update the CSO status from PendingProvisioning to Normal
+        if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
+        {
+            await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject);
+        }
 
         // For call-based exports with Create operations, we might want to keep the pending export
         // until a confirming import verifies the object was created. For now, delete on success.

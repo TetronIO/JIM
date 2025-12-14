@@ -5,7 +5,6 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
-
 namespace JIM.Application.Servers;
 
 /// <summary>
