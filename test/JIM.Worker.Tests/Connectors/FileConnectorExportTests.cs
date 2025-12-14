@@ -51,10 +51,11 @@ public class FileConnectorExportTests
         var pendingExports = new List<PendingExport>();
 
         // Act
-        _connector.Export(settingValues, pendingExports);
+        var results = _connector.Export(settingValues, pendingExports);
 
         // Assert
         Assert.That(File.Exists(_testExportPath), Is.False);
+        Assert.That(results, Is.Empty);
     }
 
     [Test]
@@ -65,11 +66,52 @@ public class FileConnectorExportTests
         var pendingExports = CreateSamplePendingExports();
 
         // Act
-        _connector.Export(settingValues, pendingExports);
+        var results = _connector.Export(settingValues, pendingExports);
 
         // Assert
         Assert.That(File.Exists(_testExportPath), Is.True);
         Assert.That(_testExportPath, Does.EndWith("export.csv"));
+        Assert.That(results, Has.Count.EqualTo(pendingExports.Count));
+    }
+
+    [Test]
+    public void Export_ReturnsSuccessResultsForAllExports()
+    {
+        // Arrange
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var pendingExports = CreateSamplePendingExports();
+
+        // Act
+        var results = _connector.Export(settingValues, pendingExports);
+
+        // Assert
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+        Assert.That(results[0].ErrorMessage, Is.Null);
+        // File-based exports don't return external IDs
+        Assert.That(results[0].ExternalId, Is.Null);
+    }
+
+    [Test]
+    public void Export_WithMultiplePendingExports_ReturnsResultsForEach()
+    {
+        // Arrange
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var pendingExports = new List<PendingExport>();
+
+        // Create 3 exports
+        for (var i = 0; i < 3; i++)
+        {
+            var exports = CreateSamplePendingExports();
+            pendingExports.AddRange(exports);
+        }
+
+        // Act
+        var results = _connector.Export(settingValues, pendingExports);
+
+        // Assert
+        Assert.That(results, Has.Count.EqualTo(3));
+        Assert.That(results.All(r => r.Success), Is.True);
     }
 
     [Test]

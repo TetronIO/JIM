@@ -328,7 +328,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         OpenImportConnection(settings.ToList(), Log.Logger);
     }
 
-    public void Export(IList<PendingExport> pendingExports)
+    public List<ExportResult> Export(IList<PendingExport> pendingExports)
     {
         if (_connection == null)
             throw new InvalidOperationException("Must call OpenExportConnection() before Export()!");
@@ -337,7 +337,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             throw new InvalidOperationException("Export settings not available. Call OpenExportConnection() first.");
 
         var export = new LdapConnectorExport(_connection, _exportSettings, Log.Logger);
-        export.Execute(pendingExports);
+        return export.Execute(pendingExports);
     }
 
     public void CloseExportConnection()

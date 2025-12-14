@@ -331,11 +331,11 @@ public class ExportExecutionServer
                         // Mark batch as executing
                         await MarkBatchAsExecutingAsync(batch);
 
-                        // Execute batch via connector
-                        connector.Export(batch);
+                        // Execute batch via connector - now returns ExportResult list
+                        var exportResults = connector.Export(batch);
 
-                        // Process results
-                        await ProcessBatchSuccessAsync(batch, result);
+                        // Process results with ExportResult data
+                        await ProcessBatchSuccessAsync(batch, exportResults, result);
 
                         processedCount += batch.Count;
                     }
@@ -370,8 +370,9 @@ public class ExportExecutionServer
                         export.LastAttemptedAt = DateTime.UtcNow;
                         await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
 
-                        connector.Export(new List<PendingExport> { export });
-                        await ProcessExportSuccessAsync(export, result);
+                        var exportResults = connector.Export(new List<PendingExport> { export });
+                        var exportResult = exportResults.Count > 0 ? exportResults[0] : ExportResult.Succeeded();
+                        await ProcessExportSuccessAsync(export, exportResult, result);
                     }
                     else
                     {
@@ -421,19 +422,30 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes a batch of successful exports.
+    /// Processes a batch of successful exports with their corresponding ExportResult data.
     /// Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc).
     /// </summary>
-    private async Task ProcessBatchSuccessAsync(List<PendingExport> batch, ExportExecutionResult result)
+    private async Task ProcessBatchSuccessAsync(List<PendingExport> batch, List<ExportResult> exportResults, ExportExecutionResult result)
     {
-        foreach (var export in batch)
+        for (var i = 0; i < batch.Count; i++)
         {
+            var export = batch[i];
+            var exportResult = i < exportResults.Count ? exportResults[i] : ExportResult.Succeeded();
+
+            if (!exportResult.Success)
+            {
+                // Export failed - mark as failed and continue
+                await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
+                result.FailedCount++;
+                continue;
+            }
+
             export.Status = PendingExportStatus.Exported;
 
-            // For Create exports, update the CSO status from PendingProvisioning to Normal
+            // For Create exports, update the CSO with the system-assigned external ID and status
             if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
             {
-                await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject);
+                await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
             }
 
             await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
@@ -444,17 +456,82 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Updates the CSO after a successful export.
-    /// For Create exports, transitions the CSO from PendingProvisioning to Normal status.
+    /// For Create exports, transitions the CSO from PendingProvisioning to Normal status
+    /// and populates the external ID attribute with the system-assigned value.
     /// </summary>
-    private async Task UpdateCsoAfterSuccessfulExportAsync(ConnectedSystemObject cso)
+    private async Task UpdateCsoAfterSuccessfulExportAsync(ConnectedSystemObject cso, ExportResult? exportResult = null)
     {
+        var needsUpdate = false;
+
+        // Update status from PendingProvisioning to Normal
         if (cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
         {
             cso.Status = ConnectedSystemObjectStatus.Normal;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+            needsUpdate = true;
+            Log.Debug("UpdateCsoAfterSuccessfulExportAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal", cso.Id);
+        }
 
-            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Updated CSO {CsoId} status from PendingProvisioning to Normal",
-                cso.Id);
+        // Populate external ID attribute if provided in the export result
+        if (exportResult != null && !string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
+        {
+            // Find or create the external ID attribute value
+            var externalIdAttrValue = cso.AttributeValues
+                .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+
+            if (externalIdAttrValue == null)
+            {
+                // Create new attribute value for external ID
+                externalIdAttrValue = new ConnectedSystemObjectAttributeValue
+                {
+                    ConnectedSystemObject = cso,
+                    AttributeId = cso.ExternalIdAttributeId
+                };
+                cso.AttributeValues.Add(externalIdAttrValue);
+            }
+
+            // Set the external ID value - try to parse as GUID first, then string
+            if (Guid.TryParse(exportResult.ExternalId, out var guidValue))
+            {
+                externalIdAttrValue.GuidValue = guidValue;
+                externalIdAttrValue.StringValue = null;
+            }
+            else
+            {
+                externalIdAttrValue.StringValue = exportResult.ExternalId;
+                externalIdAttrValue.GuidValue = null;
+            }
+
+            needsUpdate = true;
+            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId}",
+                cso.Id, exportResult.ExternalId);
+        }
+
+        // Update secondary external ID if provided
+        if (exportResult != null && !string.IsNullOrEmpty(exportResult.SecondaryExternalId) && cso.SecondaryExternalIdAttributeId.HasValue)
+        {
+            var secondaryExternalIdAttrValue = cso.AttributeValues
+                .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
+
+            if (secondaryExternalIdAttrValue == null)
+            {
+                secondaryExternalIdAttrValue = new ConnectedSystemObjectAttributeValue
+                {
+                    ConnectedSystemObject = cso,
+                    AttributeId = cso.SecondaryExternalIdAttributeId.Value
+                };
+                cso.AttributeValues.Add(secondaryExternalIdAttrValue);
+            }
+
+            secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
+            needsUpdate = true;
+            Log.Debug("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
+                cso.Id, exportResult.SecondaryExternalId);
+        }
+
+        if (needsUpdate)
+        {
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Updated CSO {CsoId}", cso.Id);
         }
     }
 
@@ -483,7 +560,7 @@ public class ExportExecutionServer
             });
 
             // File-based export - execute all at once (file connectors typically batch internally)
-            connector.Export(connectedSystem.SettingValues, pendingExports);
+            var exportResults = connector.Export(connectedSystem.SettingValues, pendingExports);
 
             // Check if the connector supports auto-confirm and the setting is enabled
             var autoConfirm = false;
@@ -495,12 +572,22 @@ public class ExportExecutionServer
             }
 
             // Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc)
-            foreach (var export in pendingExports)
+            for (var i = 0; i < pendingExports.Count; i++)
             {
+                var export = pendingExports[i];
+                var exportResult = i < exportResults.Count ? exportResults[i] : ExportResult.Succeeded();
+
+                if (!exportResult.Success)
+                {
+                    await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
+                    result.FailedCount++;
+                    continue;
+                }
+
                 // For Create exports, update the CSO status from PendingProvisioning to Normal
                 if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
                 {
-                    await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject);
+                    await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
                 }
 
                 if (autoConfirm)
@@ -515,9 +602,8 @@ public class ExportExecutionServer
                     export.LastAttemptedAt = DateTime.UtcNow;
                     await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
                 }
+                result.SuccessCount++;
             }
-
-            result.SuccessCount = pendingExports.Count;
             Log.Information("ExecuteUsingFilesWithBatchingAsync: Exported {Count} changes to file for {SystemName}",
                 pendingExports.Count, connectedSystem.Name);
         }
@@ -626,16 +712,23 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes a successful export execution.
+    /// Processes a successful export execution with ExportResult data.
     /// </summary>
-    private async Task ProcessExportSuccessAsync(PendingExport export, ExportExecutionResult result)
+    private async Task ProcessExportSuccessAsync(PendingExport export, ExportResult exportResult, ExportExecutionResult result)
     {
+        if (!exportResult.Success)
+        {
+            await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
+            result.FailedCount++;
+            return;
+        }
+
         export.Status = PendingExportStatus.Exported;
 
-        // For Create exports, update the CSO status from PendingProvisioning to Normal
+        // For Create exports, update the CSO with external ID and status
         if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
         {
-            await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject);
+            await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
         }
 
         // For call-based exports with Create operations, we might want to keep the pending export

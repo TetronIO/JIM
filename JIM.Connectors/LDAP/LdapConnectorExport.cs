@@ -28,21 +28,24 @@ internal class LdapConnectorExport
         _logger = logger;
     }
 
-    internal void Execute(IList<PendingExport> pendingExports)
+    internal List<ExportResult> Execute(IList<PendingExport> pendingExports)
     {
         _logger.Debug("LdapConnectorExport.Execute: Starting export of {Count} pending exports", pendingExports.Count);
+
+        var results = new List<ExportResult>();
 
         if (pendingExports.Count == 0)
         {
             _logger.Information("LdapConnectorExport.Execute: No pending exports to process");
-            return;
+            return results;
         }
 
         foreach (var pendingExport in pendingExports)
         {
             try
             {
-                ProcessPendingExport(pendingExport);
+                var result = ProcessPendingExport(pendingExport);
+                results.Add(result);
             }
             catch (Exception ex)
             {
@@ -63,27 +66,33 @@ internal class LdapConnectorExport
                     _logger.Warning("LdapConnectorExport.Execute: Pending export {Id} has exceeded max retries and is now Failed",
                         pendingExport.Id);
                 }
+
+                results.Add(ExportResult.Failed(ex.Message));
             }
         }
 
         _logger.Information("LdapConnectorExport.Execute: Completed export processing of {Count} pending exports", pendingExports.Count);
+        return results;
     }
 
-    private void ProcessPendingExport(PendingExport pendingExport)
+    private ExportResult ProcessPendingExport(PendingExport pendingExport)
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
 
+        ExportResult result;
         switch (pendingExport.ChangeType)
         {
             case PendingExportChangeType.Create:
-                ProcessCreate(pendingExport);
+                result = ProcessCreate(pendingExport);
                 break;
             case PendingExportChangeType.Update:
                 ProcessUpdate(pendingExport);
+                result = ExportResult.Succeeded();
                 break;
             case PendingExportChangeType.Delete:
                 ProcessDelete(pendingExport);
+                result = ExportResult.Succeeded();
                 break;
             default:
                 throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}");
@@ -92,9 +101,10 @@ internal class LdapConnectorExport
         pendingExport.Status = PendingExportStatus.Exported;
         _logger.Debug("LdapConnectorExport.ProcessPendingExport: Successfully processed {ChangeType} for {Id}",
             pendingExport.ChangeType, pendingExport.Id);
+        return result;
     }
 
-    private void ProcessCreate(PendingExport pendingExport)
+    private ExportResult ProcessCreate(PendingExport pendingExport)
     {
         // For create, we need to build the DN and all attributes
         var dn = GetDistinguishedNameForCreate(pendingExport);
@@ -142,6 +152,57 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
+
+        // After successful create, fetch the system-assigned objectGUID
+        var objectGuid = FetchObjectGuid(dn);
+        if (objectGuid != null)
+        {
+            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
+            return ExportResult.Succeeded(objectGuid, dn);
+        }
+
+        // objectGUID not available, return success without external ID
+        return ExportResult.Succeeded(null, dn);
+    }
+
+    /// <summary>
+    /// Fetches the objectGUID for a newly created object.
+    /// </summary>
+    private string? FetchObjectGuid(string dn)
+    {
+        try
+        {
+            var searchRequest = new SearchRequest(
+                dn,
+                "(objectClass=*)",
+                SearchScope.Base,
+                "objectGUID");
+
+            var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest);
+            if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
+            {
+                _logger.Warning("LdapConnectorExport.FetchObjectGuid: Failed to fetch objectGUID for '{Dn}'", dn);
+                return null;
+            }
+
+            var entry = searchResponse.Entries[0];
+            if (entry.Attributes.Contains("objectGUID"))
+            {
+                var guidBytes = entry.Attributes["objectGUID"][0] as byte[];
+                if (guidBytes != null && guidBytes.Length == 16)
+                {
+                    var guid = new Guid(guidBytes);
+                    return guid.ToString();
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "LdapConnectorExport.FetchObjectGuid: Error fetching objectGUID for '{Dn}'", dn);
+            return null;
+        }
     }
 
     private void ProcessUpdate(PendingExport pendingExport)
