@@ -564,6 +564,18 @@ END `$`$;
         else {
             Write-Host "  ⚠ Could not configure object matching rule" -ForegroundColor Yellow
         }
+
+        # Restart jim.worker to pick up schema changes (SQL modifications above)
+        Write-Host "  Restarting JIM.Worker to reload schema..." -ForegroundColor Gray
+        docker restart jim.worker > $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ JIM.Worker restarted" -ForegroundColor Green
+            # Brief wait for worker to be ready
+            Start-Sleep -Seconds 3
+        }
+        else {
+            Write-Host "  ⚠ Failed to restart JIM.Worker" -ForegroundColor Yellow
+        }
     }
     else {
         Write-Host "  ⚠ Sync rules not found, skipping attribute mappings" -ForegroundColor Yellow
