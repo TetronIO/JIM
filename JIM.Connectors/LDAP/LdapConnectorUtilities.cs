@@ -69,21 +69,17 @@ internal static class LdapConnectorUtilities
 
         var value = entry.Attributes[attributeName][0];
 
-        // LDAP returns DateTime values as strings in GeneralizedTime format (yyyyMMddHHmmss.fZ)
+        // LDAP returns DateTime values as strings in GeneralizedTime format (RFC 4517)
+        // Format: yyyyMMddHHmmss[.fraction][Z|±hhmm]
         if (value is string stringValue)
         {
-            // Handle LDAP GeneralizedTime format: yyyyMMddHHmmss.fZ
-            // Common formats: "20231215143000.0Z" or "20231215143000Z"
-            if (DateTime.TryParseExact(stringValue.TrimEnd('Z'),
-                new[] { "yyyyMMddHHmmss.f", "yyyyMMddHHmmss" },
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal,
-                out var parsedDate))
-            {
-                return parsedDate.ToUniversalTime();
-            }
-            // Fallback: try standard parsing
-            if (DateTime.TryParse(stringValue, out parsedDate))
+            var result = ParseLdapGeneralizedTime(stringValue);
+            if (result.HasValue)
+                return result;
+
+            // Fallback: try standard ISO 8601 parsing
+            if (DateTime.TryParse(stringValue, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedDate))
             {
                 return parsedDate;
             }
@@ -96,6 +92,93 @@ internal static class LdapConnectorUtilities
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Parses LDAP GeneralizedTime format (RFC 4517).
+    /// Supports: yyyyMMddHHmmss[.fraction][Z|±hhmm|±hh]
+    /// Examples: "20231215143000Z", "20231215143000.123456Z", "20231215143000+0530", "20231215143000-05"
+    /// </summary>
+    private static DateTime? ParseLdapGeneralizedTime(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length < 14)
+            return null;
+
+        // Extract the base datetime part (yyyyMMddHHmmss)
+        var basePart = value[..14];
+        var remaining = value[14..];
+
+        if (!DateTime.TryParseExact(basePart, "yyyyMMddHHmmss",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var dateTime))
+        {
+            return null;
+        }
+
+        // Handle fractional seconds and timezone
+        var fractionTicks = 0L;
+        var offset = TimeSpan.Zero;
+        var isUtc = false;
+
+        if (remaining.Length > 0)
+        {
+            // Handle fractional seconds (starts with '.')
+            if (remaining[0] == '.')
+            {
+                var fractionEnd = 1;
+                while (fractionEnd < remaining.Length && char.IsDigit(remaining[fractionEnd]))
+                    fractionEnd++;
+
+                var fractionStr = remaining[1..fractionEnd];
+                // Pad or truncate to 7 digits for .NET ticks precision
+                fractionStr = fractionStr.PadRight(7, '0')[..7];
+                if (long.TryParse(fractionStr, out fractionTicks))
+                {
+                    // fractionTicks is in 100-nanosecond units
+                }
+                remaining = remaining[fractionEnd..];
+            }
+
+            // Handle timezone: Z, +hhmm, -hhmm, +hh, -hh
+            if (remaining.Length > 0)
+            {
+                if (remaining == "Z")
+                {
+                    isUtc = true;
+                }
+                else if (remaining[0] == '+' || remaining[0] == '-')
+                {
+                    var sign = remaining[0] == '+' ? 1 : -1;
+                    var tzPart = remaining[1..];
+
+                    int hours = 0, minutes = 0;
+                    if (tzPart.Length >= 2 && int.TryParse(tzPart[..2], out hours))
+                    {
+                        if (tzPart.Length >= 4 && int.TryParse(tzPart[2..4], out minutes))
+                        {
+                            // Format: ±hhmm
+                        }
+                        // Format: ±hh (minutes remain 0)
+                        offset = new TimeSpan(sign * hours, sign * minutes, 0);
+                        isUtc = true; // Has explicit timezone
+                    }
+                }
+            }
+        }
+
+        // Add fractional ticks
+        dateTime = dateTime.AddTicks(fractionTicks);
+
+        // Convert to UTC
+        if (isUtc)
+        {
+            // Subtract offset to get UTC (if +0530, subtract 5:30 to get UTC)
+            dateTime = dateTime - offset;
+            return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+        }
+
+        // No timezone specified - assume UTC (most LDAP servers use UTC)
+        return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
     }
 
     internal static List<string>? GetEntryAttributeStringValues(SearchResultEntry entry, string attributeName)

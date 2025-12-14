@@ -402,6 +402,14 @@ public class SyncFullSyncTaskProcessor
                 ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
             }
 
+            // Collect changed attributes BEFORE applying pending changes (we need them for export evaluation)
+            var changedAttributes = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions
+                .Concat(connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals)
+                .ToList();
+
+            // Apply pending attribute value changes to the MVO
+            ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
+
             // have we created a new MVO that needs persisting?
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
             {
@@ -409,10 +417,19 @@ public class SyncFullSyncTaskProcessor
                 // After save, EF has assigned an Id to the MVO - update the CSO's FK
                 connectedSystemObject.MetaverseObjectId = connectedSystemObject.MetaverseObject.Id;
             }
+            else
+            {
+                // Existing MVO - update it if there were changes
+                await _jim.Metaverse.UpdateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
+            }
 
             // Q1 Decision: Evaluate export rules immediately when MVO changes
             // This creates PendingExports for any other connected systems that need to be updated
-            await EvaluateOutboundExportsAsync(connectedSystemObject.MetaverseObject);
+            // Note: Must be done AFTER MVO is saved so we have a valid ID for the PendingExport FK
+            if (changedAttributes.Count > 0)
+            {
+                await EvaluateOutboundExportsAsync(connectedSystemObject.MetaverseObject, changedAttributes);
+            }
         }
     }
 
@@ -421,20 +438,10 @@ public class SyncFullSyncTaskProcessor
     /// Creates PendingExports for any connected systems that need to be updated.
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
     /// </summary>
-    private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo)
+    /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
+    /// <param name="changedAttributes">The list of attribute values that changed.</param>
+    private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
-        // Get the changed attributes from the MVO's pending changes
-        var changedAttributes = mvo.PendingAttributeValueAdditions.ToList();
-
-        if (changedAttributes.Count == 0 && mvo.PendingAttributeValueRemovals.Count == 0)
-        {
-            // No attribute changes to export
-            return;
-        }
-
-        // Include removals in changed attributes for export consideration
-        changedAttributes.AddRange(mvo.PendingAttributeValueRemovals);
-
         // Evaluate export rules, passing the current connected system for Q3 circular prevention
         var pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
             mvo,
@@ -596,6 +603,41 @@ public class SyncFullSyncTaskProcessor
             UnresolvedReferenceValue = connectedSystemObjectAttributeValue.ConnectedSystemObject,
             UnresolvedReferenceValueId = connectedSystemObjectAttributeValue.ConnectedSystemObject.Id
         });
+    }
+
+    /// <summary>
+    /// Applies pending attribute value changes to a Metaverse Object.
+    /// This moves values from PendingAttributeValueAdditions to AttributeValues
+    /// and removes values listed in PendingAttributeValueRemovals.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object to apply pending changes to.</param>
+    private static void ApplyPendingMetaverseObjectAttributeChanges(MetaverseObject mvo)
+    {
+        var addCount = mvo.PendingAttributeValueAdditions.Count;
+        var removeCount = mvo.PendingAttributeValueRemovals.Count;
+
+        // If there are no pending changes, nothing to do
+        if (addCount == 0 && removeCount == 0)
+            return;
+
+        // Apply removals first
+        foreach (var removal in mvo.PendingAttributeValueRemovals)
+        {
+            mvo.AttributeValues.Remove(removal);
+        }
+
+        // Apply additions
+        foreach (var addition in mvo.PendingAttributeValueAdditions)
+        {
+            mvo.AttributeValues.Add(addition);
+        }
+
+        // Clear the pending lists now that changes have been applied
+        mvo.PendingAttributeValueRemovals.Clear();
+        mvo.PendingAttributeValueAdditions.Clear();
+
+        Log.Verbose("ApplyPendingMetaverseObjectAttributeChanges: Applied {AddCount} additions and {RemoveCount} removals to MVO {MvoId}",
+            addCount, removeCount, mvo.Id);
     }
 
     /// <summary>

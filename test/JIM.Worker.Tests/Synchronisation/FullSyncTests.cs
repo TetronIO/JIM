@@ -690,46 +690,48 @@ public class FullSyncTests
         var projectedMvo = ConnectedSystemObjectsData[0].MetaverseObject;
         Assert.That(projectedMvo, Is.Not.Null, "Expected CSO to have projected to an MVO.");
 
-        // verify pending attribute values were created for Text (DisplayName)
-        var pendingDisplayName = projectedMvo.PendingAttributeValueAdditions.Where(av =>
+        // verify attribute values were applied to MVO for Text (DisplayName)
+        // Note: After sync, pending values are applied to AttributeValues and pending lists are cleared
+        var displayName = projectedMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
-        Assert.That(pendingDisplayName, Is.Not.Empty, "Expected pending DisplayName attribute value to be created.");
-        Assert.That(pendingDisplayName.First().StringValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME).StringValue),
+        Assert.That(displayName, Is.Not.Empty, "Expected DisplayName attribute value to be applied to MVO.");
+        Assert.That(displayName.First().StringValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME).StringValue),
             "Expected DisplayName to match CSO value.");
 
-        // verify pending attribute values were created for DateTime (StartDate)
-        var pendingStartDate = projectedMvo.PendingAttributeValueAdditions.Where(av =>
+        // verify attribute values were applied for DateTime (StartDate)
+        var startDate = projectedMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.EmployeeStartDate).ToList();
-        Assert.That(pendingStartDate, Is.Not.Empty, "Expected pending EmployeeStartDate attribute value to be created.");
-        Assert.That(pendingStartDate.First().DateTimeValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.START_DATE).DateTimeValue),
+        Assert.That(startDate, Is.Not.Empty, "Expected EmployeeStartDate attribute value to be applied to MVO.");
+        Assert.That(startDate.First().DateTimeValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.START_DATE).DateTimeValue),
             "Expected StartDate to match CSO value.");
 
-        // verify pending attribute values were created for Number (EmployeeNumber)
-        var pendingEmployeeNumber = projectedMvo.PendingAttributeValueAdditions.Where(av =>
+        // verify attribute values were applied for Number (EmployeeNumber)
+        var employeeNumber = projectedMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
-        Assert.That(pendingEmployeeNumber, Is.Not.Empty, "Expected pending EmployeeNumber attribute value to be created.");
-        Assert.That(pendingEmployeeNumber.First().IntValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER).IntValue),
+        Assert.That(employeeNumber, Is.Not.Empty, "Expected EmployeeNumber attribute value to be applied to MVO.");
+        Assert.That(employeeNumber.First().IntValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER).IntValue),
             "Expected EmployeeNumber to match CSO value.");
 
-        // verify pending attribute values were created for Guid (HrId)
-        var pendingHrId = projectedMvo.PendingAttributeValueAdditions.Where(av =>
+        // verify attribute values were applied for Guid (HrId)
+        var hrId = projectedMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.HrId).ToList();
-        Assert.That(pendingHrId, Is.Not.Empty, "Expected pending HrId attribute value to be created.");
-        Assert.That(pendingHrId.First().GuidValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.HR_ID).GuidValue),
+        Assert.That(hrId, Is.Not.Empty, "Expected HrId attribute value to be applied to MVO.");
+        Assert.That(hrId.First().GuidValue, Is.EqualTo(ConnectedSystemObjectsData[0].AttributeValues.Single(a => a.AttributeId == (int)MockSourceSystemAttributeNames.HR_ID).GuidValue),
             "Expected HrId to match CSO value.");
 
-        // verify pending attribute values were created for Reference (Manager) on cso2's MVO
+        // verify pending lists are cleared after sync (values have been applied)
+        Assert.That(projectedMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
+        Assert.That(projectedMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
+
+        // verify attribute values for Reference (Manager) on cso2's MVO
         // Note: cso1 doesn't have a Manager attribute, so we check cso2's MVO instead.
-        // Also, Reference attributes only flow when the referenced CSO is already joined to an MVO,
-        // so for this test scenario, the Manager reference may not flow yet as cso1's MVO was just created.
-        // This test verifies that the Reference attribute flow mapping is correctly configured,
-        // but the actual reference resolution happens when the referenced object is joined.
+        // Reference attributes only flow when the referenced CSO is already joined to an MVO.
         var cso2Mvo = ConnectedSystemObjectsData[1].MetaverseObject;
         if (cso2Mvo != null)
         {
-            // If cso2 was also projected, check that Manager would be pending
+            // If cso2 was also projected, check if Manager was applied
             // (though it may be empty if cso1's MVO wasn't joined when cso2 was processed)
-            var pendingManager = cso2Mvo.PendingAttributeValueAdditions.Where(av =>
+            var manager = cso2Mvo.AttributeValues.Where(av =>
                 av.AttributeId == (int)MockMetaverseAttributeName.Manager).ToList();
             // Reference flow requires the referenced CSO to already have a MetaverseObject,
             // which may not be the case during initial projection sync, so we don't assert Is.Not.Empty
@@ -802,10 +804,15 @@ public class FullSyncTests
         var joinedMvo = MetaverseObjectsData[0];
         Assert.That(joinedMvo, Is.Not.Null, "Expected to find the MVO.");
 
-        // verify a pending removal was created for DisplayName that exists on MVO but not on CSO
-        var pendingRemoval = joinedMvo.PendingAttributeValueRemovals.Where(av =>
+        // verify DisplayName was removed from MVO (because it was removed from CSO)
+        // After sync, pending removals are applied and the attribute should no longer exist on the MVO
+        var displayNameOnMvo = joinedMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
-        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for DisplayName attribute value.");
+        Assert.That(displayNameOnMvo, Is.Empty, "Expected DisplayName to be removed from MVO after CSO attribute was deleted.");
+
+        // verify pending lists are cleared after sync
+        Assert.That(joinedMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
+        Assert.That(joinedMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
     }
 
     /// <summary>
@@ -1411,19 +1418,17 @@ public class FullSyncTests
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(existingMvo.Id), "Expected CSO to join to the existing MVO.");
         Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected JoinType to be Joined.");
 
-        // verify a pending removal was created for the old DisplayName value
-        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+        // verify DisplayName was updated to the new value (old value removed, new value applied)
+        // After sync, pending changes are applied to AttributeValues
+        var updatedDisplayName = existingMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
-        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for old DisplayName value.");
-        Assert.That(pendingRemoval.First().StringValue, Is.EqualTo(originalDisplayNameValue),
-            "Expected pending removal to contain the original DisplayName value.");
+        Assert.That(updatedDisplayName, Is.Not.Empty, "Expected MVO to have DisplayName after sync.");
+        Assert.That(updatedDisplayName.First().StringValue, Is.EqualTo(newDisplayNameValue),
+            "Expected MVO DisplayName to be updated to the new value.");
 
-        // verify a pending addition was created for the new DisplayName value
-        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
-            av.AttributeId == (int)MockMetaverseAttributeName.DisplayName).ToList();
-        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for new DisplayName value.");
-        Assert.That(pendingAddition.First().StringValue, Is.EqualTo(newDisplayNameValue),
-            "Expected pending addition to contain the new DisplayName value.");
+        // verify pending lists are cleared after sync
+        Assert.That(existingMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
+        Assert.That(existingMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
     }
 
     /// <summary>
@@ -1500,12 +1505,17 @@ public class FullSyncTests
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(existingMvo.Id), "Expected CSO to join to the existing MVO.");
         Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected JoinType to be Joined.");
 
-        // verify a pending addition was created for EmployeeStartDate (new attribute flowing to MVO)
-        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
+        // verify EmployeeStartDate was added to MVO (new attribute that flowed from CSO)
+        // After sync, pending additions are applied to AttributeValues
+        var addedStartDate = existingMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.EmployeeStartDate).ToList();
-        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for EmployeeStartDate value.");
-        Assert.That(pendingAddition.First().DateTimeValue, Is.EqualTo(csoStartDate.DateTimeValue),
-            "Expected pending addition to contain the CSO START_DATE value.");
+        Assert.That(addedStartDate, Is.Not.Empty, "Expected EmployeeStartDate to be added to MVO.");
+        Assert.That(addedStartDate.First().DateTimeValue, Is.EqualTo(csoStartDate.DateTimeValue),
+            "Expected MVO EmployeeStartDate to match CSO START_DATE value.");
+
+        // verify pending lists are cleared after sync
+        Assert.That(existingMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
+        Assert.That(existingMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
     }
 
     /// <summary>
@@ -1661,19 +1671,17 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify a pending removal was created for the old EmployeeNumber value
-        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+        // verify EmployeeNumber was updated to the new value (old value removed, new value applied)
+        // After sync, pending changes are applied to AttributeValues
+        var updatedEmployeeNumber = existingMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
-        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for old EmployeeNumber value.");
-        Assert.That(pendingRemoval.First().IntValue, Is.EqualTo(originalEmployeeNumberValue),
-            "Expected pending removal to contain the original EmployeeNumber value.");
+        Assert.That(updatedEmployeeNumber, Is.Not.Empty, "Expected MVO to have EmployeeNumber after sync.");
+        Assert.That(updatedEmployeeNumber.First().IntValue, Is.EqualTo(newEmployeeNumberValue),
+            "Expected MVO EmployeeNumber to be updated to the new value.");
 
-        // verify a pending addition was created for the new EmployeeNumber value
-        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
-            av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
-        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for new EmployeeNumber value.");
-        Assert.That(pendingAddition.First().IntValue, Is.EqualTo(newEmployeeNumberValue),
-            "Expected pending addition to contain the new EmployeeNumber value.");
+        // verify pending lists are cleared after sync
+        Assert.That(existingMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
+        Assert.That(existingMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
     }
 
     /// <summary>
@@ -1746,19 +1754,17 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify a pending removal was created for the old HrId value
-        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+        // verify HrId was updated to the new value (old value removed, new value applied)
+        // After sync, pending changes are applied to AttributeValues
+        var updatedHrId = existingMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.HrId).ToList();
-        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for old HrId value.");
-        Assert.That(pendingRemoval.First().GuidValue, Is.EqualTo(originalHrIdValue),
-            "Expected pending removal to contain the original HrId value.");
+        Assert.That(updatedHrId, Is.Not.Empty, "Expected MVO to have HrId after sync.");
+        Assert.That(updatedHrId.First().GuidValue, Is.EqualTo(newHrIdValue),
+            "Expected MVO HrId to be updated to the new value.");
 
-        // verify a pending addition was created for the new HrId value
-        var pendingAddition = existingMvo.PendingAttributeValueAdditions.Where(av =>
-            av.AttributeId == (int)MockMetaverseAttributeName.HrId).ToList();
-        Assert.That(pendingAddition, Is.Not.Empty, "Expected pending addition for new HrId value.");
-        Assert.That(pendingAddition.First().GuidValue, Is.EqualTo(newHrIdValue),
-            "Expected pending addition to contain the new HrId value.");
+        // verify pending lists are cleared after sync
+        Assert.That(existingMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
+        Assert.That(existingMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
     }
 
     /// <summary>
@@ -1828,10 +1834,15 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify a pending removal was created for EmployeeNumber
-        var pendingRemoval = existingMvo.PendingAttributeValueRemovals.Where(av =>
+        // verify EmployeeNumber was removed from MVO (because it was removed from CSO)
+        // After sync, pending removals are applied and the attribute should no longer exist on the MVO
+        var employeeNumberOnMvo = existingMvo.AttributeValues.Where(av =>
             av.AttributeId == (int)MockMetaverseAttributeName.EmployeeNumber).ToList();
-        Assert.That(pendingRemoval, Is.Not.Empty, "Expected pending removal for EmployeeNumber attribute value.");
+        Assert.That(employeeNumberOnMvo, Is.Empty, "Expected EmployeeNumber to be removed from MVO after CSO attribute was deleted.");
+
+        // verify pending lists are cleared after sync
+        Assert.That(existingMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
+        Assert.That(existingMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
     }
 
     #region MVO Deletion Rules Tests
