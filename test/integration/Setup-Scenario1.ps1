@@ -497,53 +497,40 @@ END `$`$;
             Write-Host "  ⚠ Failed to configure export mappings" -ForegroundColor Yellow
         }
 
-        # Add join criteria (object matching) for import rule
-        Write-Host "  Configuring join criteria..." -ForegroundColor Gray
+        # Add object matching rule for CSV object type (how to match CSOs to existing MVOs during import)
+        Write-Host "  Configuring object matching rule..." -ForegroundColor Gray
 
-        $joinCriteriaSql = @"
--- Join criteria for import sync rule (how to match CSOs to existing MVOs)
-DO `$`$
-DECLARE
-    mapping_id INT;
-    csv_employeeid_attr_id INT;
-    mv_employeeid_attr_id INT;
-BEGIN
-    -- Get attribute IDs for employeeId (CSV) and Employee ID (Metaverse)
-    SELECT ca."Id" INTO csv_employeeid_attr_id
-    FROM "ConnectedSystemAttributes" ca
-    WHERE ca."ConnectedSystemObjectTypeId" = $($csvUserType.id) AND ca."Name" = 'employeeId';
+        # Get attribute IDs
+        $csvEmployeeIdAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'employeeId' }
 
-    SELECT ma."Id" INTO mv_employeeid_attr_id
-    FROM "MetaverseAttributes" ma
-    WHERE ma."Name" = 'Employee ID';
+        # Get MV attributes
+        $mvAttributes = Invoke-JIMApi -Endpoint '/api/v1/metaverse/attributes'
+        $mvEmployeeIdAttr = $mvAttributes | Where-Object { $_.name -eq 'Employee ID' }
 
-    IF csv_employeeid_attr_id IS NOT NULL AND mv_employeeid_attr_id IS NOT NULL THEN
-        -- Check if join criteria already exists
-        IF NOT EXISTS (
-            SELECT 1 FROM "SyncRuleMappings" srm
-            JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
-            WHERE srm."ObjectMatchingSynchronisationRuleId" = $($importRule.id)
-              AND srm."TargetMetaverseAttributeId" = mv_employeeid_attr_id
-              AND srms."ConnectedSystemAttributeId" = csv_employeeid_attr_id
-        ) THEN
-            -- Create join criteria: Match on employeeId = Employee ID
-            INSERT INTO "SyncRuleMappings" ("Created", "Order", "ObjectMatchingSynchronisationRuleId", "Type", "TargetMetaverseAttributeId")
-            VALUES (NOW(), 0, $($importRule.id), 2, mv_employeeid_attr_id)
-            RETURNING "Id" INTO mapping_id;
+        if ($csvEmployeeIdAttr -and $mvEmployeeIdAttr) {
+            # Check if matching rule already exists
+            $existingRules = Get-JIMMatchingRule -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id
+            $existingRule = $existingRules | Where-Object {
+                $_.sources[0].connectedSystemAttributeId -eq $csvEmployeeIdAttr.id -and
+                $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id
+            }
 
-            INSERT INTO "SyncRuleMappingSources" ("Order", "ConnectedSystemAttributeId", "SyncRuleMappingId")
-            VALUES (0, csv_employeeid_attr_id, mapping_id);
-        END IF;
-    END IF;
-END `$`$;
-"@
+            if (-not $existingRule) {
+                # Create object matching rule: employeeId → Employee ID
+                New-JIMMatchingRule `
+                    -ConnectedSystemId $csvSystem.id `
+                    -ObjectTypeId $csvUserType.id `
+                    -SourceAttributeId $csvEmployeeIdAttr.id `
+                    -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
 
-        $joinCriteriaSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ Join criteria configured" -ForegroundColor Green
+                Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  Object matching rule already exists" -ForegroundColor Gray
+            }
         }
         else {
-            Write-Host "  ⚠ Failed to configure join criteria" -ForegroundColor Yellow
+            Write-Host "  ⚠ Could not find required attributes for matching rule" -ForegroundColor Yellow
         }
     }
     else {
