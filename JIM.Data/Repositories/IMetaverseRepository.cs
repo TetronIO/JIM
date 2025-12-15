@@ -100,5 +100,23 @@ public interface IMetaverseRepository
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id);
 
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);
+
+    /// <summary>
+    /// Creates a new Metaverse Attribute.
+    /// </summary>
+    /// <param name="attribute">The attribute to create.</param>
+    public Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute);
+
+    /// <summary>
+    /// Updates an existing Metaverse Attribute.
+    /// </summary>
+    /// <param name="attribute">The attribute to update.</param>
+    public Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute);
+
+    /// <summary>
+    /// Deletes a Metaverse Attribute.
+    /// </summary>
+    /// <param name="attribute">The attribute to delete.</param>
+    public Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute);
     #endregion
 }

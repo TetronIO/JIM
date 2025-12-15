@@ -105,6 +105,24 @@ public class MetaverseRepository : IMetaverseRepository
     {
         return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);
     }
+
+    public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
+    {
+        Repository.Database.MetaverseAttributes.Add(attribute);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute)
+    {
+        Repository.Database.Update(attribute);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute)
+    {
+        Repository.Database.MetaverseAttributes.Remove(attribute);
+        await Repository.Database.SaveChangesAsync();
+    }
     #endregion
 
     #region metaverse objects

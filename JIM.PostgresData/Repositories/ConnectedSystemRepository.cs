@@ -191,6 +191,48 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
     #endregion
 
+    #region Object Types and Attributes
+    /// <summary>
+    /// Gets a Connected System Object Type by ID.
+    /// </summary>
+    public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemObjectTypes
+            .Include(ot => ot.Attributes)
+            .Include(ot => ot.ConnectedSystem)
+            .SingleOrDefaultAsync(ot => ot.Id == id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Object Type.
+    /// </summary>
+    public async Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType)
+    {
+        Repository.Database.Update(objectType);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Gets a Connected System Attribute by ID.
+    /// </summary>
+    public async Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemAttributes
+            .Include(a => a.ConnectedSystemObjectType)
+                .ThenInclude(ot => ot.ConnectedSystem)
+            .SingleOrDefaultAsync(a => a.Id == id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Attribute.
+    /// </summary>
+    public async Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        Repository.Database.Update(attribute);
+        await Repository.Database.SaveChangesAsync();
+    }
+    #endregion
+
     #region Object Matching Rules
     /// <summary>
     /// Creates a new object matching rule for a Connected System Object Type.
@@ -1203,6 +1245,70 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         Repository.Database.Remove(syncRule);
+        await Repository.Database.SaveChangesAsync();
+    }
+    #endregion
+
+    #region Sync Rule Mappings
+    /// <summary>
+    /// Gets all mappings for a sync rule.
+    /// </summary>
+    public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Include(m => m.TargetConnectedSystemAttribute)
+            .Where(m => m.SyncRule!.Id == syncRuleId)
+            .OrderBy(m => m.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets a specific sync rule mapping by ID.
+    /// </summary>
+    public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .Include(m => m.SyncRule)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Include(m => m.TargetConnectedSystemAttribute)
+            .SingleOrDefaultAsync(m => m.Id == id);
+    }
+
+    /// <summary>
+    /// Creates a new sync rule mapping.
+    /// </summary>
+    public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping)
+    {
+        Repository.Database.SyncRuleMappings.Add(mapping);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Updates an existing sync rule mapping.
+    /// </summary>
+    public async Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping)
+    {
+        Repository.Database.Update(mapping);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Deletes a sync rule mapping.
+    /// </summary>
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping)
+    {
+        // Remove all sources first
+        Repository.Database.RemoveRange(mapping.Sources);
+        Repository.Database.SyncRuleMappings.Remove(mapping);
         await Repository.Database.SaveChangesAsync();
     }
     #endregion

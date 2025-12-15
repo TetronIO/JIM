@@ -2,6 +2,7 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -105,6 +106,153 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
 
         return Ok(MetaverseAttributeDetailDto.FromEntity(attribute));
+    }
+
+    /// <summary>
+    /// Creates a new metaverse attribute.
+    /// </summary>
+    /// <param name="request">The attribute creation request.</param>
+    /// <returns>The created attribute details.</returns>
+    /// <response code="201">Attribute created successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("attributes", Name = "CreateAttribute")]
+    [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateAttributeAsync([FromBody] CreateMetaverseAttributeRequest request)
+    {
+        _logger.LogInformation("Creating metaverse attribute: {Name}", request.Name);
+
+        // Check if attribute with same name already exists
+        var existing = await _application.Metaverse.GetMetaverseAttributeAsync(request.Name);
+        if (existing != null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Attribute with name '{request.Name}' already exists."));
+
+        var attribute = new MetaverseAttribute
+        {
+            Name = request.Name,
+            Type = request.Type,
+            AttributePlurality = request.AttributePlurality,
+            Created = DateTime.UtcNow,
+            MetaverseObjectTypes = new List<MetaverseObjectType>()
+        };
+
+        // Associate with object types if specified
+        if (request.ObjectTypeIds != null && request.ObjectTypeIds.Count > 0)
+        {
+            foreach (var objectTypeId in request.ObjectTypeIds)
+            {
+                var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, false);
+                if (objectType == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Object type with ID {objectTypeId} not found."));
+
+                attribute.MetaverseObjectTypes.Add(objectType);
+            }
+        }
+
+        await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, null);
+
+        _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
+
+        var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
+        return CreatedAtAction(nameof(GetAttributeAsync), new { id = attribute.Id }, MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Updates an existing metaverse attribute.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute.</param>
+    /// <param name="request">The attribute update request.</param>
+    /// <returns>The updated attribute details.</returns>
+    /// <response code="200">Attribute updated successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="404">Attribute not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPut("attributes/{id:int}", Name = "UpdateAttribute")]
+    [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateAttributeAsync(int id, [FromBody] UpdateMetaverseAttributeRequest request)
+    {
+        _logger.LogInformation("Updating metaverse attribute: {Id}", id);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        if (attribute.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Cannot modify built-in attributes."));
+
+        // Apply updates
+        if (!string.IsNullOrEmpty(request.Name))
+        {
+            // Check if new name conflicts with existing
+            var existing = await _application.Metaverse.GetMetaverseAttributeAsync(request.Name);
+            if (existing != null && existing.Id != id)
+                return BadRequest(ApiErrorResponse.BadRequest($"Attribute with name '{request.Name}' already exists."));
+            attribute.Name = request.Name;
+        }
+
+        if (request.Type.HasValue)
+            attribute.Type = request.Type.Value;
+
+        if (request.AttributePlurality.HasValue)
+            attribute.AttributePlurality = request.AttributePlurality.Value;
+
+        // Update object type associations if specified
+        if (request.ObjectTypeIds != null)
+        {
+            attribute.MetaverseObjectTypes.Clear();
+            foreach (var objectTypeId in request.ObjectTypeIds)
+            {
+                var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, false);
+                if (objectType == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Object type with ID {objectTypeId} not found."));
+
+                attribute.MetaverseObjectTypes.Add(objectType);
+            }
+        }
+
+        await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, null);
+
+        _logger.LogInformation("Updated metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
+
+        var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
+        return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Deletes a metaverse attribute.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute to delete.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Attribute deleted successfully.</response>
+    /// <response code="400">Cannot delete built-in or in-use attribute.</response>
+    /// <response code="404">Attribute not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpDelete("attributes/{id:int}", Name = "DeleteAttribute")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteAttributeAsync(int id)
+    {
+        _logger.LogInformation("Deleting metaverse attribute: {Id}", id);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        if (attribute.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Cannot delete built-in attributes."));
+
+        await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, null);
+
+        _logger.LogInformation("Deleted metaverse attribute: {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>

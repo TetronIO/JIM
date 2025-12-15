@@ -94,6 +94,134 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     }
 
     /// <summary>
+    /// Updates a Connected System Object Type.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint to update properties of an object type, such as:
+    /// - Selected: Whether the object type is managed by JIM
+    /// - RemoveContributedAttributesOnObsoletion: Whether MVO attributes are removed when CSO is obsoleted
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="objectTypeId">The unique identifier of the object type.</param>
+    /// <param name="request">The update request with new values.</param>
+    /// <returns>The updated object type details.</returns>
+    /// <response code="200">Object type updated successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="404">Connected system or object type not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}", Name = "UpdateConnectedSystemObjectType")]
+    [ProducesResponseType(typeof(ConnectedSystemObjectTypeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemObjectTypeAsync(int connectedSystemId, int objectTypeId, [FromBody] UpdateConnectedSystemObjectTypeRequest request)
+    {
+        _logger.LogInformation("Updating object type {ObjectTypeId} for connected system {SystemId}", objectTypeId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for object type update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Verify connected system exists
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        // Get the object type
+        var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in connected system {connectedSystemId}."));
+
+        // Apply updates
+        if (request.Selected.HasValue)
+            objectType.Selected = request.Selected.Value;
+
+        if (request.RemoveContributedAttributesOnObsoletion.HasValue)
+            objectType.RemoveContributedAttributesOnObsoletion = request.RemoveContributedAttributesOnObsoletion.Value;
+
+        await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, initiatedBy);
+
+        _logger.LogInformation("Updated object type {ObjectTypeId} ({Name})", objectType.Id, objectType.Name);
+
+        // Return the updated object type
+        var updated = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Updates a Connected System Attribute.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint to update properties of an attribute, such as:
+    /// - Selected: Whether the attribute is managed by JIM
+    /// - IsExternalId: Whether this is the unique identifier for objects
+    /// - IsSecondaryExternalId: Whether this is a secondary identifier (e.g., DN for LDAP)
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="objectTypeId">The unique identifier of the object type.</param>
+    /// <param name="attributeId">The unique identifier of the attribute.</param>
+    /// <param name="request">The update request with new values.</param>
+    /// <returns>The updated attribute details.</returns>
+    /// <response code="200">Attribute updated successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="404">Connected system, object type, or attribute not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/attributes/{attributeId:int}", Name = "UpdateConnectedSystemAttribute")]
+    [ProducesResponseType(typeof(ConnectedSystemAttributeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemAttributeAsync(int connectedSystemId, int objectTypeId, int attributeId, [FromBody] UpdateConnectedSystemAttributeRequest request)
+    {
+        _logger.LogInformation("Updating attribute {AttributeId} for object type {ObjectTypeId} in connected system {SystemId}", attributeId, objectTypeId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for attribute update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Verify connected system exists
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        // Get the attribute
+        var attribute = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found."));
+
+        // Verify attribute belongs to the specified object type and connected system
+        if (attribute.ConnectedSystemObjectType.Id != objectTypeId ||
+            attribute.ConnectedSystemObjectType.ConnectedSystemId != connectedSystemId)
+        {
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of connected system {connectedSystemId}."));
+        }
+
+        // Apply updates
+        if (request.Selected.HasValue)
+            attribute.Selected = request.Selected.Value;
+
+        if (request.IsExternalId.HasValue)
+            attribute.IsExternalId = request.IsExternalId.Value;
+
+        if (request.IsSecondaryExternalId.HasValue)
+            attribute.IsSecondaryExternalId = request.IsSecondaryExternalId.Value;
+
+        await _application.ConnectedSystems.UpdateAttributeAsync(attribute, initiatedBy);
+
+        _logger.LogInformation("Updated attribute {AttributeId} ({Name})", attribute.Id, attribute.Name);
+
+        // Return the updated attribute
+        var updated = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
+        return Ok(ConnectedSystemAttributeDto.FromEntity(updated!));
+    }
+
+    /// <summary>
     /// Gets a specific connected system object by ID.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
@@ -946,6 +1074,223 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
         await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy);
 
         _logger.LogInformation("Deleted sync rule: {Id}", id);
+
+        return NoContent();
+    }
+
+    #endregion
+
+    #region Sync Rule Mappings
+
+    /// <summary>
+    /// Gets all attribute flow mappings for a sync rule.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <returns>A list of attribute flow mappings.</returns>
+    [HttpGet("sync-rules/{syncRuleId:int}/mappings", Name = "GetSyncRuleMappings")]
+    [ProducesResponseType(typeof(IEnumerable<SyncRuleMappingDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyncRuleMappingsAsync(int syncRuleId)
+    {
+        _logger.LogTrace("Requested mappings for sync rule: {Id}", syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var mappings = await _application.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
+        var dtos = mappings.Select(SyncRuleMappingDto.FromEntity);
+        return Ok(dtos);
+    }
+
+    /// <summary>
+    /// Gets a specific attribute flow mapping by ID.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="mappingId">The unique identifier of the mapping.</param>
+    /// <returns>The attribute flow mapping details.</returns>
+    [HttpGet("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "GetSyncRuleMapping")]
+    [ProducesResponseType(typeof(SyncRuleMappingDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyncRuleMappingAsync(int syncRuleId, int mappingId)
+    {
+        _logger.LogTrace("Requested mapping {MappingId} for sync rule: {SyncRuleId}", mappingId, syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in sync rule {syncRuleId}."));
+
+        return Ok(SyncRuleMappingDto.FromEntity(mapping));
+    }
+
+    /// <summary>
+    /// Creates a new attribute flow mapping for a sync rule.
+    /// </summary>
+    /// <remarks>
+    /// For Import rules (direction = Import), specify TargetMetaverseAttributeId and source ConnectedSystemAttributeIds.
+    /// For Export rules (direction = Export), specify TargetConnectedSystemAttributeId and source MetaverseAttributeIds.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="request">The mapping creation request.</param>
+    /// <returns>The created attribute flow mapping.</returns>
+    /// <response code="201">Mapping created successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="404">Sync rule or referenced attributes not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/mappings", Name = "CreateSyncRuleMapping")]
+    [ProducesResponseType(typeof(SyncRuleMappingDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateSyncRuleMappingAsync(int syncRuleId, [FromBody] CreateSyncRuleMappingRequest request)
+    {
+        _logger.LogInformation("Creating mapping for sync rule: {SyncRuleId}", syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for mapping creation");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        // Create the mapping
+        var mapping = new SyncRuleMapping
+        {
+            SyncRule = syncRule
+        };
+
+        // Validate and set target attribute based on direction
+        if (syncRule.Direction == SyncRuleDirection.Import)
+        {
+            if (!request.TargetMetaverseAttributeId.HasValue)
+                return BadRequest(ApiErrorResponse.BadRequest("TargetMetaverseAttributeId is required for import rules."));
+
+            var mvAttr = await _application.Metaverse.GetMetaverseAttributeAsync(request.TargetMetaverseAttributeId.Value);
+            if (mvAttr == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.TargetMetaverseAttributeId} not found."));
+
+            mapping.TargetMetaverseAttributeId = mvAttr.Id;
+            mapping.TargetMetaverseAttribute = mvAttr;
+        }
+        else // Export
+        {
+            if (!request.TargetConnectedSystemAttributeId.HasValue)
+                return BadRequest(ApiErrorResponse.BadRequest("TargetConnectedSystemAttributeId is required for export rules."));
+
+            var csAttr = await _application.ConnectedSystems.GetAttributeAsync(request.TargetConnectedSystemAttributeId.Value);
+            if (csAttr == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected system attribute with ID {request.TargetConnectedSystemAttributeId} not found."));
+
+            // Verify attribute belongs to the sync rule's object type
+            if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
+                return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the sync rule's object type."));
+
+            mapping.TargetConnectedSystemAttributeId = csAttr.Id;
+            mapping.TargetConnectedSystemAttribute = csAttr;
+        }
+
+        // Add sources
+        foreach (var sourceRequest in request.Sources)
+        {
+            var source = new SyncRuleMappingSource
+            {
+                Order = sourceRequest.Order
+            };
+
+            if (syncRule.Direction == SyncRuleDirection.Import)
+            {
+                if (!sourceRequest.ConnectedSystemAttributeId.HasValue)
+                    return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import rule sources."));
+
+                var csAttr = await _application.ConnectedSystems.GetAttributeAsync(sourceRequest.ConnectedSystemAttributeId.Value);
+                if (csAttr == null)
+                    return NotFound(ApiErrorResponse.NotFound($"Connected system attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found."));
+
+                // Verify attribute belongs to the sync rule's object type
+                if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the sync rule's object type."));
+
+                source.ConnectedSystemAttributeId = csAttr.Id;
+                source.ConnectedSystemAttribute = csAttr;
+            }
+            else // Export
+            {
+                if (!sourceRequest.MetaverseAttributeId.HasValue)
+                    return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export rule sources."));
+
+                var mvAttr = await _application.Metaverse.GetMetaverseAttributeAsync(sourceRequest.MetaverseAttributeId.Value);
+                if (mvAttr == null)
+                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
+
+                source.MetaverseAttributeId = mvAttr.Id;
+                source.MetaverseAttribute = mvAttr;
+            }
+
+            mapping.Sources.Add(source);
+        }
+
+        try
+        {
+            await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, initiatedBy);
+
+            _logger.LogInformation("Created mapping {MappingId} for sync rule {SyncRuleId}", mapping.Id, syncRuleId);
+
+            // Retrieve the created mapping to get all populated fields
+            var created = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mapping.Id);
+            return CreatedAtRoute("GetSyncRuleMapping", new { syncRuleId, mappingId = mapping.Id }, SyncRuleMappingDto.FromEntity(created!));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create sync rule mapping: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Deletes an attribute flow mapping.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="mappingId">The unique identifier of the mapping to delete.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Mapping deleted successfully.</response>
+    /// <response code="404">Sync rule or mapping not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpDelete("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "DeleteSyncRuleMapping")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteSyncRuleMappingAsync(int syncRuleId, int mappingId)
+    {
+        _logger.LogInformation("Deleting mapping {MappingId} for sync rule {SyncRuleId}", mappingId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for mapping deletion");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in sync rule {syncRuleId}."));
+
+        await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy);
+
+        _logger.LogInformation("Deleted mapping {MappingId} from sync rule {SyncRuleId}", mappingId, syncRuleId);
 
         return NoContent();
     }

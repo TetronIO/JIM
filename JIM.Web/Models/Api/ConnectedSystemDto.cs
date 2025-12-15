@@ -67,6 +67,7 @@ public class ConnectedSystemObjectTypeDto
     public bool Selected { get; set; }
     public bool RemoveContributedAttributesOnObsoletion { get; set; }
     public int AttributeCount { get; set; }
+    public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
     public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity)
     {
@@ -77,7 +78,44 @@ public class ConnectedSystemObjectTypeDto
             Created = entity.Created,
             Selected = entity.Selected,
             RemoveContributedAttributesOnObsoletion = entity.RemoveContributedAttributesOnObsoletion,
-            AttributeCount = entity.Attributes?.Count ?? 0
+            AttributeCount = entity.Attributes?.Count ?? 0,
+            Attributes = entity.Attributes?
+                .Select(ConnectedSystemAttributeDto.FromEntity)
+                .ToList()
+        };
+    }
+}
+
+/// <summary>
+/// API representation of a ConnectedSystemObjectTypeAttribute.
+/// </summary>
+public class ConnectedSystemAttributeDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = null!;
+    public string? Description { get; set; }
+    public string? ClassName { get; set; }
+    public DateTime Created { get; set; }
+    public string Type { get; set; } = null!;
+    public string AttributePlurality { get; set; } = null!;
+    public bool Selected { get; set; }
+    public bool IsExternalId { get; set; }
+    public bool IsSecondaryExternalId { get; set; }
+
+    public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
+    {
+        return new ConnectedSystemAttributeDto
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            Description = entity.Description,
+            ClassName = entity.ClassName,
+            Created = entity.Created,
+            Type = entity.Type.ToString(),
+            AttributePlurality = entity.AttributePlurality.ToString(),
+            Selected = entity.Selected,
+            IsExternalId = entity.IsExternalId,
+            IsSecondaryExternalId = entity.IsSecondaryExternalId
         };
     }
 }

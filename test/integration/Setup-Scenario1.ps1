@@ -316,30 +316,27 @@ try {
         Write-Host "    Metaverse: $($mvUserType.name) (ID: $($mvUserType.id))" -ForegroundColor Gray
 
         # Mark the required object types as selected (required for import/export to work)
-        $selectObjectTypesSql = @"
-UPDATE "ConnectedSystemObjectTypes"
-SET "Selected" = true
-WHERE "Id" IN ($($csvUserType.id), $($ldapUserType.id));
-"@
-        $selectObjectTypesSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        Set-JIMConnectedSystemObjectType -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -Selected $true | Out-Null
+        Set-JIMConnectedSystemObjectType -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -Selected $true | Out-Null
         Write-Host "  ✓ Selected CSV 'person' and LDAP 'User' object types" -ForegroundColor Green
 
         # Mark employeeId as the External ID (anchor) for CSV object type
-        $setExternalIdSql = @"
-UPDATE "ConnectedSystemAttributes"
-SET "IsExternalId" = true
-WHERE "ConnectedSystemObjectTypeId" = $($csvUserType.id) AND "Name" = 'employeeId';
-"@
-        $setExternalIdSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
-        Write-Host "  ✓ Set 'employeeId' as External ID for CSV object type" -ForegroundColor Green
+        $csvEmployeeIdAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'employeeId' }
+        if ($csvEmployeeIdAttr) {
+            Set-JIMConnectedSystemAttribute -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -AttributeId $csvEmployeeIdAttr.id -IsExternalId $true | Out-Null
+            Write-Host "  ✓ Set 'employeeId' as External ID for CSV object type" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Could not find 'employeeId' attribute in CSV object type" -ForegroundColor Yellow
+        }
 
         # Mark all CSV and LDAP attributes as selected (required for import/export)
-        $selectAttributesSql = @"
-UPDATE "ConnectedSystemAttributes"
-SET "Selected" = true
-WHERE "ConnectedSystemObjectTypeId" IN ($($csvUserType.id), $($ldapUserType.id));
-"@
-        $selectAttributesSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        foreach ($attr in $csvUserType.attributes) {
+            Set-JIMConnectedSystemAttribute -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -AttributeId $attr.id -Selected $true | Out-Null
+        }
+        foreach ($attr in $ldapUserType.attributes) {
+            Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeId $attr.id -Selected $true | Out-Null
+        }
         Write-Host "  ✓ Selected all attributes for CSV and LDAP object types" -ForegroundColor Green
 
         # Create Import sync rule (CSV -> Metaverse)
@@ -393,246 +390,148 @@ Write-TestStep "Step 6c" "Configuring Attribute Flow Mappings"
 
 try {
     if ($importRule -and $exportRule) {
-        Write-Host "  Configuring attribute mappings via database..." -ForegroundColor Gray
+        Write-Host "  Configuring attribute mappings via API..." -ForegroundColor Gray
 
         # Get attribute IDs for mapping
         # First, create a DN Metaverse attribute if it doesn't exist (needed for LDAP export)
-        $createDnAttrSql = @"
-DO `$`$
-DECLARE
-    dn_attr_id INT;
-    user_type_id INT;
-BEGIN
-    -- Get User type ID
-    SELECT "Id" INTO user_type_id FROM "MetaverseObjectTypes" WHERE "Name" = 'User';
+        $dnAttr = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq 'DN' }
+        if (-not $dnAttr) {
+            $dnAttr = New-JIMMetaverseAttribute -Name 'DN' -Type Text -ObjectTypeIds @($mvUserType.id)
+            Write-Host "  ✓ Created DN Metaverse attribute (ID: $($dnAttr.id))" -ForegroundColor Green
+        }
+        else {
+            # Ensure it's linked to User type if not already
+            if ($dnAttr.objectTypeIds -notcontains $mvUserType.id) {
+                Set-JIMMetaverseAttribute -Id $dnAttr.id -ObjectTypeIds @($mvUserType.id) | Out-Null
+            }
+            Write-Host "  ✓ DN Metaverse attribute already exists (ID: $($dnAttr.id))" -ForegroundColor Green
+        }
 
-    -- Check if DN attribute exists
-    SELECT ma."Id" INTO dn_attr_id
-    FROM "MetaverseAttributes" ma
-    WHERE ma."Name" = 'DN';
-
-    IF dn_attr_id IS NULL THEN
-        -- Create the DN attribute (Type=1 is Text)
-        INSERT INTO "MetaverseAttributes" ("Created", "Name", "Type", "AttributePlurality", "BuiltIn")
-        VALUES (NOW(), 'DN', 1, 0, false)
-        RETURNING "Id" INTO dn_attr_id;
-
-        -- Link to User object type
-        INSERT INTO "MetaverseAttributeMetaverseObjectType" ("AttributesId", "MetaverseObjectTypesId")
-        VALUES (dn_attr_id, user_type_id);
-
-        RAISE NOTICE 'Created DN attribute with ID %', dn_attr_id;
-    ELSE
-        -- Ensure link exists
-        INSERT INTO "MetaverseAttributeMetaverseObjectType" ("AttributesId", "MetaverseObjectTypesId")
-        VALUES (dn_attr_id, user_type_id)
-        ON CONFLICT DO NOTHING;
-
-        -- Ensure Type is correct (1 = Text)
-        UPDATE "MetaverseAttributes" SET "Type" = 1 WHERE "Id" = dn_attr_id AND "Type" != 1;
-
-        RAISE NOTICE 'DN attribute already exists with ID %', dn_attr_id;
-    END IF;
-END `$`$;
-"@
-        $createDnAttrSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
-        Write-Host "  ✓ Ensured DN Metaverse attribute exists" -ForegroundColor Green
-
+        # Define mappings
         $importMappings = @(
-            @{ CsAttr = "employeeId";        MvAttr = "Employee ID";    CsId = $null; MvId = $null }
-            @{ CsAttr = "firstName";         MvAttr = "First Name";     CsId = $null; MvId = $null }
-            @{ CsAttr = "lastName";          MvAttr = "Last Name";      CsId = $null; MvId = $null }
-            @{ CsAttr = "displayName";       MvAttr = "Display Name";   CsId = $null; MvId = $null }
-            @{ CsAttr = "email";             MvAttr = "Email";          CsId = $null; MvId = $null }
-            @{ CsAttr = "title";             MvAttr = "Job Title";      CsId = $null; MvId = $null }
-            @{ CsAttr = "department";        MvAttr = "Department";     CsId = $null; MvId = $null }
-            @{ CsAttr = "samAccountName";    MvAttr = "Account Name";   CsId = $null; MvId = $null }
-            @{ CsAttr = "dn";                MvAttr = "DN";             CsId = $null; MvId = $null }
+            @{ CsAttr = "employeeId";        MvAttr = "Employee ID" }
+            @{ CsAttr = "firstName";         MvAttr = "First Name" }
+            @{ CsAttr = "lastName";          MvAttr = "Last Name" }
+            @{ CsAttr = "displayName";       MvAttr = "Display Name" }
+            @{ CsAttr = "email";             MvAttr = "Email" }
+            @{ CsAttr = "title";             MvAttr = "Job Title" }
+            @{ CsAttr = "department";        MvAttr = "Department" }
+            @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
+            @{ CsAttr = "dn";                MvAttr = "DN" }
         )
 
         $exportMappings = @(
-            @{ MvAttr = "Account Name";  LdapAttr = "sAMAccountName";       MvId = $null; LdapId = $null }
-            @{ MvAttr = "First Name";    LdapAttr = "givenName";            MvId = $null; LdapId = $null }
-            @{ MvAttr = "Last Name";     LdapAttr = "sn";                   MvId = $null; LdapId = $null }
-            @{ MvAttr = "Display Name";  LdapAttr = "displayName";          MvId = $null; LdapId = $null }
-            @{ MvAttr = "Display Name";  LdapAttr = "cn";                   MvId = $null; LdapId = $null }
-            @{ MvAttr = "Email";         LdapAttr = "mail";                 MvId = $null; LdapId = $null }
-            @{ MvAttr = "Email";         LdapAttr = "userPrincipalName";    MvId = $null; LdapId = $null }  # UPN = email for AD login
-            @{ MvAttr = "Job Title";     LdapAttr = "title";                MvId = $null; LdapId = $null }
-            @{ MvAttr = "Department";    LdapAttr = "department";           MvId = $null; LdapId = $null }
-            @{ MvAttr = "DN";            LdapAttr = "distinguishedName";    MvId = $null; LdapId = $null }  # Required for LDAP object creation
+            @{ MvAttr = "Account Name";  LdapAttr = "sAMAccountName" }
+            @{ MvAttr = "First Name";    LdapAttr = "givenName" }
+            @{ MvAttr = "Last Name";     LdapAttr = "sn" }
+            @{ MvAttr = "Display Name";  LdapAttr = "displayName" }
+            @{ MvAttr = "Display Name";  LdapAttr = "cn" }
+            @{ MvAttr = "Email";         LdapAttr = "mail" }
+            @{ MvAttr = "Email";         LdapAttr = "userPrincipalName" }  # UPN = email for AD login
+            @{ MvAttr = "Job Title";     LdapAttr = "title" }
+            @{ MvAttr = "Department";    LdapAttr = "department" }
+            @{ MvAttr = "DN";            LdapAttr = "distinguishedName" }  # Required for LDAP object creation
         )
 
-        # SQL to add import mappings (CSV → Metaverse)
-        $importSql = @"
--- Import attribute flow mappings (CSV → Metaverse)
-DO `$`$
-DECLARE
-    mapping_id INT;
-    csv_attr_id INT;
-    mv_attr_id INT;
-BEGIN
-"@
+        # Get all metaverse attributes for lookup
+        $mvAttributes = Get-JIMMetaverseAttribute
+
+        # Create import mappings (CSV → Metaverse)
+        $existingImportMappings = Get-JIMSyncRuleMapping -SyncRuleId $importRule.id
+        $importMappingsCreated = 0
 
         foreach ($mapping in $importMappings) {
-            $importSql += @"
+            $csvAttr = $csvUserType.attributes | Where-Object { $_.name -eq $mapping.CsAttr }
+            $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
 
-    -- Map CSV.$($mapping.CsAttr) → Metaverse.$($mapping.MvAttr)
-    SELECT ca."Id" INTO csv_attr_id
-    FROM "ConnectedSystemAttributes" ca
-    WHERE ca."ConnectedSystemObjectTypeId" = $($csvUserType.id) AND ca."Name" = '$($mapping.CsAttr)';
+            if ($csvAttr -and $mvAttr) {
+                # Check if mapping already exists
+                $existsAlready = $existingImportMappings | Where-Object {
+                    $_.targetMetaverseAttributeId -eq $mvAttr.id -and
+                    ($_.sources | Where-Object { $_.connectedSystemAttributeId -eq $csvAttr.id })
+                }
 
-    SELECT ma."Id" INTO mv_attr_id
-    FROM "MetaverseAttributes" ma
-    WHERE ma."Name" = '$($mapping.MvAttr)';
-
-    IF csv_attr_id IS NOT NULL AND mv_attr_id IS NOT NULL THEN
-        -- Check if mapping already exists
-        IF NOT EXISTS (
-            SELECT 1 FROM "SyncRuleMappings" srm
-            JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
-            WHERE srm."SyncRuleId" = $($importRule.id)
-              AND srm."TargetMetaverseAttributeId" = mv_attr_id
-              AND srms."ConnectedSystemAttributeId" = csv_attr_id
-        ) THEN
-            INSERT INTO "SyncRuleMappings" ("Created", "SyncRuleId", "TargetMetaverseAttributeId")
-            VALUES (NOW(), $($importRule.id), mv_attr_id)
-            RETURNING "Id" INTO mapping_id;
-
-            INSERT INTO "SyncRuleMappingSources" ("Order", "ConnectedSystemAttributeId", "SyncRuleMappingId")
-            VALUES (0, csv_attr_id, mapping_id);
-        END IF;
-    END IF;
-"@
+                if (-not $existsAlready) {
+                    try {
+                        New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
+                            -TargetMetaverseAttributeId $mvAttr.id `
+                            -SourceConnectedSystemAttributeId $csvAttr.id | Out-Null
+                        $importMappingsCreated++
+                    }
+                    catch {
+                        Write-Host "    ⚠ Could not create mapping $($mapping.CsAttr) → $($mapping.MvAttr): $_" -ForegroundColor Yellow
+                    }
+                }
+            }
         }
+        Write-Host "  ✓ Import attribute mappings configured ($importMappingsCreated new)" -ForegroundColor Green
 
-        $importSql += @"
-
-END `$`$;
-"@
-
-        # SQL to add export mappings (Metaverse → LDAP)
-        $exportSql = @"
--- Export attribute flow mappings (Metaverse → LDAP)
-DO `$`$
-DECLARE
-    mapping_id INT;
-    ldap_attr_id INT;
-    mv_attr_id INT;
-BEGIN
-"@
+        # Create export mappings (Metaverse → LDAP)
+        $existingExportMappings = Get-JIMSyncRuleMapping -SyncRuleId $exportRule.id
+        $exportMappingsCreated = 0
 
         foreach ($mapping in $exportMappings) {
-            $exportSql += @"
+            $ldapAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
+            $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
 
-    -- Map Metaverse.$($mapping.MvAttr) → LDAP.$($mapping.LdapAttr)
-    SELECT ca."Id" INTO ldap_attr_id
-    FROM "ConnectedSystemAttributes" ca
-    WHERE ca."ConnectedSystemObjectTypeId" = $($ldapUserType.id) AND ca."Name" = '$($mapping.LdapAttr)';
+            if ($ldapAttr -and $mvAttr) {
+                # Check if mapping already exists
+                $existsAlready = $existingExportMappings | Where-Object {
+                    $_.targetConnectedSystemAttributeId -eq $ldapAttr.id -and
+                    ($_.sources | Where-Object { $_.metaverseAttributeId -eq $mvAttr.id })
+                }
 
-    SELECT ma."Id" INTO mv_attr_id
-    FROM "MetaverseAttributes" ma
-    WHERE ma."Name" = '$($mapping.MvAttr)';
-
-    IF ldap_attr_id IS NOT NULL AND mv_attr_id IS NOT NULL THEN
-        -- Check if mapping already exists
-        IF NOT EXISTS (
-            SELECT 1 FROM "SyncRuleMappings" srm
-            JOIN "SyncRuleMappingSources" srms ON srm."Id" = srms."SyncRuleMappingId"
-            WHERE srm."SyncRuleId" = $($exportRule.id)
-              AND srm."TargetConnectedSystemAttributeId" = ldap_attr_id
-              AND srms."MetaverseAttributeId" = mv_attr_id
-        ) THEN
-            INSERT INTO "SyncRuleMappings" ("Created", "SyncRuleId", "TargetConnectedSystemAttributeId")
-            VALUES (NOW(), $($exportRule.id), ldap_attr_id)
-            RETURNING "Id" INTO mapping_id;
-
-            INSERT INTO "SyncRuleMappingSources" ("Order", "MetaverseAttributeId", "SyncRuleMappingId")
-            VALUES (0, mv_attr_id, mapping_id);
-        END IF;
-    END IF;
-"@
+                if (-not $existsAlready) {
+                    try {
+                        New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
+                            -TargetConnectedSystemAttributeId $ldapAttr.id `
+                            -SourceMetaverseAttributeId $mvAttr.id | Out-Null
+                        $exportMappingsCreated++
+                    }
+                    catch {
+                        Write-Host "    ⚠ Could not create mapping $($mapping.MvAttr) → $($mapping.LdapAttr): $_" -ForegroundColor Yellow
+                    }
+                }
+            }
         }
-
-        $exportSql += @"
-
-END `$`$;
-"@
-
-        # Execute SQL via docker exec
-        $importSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ Import attribute mappings configured" -ForegroundColor Green
-        }
-        else {
-            Write-Host "  ⚠ Failed to configure import mappings" -ForegroundColor Yellow
-        }
-
-        $exportSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ Export attribute mappings configured" -ForegroundColor Green
-        }
-        else {
-            Write-Host "  ⚠ Failed to configure export mappings" -ForegroundColor Yellow
-        }
+        Write-Host "  ✓ Export attribute mappings configured ($exportMappingsCreated new)" -ForegroundColor Green
 
         # Add object matching rule for CSV object type (how to match CSOs to existing MVOs during import)
         Write-Host "  Configuring object matching rule..." -ForegroundColor Gray
 
-        # Use SQL to create matching rule since the API endpoint may not return attributes with object types
-        $matchingRuleSql = @"
--- Object matching rule: employeeId → Employee ID
-DO `$`$
-DECLARE
-    csv_attr_id INT;
-    mv_attr_id INT;
-    rule_id INT;
-BEGIN
-    -- Get CSV employeeId attribute
-    SELECT ca."Id" INTO csv_attr_id
-    FROM "ConnectedSystemAttributes" ca
-    WHERE ca."ConnectedSystemObjectTypeId" = $($csvUserType.id) AND ca."Name" = 'employeeId';
+        $csvEmployeeIdAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'employeeId' }
+        $mvEmployeeIdAttr = $mvAttributes | Where-Object { $_.name -eq 'Employee ID' }
 
-    -- Get MV Employee ID attribute
-    SELECT ma."Id" INTO mv_attr_id
-    FROM "MetaverseAttributes" ma
-    WHERE ma."Name" = 'Employee ID';
+        if ($csvEmployeeIdAttr -and $mvEmployeeIdAttr) {
+            # Check if matching rule already exists
+            $existingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id
 
-    IF csv_attr_id IS NOT NULL AND mv_attr_id IS NOT NULL THEN
-        -- Check if matching rule already exists
-        IF NOT EXISTS (
-            SELECT 1 FROM "ObjectMatchingRules" omr
-            JOIN "ObjectMatchingRuleSources" omrs ON omr."Id" = omrs."ObjectMatchingRuleId"
-            WHERE omr."ConnectedSystemObjectTypeId" = $($csvUserType.id)
-              AND omr."TargetMetaverseAttributeId" = mv_attr_id
-              AND omrs."ConnectedSystemAttributeId" = csv_attr_id
-        ) THEN
-            INSERT INTO "ObjectMatchingRules" ("Created", "Order", "ConnectedSystemObjectTypeId", "TargetMetaverseAttributeId")
-            VALUES (NOW(), 0, $($csvUserType.id), mv_attr_id)
-            RETURNING "Id" INTO rule_id;
+            $matchingRuleExists = $existingMatchingRules | Where-Object {
+                $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id -and
+                ($_.sources | Where-Object { $_.connectedSystemAttributeId -eq $csvEmployeeIdAttr.id })
+            }
 
-            INSERT INTO "ObjectMatchingRuleSources" ("Order", "ConnectedSystemAttributeId", "ObjectMatchingRuleId")
-            VALUES (0, csv_attr_id, rule_id);
-
-            RAISE NOTICE 'Created matching rule for employeeId → Employee ID';
-        ELSE
-            RAISE NOTICE 'Matching rule already exists';
-        END IF;
-    ELSE
-        RAISE NOTICE 'Could not find required attributes (csv_attr_id=%, mv_attr_id=%)', csv_attr_id, mv_attr_id;
-    END IF;
-END `$`$;
-"@
-
-        $matchingRuleSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
+            if (-not $matchingRuleExists) {
+                try {
+                    New-JIMMatchingRule -ConnectedSystemId $csvSystem.id `
+                        -ObjectTypeId $csvUserType.id `
+                        -TargetMetaverseAttributeName 'Employee ID' `
+                        -SourceConnectedSystemAttributeName 'employeeId' | Out-Null
+                    Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
+                }
+                catch {
+                    Write-Host "  ⚠ Could not configure object matching rule: $_" -ForegroundColor Yellow
+                }
+            }
+            else {
+                Write-Host "  Object matching rule already exists" -ForegroundColor Gray
+            }
         }
         else {
-            Write-Host "  ⚠ Could not configure object matching rule" -ForegroundColor Yellow
+            Write-Host "  ⚠ Could not find required attributes for matching rule" -ForegroundColor Yellow
         }
 
-        # Restart jim.worker to pick up schema changes (SQL modifications above)
+        # Restart jim.worker to pick up schema changes (API modifications may require reload)
         Write-Host "  Restarting JIM.Worker to reload schema..." -ForegroundColor Gray
         docker restart jim.worker > $null
         if ($LASTEXITCODE -eq 0) {

@@ -141,6 +141,39 @@ public interface IConnectedSystemRepository
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules);
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
+
+    #region Sync Rule Mappings
+    /// <summary>
+    /// Gets all mappings for a sync rule.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId);
+
+    /// <summary>
+    /// Gets a specific sync rule mapping by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the mapping.</param>
+    Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id);
+
+    /// <summary>
+    /// Creates a new sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to create.</param>
+    Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping);
+
+    /// <summary>
+    /// Updates an existing sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to update.</param>
+    Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping);
+
+    /// <summary>
+    /// Deletes a sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to delete.</param>
+    Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping);
+    #endregion
+
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
@@ -221,6 +254,32 @@ public interface IConnectedSystemRepository
     public Task DeleteSyncRuleAsync(SyncRule syncRule);
 
     public Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute);
+
+    #region Object Types and Attributes
+    /// <summary>
+    /// Gets a Connected System Object Type by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the object type.</param>
+    Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Object Type.
+    /// </summary>
+    /// <param name="objectType">The object type to update.</param>
+    Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType);
+
+    /// <summary>
+    /// Gets a Connected System Attribute by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute.</param>
+    Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Attribute.
+    /// </summary>
+    /// <param name="attribute">The attribute to update.</param>
+    Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute);
+    #endregion
 
     #region Object Matching Rules
     /// <summary>

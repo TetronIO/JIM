@@ -40,12 +40,25 @@
         'Remove-JIMConnectedSystem',
         'Import-JIMConnectedSystemSchema',
         'Get-JIMConnectorDefinition',
+        'Set-JIMConnectedSystemObjectType',
+        'Set-JIMConnectedSystemAttribute',
 
         # Sync Rules
         'Get-JIMSyncRule',
         'New-JIMSyncRule',
         'Set-JIMSyncRule',
         'Remove-JIMSyncRule',
+
+        # Sync Rule Mappings
+        'Get-JIMSyncRuleMapping',
+        'New-JIMSyncRuleMapping',
+        'Remove-JIMSyncRuleMapping',
+
+        # Object Matching Rules
+        'Get-JIMMatchingRule',
+        'New-JIMMatchingRule',
+        'Set-JIMMatchingRule',
+        'Remove-JIMMatchingRule',
 
         # Run Profiles
         'Get-JIMRunProfile',
@@ -62,6 +75,9 @@
         'Get-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
         'Get-JIMMetaverseAttribute',
+        'New-JIMMetaverseAttribute',
+        'Set-JIMMetaverseAttribute',
+        'Remove-JIMMetaverseAttribute',
 
         # API Keys
         'Get-JIMApiKey',

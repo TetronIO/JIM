@@ -9,5 +9,6 @@ public enum ActivityTargetType
     SyncRule = 4,
     MetaverseObject = 5,
     TrustedCertificate = 6,
-    ObjectMatchingRule = 7
+    ObjectMatchingRule = 7,
+    MetaverseAttribute = 8
 }

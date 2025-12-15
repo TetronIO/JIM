@@ -619,6 +619,76 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
     }
+
+    /// <summary>
+    /// Gets a Connected System Object Type by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the object type.</param>
+    public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Object Type.
+    /// </summary>
+    /// <param name="objectType">The object type to update.</param>
+    /// <param name="initiatedBy">The user who initiated the update.</param>
+    public async Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType, MetaverseObject? initiatedBy)
+    {
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+
+        Log.Debug("UpdateObjectTypeAsync() called for {ObjectType}", objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = objectType.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateObjectTypeAsync(objectType);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Gets a Connected System Attribute by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute.</param>
+    public async Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetAttributeAsync(id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Attribute.
+    /// </summary>
+    /// <param name="attribute">The attribute to update.</param>
+    /// <param name="initiatedBy">The user who initiated the update.</param>
+    public async Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute, MetaverseObject? initiatedBy)
+    {
+        if (attribute == null)
+            throw new ArgumentNullException(nameof(attribute));
+
+        Log.Debug("UpdateAttributeAsync() called for {Attribute}", attribute.Name);
+
+        var activity = new Activity
+        {
+            TargetName = attribute.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
     #endregion
 
     #region Connected System Objects
@@ -1060,6 +1130,104 @@ public class ConnectedSystemServer
 
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemContainerAsync(connectedSystemContainer);
+    }
+    #endregion
+
+    #region Sync Rule Mappings
+    /// <summary>
+    /// Gets all mappings for a sync rule.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
+    {
+        return await Application.Repository.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
+    }
+
+    /// <summary>
+    /// Gets a specific sync rule mapping by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the mapping.</param>
+    public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(id);
+    }
+
+    /// <summary>
+    /// Creates a new sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to create.</param>
+    /// <param name="initiatedBy">The user who initiated the creation.</param>
+    public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId}", mapping.SyncRule?.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates an existing sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to update.</param>
+    /// <param name="initiatedBy">The user who initiated the update.</param>
+    public async Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Deletes a sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to delete.</param>
+    /// <param name="initiatedBy">The user who initiated the deletion.</param>
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("DeleteSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
     }
     #endregion
 
