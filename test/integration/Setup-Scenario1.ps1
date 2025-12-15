@@ -244,30 +244,43 @@ catch {
 # Step 6: Import Schemas
 Write-TestStep "Step 6" "Importing Connected System Schemas"
 
-try {
-    # Import CSV schema
-    Write-Host "  Importing CSV schema..." -ForegroundColor Gray
-    $csvSystemUpdated = Import-JIMConnectedSystemSchema -Id $csvSystem.id -PassThru
-    $csvObjectTypes = Get-JIMConnectedSystem -Id $csvSystem.id -ObjectTypes
-    Write-Host "  ✓ CSV schema imported ($($csvObjectTypes.Count) object types)" -ForegroundColor Green
+# Check if schemas are already imported (to avoid FK constraint errors on re-run)
+$csvObjectTypes = Get-JIMConnectedSystem -Id $csvSystem.id -ObjectTypes
+if ($csvObjectTypes -and $csvObjectTypes.Count -gt 0) {
+    Write-Host "  CSV schema already imported ($($csvObjectTypes.Count) object types)" -ForegroundColor Gray
 }
-catch {
-    Write-Host "  ✗ Failed to import CSV schema: $_" -ForegroundColor Red
-    Write-Host "    Ensure connected system is properly configured before importing schema" -ForegroundColor Yellow
-    throw
+else {
+    try {
+        # Import CSV schema
+        Write-Host "  Importing CSV schema..." -ForegroundColor Gray
+        $csvSystemUpdated = Import-JIMConnectedSystemSchema -Id $csvSystem.id -PassThru
+        $csvObjectTypes = Get-JIMConnectedSystem -Id $csvSystem.id -ObjectTypes
+        Write-Host "  ✓ CSV schema imported ($($csvObjectTypes.Count) object types)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ✗ Failed to import CSV schema: $_" -ForegroundColor Red
+        Write-Host "    Ensure connected system is properly configured before importing schema" -ForegroundColor Yellow
+        throw
+    }
 }
 
-try {
-    # Import LDAP schema
-    Write-Host "  Importing LDAP schema..." -ForegroundColor Gray
-    $ldapSystemUpdated = Import-JIMConnectedSystemSchema -Id $ldapSystem.id -PassThru
-    $ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
-    Write-Host "  ✓ LDAP schema imported ($($ldapObjectTypes.Count) object types)" -ForegroundColor Green
+$ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
+if ($ldapObjectTypes -and $ldapObjectTypes.Count -gt 0) {
+    Write-Host "  LDAP schema already imported ($($ldapObjectTypes.Count) object types)" -ForegroundColor Gray
 }
-catch {
-    Write-Host "  ⚠ LDAP schema import failed: $_" -ForegroundColor Yellow
-    Write-Host "    LDAP export sync rules will be skipped. Continuing with CSV import only." -ForegroundColor Yellow
-    $ldapObjectTypes = @()
+else {
+    try {
+        # Import LDAP schema
+        Write-Host "  Importing LDAP schema..." -ForegroundColor Gray
+        $ldapSystemUpdated = Import-JIMConnectedSystemSchema -Id $ldapSystem.id -PassThru
+        $ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
+        Write-Host "  ✓ LDAP schema imported ($($ldapObjectTypes.Count) object types)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ⚠ LDAP schema import failed: $_" -ForegroundColor Yellow
+        Write-Host "    LDAP export sync rules will be skipped. Continuing with CSV import only." -ForegroundColor Yellow
+        $ldapObjectTypes = @()
+    }
 }
 
 # Step 6b: Create Sync Rules
@@ -383,26 +396,68 @@ try {
         Write-Host "  Configuring attribute mappings via database..." -ForegroundColor Gray
 
         # Get attribute IDs for mapping
+        # First, create a DN Metaverse attribute if it doesn't exist (needed for LDAP export)
+        $createDnAttrSql = @"
+DO `$`$
+DECLARE
+    dn_attr_id INT;
+    user_type_id INT;
+BEGIN
+    -- Get User type ID
+    SELECT "Id" INTO user_type_id FROM "MetaverseObjectTypes" WHERE "Name" = 'User';
+
+    -- Check if DN attribute exists
+    SELECT ma."Id" INTO dn_attr_id
+    FROM "MetaverseAttributes" ma
+    WHERE ma."Name" = 'DN';
+
+    IF dn_attr_id IS NULL THEN
+        -- Create the DN attribute
+        INSERT INTO "MetaverseAttributes" ("Created", "Name", "Type", "AttributePlurality", "BuiltIn")
+        VALUES (NOW(), 'DN', 0, 0, false)
+        RETURNING "Id" INTO dn_attr_id;
+
+        -- Link to User object type
+        INSERT INTO "MetaverseAttributeMetaverseObjectType" ("AttributesId", "MetaverseObjectTypesId")
+        VALUES (dn_attr_id, user_type_id);
+
+        RAISE NOTICE 'Created DN attribute with ID %', dn_attr_id;
+    ELSE
+        -- Ensure link exists
+        INSERT INTO "MetaverseAttributeMetaverseObjectType" ("AttributesId", "MetaverseObjectTypesId")
+        VALUES (dn_attr_id, user_type_id)
+        ON CONFLICT DO NOTHING;
+
+        RAISE NOTICE 'DN attribute already exists with ID %', dn_attr_id;
+    END IF;
+END `$`$;
+"@
+        $createDnAttrSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        Write-Host "  ✓ Ensured DN Metaverse attribute exists" -ForegroundColor Green
+
         $importMappings = @(
-            @{ CsAttr = "employeeId";    MvAttr = "Employee ID";    CsId = $null; MvId = $null }
-            @{ CsAttr = "firstName";     MvAttr = "First Name";     CsId = $null; MvId = $null }
-            @{ CsAttr = "lastName";      MvAttr = "Last Name";      CsId = $null; MvId = $null }
-            @{ CsAttr = "displayName";   MvAttr = "Display Name";   CsId = $null; MvId = $null }
-            @{ CsAttr = "email";         MvAttr = "Email";          CsId = $null; MvId = $null }
-            @{ CsAttr = "title";         MvAttr = "Job Title";      CsId = $null; MvId = $null }
-            @{ CsAttr = "department";    MvAttr = "Department";     CsId = $null; MvId = $null }
-            @{ CsAttr = "samAccountName"; MvAttr = "Account Name";  CsId = $null; MvId = $null }
+            @{ CsAttr = "employeeId";        MvAttr = "Employee ID";    CsId = $null; MvId = $null }
+            @{ CsAttr = "firstName";         MvAttr = "First Name";     CsId = $null; MvId = $null }
+            @{ CsAttr = "lastName";          MvAttr = "Last Name";      CsId = $null; MvId = $null }
+            @{ CsAttr = "displayName";       MvAttr = "Display Name";   CsId = $null; MvId = $null }
+            @{ CsAttr = "email";             MvAttr = "Email";          CsId = $null; MvId = $null }
+            @{ CsAttr = "title";             MvAttr = "Job Title";      CsId = $null; MvId = $null }
+            @{ CsAttr = "department";        MvAttr = "Department";     CsId = $null; MvId = $null }
+            @{ CsAttr = "samAccountName";    MvAttr = "Account Name";   CsId = $null; MvId = $null }
+            @{ CsAttr = "dn";                MvAttr = "DN";             CsId = $null; MvId = $null }
         )
 
         $exportMappings = @(
-            @{ MvAttr = "Account Name";  LdapAttr = "sAMAccountName"; MvId = $null; LdapId = $null }
-            @{ MvAttr = "First Name";    LdapAttr = "givenName";      MvId = $null; LdapId = $null }
-            @{ MvAttr = "Last Name";     LdapAttr = "sn";             MvId = $null; LdapId = $null }
-            @{ MvAttr = "Display Name";  LdapAttr = "displayName";    MvId = $null; LdapId = $null }
-            @{ MvAttr = "Display Name";  LdapAttr = "cn";             MvId = $null; LdapId = $null }
-            @{ MvAttr = "Email";         LdapAttr = "mail";           MvId = $null; LdapId = $null }
-            @{ MvAttr = "Job Title";     LdapAttr = "title";          MvId = $null; LdapId = $null }
-            @{ MvAttr = "Department";    LdapAttr = "department";     MvId = $null; LdapId = $null }
+            @{ MvAttr = "Account Name";  LdapAttr = "sAMAccountName";       MvId = $null; LdapId = $null }
+            @{ MvAttr = "First Name";    LdapAttr = "givenName";            MvId = $null; LdapId = $null }
+            @{ MvAttr = "Last Name";     LdapAttr = "sn";                   MvId = $null; LdapId = $null }
+            @{ MvAttr = "Display Name";  LdapAttr = "displayName";          MvId = $null; LdapId = $null }
+            @{ MvAttr = "Display Name";  LdapAttr = "cn";                   MvId = $null; LdapId = $null }
+            @{ MvAttr = "Email";         LdapAttr = "mail";                 MvId = $null; LdapId = $null }
+            @{ MvAttr = "Email";         LdapAttr = "userPrincipalName";    MvId = $null; LdapId = $null }  # UPN = email for AD login
+            @{ MvAttr = "Job Title";     LdapAttr = "title";                MvId = $null; LdapId = $null }
+            @{ MvAttr = "Department";    LdapAttr = "department";           MvId = $null; LdapId = $null }
+            @{ MvAttr = "DN";            LdapAttr = "distinguishedName";    MvId = $null; LdapId = $null }  # Required for LDAP object creation
         )
 
         # SQL to add import mappings (CSV → Metaverse)
@@ -620,6 +675,20 @@ try {
         Write-Host "  Run profile 'HR CSV - Full Import' already exists" -ForegroundColor Gray
     }
 
+    # Full Sync from CSV - evaluates sync rules and creates MVOs/pending exports
+    $csvSyncProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Full Sync" }
+    if (-not $csvSyncProfile) {
+        $csvSyncProfile = New-JIMRunProfile `
+            -Name "HR CSV - Full Sync" `
+            -ConnectedSystemId $csvSystem.id `
+            -RunType "FullSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'HR CSV - Full Sync' run profile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'HR CSV - Full Sync' already exists" -ForegroundColor Gray
+    }
+
     # Export to LDAP (Note: 'Export' is the correct RunType, not 'FullExport')
     $ldapExportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Export" }
     if (-not $ldapExportProfile) {
@@ -658,5 +727,6 @@ return @{
     CSVSystemId = $csvSystem.id
     LDAPSystemId = $ldapSystem.id
     CSVImportProfileId = $csvImportProfile.id
+    CSVSyncProfileId = $csvSyncProfile.id
     LDAPExportProfileId = $ldapExportProfile.id
 }

@@ -1067,7 +1067,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Sync Rules
     public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
-        return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
+        return await Repository.Database.SyncRules
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.TargetMetaverseAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Sources)
+            .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Sources)
+            .ThenInclude(s => s.MetaverseAttribute)
+            .Include(sr => sr.ConnectedSystem)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            .Include(sr => sr.MetaverseObjectType)
+            .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
+            .OrderBy(x => x.Name)
+            .ToListAsync();
     }
     
     /// <summary>

@@ -105,9 +105,11 @@ try {
         $testUser.Email = "test.joiner@testdomain.local"
         $testUser.DisplayName = "Test Joiner"
 
-        # Add user to CSV file
+        # Add user to CSV file (with new columns: userPrincipalName and dn)
         $csvPath = "$PSScriptRoot/../test-data/hr-users.csv"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`""
+        $upn = "$($testUser.SamAccountName)@testdomain.local"
+        $dn = "CN=$($testUser.DisplayName),CN=Users,DC=testdomain,DC=local"
+        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`",`"$dn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         Write-Host "  ✓ Added test.joiner to CSV" -ForegroundColor Green
@@ -121,8 +123,18 @@ try {
 
         Write-Host "  ✓ CSV import started (Activity: $($importResult.activityId))" -ForegroundColor Green
 
-        # Wait for processing
-        Write-Host "Waiting $WaitSeconds seconds for processing..." -ForegroundColor Gray
+        # Wait for import processing
+        Write-Host "Waiting $WaitSeconds seconds for import..." -ForegroundColor Gray
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Trigger Full Sync (evaluates sync rules, creates MVOs and pending exports)
+        Write-Host "Triggering Full Sync..." -ForegroundColor Gray
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -PassThru
+
+        Write-Host "  ✓ Full Sync started (Activity: $($syncResult.activityId))" -ForegroundColor Green
+
+        # Wait for sync processing
+        Write-Host "Waiting $WaitSeconds seconds for sync..." -ForegroundColor Gray
         Start-Sleep -Seconds $WaitSeconds
 
         # Trigger LDAP Export
@@ -174,9 +186,12 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync
+        # Trigger sync (Import → Full Sync → Export)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
+
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
@@ -217,9 +232,12 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync
+        # Trigger sync (Import → Full Sync → Export)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
+
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
 
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
@@ -252,16 +270,20 @@ try {
         $reconnectUser.EmployeeId = "EMP888888"
         $reconnectUser.SamAccountName = "test.reconnect"
 
-        # Add to CSV
+        # Add to CSV (with new columns: userPrincipalName and dn)
         $csvPath = "$PSScriptRoot/../test-data/hr-users.csv"
-        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"Test Reconnect`",`"Active`""
+        $upn = "$($reconnectUser.SamAccountName)@testdomain.local"
+        $dn = "CN=Test Reconnect,CN=Users,DC=testdomain,DC=local"
+        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"Test Reconnect`",`"Active`",`"$upn`",`"$dn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Initial sync
+        # Initial sync (Import → Full Sync → Export)
         Write-Host "  Initial sync..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
@@ -274,6 +296,8 @@ try {
 
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
         Start-Sleep -Seconds 10  # Short wait
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
+        Start-Sleep -Seconds 10  # Short wait
 
         # Restore user (simulating rehire before grace period)
         Write-Host "  Restoring user (simulating rehire)..." -ForegroundColor Gray
@@ -281,6 +305,8 @@ try {
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
         Start-Sleep -Seconds $WaitSeconds
