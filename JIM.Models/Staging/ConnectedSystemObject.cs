@@ -87,7 +87,7 @@ public class ConnectedSystemObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.SingleOrDefault(q => q.Attribute.Id == ExternalIdAttributeId);
+            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == ExternalIdAttributeId);
         } 
     }
 
@@ -99,7 +99,7 @@ public class ConnectedSystemObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.SingleOrDefault(q => q.Attribute.Id == SecondaryExternalIdAttributeId);
+            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == SecondaryExternalIdAttributeId);
         }
     }
 

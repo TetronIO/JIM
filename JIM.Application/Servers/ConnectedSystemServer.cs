@@ -832,7 +832,7 @@ public class ConnectedSystemServer
         // create a change object we can add attribute changes to.
         var change = new ConnectedSystemObjectChange
         {
-            ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+            ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Create,
             ChangeTime = DateTime.UtcNow,

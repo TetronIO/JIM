@@ -281,7 +281,7 @@ public class SyncImportTaskProcessor
         {
             // find the object type for the imported object in our schema
             var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
-                        
+
             // what is the external id attribute for this object type in our schema?
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
             externalIdsImported.Add(new ExternalIdPair
@@ -524,8 +524,10 @@ public class SyncImportTaskProcessor
         var connectedSystemObject = new ConnectedSystemObject
         {
             ConnectedSystem = _connectedSystem,
+            ConnectedSystemId = _connectedSystem.Id,
             ExternalIdAttributeId = connectedSystemObjectType.Attributes.First(a => a.IsExternalId).Id,
-            Type = connectedSystemObjectType
+            Type = connectedSystemObjectType,
+            TypeId = connectedSystemObjectType.Id
         };
 
         // not every system uses a secondary external id attribute, but some do, i.e. LDAP
@@ -557,6 +559,7 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
                             StringValue = importObjectAttributeStringValue,
                             ConnectedSystemObject = connectedSystemObject
                         });
@@ -568,6 +571,7 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
                             IntValue = importObjectAttributeIntValue,
                             ConnectedSystemObject = connectedSystemObject
                         });
@@ -579,6 +583,7 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
                             ByteValue = importObjectAttributeByteValue,
                             ConnectedSystemObject = connectedSystemObject
                         });
@@ -590,6 +595,7 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
                             GuidValue = importObjectAttributeGuidValue,
                             ConnectedSystemObject = connectedSystemObject
                         });
@@ -599,6 +605,7 @@ public class SyncImportTaskProcessor
                     connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                     {
                         Attribute = csAttribute,
+                        AttributeId = csAttribute.Id,
                         DateTimeValue = importObjectAttribute.DateTimeValue,
                         ConnectedSystemObject = connectedSystemObject
                     });
@@ -607,6 +614,7 @@ public class SyncImportTaskProcessor
                     connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                     {
                         Attribute = csAttribute,
+                        AttributeId = csAttribute.Id,
                         BoolValue = importObjectAttribute.BoolValue,
                         ConnectedSystemObject = connectedSystemObject
                     });
@@ -617,6 +625,7 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
                         {
                             Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
                             UnresolvedReferenceValue = importObjectAttributeReferenceValue,
                             ConnectedSystemObject = connectedSystemObject
                         });

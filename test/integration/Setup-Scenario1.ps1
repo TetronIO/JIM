@@ -320,6 +320,15 @@ WHERE "ConnectedSystemObjectTypeId" = $($csvUserType.id) AND "Name" = 'employeeI
         $setExternalIdSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
         Write-Host "  ✓ Set 'employeeId' as External ID for CSV object type" -ForegroundColor Green
 
+        # Mark all CSV and LDAP attributes as selected (required for import/export)
+        $selectAttributesSql = @"
+UPDATE "ConnectedSystemAttributes"
+SET "Selected" = true
+WHERE "ConnectedSystemObjectTypeId" IN ($($csvUserType.id), $($ldapUserType.id));
+"@
+        $selectAttributesSql | docker compose -f /workspaces/JIM/docker-compose.yml -f /workspaces/JIM/docker-compose.override.codespaces.yml exec -T jim.database psql -U jim -d jim > $null
+        Write-Host "  ✓ Selected all attributes for CSV and LDAP object types" -ForegroundColor Green
+
         # Create Import sync rule (CSV -> Metaverse)
         $existingRules = Get-JIMSyncRule
         $importRuleName = "HR CSV Import Users"
