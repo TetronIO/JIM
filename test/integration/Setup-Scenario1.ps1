@@ -412,9 +412,9 @@ BEGIN
     WHERE ma."Name" = 'DN';
 
     IF dn_attr_id IS NULL THEN
-        -- Create the DN attribute
+        -- Create the DN attribute (Type=1 is Text)
         INSERT INTO "MetaverseAttributes" ("Created", "Name", "Type", "AttributePlurality", "BuiltIn")
-        VALUES (NOW(), 'DN', 0, 0, false)
+        VALUES (NOW(), 'DN', 1, 0, false)
         RETURNING "Id" INTO dn_attr_id;
 
         -- Link to User object type
@@ -427,6 +427,9 @@ BEGIN
         INSERT INTO "MetaverseAttributeMetaverseObjectType" ("AttributesId", "MetaverseObjectTypesId")
         VALUES (dn_attr_id, user_type_id)
         ON CONFLICT DO NOTHING;
+
+        -- Ensure Type is correct (1 = Text)
+        UPDATE "MetaverseAttributes" SET "Type" = 1 WHERE "Id" = dn_attr_id AND "Type" != 1;
 
         RAISE NOTICE 'DN attribute already exists with ID %', dn_attr_id;
     END IF;
