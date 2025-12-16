@@ -1148,8 +1148,32 @@ docker logs jim.web --tail 100
 
 1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
 2. ~~**Fix file connector change detection**~~ - ✅ Fixed! All Scenario 1 tests now passing
-3. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC
+3. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC (blocked - see below)
 4. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+
+### Blocking Issue: LDAP Partition Management API Missing
+
+**Status**: 🚧 BLOCKED
+
+**Symptom**: Scenario 2 (Directory-to-Directory) setup completes but imports return no objects.
+
+**Root Cause**: The LDAP connector requires partitions and containers to be selected for import. The connector iterates over `ConnectedSystem.Partitions.Where(p => p.Selected)` and then selected containers within each partition. Currently:
+- There is no API endpoint to list, select, or configure partitions
+- Schema import creates partitions but doesn't select them by default
+- The PowerShell module has no cmdlets for partition management
+
+**Impact**:
+- Scenario 2 (Directory-to-Directory): ❌ BLOCKED - LDAP-to-LDAP sync cannot work without partition selection
+- Scenario 3 (GALSYNC): ❌ BLOCKED - LDAP import to CSV export needs partition selection
+
+**Fix Required**: Implement partition management API endpoints:
+1. `GET /api/v1/synchronisation/connected-systems/{id}/partitions` - List partitions
+2. `PUT /api/v1/synchronisation/connected-systems/{id}/partitions/{partitionId}` - Update partition (select/deselect)
+3. `PUT /api/v1/synchronisation/connected-systems/{id}/partitions/{partitionId}/containers/{containerId}` - Update container selection
+
+**Files Created (Ready for Use Once API Available)**:
+- `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync
+- `test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1` - Test execution script
 
 ### Resolved Issue: File Connector Not Detecting Attribute Changes
 
@@ -1176,6 +1200,7 @@ docker logs jim.web --tail 100
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.8     | 2025-12-16 | Added Scenario 2 scripts (Setup-Scenario2.ps1, Invoke-Scenario2-DirectorySync.ps1). Documented blocking issue - LDAP partition management API needed. |
 | 1.7     | 2025-12-16 | **Phase 1 Complete!** All Scenario 1 tests passing. Fixed file connector change detection (missing .Include() calls). Added test data reset and AD cleanup for repeatable tests. |
 | 1.6     | 2025-12-16 | Ran full Scenario 1 tests, documented file connector change detection issue |
 | 1.5     | 2025-12-16 | Scenario 1 Joiner test passing, added Nano template, multiple bug fixes |
