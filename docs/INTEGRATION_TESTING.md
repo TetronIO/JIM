@@ -938,10 +938,13 @@ If a test scenario requires functionality not exposed via API or PowerShell:
 
 **Example of Blocked Scenario**:
 
-The current Scenario 2 (Directory-to-Directory) is blocked because the LDAP connector requires partition selection, but no API endpoint exists for this. Rather than using SQL to set `ConnectedSystemPartition.Selected = true`, we:
-1. Documented the blocking issue (see [Blocking Issue: LDAP Partition Management API Missing](#blocking-issue-ldap-partition-management-api-missing))
+Scenario 2 (Directory-to-Directory) was initially blocked because no API existed for partition selection. Following this process:
+1. Documented the blocking issue in this document
 2. Created GitHub issue #191 for the required API endpoints
-3. Left the test scripts ready to use once the API is implemented
+3. Implemented the missing API (partition management, hierarchy import)
+4. Updated test scripts to use the new API
+
+The scenario is now blocked by a different issue (LDAP connector object type matching bug) which was discovered through integration testing - exactly the kind of issue these tests are designed to find.
 
 **Acceptable SQL Usage**:
 - **External systems only**: Querying Samba AD, test databases, or other external systems being tested
@@ -1187,29 +1190,54 @@ docker logs jim.web --tail 100
 3. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC (blocked - see below)
 4. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
 
-### Blocking Issue: LDAP Partition Management API Missing
+### Blocking Issue: LDAP Connector Object Type Matching Bug
 
 **Status**: 🚧 BLOCKED
 
-**Symptom**: Scenario 2 (Directory-to-Directory) setup completes but imports return no objects.
+**Symptom**: Scenario 2 (Directory-to-Directory) LDAP import fails with error: `Sequence contains more than one matching element`
 
-**Root Cause**: The LDAP connector requires partitions and containers to be selected for import. The connector iterates over `ConnectedSystem.Partitions.Where(p => p.Selected)` and then selected containers within each partition. Currently:
-- There is no API endpoint to list, select, or configure partitions
-- Schema import creates partitions but doesn't select them by default
-- The PowerShell module has no cmdlets for partition management
+**Root Cause**: The LDAP connector's `ConvertLdapResults` method (line 539 in `LdapConnectorImport.cs`) uses `SingleOrDefault` to match object types by object class. Active Directory objects inherit from multiple object classes (e.g., `user`, `organizationalPerson`, `person`, `top`), and when multiple of these classes are defined in the schema as object types, the match fails.
+
+```csharp
+// Line 539 - fails when multiple object types match
+var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
+    ot => objectClasses.Any(oc => oc.Equals(ot.Name, StringComparison.OrdinalIgnoreCase)));
+```
 
 **Impact**:
-- Scenario 2 (Directory-to-Directory): ❌ BLOCKED - LDAP-to-LDAP sync cannot work without partition selection
-- Scenario 3 (GALSYNC): ❌ BLOCKED - LDAP import to CSV export needs partition selection
+- Scenario 2 (Directory-to-Directory): ❌ BLOCKED - LDAP import fails during object conversion
+- Scenario 3 (GALSYNC): ❌ BLOCKED - LDAP import required for this scenario
 
-**Fix Required**: Implement partition management API endpoints:
-1. `GET /api/v1/synchronisation/connected-systems/{id}/partitions` - List partitions
-2. `PUT /api/v1/synchronisation/connected-systems/{id}/partitions/{partitionId}` - Update partition (select/deselect)
-3. `PUT /api/v1/synchronisation/connected-systems/{id}/partitions/{partitionId}/containers/{containerId}` - Update container selection
+**Fix Required**: The LDAP connector needs to prioritise the most specific object class (e.g., `user` over `person`). Potential fixes:
+1. Use the first (most specific) object class in the array
+2. Implement object class hierarchy awareness
+3. Filter schema to only include leaf object types
 
-**Files Created (Ready for Use Once API Available)**:
-- `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync
+**GitHub Issue**: To be created
+
+**Files Created (Ready for Use Once Bug Fixed)**:
+- `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync (fully functional)
 - `test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1` - Test execution script
+
+### Resolved Issue: LDAP Partition Management API Missing
+
+**Status**: ✅ RESOLVED (2025-12-16)
+
+**Original Symptom**: Scenario 2 setup completed but imports returned no objects because partitions were not selected.
+
+**Fix Applied**: Implemented partition and container management API:
+- `GET /api/v1/synchronisation/connected-systems/{id}/partitions` - List partitions
+- `PUT /api/v1/synchronisation/connected-systems/{id}/partitions/{partitionId}` - Update partition selection
+- `PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` - Update container selection
+- `POST /api/v1/synchronisation/connected-systems/{id}/import-hierarchy` - Import hierarchy from LDAP
+
+**PowerShell Cmdlets Added**:
+- `Get-JIMConnectedSystemPartition` - List partitions
+- `Set-JIMConnectedSystemPartition` - Update partition selection
+- `Set-JIMConnectedSystemContainer` - Update container selection
+- `Import-JIMConnectedSystemHierarchy` - Import hierarchy from connector
+
+**Commit**: 9d7445f - feat(api): Add hierarchy import endpoint and PowerShell cmdlet
 
 ### Resolved Issue: File Connector Not Detecting Attribute Changes
 
@@ -1236,6 +1264,7 @@ docker logs jim.web --tail 100
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.9     | 2025-12-16 | Resolved partition API blocking issue. Added partition/container management API and PowerShell cmdlets. Discovered LDAP connector object type matching bug (new blocker). |
 | 1.8     | 2025-12-16 | Added Scenario 2 scripts (Setup-Scenario2.ps1, Invoke-Scenario2-DirectorySync.ps1). Documented blocking issue - LDAP partition management API needed. |
 | 1.7     | 2025-12-16 | **Phase 1 Complete!** All Scenario 1 tests passing. Fixed file connector change detection (missing .Include() calls). Added test data reset and AD cleanup for repeatable tests. |
 | 1.6     | 2025-12-16 | Ran full Scenario 1 tests, documented file connector change detection issue |
