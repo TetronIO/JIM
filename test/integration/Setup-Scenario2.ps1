@@ -308,25 +308,95 @@ else {
     }
 }
 
-# Step 7: Select Partitions and Containers for Import
-Write-TestStep "Step 7" "Selecting Partitions and Containers"
+# Step 7: Create Test OUs and Select Partitions/Containers
+Write-TestStep "Step 7" "Creating Test OUs and Selecting Partitions/Containers"
 
 try {
-    # Select partitions for Source system
+    # Create TestUsers OU in both AD instances (required for proper scoping)
+    # This filters out built-in accounts like Administrator, Guest, krbtgt
+    Write-Host "  Creating TestUsers OU in Source AD..." -ForegroundColor Gray
+    $result = docker exec samba-ad-source samba-tool ou create "OU=TestUsers,DC=sourcedomain,DC=local" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "    ✓ Created OU=TestUsers in Source AD" -ForegroundColor Green
+    }
+    elseif ($result -match "already exists") {
+        Write-Host "    OU=TestUsers already exists in Source AD" -ForegroundColor Gray
+    }
+    else {
+        Write-Host "    ⚠ Failed to create OU=TestUsers in Source AD: $result" -ForegroundColor Yellow
+    }
+
+    Write-Host "  Creating TestUsers OU in Target AD..." -ForegroundColor Gray
+    $result = docker exec samba-ad-target samba-tool ou create "OU=TestUsers,DC=targetdomain,DC=local" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "    ✓ Created OU=TestUsers in Target AD" -ForegroundColor Green
+    }
+    elseif ($result -match "already exists") {
+        Write-Host "    OU=TestUsers already exists in Target AD" -ForegroundColor Gray
+    }
+    else {
+        Write-Host "    ⚠ Failed to create OU=TestUsers in Target AD: $result" -ForegroundColor Yellow
+    }
+
+    # Re-import hierarchy to pick up the new OUs
+    Write-Host "  Re-importing hierarchy to discover new OUs..." -ForegroundColor Gray
+    Import-JIMConnectedSystemHierarchy -Id $sourceSystem.id | Out-Null
+    Import-JIMConnectedSystemHierarchy -Id $targetSystem.id | Out-Null
+    Write-Host "    ✓ Hierarchy re-imported" -ForegroundColor Green
+
+    # Helper function to recursively find a container by name
+    function Find-ContainerByName {
+        param(
+            [array]$Containers,
+            [string]$Name
+        )
+        foreach ($container in $Containers) {
+            if ($container.name -eq $Name) {
+                return $container
+            }
+            if ($container.childContainers -and $container.childContainers.Count -gt 0) {
+                $found = Find-ContainerByName -Containers $container.childContainers -Name $Name
+                if ($found) {
+                    return $found
+                }
+            }
+        }
+        return $null
+    }
+
+    # Configure Source system - only select domain partition and TestUsers container
     Write-Host "  Configuring Source LDAP partitions..." -ForegroundColor Gray
     $sourcePartitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
 
     if ($sourcePartitions -and $sourcePartitions.Count -gt 0) {
-        foreach ($partition in $sourcePartitions) {
-            Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected partition: $($partition.name)" -ForegroundColor Green
+        # Find the main domain partition (DC=sourcedomain,DC=local)
+        $sourceDomainPartition = $sourcePartitions | Where-Object {
+            $_.name -eq "DC=sourcedomain,DC=local"
+        }
 
-            # Select all containers in this partition
-            if ($partition.containers -and $partition.containers.Count -gt 0) {
-                foreach ($container in $partition.containers) {
-                    Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $container.id -Selected $true | Out-Null
-                }
-                Write-Host "    ✓ Selected $($partition.containers.Count) container(s)" -ForegroundColor Green
+        if ($sourceDomainPartition) {
+            # Select only the domain partition
+            Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $sourceDomainPartition.id -Selected $true | Out-Null
+            Write-Host "    ✓ Selected partition: $($sourceDomainPartition.name)" -ForegroundColor Green
+
+            # Find and select only the TestUsers container
+            $testUsersContainer = Find-ContainerByName -Containers $sourceDomainPartition.containers -Name "TestUsers"
+            if ($testUsersContainer) {
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $testUsersContainer.id -Selected $true | Out-Null
+                Write-Host "    ✓ Selected container: TestUsers (filters out built-in accounts)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "    ⚠ TestUsers container not found - run Populate-SambaAD.ps1 first" -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Host "    ⚠ Domain partition not found for Source system" -ForegroundColor Yellow
+        }
+
+        # Deselect other partitions (DNS zones, Configuration, Schema)
+        foreach ($partition in $sourcePartitions) {
+            if ($partition.name -ne "DC=sourcedomain,DC=local") {
+                Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $false | Out-Null
             }
         }
     }
@@ -334,21 +404,39 @@ try {
         Write-Host "    ⚠ No partitions found for Source system" -ForegroundColor Yellow
     }
 
-    # Select partitions for Target system
+    # Configure Target system - only select domain partition and TestUsers container
     Write-Host "  Configuring Target LDAP partitions..." -ForegroundColor Gray
     $targetPartitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id
 
     if ($targetPartitions -and $targetPartitions.Count -gt 0) {
-        foreach ($partition in $targetPartitions) {
-            Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected partition: $($partition.name)" -ForegroundColor Green
+        # Find the main domain partition (DC=targetdomain,DC=local)
+        $targetDomainPartition = $targetPartitions | Where-Object {
+            $_.name -eq "DC=targetdomain,DC=local"
+        }
 
-            # Select all containers in this partition
-            if ($partition.containers -and $partition.containers.Count -gt 0) {
-                foreach ($container in $partition.containers) {
-                    Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $container.id -Selected $true | Out-Null
-                }
-                Write-Host "    ✓ Selected $($partition.containers.Count) container(s)" -ForegroundColor Green
+        if ($targetDomainPartition) {
+            # Select only the domain partition
+            Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $targetDomainPartition.id -Selected $true | Out-Null
+            Write-Host "    ✓ Selected partition: $($targetDomainPartition.name)" -ForegroundColor Green
+
+            # Find and select only the TestUsers container
+            $testUsersContainer = Find-ContainerByName -Containers $targetDomainPartition.containers -Name "TestUsers"
+            if ($testUsersContainer) {
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $testUsersContainer.id -Selected $true | Out-Null
+                Write-Host "    ✓ Selected container: TestUsers (filters out built-in accounts)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "    ⚠ TestUsers container not found - will be created during export" -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Host "    ⚠ Domain partition not found for Target system" -ForegroundColor Yellow
+        }
+
+        # Deselect other partitions (DNS zones, Configuration, Schema)
+        foreach ($partition in $targetPartitions) {
+            if ($partition.name -ne "DC=targetdomain,DC=local") {
+                Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $false | Out-Null
             }
         }
     }
@@ -356,7 +444,7 @@ try {
         Write-Host "    ⚠ No partitions found for Target system" -ForegroundColor Yellow
     }
 
-    Write-Host "  ✓ Partitions and containers configured" -ForegroundColor Green
+    Write-Host "  ✓ Partitions and containers configured (scoped to TestUsers OU)" -ForegroundColor Green
 }
 catch {
     Write-Host "  ✗ Failed to configure partitions: $_" -ForegroundColor Red
@@ -525,6 +613,8 @@ try {
         )
 
         # Target exports these attributes from Metaverse
+        # Note: distinguishedName is required for LDAP provisioning - it tells the connector where to create the object
+        # The DN is constructed using an expression that places users in the TestUsers OU
         $exportMappings = @(
             @{ MvAttr = "Account Name";   LdapAttr = "sAMAccountName" }
             @{ MvAttr = "First Name";     LdapAttr = "givenName" }
@@ -537,6 +627,22 @@ try {
             @{ MvAttr = "Department";     LdapAttr = "department" }
             @{ MvAttr = "Phone";          LdapAttr = "telephoneNumber" }
         )
+
+        # NOTE: For LDAP provisioning (creating new objects), the connector needs a distinguishedName attribute
+        # to know where to create the object. Without function/expression support in JIM, we cannot dynamically
+        # construct the target DN from metaverse attributes.
+        #
+        # Current limitation: New object provisioning to LDAP requires either:
+        # 1. Pre-populating users in the target system (for join/update scenarios)
+        # 2. Implementing function support for DN construction (e.g., "CN=" + DisplayName + ",OU=TestUsers,DC=...")
+        #
+        # For Scenario 2, this demonstrates:
+        # - Import from Source AD -> Metaverse (works)
+        # - Sync to create pending exports (works)
+        # - Export to Target AD will fail for NEW objects until DN construction is available
+        # - Export to Target AD will work for EXISTING objects (updates)
+        #
+        # Workaround: Pre-create matching users in Target AD, then run import on both sides to establish joins
 
         # Get all metaverse attributes for lookup
         $mvAttributes = Get-JIMMetaverseAttribute
