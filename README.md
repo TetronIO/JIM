@@ -65,7 +65,7 @@ Each release includes a downloadable bundle containing pre-built Docker images, 
 ## Connectors
 JIM is currently targeting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will also be able to develop their own custom Connectors for use with JIM to support bespoke scenarios.
 
-- LDAP (incl. Active Directory & AD-LDS)
+- LDAP (incl. Active Directory, AD-LDS & Samba AD)
 - Microsoft SQL Server Database
 - PostgreSQL Database
 - MySQL Database
