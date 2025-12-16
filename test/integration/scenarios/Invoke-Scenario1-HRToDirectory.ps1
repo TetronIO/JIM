@@ -76,6 +76,32 @@ try {
         throw "API key required for authentication"
     }
 
+    # Reset CSV to baseline state before running tests
+    # This ensures test data is in a known state regardless of previous test runs
+    Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
+    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
+
+    # Clean up AD users from previous test runs
+    # This prevents "object already exists" errors during export
+    Write-Host "Cleaning up AD test users from previous runs..." -ForegroundColor Gray
+    $testUsers = @("bob.smith1", "charlie.smith2", "diana.smith3", "test.joiner", "test.reconnect")
+    $deletedCount = 0
+    foreach ($user in $testUsers) {
+        # Try to delete the user - if they don't exist, samba-tool will error but that's OK
+        # Use bash -c to properly capture the output and exit code
+        $output = & docker exec samba-ad-primary bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
+        if ($output -match "Deleted user") {
+            Write-Host "  ✓ Deleted $user from AD" -ForegroundColor Gray
+            $deletedCount++
+        } elseif ($output -match "Unable to find user") {
+            Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
+        }
+    }
+    Write-Host "  ✓ AD cleanup complete ($deletedCount users deleted)" -ForegroundColor Green
+
     $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template
 
     if (-not $config) {
