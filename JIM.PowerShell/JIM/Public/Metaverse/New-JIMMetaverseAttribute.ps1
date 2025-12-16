@@ -77,11 +77,35 @@ function New-JIMMetaverseAttribute {
             return
         }
 
+        # Map type string to enum integer value (AttributeDataType enum)
+        $typeMap = @{
+            'Text'      = 1
+            'Number'    = 2
+            'Integer'   = 2  # Alias for Number
+            'DateTime'  = 3
+            'Binary'    = 4
+            'Reference' = 5
+            'Guid'      = 6
+            'Boolean'   = 7
+        }
+        $typeValue = $typeMap[$Type]
+        if ($null -eq $typeValue) {
+            Write-Error "Invalid type '$Type'. Valid values: Text, Number, Integer, DateTime, Binary, Reference, Guid, Boolean"
+            return
+        }
+
+        # Map plurality string to enum integer value (AttributePlurality enum)
+        $pluralityMap = @{
+            'SingleValued' = 0
+            'MultiValued'  = 1
+        }
+        $pluralityValue = $pluralityMap[$AttributePlurality]
+
         # Build request body
         $body = @{
             name = $Name
-            type = $Type
-            attributePlurality = $AttributePlurality
+            type = $typeValue
+            attributePlurality = $pluralityValue
         }
 
         if ($ObjectTypeIds) {

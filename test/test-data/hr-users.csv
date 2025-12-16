@@ -1,2 +1,5 @@
 "employeeId","firstName","lastName","email","department","title","samAccountName","displayName","status","userPrincipalName","dn"
-"EMP001","John","Doe","john.doe@testdomain.local","IT","Developer","john.doe","John Doe","Active","john.doe@testdomain.local","CN=John Doe,CN=Users,DC=testdomain,DC=local"
+"EMP001","Bob","Smith","bob.smith1@testdomain.local","HR","Manager","bob.smith1","Bob Smith","Active","bob.smith1@testdomain.local","CN=Bob Smith,CN=Users,DC=testdomain,DC=local"
+"EMP002","Alice","Johnson","alice.johnson@testdomain.local","Engineering","Developer","alice.johnson","Alice Johnson","Active","alice.johnson@testdomain.local","CN=Alice Johnson,CN=Users,DC=testdomain,DC=local"
+"EMP003","Charlie","Brown","charlie.brown@testdomain.local","Sales","Representative","charlie.brown","Charlie Brown","Active","charlie.brown@testdomain.local","CN=Charlie Brown,CN=Users,DC=testdomain,DC=local"
+"EMP999999","Tina","Martin","test.joiner@testdomain.local","Admin","Associate","test.joiner","Test Joiner","Active","test.joiner@testdomain.local","CN=Test Joiner,CN=Users,DC=testdomain,DC=local"

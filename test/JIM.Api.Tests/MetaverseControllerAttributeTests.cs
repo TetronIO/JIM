@@ -78,7 +78,7 @@ public class MetaverseControllerAttributeTests
         };
         var result = await _controller.CreateAttributeAsync(request);
 
-        Assert.That(result, Is.InstanceOf<CreatedAtActionResult>());
+        Assert.That(result, Is.InstanceOf<CreatedResult>());
     }
 
     [Test]
@@ -194,7 +194,7 @@ public class MetaverseControllerAttributeTests
             Name = "NewAttribute",
             Type = AttributeDataType.Text
         };
-        var result = await _controller.CreateAttributeAsync(request) as CreatedAtActionResult;
+        var result = await _controller.CreateAttributeAsync(request) as CreatedResult;
         var dto = result?.Value as MetaverseAttributeDetailDto;
 
         Assert.That(dto, Is.Not.Null);

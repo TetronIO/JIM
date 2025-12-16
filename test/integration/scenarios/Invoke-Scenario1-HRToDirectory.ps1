@@ -106,7 +106,8 @@ try {
         $testUser.DisplayName = "Test Joiner"
 
         # Add user to CSV file (with new columns: userPrincipalName and dn)
-        $csvPath = "$PSScriptRoot/../test-data/hr-users.csv"
+        # Note: Using test/test-data path as that's what's mounted to JIM containers via docker-compose.override.codespaces.yml
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
         $dn = "CN=$($testUser.DisplayName),CN=Users,DC=testdomain,DC=local"
         $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`",`"$dn`""
@@ -168,7 +169,7 @@ try {
         Write-Host "Updating user department in CSV..." -ForegroundColor Gray
 
         # Update CSV - change bob.smith1's department
-        $csvPath = "$PSScriptRoot/../test-data/hr-users.csv"
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $csvContent = Get-Content $csvPath
 
         $updatedContent = $csvContent | ForEach-Object {
@@ -218,7 +219,7 @@ try {
 
         Write-Host "Removing user from CSV..." -ForegroundColor Gray
 
-        $csvPath = "$PSScriptRoot/../test-data/hr-users.csv"
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $csvContent = Get-Content $csvPath
 
         # Remove test.joiner (or bob.smith1 if joiner not run)
@@ -271,7 +272,7 @@ try {
         $reconnectUser.SamAccountName = "test.reconnect"
 
         # Add to CSV (with new columns: userPrincipalName and dn)
-        $csvPath = "$PSScriptRoot/../test-data/hr-users.csv"
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($reconnectUser.SamAccountName)@testdomain.local"
         $dn = "CN=Test Reconnect,CN=Users,DC=testdomain,DC=local"
         $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"Test Reconnect`",`"Active`",`"$upn`",`"$dn`""
@@ -327,8 +328,8 @@ try {
     # Summary
     Write-TestSection "Test Results Summary"
 
-    $successCount = ($testResults.Steps | Where-Object { $_.Success }).Count
-    $totalCount = $testResults.Steps.Count
+    $successCount = @($testResults.Steps | Where-Object { $_.Success }).Count
+    $totalCount = @($testResults.Steps).Count
 
     Write-Host "Tests run:    $totalCount" -ForegroundColor Cyan
     Write-Host "Tests passed: $successCount" -ForegroundColor $(if ($successCount -eq $totalCount) { "Green" } else { "Yellow" })

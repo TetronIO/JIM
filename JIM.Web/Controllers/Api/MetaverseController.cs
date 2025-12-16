@@ -156,7 +156,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
 
         var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
-        return CreatedAtAction(nameof(GetAttributeAsync), new { id = attribute.Id }, MetaverseAttributeDetailDto.FromEntity(result!));
+        // Use Created with explicit URL instead of CreatedAtAction to avoid API versioning route generation issues
+        return Created($"/api/v1/metaverse/attributes/{attribute.Id}", MetaverseAttributeDetailDto.FromEntity(result!));
     }
 
     /// <summary>

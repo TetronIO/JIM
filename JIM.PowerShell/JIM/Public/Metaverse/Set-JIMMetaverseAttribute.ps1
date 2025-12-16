@@ -91,6 +91,24 @@ function Set-JIMMetaverseAttribute {
 
         $attrId = if ($InputObject) { $InputObject.id } else { $Id }
 
+        # Map type string to enum integer value (AttributeDataType enum)
+        $typeMap = @{
+            'Text'      = 1
+            'Number'    = 2
+            'Integer'   = 2  # Alias for Number
+            'DateTime'  = 3
+            'Binary'    = 4
+            'Reference' = 5
+            'Guid'      = 6
+            'Boolean'   = 7
+        }
+
+        # Map plurality string to enum integer value (AttributePlurality enum)
+        $pluralityMap = @{
+            'SingleValued' = 0
+            'MultiValued'  = 1
+        }
+
         # Build update body
         $body = @{}
 
@@ -99,11 +117,16 @@ function Set-JIMMetaverseAttribute {
         }
 
         if ($Type) {
-            $body.type = $Type
+            $typeValue = $typeMap[$Type]
+            if ($null -eq $typeValue) {
+                Write-Error "Invalid type '$Type'. Valid values: Text, Number, Integer, DateTime, Binary, Reference, Guid, Boolean"
+                return
+            }
+            $body.type = $typeValue
         }
 
         if ($AttributePlurality) {
-            $body.attributePlurality = $AttributePlurality
+            $body.attributePlurality = $pluralityMap[$AttributePlurality]
         }
 
         if ($PSBoundParameters.ContainsKey('ObjectTypeIds')) {
