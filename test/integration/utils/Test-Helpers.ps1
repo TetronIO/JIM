@@ -164,11 +164,16 @@ function Get-TemplateScale {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
         [string]$Template
     )
 
     $scales = @{
+        Nano = @{
+            Users = 3
+            Groups = 1
+            AvgMemberships = 1
+        }
         Micro = @{
             Users = 10
             Groups = 3

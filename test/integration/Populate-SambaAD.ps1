@@ -7,7 +7,7 @@
     based on the specified template scale
 
 .PARAMETER Template
-    Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .PARAMETER Instance
     Which Samba AD instance to populate (Primary, Source, Target)
@@ -18,7 +18,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]

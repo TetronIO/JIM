@@ -17,7 +17,7 @@
     API key for authentication (if not provided, will attempt to create one)
 
 .PARAMETER Template
-    Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .EXAMPLE
     ./Setup-Scenario1.ps1 -JIMUrl "http://localhost:5200" -ApiKey "jim_abc123..."
@@ -40,7 +40,7 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small"
 )
 

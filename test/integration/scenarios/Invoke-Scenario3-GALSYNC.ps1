@@ -12,7 +12,7 @@
     Which test step to execute (Export, Update, Delete, All)
 
 .PARAMETER Template
-    Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .PARAMETER WaitSeconds
     Seconds to wait between steps for JIM processing (default: 60)
@@ -30,7 +30,7 @@ param(
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]

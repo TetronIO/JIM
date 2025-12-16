@@ -14,7 +14,7 @@
     8. Tear down systems (optional)
 
 .PARAMETER Template
-    Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .PARAMETER Phase
     Test phase (1 = MVP with LDAP/CSV, 2 = Post-MVP with databases)
@@ -43,7 +43,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]

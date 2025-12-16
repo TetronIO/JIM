@@ -7,7 +7,7 @@
     Files are created in the shared volume for JIM File connector testing
 
 .PARAMETER Template
-    Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .PARAMETER OutputPath
     Path where CSV files should be created (default: ./test-data)
@@ -18,7 +18,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]

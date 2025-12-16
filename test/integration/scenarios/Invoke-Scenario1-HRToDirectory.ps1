@@ -10,7 +10,7 @@
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
 
 .PARAMETER Template
-    Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200 for host access)
@@ -34,7 +34,7 @@ param(
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
