@@ -502,9 +502,16 @@
                                 <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
                             </MudChip>
                         }
-                        else if (source.Function != null)
+                        else if (!string.IsNullOrWhiteSpace(source.Expression))
                         {
-                            <MudAlert Severity="Severity.Error">Functions are not yet supported in attribute flow rules.</MudAlert>
+                            <MudChip T="string">
+                                <AvatarContent>
+                                    <MudTooltip Text="Expression">
+                                        <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@source.Expression</ChildContent>
+                            </MudChip>
                         }
 
                         <!-- some thought needs to be given to how we handle specifying constant values -->
@@ -525,9 +532,16 @@
                                 <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
                             </MudChip>
                         }
-                        else if (source.Function != null)
+                        else if (!string.IsNullOrWhiteSpace(source.Expression))
                         {
-                            <MudAlert Severity="Severity.Error">Functions are not yet supported in attribute flow rules.</MudAlert>
+                            <MudChip T="string">
+                                <AvatarContent>
+                                    <MudTooltip Text="Expression">
+                                        <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@source.Expression</ChildContent>
+                            </MudChip>
                         }
 
                         <!-- some thought needs to be given to how we handle specifying constant values -->
@@ -721,11 +735,11 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
         }
 
         // the rest depends on what type of source has been chosen by the user
-        if (_matchingRuleMappingSource.ConnectedSystemAttribute == null && (_matchingRuleMappingSource.Function == null ||
-        (_matchingRuleMappingSource.Function != null && (_matchingRuleMappingSource.ParameterValues == null ||
-        _matchingRuleMappingSource.ParameterValues.Count == 0))))
+        // Must have either a connected system attribute or an expression
+        if (_matchingRuleMappingSource.ConnectedSystemAttribute == null &&
+            string.IsNullOrWhiteSpace(_matchingRuleMappingSource.Expression))
         {
-            Console.WriteLine("DisableAddMappingButton: attrib/function/params missing");
+            Console.WriteLine("DisableAddMappingButton: attrib/expression missing");
             return true;
         }
 
@@ -835,9 +849,9 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
         }
         else
         {
-            // add the criteria group to the parent's children, i.e. mak sure the relationships is established on both the parent
-            and the new criteria group
-        _syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Add(_syncRuleScopingCriteriaGroup);
+            // add the criteria group to the parent's children, i.e. make sure the relationship is established on both the parent
+            // and the new criteria group
+            _syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Add(_syncRuleScopingCriteriaGroup);
         }
 
         // all done, reset

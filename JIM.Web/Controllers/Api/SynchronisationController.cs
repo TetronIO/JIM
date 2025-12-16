@@ -2,6 +2,7 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Application.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
@@ -26,10 +27,14 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class SynchronisationController(ILogger<SynchronisationController> logger, JimApplication application) : ControllerBase
+public class SynchronisationController(
+    ILogger<SynchronisationController> logger,
+    JimApplication application,
+    IExpressionEvaluator expressionEvaluator) : ControllerBase
 {
     private readonly ILogger<SynchronisationController> _logger = logger;
     private readonly JimApplication _application = application;
+    private readonly IExpressionEvaluator _expressionEvaluator = expressionEvaluator;
 
     #region Connected Systems
 
@@ -1418,10 +1423,21 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
                 Order = sourceRequest.Order
             };
 
-            if (syncRule.Direction == SyncRuleDirection.Import)
+            // Check if this is an expression-based source
+            if (!string.IsNullOrWhiteSpace(sourceRequest.Expression))
             {
+                // Expression-based source - validate the expression
+                var validationResult = _expressionEvaluator.Validate(sourceRequest.Expression);
+                if (!validationResult.IsValid)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Invalid expression: {validationResult.ErrorMessage}"));
+
+                source.Expression = sourceRequest.Expression;
+            }
+            else if (syncRule.Direction == SyncRuleDirection.Import)
+            {
+                // Attribute-based import source
                 if (!sourceRequest.ConnectedSystemAttributeId.HasValue)
-                    return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import rule sources."));
+                    return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId or Expression is required for import rule sources."));
 
                 var csAttr = await _application.ConnectedSystems.GetAttributeAsync(sourceRequest.ConnectedSystemAttributeId.Value);
                 if (csAttr == null)
@@ -1436,8 +1452,9 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
             }
             else // Export
             {
+                // Attribute-based export source
                 if (!sourceRequest.MetaverseAttributeId.HasValue)
-                    return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export rule sources."));
+                    return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId or Expression is required for export rule sources."));
 
                 var mvAttr = await _application.Metaverse.GetMetaverseAttributeAsync(sourceRequest.MetaverseAttributeId.Value);
                 if (mvAttr == null)
@@ -1827,6 +1844,58 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
         _logger.LogInformation("Deleted object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
 
         return NoContent();
+    }
+
+    #endregion
+
+    #region Expression Testing
+
+    /// <summary>
+    /// Tests an expression with sample attribute data.
+    /// </summary>
+    /// <param name="request">The test expression request containing the expression and sample attribute values.</param>
+    /// <returns>The result of evaluating the expression.</returns>
+    /// <response code="200">Expression evaluated successfully.</response>
+    /// <response code="400">Invalid expression or test data.</response>
+    /// <response code="401">Authentication required.</response>
+    [HttpPost("test-expression", Name = "TestExpression")]
+    [ProducesResponseType(typeof(TestExpressionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public IActionResult TestExpression([FromBody] TestExpressionRequest request)
+    {
+        _logger.LogDebug("Testing expression: {Expression}", request.Expression);
+
+        if (string.IsNullOrWhiteSpace(request.Expression))
+            return BadRequest(ApiErrorResponse.BadRequest("Expression is required."));
+
+        // First validate the expression syntax
+        var validationResult = _expressionEvaluator.Validate(request.Expression);
+        if (!validationResult.IsValid)
+        {
+            return Ok(new TestExpressionResponse
+            {
+                IsValid = false,
+                ErrorMessage = validationResult.ErrorMessage,
+                ErrorPosition = validationResult.ErrorPosition
+            });
+        }
+
+        // Build the context from the provided attribute values
+        var mvAttributes = request.MvAttributes ?? new Dictionary<string, object?>();
+        var csAttributes = request.CsAttributes ?? new Dictionary<string, object?>();
+        var context = new ExpressionContext(mvAttributes, csAttributes);
+
+        // Evaluate the expression
+        var testResult = _expressionEvaluator.Test(request.Expression, context);
+
+        return Ok(new TestExpressionResponse
+        {
+            IsValid = testResult.IsValid,
+            Result = testResult.Result,
+            ResultType = testResult.ResultType,
+            ErrorMessage = testResult.ErrorMessage
+        });
     }
 
     #endregion

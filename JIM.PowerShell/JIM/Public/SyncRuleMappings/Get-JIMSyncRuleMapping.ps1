@@ -9,6 +9,7 @@ function Get-JIMSyncRuleMapping {
 
     .PARAMETER SyncRuleId
         The unique identifier of the Sync Rule.
+        Also accepts pipeline input via the Id property.
 
     .PARAMETER MappingId
         Optional. The unique identifier of a specific mapping to retrieve.
@@ -27,11 +28,6 @@ function Get-JIMSyncRuleMapping {
 
         Gets a specific mapping from Sync Rule 1.
 
-    .EXAMPLE
-        Get-JIMSyncRule -Id 1 | Get-JIMSyncRuleMapping
-
-        Gets all mappings for a Sync Rule from the pipeline.
-
     .LINK
         New-JIMSyncRuleMapping
         Remove-JIMSyncRuleMapping
@@ -40,7 +36,8 @@ function Get-JIMSyncRuleMapping {
     [CmdletBinding(DefaultParameterSetName = 'List')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'List')]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ById')]
         [Alias('Id')]
         [int]$SyncRuleId,
 
@@ -55,26 +52,26 @@ function Get-JIMSyncRuleMapping {
             return
         }
 
-        switch ($PSCmdlet.ParameterSetName) {
-            'ById' {
-                Write-Verbose "Getting Sync Rule Mapping with ID: $MappingId for Sync Rule: $SyncRuleId"
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/$MappingId"
-                $result
-            }
+        # Determine if we're getting a specific mapping or all mappings
+        $isGettingById = $PSCmdlet.ParameterSetName -eq 'ById'
 
-            'List' {
-                Write-Verbose "Getting all Sync Rule Mappings for Sync Rule: $SyncRuleId"
-                $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings"
+        if ($isGettingById) {
+            Write-Verbose "Getting Sync Rule Mapping with ID: $MappingId for Sync Rule: $SyncRuleId"
+            $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/$MappingId"
+            $result
+        }
+        else {
+            Write-Verbose "Getting all Sync Rule Mappings for Sync Rule: $SyncRuleId"
+            $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings"
 
-                # Handle array or paginated response
-                $mappings = if ($response -is [array]) { $response }
-                           elseif ($response.items) { $response.items }
-                           else { @($response) }
+            # Handle array or paginated response
+            $mappings = if ($response -is [array]) { $response }
+                       elseif ($response.items) { $response.items }
+                       else { @($response) }
 
-                # Output each mapping individually for pipeline support
-                foreach ($mapping in $mappings) {
-                    $mapping
-                }
+            # Output each mapping individually for pipeline support
+            foreach ($mapping in $mappings) {
+                $mapping
             }
         }
     }

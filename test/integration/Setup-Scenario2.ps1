@@ -592,13 +592,6 @@ try {
     if ($sourceImportRule -and $targetExportRule) {
         Write-Host "  Configuring attribute mappings..." -ForegroundColor Gray
 
-        # Create DN Metaverse attribute if it doesn't exist
-        $dnAttr = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq 'DN' }
-        if (-not $dnAttr) {
-            $dnAttr = New-JIMMetaverseAttribute -Name 'DN' -Type Text -ObjectTypeIds @($mvUserType.id)
-            Write-Host "  ✓ Created DN Metaverse attribute" -ForegroundColor Green
-        }
-
         # Define attribute mappings for forward sync (Source -> Metaverse -> Target)
         # Source imports these attributes to Metaverse
         $importMappings = @(
@@ -613,8 +606,6 @@ try {
         )
 
         # Target exports these attributes from Metaverse
-        # Note: distinguishedName is required for LDAP provisioning - it tells the connector where to create the object
-        # The DN is constructed using an expression that places users in the TestUsers OU
         $exportMappings = @(
             @{ MvAttr = "Account Name";   LdapAttr = "sAMAccountName" }
             @{ MvAttr = "First Name";     LdapAttr = "givenName" }
@@ -628,21 +619,22 @@ try {
             @{ MvAttr = "Phone";          LdapAttr = "telephoneNumber" }
         )
 
-        # NOTE: For LDAP provisioning (creating new objects), the connector needs a distinguishedName attribute
-        # to know where to create the object. Without function/expression support in JIM, we cannot dynamically
-        # construct the target DN from metaverse attributes.
-        #
-        # Current limitation: New object provisioning to LDAP requires either:
-        # 1. Pre-populating users in the target system (for join/update scenarios)
-        # 2. Implementing function support for DN construction (e.g., "CN=" + DisplayName + ",OU=TestUsers,DC=...")
-        #
-        # For Scenario 2, this demonstrates:
-        # - Import from Source AD -> Metaverse (works)
-        # - Sync to create pending exports (works)
-        # - Export to Target AD will fail for NEW objects until DN construction is available
-        # - Export to Target AD will work for EXISTING objects (updates)
-        #
-        # Workaround: Pre-create matching users in Target AD, then run import on both sides to establish joins
+        # Expression-based mappings for computed values
+        # distinguishedName is required for LDAP provisioning - tells the connector where to create the object
+        $targetExpressionMappings = @(
+            @{
+                LdapAttr = "distinguishedName"
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=targetdomain,DC=local"'
+            }
+        )
+
+        # For reverse sync (Source export), also need DN expression
+        $sourceExpressionMappings = @(
+            @{
+                LdapAttr = "distinguishedName"
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=sourcedomain,DC=local"'
+            }
+        )
 
         # Get all metaverse attributes for lookup
         $mvAttributes = Get-JIMMetaverseAttribute
@@ -705,6 +697,35 @@ try {
         }
         Write-Host "  ✓ Target export mappings configured ($exportMappingsCreated new)" -ForegroundColor Green
 
+        # Create expression-based export mappings for Target (for DN construction)
+        $targetExpressionMappingsCreated = 0
+        foreach ($mapping in $targetExpressionMappings) {
+            $ldapAttr = $targetUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
+
+            if ($ldapAttr) {
+                # Check if mapping already exists for this target attribute
+                $existsAlready = $existingExportMappings | Where-Object {
+                    $_.targetConnectedSystemAttributeId -eq $ldapAttr.id
+                }
+
+                if (-not $existsAlready) {
+                    try {
+                        New-JIMSyncRuleMapping -SyncRuleId $targetExportRule.id `
+                            -TargetConnectedSystemAttributeId $ldapAttr.id `
+                            -Expression $mapping.Expression | Out-Null
+                        $targetExpressionMappingsCreated++
+                        Write-Host "    ✓ Created expression mapping for $($mapping.LdapAttr)" -ForegroundColor Green
+                    }
+                    catch {
+                        Write-Host "    ⚠ Could not create expression mapping for $($mapping.LdapAttr): $_" -ForegroundColor Yellow
+                    }
+                }
+            }
+        }
+        if ($targetExpressionMappingsCreated -gt 0) {
+            Write-Host "  ✓ Target expression-based mappings configured ($targetExpressionMappingsCreated new)" -ForegroundColor Green
+        }
+
         # Configure reverse mappings for bidirectional sync
         # Target Import mappings (for reverse sync)
         if ($targetImportRule) {
@@ -766,6 +787,35 @@ try {
                 }
             }
             Write-Host "  ✓ Source export mappings configured ($reverseExportMappingsCreated new)" -ForegroundColor Green
+
+            # Create expression-based export mappings for Source (for DN construction in reverse sync)
+            $sourceExpressionMappingsCreated = 0
+            foreach ($mapping in $sourceExpressionMappings) {
+                $ldapAttr = $sourceUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
+
+                if ($ldapAttr) {
+                    # Check if mapping already exists for this target attribute
+                    $existsAlready = $existingSourceExportMappings | Where-Object {
+                        $_.targetConnectedSystemAttributeId -eq $ldapAttr.id
+                    }
+
+                    if (-not $existsAlready) {
+                        try {
+                            New-JIMSyncRuleMapping -SyncRuleId $sourceExportRule.id `
+                                -TargetConnectedSystemAttributeId $ldapAttr.id `
+                                -Expression $mapping.Expression | Out-Null
+                            $sourceExpressionMappingsCreated++
+                            Write-Host "    ✓ Created expression mapping for $($mapping.LdapAttr)" -ForegroundColor Green
+                        }
+                        catch {
+                            Write-Host "    ⚠ Could not create expression mapping for $($mapping.LdapAttr): $_" -ForegroundColor Yellow
+                        }
+                    }
+                }
+            }
+            if ($sourceExpressionMappingsCreated -gt 0) {
+                Write-Host "  ✓ Source expression-based mappings configured ($sourceExpressionMappingsCreated new)" -ForegroundColor Green
+            }
         }
 
         # Add object matching rule for Source AD (match by sAMAccountName)

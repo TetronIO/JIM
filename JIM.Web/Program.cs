@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using JIM.Web.Middleware.Api;
@@ -48,6 +49,7 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
     builder.Services.AddScoped<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
+    builder.Services.AddExpressionEvaluation();
 
     // setup OpenID Connect (OIDC) authentication for Blazor UI
     var authority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority);

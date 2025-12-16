@@ -180,10 +180,10 @@ public class ObjectMatchingServer
             return null;
         }
 
-        // Function-based sources not yet supported
-        if (source.Function != null)
+        // Expression-based sources not yet supported in object matching
+        if (!string.IsNullOrWhiteSpace(source.Expression))
         {
-            Log.Warning("ComputeMatchingValueFromMvo: Function-based matching rules not yet supported");
+            Log.Warning("ComputeMatchingValueFromMvo: Expression-based matching rules not yet supported");
             return null;
         }
 

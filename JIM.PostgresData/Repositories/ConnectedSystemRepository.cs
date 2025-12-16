@@ -1257,9 +1257,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.Function)
-            .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .SingleOrDefaultAsync(x => x.Id == id);
     }

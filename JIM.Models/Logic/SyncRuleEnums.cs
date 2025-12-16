@@ -15,7 +15,6 @@ public enum SyncRuleMappingSourcesType
 {
     NotSet = 0,
     AttributeMapping = 1,
-    FunctionMapping = 2,
-    ExpressionMapping = 3,
-    AdvancedMapping = 4
+    ExpressionMapping = 2,
+    AdvancedMapping = 3
 }
