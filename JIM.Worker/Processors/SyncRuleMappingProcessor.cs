@@ -1,3 +1,4 @@
+using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -294,13 +295,187 @@ public static class SyncRuleMappingProcessor
                     }
                 }
             }
+            else if (!string.IsNullOrWhiteSpace(source.Expression))
+            {
+                // Expression-based mapping: evaluate the expression and apply the result
+                try
+                {
+                    var evaluator = new DynamicExpressoEvaluator();
+
+                    // Build expression context with MVO and CSO attributes
+                    var mvAttributes = new Dictionary<string, object?>();
+                    foreach (var mvAttrValue in mvo.AttributeValues)
+                    {
+                        if (mvAttrValue.Attribute == null) continue;
+
+                        var attrName = mvAttrValue.Attribute.Name;
+                        var value = mvAttrValue.Attribute.Type switch
+                        {
+                            AttributeDataType.Text => mvAttrValue.StringValue,
+                            AttributeDataType.Number => mvAttrValue.IntValue,
+                            AttributeDataType.DateTime => mvAttrValue.DateTimeValue,
+                            AttributeDataType.Binary => mvAttrValue.ByteValue,
+                            AttributeDataType.Guid => mvAttrValue.GuidValue,
+                            AttributeDataType.Boolean => mvAttrValue.BoolValue,
+                            _ => null
+                        };
+                        mvAttributes[attrName] = value;
+                    }
+
+                    var csAttributes = new Dictionary<string, object?>();
+                    foreach (var csAttrValue in connectedSystemObject.AttributeValues)
+                    {
+                        if (csAttrValue.Attribute == null) continue;
+
+                        var attrName = csAttrValue.Attribute.Name;
+                        var value = csAttrValue.Attribute.Type switch
+                        {
+                            AttributeDataType.Text => csAttrValue.StringValue,
+                            AttributeDataType.Number => csAttrValue.IntValue,
+                            AttributeDataType.DateTime => csAttrValue.DateTimeValue,
+                            AttributeDataType.Binary => csAttrValue.ByteValue,
+                            AttributeDataType.Guid => csAttrValue.GuidValue,
+                            AttributeDataType.Boolean => csAttrValue.BoolValue,
+                            _ => null
+                        };
+                        csAttributes[attrName] = value;
+                    }
+
+                    var context = new ExpressionContext(mvAttributes, csAttributes);
+                    var expressionResult = evaluator.Evaluate(source.Expression, context);
+
+                    // Apply the expression result to the target MVO attribute
+                    if (expressionResult != null)
+                    {
+                        var existingValue = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
+
+                        // Determine if we need to update the attribute value
+                        bool needsUpdate = false;
+                        object? newValue = null;
+
+                        switch (syncRuleMapping.TargetMetaverseAttribute.Type)
+                        {
+                            case AttributeDataType.Text:
+                                newValue = expressionResult.ToString();
+                                needsUpdate = existingValue == null || existingValue.StringValue != newValue as string;
+                                break;
+
+                            case AttributeDataType.Number:
+                                if (expressionResult is int intValue)
+                                {
+                                    newValue = intValue;
+                                    needsUpdate = existingValue == null || existingValue.IntValue != intValue;
+                                }
+                                else if (int.TryParse(expressionResult.ToString(), out var parsedInt))
+                                {
+                                    newValue = parsedInt;
+                                    needsUpdate = existingValue == null || existingValue.IntValue != parsedInt;
+                                }
+                                break;
+
+                            case AttributeDataType.DateTime:
+                                if (expressionResult is DateTime dtValue)
+                                {
+                                    newValue = dtValue;
+                                    needsUpdate = existingValue == null || existingValue.DateTimeValue != dtValue;
+                                }
+                                break;
+
+                            case AttributeDataType.Binary:
+                                if (expressionResult is byte[] byteValue)
+                                {
+                                    newValue = byteValue;
+                                    needsUpdate = existingValue == null || !Utilities.Utilities.AreByteArraysTheSame(existingValue.ByteValue, byteValue);
+                                }
+                                break;
+
+                            case AttributeDataType.Guid:
+                                if (expressionResult is Guid guidValue)
+                                {
+                                    newValue = guidValue;
+                                    needsUpdate = existingValue == null || existingValue.GuidValue != guidValue;
+                                }
+                                else if (Guid.TryParse(expressionResult.ToString(), out var parsedGuid))
+                                {
+                                    newValue = parsedGuid;
+                                    needsUpdate = existingValue == null || existingValue.GuidValue != parsedGuid;
+                                }
+                                break;
+
+                            case AttributeDataType.Boolean:
+                                if (expressionResult is bool boolValue)
+                                {
+                                    newValue = boolValue;
+                                    needsUpdate = existingValue == null || existingValue.BoolValue != boolValue;
+                                }
+                                break;
+                        }
+
+                        if (needsUpdate)
+                        {
+                            // Remove old value if exists
+                            if (existingValue != null)
+                            {
+                                mvo.PendingAttributeValueRemovals.Add(existingValue);
+                            }
+
+                            // Add new value
+                            var newAttributeValue = new MetaverseObjectAttributeValue
+                            {
+                                MetaverseObject = mvo,
+                                Attribute = syncRuleMapping.TargetMetaverseAttribute,
+                                AttributeId = syncRuleMapping.TargetMetaverseAttribute.Id
+                            };
+
+                            switch (syncRuleMapping.TargetMetaverseAttribute.Type)
+                            {
+                                case AttributeDataType.Text:
+                                    newAttributeValue.StringValue = newValue as string;
+                                    break;
+                                case AttributeDataType.Number:
+                                    newAttributeValue.IntValue = (int?)newValue;
+                                    break;
+                                case AttributeDataType.DateTime:
+                                    newAttributeValue.DateTimeValue = (DateTime?)newValue;
+                                    break;
+                                case AttributeDataType.Binary:
+                                    newAttributeValue.ByteValue = newValue as byte[];
+                                    break;
+                                case AttributeDataType.Guid:
+                                    newAttributeValue.GuidValue = (Guid?)newValue;
+                                    break;
+                                case AttributeDataType.Boolean:
+                                    newAttributeValue.BoolValue = (bool?)newValue;
+                                    break;
+                            }
+
+                            mvo.PendingAttributeValueAdditions.Add(newAttributeValue);
+                        }
+                    }
+                    else
+                    {
+                        // Expression returned null - remove existing value if any
+                        var existingValue = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
+                        if (existingValue != null)
+                        {
+                            mvo.PendingAttributeValueRemovals.Add(existingValue);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Process: Error evaluating expression '{Expression}' for sync rule mapping {MappingId}",
+                        source.Expression, syncRuleMapping.Id);
+                    throw;
+                }
+            }
             else if (source.Function != null)
                 throw new NotImplementedException("Functions have not been implemented yet.");
             else if (source.MetaverseAttribute != null)
                 throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. " +
                                                "This operation is focused on import flow, so Connected System to Metaverse Object.");
             else
-                throw new InvalidDataException("Expected ConnectedSystemAttribute or Function to be populated in a SyncRuleMappingSource object.");
+                throw new InvalidDataException("Expected ConnectedSystemAttribute, Expression, or Function to be populated in a SyncRuleMappingSource object.");
         }
     }
 }
