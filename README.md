@@ -73,6 +73,7 @@ JIM is currently targeting the following means of connecting to systems via it's
 - CSV/Text files
 - PowerShell (Core)
 - SCIM 2.0
+- Web Services (REST APIs with OAuth2/API key authentication)
 
 ## Getting Started
 
