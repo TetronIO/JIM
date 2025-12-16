@@ -360,10 +360,14 @@ public class MetaverseControllerAttributeTests
             MetaverseObjectTypes = new List<MetaverseObjectType> { objectType1 }
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        // When ObjectTypeIds is specified, the controller uses GetMetaverseAttributeWithObjectTypesAsync
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(1))
             .ReturnsAsync(attribute);
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(2, false))
             .ReturnsAsync(objectType2);
+        // The controller also fetches the updated attribute for the response
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+            .ReturnsAsync(attribute);
 
         var request = new UpdateMetaverseAttributeRequest { ObjectTypeIds = new List<int> { 2 } };
         await _controller.UpdateAttributeAsync(1, request);

@@ -101,6 +101,13 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Id == id);
     }
 
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id)
+    {
+        return await Repository.Database.MetaverseAttributes
+            .Include(a => a.MetaverseObjectTypes)
+            .SingleOrDefaultAsync(x => x.Id == id);
+    }
+
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
     {
         return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);

@@ -99,6 +99,13 @@ public interface IMetaverseRepository
 
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id);
 
+    /// <summary>
+    /// Gets a Metaverse Attribute by ID including its associated object types.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute.</param>
+    /// <returns>The attribute with its associated object types, or null if not found.</returns>
+    public Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id);
+
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);
 
     /// <summary>

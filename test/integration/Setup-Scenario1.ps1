@@ -401,7 +401,12 @@ try {
         }
         else {
             # Ensure it's linked to User type if not already
-            if ($dnAttr.objectTypeIds -notcontains $mvUserType.id) {
+            # The API returns metaverseObjectTypes as array of objects with id property
+            $linkedTypeIds = @()
+            if ($dnAttr.metaverseObjectTypes) {
+                $linkedTypeIds = $dnAttr.metaverseObjectTypes | ForEach-Object { $_.id }
+            }
+            if ($linkedTypeIds -notcontains $mvUserType.id) {
                 Set-JIMMetaverseAttribute -Id $dnAttr.id -ObjectTypeIds @($mvUserType.id) | Out-Null
             }
             Write-Host "  ✓ DN Metaverse attribute already exists (ID: $($dnAttr.id))" -ForegroundColor Green

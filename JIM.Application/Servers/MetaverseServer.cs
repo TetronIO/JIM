@@ -65,6 +65,11 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(id);
     }
 
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
+    }
+
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
     {
         return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(name);

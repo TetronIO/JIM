@@ -1060,10 +1060,81 @@ JIM/
 
 ---
 
+## Current Progress & Known Issues
+
+### Phase 1 Status (as of 2025-12-16)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
+| API Endpoints | ✅ Complete | Schema management, sync rules, mappings, run profiles |
+| PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
+| Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration working |
+| Invoke-Scenario1 | ⚠️ Partial | Setup runs, tests need sync engine fixes |
+| Scenario 2 & 3 | ⏳ Pending | Placeholder scripts exist |
+
+### Known Issues Requiring Fixes
+
+1. **Sync engine not exporting to AD** - The Joiner/Mover tests fail because users aren't being exported to Samba AD. Investigation needed in the Worker sync/export logic.
+
+2. **DisplayNameOrId bug** (Fixed) - `ConnectedSystemObject.DisplayNameOrId` was using `SingleOrDefault` which threw "Sequence contains more than one matching element" when duplicate attribute values existed. Fixed by changing to `FirstOrDefault`.
+
+3. **MetaverseAttribute.MetaverseObjectTypes null** (Fixed) - When updating attribute associations, the collection wasn't loaded. Added `GetMetaverseAttributeWithObjectTypesAsync` method to include navigation property.
+
+### Quick Start for New Session
+
+```powershell
+# 1. Start the full Docker stack (JIM + external systems)
+jim-stack
+docker compose -f docker-compose.integration-tests.yml up -d
+
+# 2. Wait for systems to be ready
+pwsh test/integration/Wait-SystemsReady.ps1
+
+# 3. Set up infrastructure API key (if not already done)
+pwsh test/integration/Setup-InfrastructureApiKey.ps1
+
+# 4. Run Scenario 1 setup (creates connected systems, sync rules, mappings)
+pwsh test/integration/Setup-Scenario1.ps1 -ApiKey "jim_ak_xxx" -Template Micro
+
+# 5. Run the full test scenario
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -ApiKey "jim_ak_xxx" -Template Micro
+
+# 6. Check logs if tests fail
+docker logs jim.worker --tail 100
+docker logs jim.web --tail 100
+```
+
+### Files Modified in This Branch
+
+**New Files:**
+- `test/JIM.Api.Tests/SynchronisationControllerSchemaTests.cs` - 14 tests
+- `test/JIM.Api.Tests/MetaverseControllerAttributeTests.cs` - 18 tests
+- `test/JIM.Api.Tests/SynchronisationControllerMappingTests.cs` - 11 tests
+
+**Bug Fixes:**
+- `JIM.Application/Servers/ConnectedSystemServer.cs` - Activity.ConnectedSystemId for UPDATE operations
+- `JIM.Web/Controllers/Api/MetaverseController.cs` - Collection initialisation, eager loading for updates
+- `JIM.Models/Staging/ConnectedSystemObject.cs` - DisplayNameOrId FirstOrDefault fix
+- `JIM.Data/Repositories/IMetaverseRepository.cs` - Added GetMetaverseAttributeWithObjectTypesAsync
+- `JIM.PostgresData/Repositories/MetaverseRepository.cs` - Implemented GetMetaverseAttributeWithObjectTypesAsync
+
+**Integration Test Improvements:**
+- `test/integration/Setup-Scenario1.ps1` - Fixed API response property names (metaverseObjectTypes)
+
+### Next Steps
+
+1. **Debug sync engine export** - Investigate why LDAP export isn't creating users in AD
+2. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC
+3. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+
+---
+
 ## Version History
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.4     | 2025-12-16 | Added Current Progress section, known issues, quick start guide |
 | 1.3     | 2025-12-13 | Added Test Lifecycle Quick Reference section for DevContainer and CI/CD |
 | 1.2     | 2025-12-09 | Added JIM configuration section, step-based execution, dependencies |
 | 1.1     | 2025-12-08 | Updated file paths to use existing test/ folder |
