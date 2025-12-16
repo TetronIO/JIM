@@ -59,54 +59,46 @@ else {
     Write-Host "  ✓ Key validation passed" -ForegroundColor Green
 }
 
-# Update docker-compose.override.codespaces.yml to include the environment variable
+# Update .env file with the API key (this file is gitignored)
 Write-Host ""
-Write-Host "Updating Docker Compose configuration..." -ForegroundColor Gray
+Write-Host "Updating .env file with API key..." -ForegroundColor Gray
 
-$composeOverridePath = "/workspaces/JIM/docker-compose.override.codespaces.yml"
+$envFilePath = "/workspaces/JIM/.env"
 
-if (-not (Test-Path $composeOverridePath)) {
-    Write-Host "  ✗ Docker Compose override file not found: $composeOverridePath" -ForegroundColor Red
-    exit 1
-}
-
-$composeContent = Get-Content $composeOverridePath -Raw
-
-# Check if JIM_INFRASTRUCTURE_API_KEY is already in the file
-if ($composeContent -match "JIM_INFRASTRUCTURE_API_KEY") {
-    Write-Host "  JIM_INFRASTRUCTURE_API_KEY already present in compose file" -ForegroundColor Yellow
-    Write-Host "  Updating value..." -ForegroundColor Gray
-
-    # Replace the existing value - handles both formats:
-    # - JIM_INFRASTRUCTURE_API_KEY=value (array format)
-    # - JIM_INFRASTRUCTURE_API_KEY: "value" (map format)
-    $composeContent = $composeContent -replace "JIM_INFRASTRUCTURE_API_KEY[=:].*", "JIM_INFRASTRUCTURE_API_KEY=$KeyValue"
-    $composeContent | Set-Content $composeOverridePath -NoNewline
-
-    Write-Host "  ✓ Updated JIM_INFRASTRUCTURE_API_KEY in compose file" -ForegroundColor Green
-}
-else {
-    Write-Host "  Adding JIM_INFRASTRUCTURE_API_KEY to jim.web service..." -ForegroundColor Gray
-
-    # Find the jim.web environment section and add the key
-    if ($composeContent -match "(?s)(jim\.web:.*?environment:)(.*?)((?=\n  \w)|$)") {
-        $before = $matches[1]
-        $envSection = $matches[2]
-        $after = $matches[3]
-
-        # Add the key to the environment section
-        $newEnvSection = $envSection + "`n      JIM_INFRASTRUCTURE_API_KEY: `"$KeyValue`""
-        $composeContent = $composeContent.Replace($before + $envSection + $after, $before + $newEnvSection + $after)
-
-        $composeContent | Set-Content $composeOverridePath -NoNewline
-        Write-Host "  ✓ Added JIM_INFRASTRUCTURE_API_KEY to compose file" -ForegroundColor Green
+if (-not (Test-Path $envFilePath)) {
+    Write-Host "  ⚠ .env file not found, creating from .env.example..." -ForegroundColor Yellow
+    if (Test-Path "/workspaces/JIM/.env.example") {
+        Copy-Item "/workspaces/JIM/.env.example" $envFilePath
     }
     else {
-        Write-Host "  ✗ Could not find jim.web environment section in compose file" -ForegroundColor Red
-        Write-Host "  Please add manually:" -ForegroundColor Yellow
-        Write-Host "    JIM_INFRASTRUCTURE_API_KEY: `"$KeyValue`"" -ForegroundColor Gray
-        exit 1
+        # Create minimal .env file
+        "" | Out-File $envFilePath -Encoding UTF8
     }
+}
+
+$envContent = Get-Content $envFilePath -Raw
+if ($null -eq $envContent) { $envContent = "" }
+
+# Check if JIM_INFRASTRUCTURE_API_KEY is already in the file
+if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
+    Write-Host "  JIM_INFRASTRUCTURE_API_KEY already present in .env" -ForegroundColor Yellow
+    Write-Host "  Updating value..." -ForegroundColor Gray
+
+    # Replace the existing value
+    $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$KeyValue"
+    $envContent | Set-Content $envFilePath -NoNewline
+
+    Write-Host "  ✓ Updated JIM_INFRASTRUCTURE_API_KEY in .env" -ForegroundColor Green
+}
+else {
+    Write-Host "  Adding JIM_INFRASTRUCTURE_API_KEY to .env..." -ForegroundColor Gray
+
+    # Append the key to the file
+    $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
+    $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$KeyValue`n"
+    $envContent | Set-Content $envFilePath -NoNewline
+
+    Write-Host "  ✓ Added JIM_INFRASTRUCTURE_API_KEY to .env" -ForegroundColor Green
 }
 
 # Recreate jim.web to pick up the new environment variable
@@ -115,6 +107,7 @@ else {
 Write-Host ""
 Write-Host "Recreating JIM.Web to apply changes..." -ForegroundColor Gray
 
+$composeOverridePath = "/workspaces/JIM/docker-compose.override.codespaces.yml"
 docker compose -f /workspaces/JIM/docker-compose.yml -f $composeOverridePath --profile with-db up -d --force-recreate jim.web 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
