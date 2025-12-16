@@ -571,6 +571,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
+        // Use EF.Functions.ILike for case-insensitive comparison in PostgreSQL
+        var lowerValue = secondaryExternalIdValue.ToLowerInvariant();
         return await Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
@@ -582,7 +584,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.AttributeValues.Any(av =>
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
-                    av.StringValue.Equals(secondaryExternalIdValue, StringComparison.OrdinalIgnoreCase)));
+                    av.StringValue.ToLower() == lowerValue));
     }
 
     public async Task<int> GetConnectedSystemObjectCountAsync()
