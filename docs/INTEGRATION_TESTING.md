@@ -1063,7 +1063,7 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2025-12-16)
+### Phase 1 Status (as of 2025-12-16) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -1071,7 +1071,7 @@ JIM/
 | API Endpoints | ✅ Complete | Schema management, sync rules, mappings, run profiles |
 | PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
 | Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration working |
-| Invoke-Scenario1 | ✅ Complete | Joiner test passing (users provisioned to AD) |
+| Invoke-Scenario1 | ✅ Complete | All 4 tests passing (Joiner, Mover, Leaver, Reconnection) |
 | Scenario 2 & 3 | ⏳ Pending | Placeholder scripts exist |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
@@ -1090,6 +1090,10 @@ JIM/
 6. **CSV generation** - Added `userPrincipalName` and `dn` columns to generated CSV files.
 
 7. **Nano template** - Added smallest template (3 users) for fast iteration during development.
+
+8. **File connector change detection** - `.Include()` calls were missing in repository methods that retrieve CSOs. Added eager loading for `AttributeValues` and `Attributes` navigation properties.
+
+9. **Test data reset** - Added CSV test data reset and AD user cleanup at start of each test run for repeatable execution.
 
 ### Previously Fixed Issues
 
@@ -1134,36 +1138,37 @@ docker logs jim.web --tail 100
 - `JIM.Models/Staging/ConnectedSystemObject.cs` - DisplayNameOrId FirstOrDefault fix
 - `JIM.Data/Repositories/IMetaverseRepository.cs` - Added GetMetaverseAttributeWithObjectTypesAsync
 - `JIM.PostgresData/Repositories/MetaverseRepository.cs` - Implemented GetMetaverseAttributeWithObjectTypesAsync
+- `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` - Added .Include() for AttributeValues in CSO retrieval methods
 
 **Integration Test Improvements:**
 - `test/integration/Setup-Scenario1.ps1` - Fixed API response property names (metaverseObjectTypes)
+- `test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1` - Added CSV reset and AD cleanup for repeatable tests
 
 ### Next Steps
 
 1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
-2. **Fix file connector change detection** - Mover test fails because attribute updates aren't detected (see Known Issue below)
+2. ~~**Fix file connector change detection**~~ - ✅ Fixed! All Scenario 1 tests now passing
 3. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC
 4. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
 
-### Known Issue: File Connector Not Detecting Attribute Changes
+### Resolved Issue: File Connector Not Detecting Attribute Changes
 
-**Symptom**: The Mover test fails - when `bob.smith1` department is changed from "HR" to "IT" in the CSV, the change is not exported to AD.
+**Status**: ✅ RESOLVED (2025-12-16)
 
-**Root Cause**: During import, the file connector correctly identifies existing CSOs and calls update instead of create. However, `UpdateConnectedSystemObjectAttributeValuesAsync` reports "No work to do. No pending attribute value changes" - the connector is not properly comparing new values with existing values.
+**Symptom**: The Mover test was failing - when `bob.smith1` department changed from "HR" to "IT" in the CSV, the change was not exported to AD.
 
-**Log Evidence**:
-```
-WRN: Connector indicated Create for object type 'person' but CSO already exists. Updating instead.
-VRB: UpdateConnectedSystemObjectAttributeValuesAsync: No work to do. No pending attribute value changes for CSO: ...
-```
+**Root Cause**: Repository methods that retrieve CSOs for comparison were missing `.Include()` calls for navigation properties. When the sync engine compared incoming attribute values with existing CSO values, the existing values were null because they weren't eagerly loaded.
 
-**Impact**:
+**Fix Applied**: Added `.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute)` to these methods in `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`:
+- `GetConnectedSystemObjectByAnchorAsync`
+- `GetConnectedSystemObjectByDnAsync`
+- `FindExistingConnectedSystemObjectAsync`
+
+**Test Results After Fix**:
 - Joiner test: ✅ PASSES (new user creation works)
-- Mover test: ❌ FAILS (attribute updates not detected)
-- Leaver test: ⚠️ PARTIAL (user removal detection may also be affected)
+- Mover test: ✅ PASSES (attribute updates now detected and exported)
+- Leaver test: ✅ PASSES (user flagged for deletion - actual deletion is policy-based)
 - Reconnection test: ✅ PASSES (user preservation works)
-
-**Fix Required**: Investigate `ProcessImportObjectsAsync` and `UpdateConnectedSystemObjectAttributeValuesAsync` in the worker to ensure attribute value comparison correctly detects changes.
 
 ---
 
@@ -1171,6 +1176,7 @@ VRB: UpdateConnectedSystemObjectAttributeValuesAsync: No work to do. No pending 
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.7     | 2025-12-16 | **Phase 1 Complete!** All Scenario 1 tests passing. Fixed file connector change detection (missing .Include() calls). Added test data reset and AD cleanup for repeatable tests. |
 | 1.6     | 2025-12-16 | Ran full Scenario 1 tests, documented file connector change detection issue |
 | 1.5     | 2025-12-16 | Scenario 1 Joiner test passing, added Nano template, multiple bug fixes |
 | 1.4     | 2025-12-16 | Added Current Progress section, known issues, quick start guide |
