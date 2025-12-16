@@ -108,3 +108,27 @@ public class UpdateConnectedSystemAttributeRequest
     /// </summary>
     public bool? IsSecondaryExternalId { get; set; }
 }
+
+/// <summary>
+/// Request DTO for updating a Connected System Partition.
+/// </summary>
+public class UpdateConnectedSystemPartitionRequest
+{
+    /// <summary>
+    /// Whether this partition is selected for import operations.
+    /// When selected, objects within this partition will be imported during sync.
+    /// </summary>
+    public bool? Selected { get; set; }
+}
+
+/// <summary>
+/// Request DTO for updating a Connected System Container.
+/// </summary>
+public class UpdateConnectedSystemContainerRequest
+{
+    /// <summary>
+    /// Whether this container is selected for import operations.
+    /// When selected, objects within this container will be imported during sync.
+    /// </summary>
+    public bool? Selected { get; set; }
+}

@@ -42,6 +42,9 @@
         'Get-JIMConnectorDefinition',
         'Set-JIMConnectedSystemObjectType',
         'Set-JIMConnectedSystemAttribute',
+        'Get-JIMConnectedSystemPartition',
+        'Set-JIMConnectedSystemPartition',
+        'Set-JIMConnectedSystemContainer',
 
         # Sync Rules
         'Get-JIMSyncRule',

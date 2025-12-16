@@ -195,3 +195,65 @@ public class ConnectedSystemObjectAttributeValueDto
         };
     }
 }
+
+/// <summary>
+/// API representation of a ConnectedSystemPartition.
+/// </summary>
+public class ConnectedSystemPartitionDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = null!;
+    public string ExternalId { get; set; } = null!;
+    public bool Selected { get; set; }
+    public int ConnectedSystemId { get; set; }
+    public List<ConnectedSystemContainerDto> Containers { get; set; } = new();
+
+    public static ConnectedSystemPartitionDto FromEntity(ConnectedSystemPartition entity)
+    {
+        return new ConnectedSystemPartitionDto
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            ExternalId = entity.ExternalId,
+            Selected = entity.Selected,
+            ConnectedSystemId = entity.ConnectedSystem?.Id ?? 0,
+            Containers = entity.Containers?
+                .Select(ConnectedSystemContainerDto.FromEntity)
+                .ToList() ?? new()
+        };
+    }
+}
+
+/// <summary>
+/// API representation of a ConnectedSystemContainer.
+/// </summary>
+public class ConnectedSystemContainerDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = null!;
+    public string ExternalId { get; set; } = null!;
+    public string? Description { get; set; }
+    public bool Hidden { get; set; }
+    public bool Selected { get; set; }
+    public int? PartitionId { get; set; }
+    public int? ConnectedSystemId { get; set; }
+    public List<ConnectedSystemContainerDto> ChildContainers { get; set; } = new();
+
+    public static ConnectedSystemContainerDto FromEntity(ConnectedSystemContainer entity)
+    {
+        return new ConnectedSystemContainerDto
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            ExternalId = entity.ExternalId,
+            Description = entity.Description,
+            Hidden = entity.Hidden,
+            Selected = entity.Selected,
+            PartitionId = entity.Partition?.Id,
+            ConnectedSystemId = entity.ConnectedSystem?.Id,
+            ChildContainers = entity.ChildContainers
+                .Select(FromEntity)
+                .ToList()
+        };
+    }
+}

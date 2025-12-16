@@ -1093,11 +1093,24 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
     }
 
+    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id);
+    }
+
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
+    {
+        if (partition == null)
+            throw new ArgumentNullException(nameof(partition));
+
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+    }
+
     public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
     {
         if (connectedSystemPartition == null)
             throw new ArgumentNullException(nameof(connectedSystemPartition));
-        
+
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemPartitionAsync(connectedSystemPartition);
     }
     #endregion
@@ -1121,6 +1134,19 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(connectedSystem));
 
         return await Application.Repository.ConnectedSystems.GetConnectedSystemContainersAsync(connectedSystem);
+    }
+
+    public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemContainerAsync(id);
+    }
+
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container)
+    {
+        if (container == null)
+            throw new ArgumentNullException(nameof(container));
+
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container);
     }
 
     public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)

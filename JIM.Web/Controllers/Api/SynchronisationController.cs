@@ -269,6 +269,141 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
         return Ok(preview);
     }
 
+    #region Partitions and Containers
+    /// <summary>
+    /// Gets all partitions for a Connected System.
+    /// </summary>
+    /// <remarks>
+    /// Partitions represent logical divisions within a connected system (e.g., LDAP naming contexts).
+    /// Each partition contains containers that can be selected for import operations.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <returns>A list of partitions with their containers.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/partitions", Name = "GetConnectedSystemPartitions")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectedSystemPartitionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemPartitionsAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested partitions for connected system: {Id}", connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var partitions = await _application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+        var dtos = partitions.Select(ConnectedSystemPartitionDto.FromEntity);
+        return Ok(dtos);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Partition.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint to select or deselect a partition for import operations.
+    /// When a partition is selected, objects within it (and its selected containers) will be imported during sync.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="partitionId">The unique identifier of the partition.</param>
+    /// <param name="request">The update request with new values.</param>
+    /// <returns>The updated partition details.</returns>
+    /// <response code="200">Partition updated successfully.</response>
+    /// <response code="404">Connected system or partition not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/partitions/{partitionId:int}", Name = "UpdateConnectedSystemPartition")]
+    [ProducesResponseType(typeof(ConnectedSystemPartitionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemPartitionAsync(int connectedSystemId, int partitionId, [FromBody] UpdateConnectedSystemPartitionRequest request)
+    {
+        _logger.LogInformation("Updating partition {PartitionId} for connected system {SystemId}", partitionId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for partition update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Verify connected system exists
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        // Get the partition
+        var partition = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId);
+        if (partition == null || partition.ConnectedSystem?.Id != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Partition with ID {partitionId} not found in connected system {connectedSystemId}."));
+
+        // Apply updates
+        if (request.Selected.HasValue)
+            partition.Selected = request.Selected.Value;
+
+        await _application.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+
+        // Reload to get full entity with relationships
+        var updated = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId);
+        return Ok(ConnectedSystemPartitionDto.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Updates a Connected System Container.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint to select or deselect a container for import operations.
+    /// When a container is selected, objects within it will be imported during sync.
+    /// The parent partition must also be selected for the container selection to take effect.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="containerId">The unique identifier of the container.</param>
+    /// <param name="request">The update request with new values.</param>
+    /// <returns>The updated container details.</returns>
+    /// <response code="200">Container updated successfully.</response>
+    /// <response code="404">Connected system or container not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/containers/{containerId:int}", Name = "UpdateConnectedSystemContainer")]
+    [ProducesResponseType(typeof(ConnectedSystemContainerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemContainerAsync(int connectedSystemId, int containerId, [FromBody] UpdateConnectedSystemContainerRequest request)
+    {
+        _logger.LogInformation("Updating container {ContainerId} for connected system {SystemId}", containerId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for container update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Verify connected system exists
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        // Get the container
+        var container = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
+        if (container == null)
+            return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found."));
+
+        // Verify container belongs to the connected system (via partition or directly)
+        var belongsToSystem = (container.Partition?.ConnectedSystem?.Id == connectedSystemId) ||
+                              (container.ConnectedSystem?.Id == connectedSystemId);
+        if (!belongsToSystem)
+            return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in connected system {connectedSystemId}."));
+
+        // Apply updates
+        if (request.Selected.HasValue)
+            container.Selected = request.Selected.Value;
+
+        await _application.ConnectedSystems.UpdateConnectedSystemContainerAsync(container);
+
+        // Reload to get full entity with relationships
+        var updated = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
+        return Ok(ConnectedSystemContainerDto.FromEntity(updated!));
+    }
+    #endregion
+
     /// <summary>
     /// Creates a new Connected System.
     /// </summary>

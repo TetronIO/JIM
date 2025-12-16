@@ -739,6 +739,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemPartitions.Include(csp => csp.Containers).Where(q => q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
     }
 
+    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemPartitions
+            .Include(csp => csp.ConnectedSystem)
+            .Include(csp => csp.Containers)
+            .FirstOrDefaultAsync(csp => csp.Id == id);
+    }
+
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
+    {
+        Repository.Database.ConnectedSystemPartitions.Update(partition);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
     {
         Repository.Database.ConnectedSystemPartitions.Remove(connectedSystemPartition);
@@ -760,6 +774,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
     {
         return await Repository.Database.ConnectedSystemContainers.Where(q => q.ConnectedSystem != null && q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
+    }
+
+    public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemContainers
+            .Include(c => c.Partition)
+            .ThenInclude(p => p!.ConnectedSystem)
+            .Include(c => c.ConnectedSystem)
+            .Include(c => c.ChildContainers)
+            .FirstOrDefaultAsync(c => c.Id == id);
+    }
+
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container)
+    {
+        Repository.Database.ConnectedSystemContainers.Update(container);
+        await Repository.Database.SaveChangesAsync();
     }
 
     public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)

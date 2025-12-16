@@ -130,6 +130,30 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Gets a Connected System Partition by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the partition.</param>
+    Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Partition.
+    /// </summary>
+    /// <param name="partition">The partition to update.</param>
+    Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition);
+
+    /// <summary>
+    /// Gets a Connected System Container by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the container.</param>
+    Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Container.
+    /// </summary>
+    /// <param name="container">The container to update.</param>
+    Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
     public Task<List<SyncRule>> GetSyncRulesAsync();
 

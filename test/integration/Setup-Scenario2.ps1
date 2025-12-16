@@ -272,8 +272,63 @@ else {
     }
 }
 
-# Step 7: Create Sync Rules
-Write-TestStep "Step 7" "Creating Sync Rules"
+# Step 7: Select Partitions and Containers for Import
+Write-TestStep "Step 7" "Selecting Partitions and Containers"
+
+try {
+    # Select partitions for Source system
+    Write-Host "  Configuring Source LDAP partitions..." -ForegroundColor Gray
+    $sourcePartitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
+
+    if ($sourcePartitions -and $sourcePartitions.Count -gt 0) {
+        foreach ($partition in $sourcePartitions) {
+            Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $true | Out-Null
+            Write-Host "    ✓ Selected partition: $($partition.name)" -ForegroundColor Green
+
+            # Select all containers in this partition
+            if ($partition.containers -and $partition.containers.Count -gt 0) {
+                foreach ($container in $partition.containers) {
+                    Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $container.id -Selected $true | Out-Null
+                }
+                Write-Host "    ✓ Selected $($partition.containers.Count) container(s)" -ForegroundColor Green
+            }
+        }
+    }
+    else {
+        Write-Host "    ⚠ No partitions found for Source system" -ForegroundColor Yellow
+    }
+
+    # Select partitions for Target system
+    Write-Host "  Configuring Target LDAP partitions..." -ForegroundColor Gray
+    $targetPartitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id
+
+    if ($targetPartitions -and $targetPartitions.Count -gt 0) {
+        foreach ($partition in $targetPartitions) {
+            Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $true | Out-Null
+            Write-Host "    ✓ Selected partition: $($partition.name)" -ForegroundColor Green
+
+            # Select all containers in this partition
+            if ($partition.containers -and $partition.containers.Count -gt 0) {
+                foreach ($container in $partition.containers) {
+                    Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $container.id -Selected $true | Out-Null
+                }
+                Write-Host "    ✓ Selected $($partition.containers.Count) container(s)" -ForegroundColor Green
+            }
+        }
+    }
+    else {
+        Write-Host "    ⚠ No partitions found for Target system" -ForegroundColor Yellow
+    }
+
+    Write-Host "  ✓ Partitions and containers configured" -ForegroundColor Green
+}
+catch {
+    Write-Host "  ✗ Failed to configure partitions: $_" -ForegroundColor Red
+    throw
+}
+
+# Step 8: Create Sync Rules
+Write-TestStep "Step 8" "Creating Sync Rules"
 
 try {
     # Get the "user" object type from both systems
@@ -406,8 +461,8 @@ catch {
     throw
 }
 
-# Step 8: Configure Attribute Flow Mappings
-Write-TestStep "Step 8" "Configuring Attribute Flow Mappings"
+# Step 9: Configure Attribute Flow Mappings
+Write-TestStep "Step 9" "Configuring Attribute Flow Mappings"
 
 try {
     if ($sourceImportRule -and $targetExportRule) {
@@ -647,8 +702,8 @@ catch {
     throw
 }
 
-# Step 9: Create Run Profiles
-Write-TestStep "Step 9" "Creating Run Profiles"
+# Step 10: Create Run Profiles
+Write-TestStep "Step 10" "Creating Run Profiles"
 
 try {
     # Get existing run profiles
