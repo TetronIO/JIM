@@ -154,3 +154,20 @@ html, body {
 .mud-dialog-actions {
     padding: 24px !important;
 }
+
+/* Remove drop shadows from all MudBlazor buttons */
+.mud-button-root {
+    box-shadow: none !important;
+}
+
+.mud-button-filled {
+    box-shadow: none !important;
+}
+
+.mud-button-group .mud-button-root {
+    box-shadow: none !important;
+}
+
+.mud-button-group-override-styles {
+    box-shadow: none !important;
+}
