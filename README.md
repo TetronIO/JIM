@@ -75,65 +75,17 @@ JIM is currently targeting the following means of connecting to systems via it's
 - SCIM 2.0
 - Web Services (REST APIs with OAuth2/API key authentication)
 
+## Authentication
+
+JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. It is IdP-agnostic and works with any OIDC-compliant Identity Provider, including Microsoft Entra ID, Okta, Auth0, Keycloak, and AD FS. PKCE is used for enhanced security.
+
+For API access, JIM supports both JWT Bearer tokens and API keys for automation and CI/CD scenarios.
+
 ## Getting Started
 
-JIM uses GitHub Codespaces to provide a fully configured development environment in the cloud with all dependencies pre-installed (.NET 9.0, Docker, PostgreSQL).
+For development setup using GitHub Codespaces or local installation, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
 
-**Quick Start:**
-
-1. Click the **Code** button on the GitHub repository
-2. Select **Codespaces** > **Create codespace on main**
-3. Wait for the environment to provision (includes automatic `.env` creation)
-4. Update the `.env` file with your SSO settings (see below)
-5. Use the pre-configured shell aliases:
-   - `jim-db` - Start PostgreSQL database
-   - `jim-web` - Run Web UI locally (press F5 in VS Code) - also serves the API at `/api/`
-   - `jim-stack` - Start full Docker stack
-   - `jim-migrate` - Apply database migrations
-
-For local development instructions and advanced setup, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
-   
-### Setup SSO
-JIM uses SSO to authenticate and authorise users. Create an OIDC SSO configuration in your IdP for JIM using the [Code Authorisation Grant](https://oauth.net/2/grant-types/authorization-code/) flow. Keep a note of the authority URL, client id and secret for use in the `.env` file below.
-
-> **Note**: JIM uses PKCE for improved security. JIM is IDP-agnostic and works with any OIDC-compliant Identity Provider, including Microsoft Entra ID, Okta, Auth0, Keycloak, AD FS, and others.
-
-For detailed step-by-step setup instructions, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) which covers:
-- Microsoft Entra ID (Azure AD)
-- AD FS (Active Directory Federation Services)
-- Keycloak
-
-Currently there can only be a single administrator, the one you setup in your `.env` file below. Later releases will include a full RBAC model. All other users accessing JIM will be standard users with no privileges.
-
-### `.env` Configuration Example:
-Replace `<...>` elements with your real values. See `.env.example` for detailed documentation.
-
-```
-# Database
-JIM_DB_NAME=jim
-JIM_DB_USERNAME=jim
-JIM_DB_PASSWORD=password
-JIM_DB_LOG_SENSITIVE_INFO=true
-
-# SSO/OIDC - works with any OIDC-compliant provider
-JIM_SSO_AUTHORITY=<your IDP URL, e.g. https://login.microsoftonline.com/{tenant-id}/v2.0>
-JIM_SSO_CLIENT_ID=<your client id>
-JIM_SSO_SECRET=<your client secret>
-JIM_SSO_API_SCOPE=<your API scope, e.g. api://{client-id}/access_as_user>
-
-# User Identity Mapping
-# JIM uses standard OIDC claims (sub, name, given_name, family_name, preferred_username)
-JIM_SSO_CLAIM_TYPE=sub
-JIM_SSO_MV_ATTRIBUTE=Subject Identifier
-JIM_SSO_INITIAL_ADMIN=<your sub claim value>
-```
-
-**Finding Your `sub` Claim Value**:
-1. Log into JIM with your admin account
-2. Navigate to `/claims` to see your OIDC claims
-3. Copy the value of the `sub` claim
-
-The `sub` (subject identifier) claim is the standard OIDC claim for uniquely identifying users. It's guaranteed to be unique and stable per user per application across all OIDC-compliant providers.
+For SSO configuration with your Identity Provider, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
 
 ## State of Development
 JIM is approximately 88% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
