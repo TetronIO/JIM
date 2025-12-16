@@ -912,6 +912,42 @@ function Get-ADUser {
 5. **Documentation**: Clear parameter descriptions and examples
 6. **Assertions**: Use helper functions for consistent assertion messages
 
+### Development Guidelines
+
+#### No Direct SQL for JIM Configuration
+
+**CRITICAL REQUIREMENT**: Integration test scripts must **NEVER** use direct SQL queries to configure JIM or manipulate its database for test setup/teardown. All JIM configuration must be performed through:
+
+1. **REST API** (`/api/v1/...` endpoints)
+2. **PowerShell Module** (`JIM.PowerShell` cmdlets)
+
+**Rationale**:
+- Direct SQL bypasses business logic, validation, and audit trails
+- SQL-based workarounds create technical debt and hide API gaps
+- Tests should validate the same interfaces that users and administrators use
+- API/PowerShell gaps discovered during testing are valuable feedback
+
+**When API/PowerShell Gaps Are Identified**:
+
+If a test scenario requires functionality not exposed via API or PowerShell:
+
+1. **STOP** - Do not work around with SQL
+2. **Document** - Record the missing functionality in the test documentation
+3. **Ask** - Consult with the user/team on how to proceed
+4. **Assume** - The default assumption is that we will implement the missing API/PowerShell functionality
+
+**Example of Blocked Scenario**:
+
+The current Scenario 2 (Directory-to-Directory) is blocked because the LDAP connector requires partition selection, but no API endpoint exists for this. Rather than using SQL to set `ConnectedSystemPartition.Selected = true`, we:
+1. Documented the blocking issue (see [Blocking Issue: LDAP Partition Management API Missing](#blocking-issue-ldap-partition-management-api-missing))
+2. Created GitHub issue #191 for the required API endpoints
+3. Left the test scripts ready to use once the API is implemented
+
+**Acceptable SQL Usage**:
+- **External systems only**: Querying Samba AD, test databases, or other external systems being tested
+- **Verification queries**: Read-only queries to verify JIM's internal state (not for setup/teardown)
+- **Emergency debugging**: Temporary diagnostic queries during development (never committed)
+
 ---
 
 ## Troubleshooting
