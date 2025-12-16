@@ -392,26 +392,6 @@ try {
     if ($importRule -and $exportRule) {
         Write-Host "  Configuring attribute mappings via API..." -ForegroundColor Gray
 
-        # Get attribute IDs for mapping
-        # First, create a DN Metaverse attribute if it doesn't exist (needed for LDAP export)
-        $dnAttr = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq 'DN' }
-        if (-not $dnAttr) {
-            $dnAttr = New-JIMMetaverseAttribute -Name 'DN' -Type Text -ObjectTypeIds @($mvUserType.id)
-            Write-Host "  ✓ Created DN Metaverse attribute (ID: $($dnAttr.id))" -ForegroundColor Green
-        }
-        else {
-            # Ensure it's linked to User type if not already
-            # The API returns metaverseObjectTypes as array of objects with id property
-            $linkedTypeIds = @()
-            if ($dnAttr.metaverseObjectTypes) {
-                $linkedTypeIds = $dnAttr.metaverseObjectTypes | ForEach-Object { $_.id }
-            }
-            if ($linkedTypeIds -notcontains $mvUserType.id) {
-                Set-JIMMetaverseAttribute -Id $dnAttr.id -ObjectTypeIds @($mvUserType.id) | Out-Null
-            }
-            Write-Host "  ✓ DN Metaverse attribute already exists (ID: $($dnAttr.id))" -ForegroundColor Green
-        }
-
         # Define mappings
         $importMappings = @(
             @{ CsAttr = "employeeId";        MvAttr = "Employee ID" }
@@ -422,7 +402,6 @@ try {
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
-            @{ CsAttr = "dn";                MvAttr = "DN" }
         )
 
         $exportMappings = @(
@@ -435,7 +414,14 @@ try {
             @{ MvAttr = "Email";         LdapAttr = "userPrincipalName" }  # UPN = email for AD login
             @{ MvAttr = "Job Title";     LdapAttr = "title" }
             @{ MvAttr = "Department";    LdapAttr = "department" }
-            @{ MvAttr = "DN";            LdapAttr = "distinguishedName" }  # Required for LDAP object creation
+        )
+
+        # Expression-based mappings for computed values
+        $expressionMappings = @(
+            @{
+                LdapAttr = "distinguishedName"
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",CN=Users,DC=testdomain,DC=local"'
+            }
         )
 
         # Get all metaverse attributes for lookup
@@ -500,6 +486,38 @@ try {
             }
         }
         Write-Host "  ✓ Export attribute mappings configured ($exportMappingsCreated new)" -ForegroundColor Green
+
+        # Create expression-based export mappings (for computed values like DN)
+        $expressionMappingsCreated = 0
+        foreach ($mapping in $expressionMappings) {
+            $ldapAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
+
+            if ($ldapAttr) {
+                # Check if mapping already exists for this target attribute
+                $existsAlready = $existingExportMappings | Where-Object {
+                    $_.targetConnectedSystemAttributeId -eq $ldapAttr.id
+                }
+
+                if (-not $existsAlready) {
+                    try {
+                        New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
+                            -TargetConnectedSystemAttributeId $ldapAttr.id `
+                            -Expression $mapping.Expression | Out-Null
+                        $expressionMappingsCreated++
+                        Write-Host "    ✓ Created expression mapping for $($mapping.LdapAttr)" -ForegroundColor Green
+                    }
+                    catch {
+                        Write-Host "    ⚠ Could not create expression mapping for $($mapping.LdapAttr): $_" -ForegroundColor Yellow
+                    }
+                }
+            }
+            else {
+                Write-Host "    ⚠ LDAP attribute '$($mapping.LdapAttr)' not found in schema" -ForegroundColor Yellow
+            }
+        }
+        if ($expressionMappingsCreated -gt 0) {
+            Write-Host "  ✓ Expression-based mappings configured ($expressionMappingsCreated new)" -ForegroundColor Green
+        }
 
         # Add object matching rule for CSV object type (how to match CSOs to existing MVOs during import)
         Write-Host "  Configuring object matching rule..." -ForegroundColor Gray

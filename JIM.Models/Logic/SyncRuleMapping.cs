@@ -54,10 +54,9 @@ public class SyncRuleMapping
         if (Sources.All(s => s.ConnectedSystemAttribute != null || s.MetaverseAttribute != null))
             return SyncRuleMappingSourcesType.AttributeMapping;
 
-        if (Sources.All(s => s.Function != null))
-            return SyncRuleMappingSourcesType.FunctionMapping;
+        if (Sources.All(s => !string.IsNullOrWhiteSpace(s.Expression)))
+            return SyncRuleMappingSourcesType.ExpressionMapping;
 
-        // expressions not yet supported
         return SyncRuleMappingSourcesType.AdvancedMapping;
     }
 }

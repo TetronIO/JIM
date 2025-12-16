@@ -1,10 +1,9 @@
 using JIM.Models.Core;
-using JIM.Models.Extensibility;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
 /// <summary>
-/// Defines a source for an object matching rule. Can hold either an attribute or a function.
+/// Defines a source for an object matching rule. Can hold either an attribute or an expression.
 /// If it's an attribute, it will be either a ConnectedSystemAttribute (for CSO → MVO matching)
 /// or a MetaverseAttribute (for MVO → CSO matching during export).
 /// </summary>
@@ -13,7 +12,7 @@ public class ObjectMatchingRuleSource
     public int Id { get; set; }
 
     /// <summary>
-    /// If multiple sources are defined (for function chaining), this determines evaluation order.
+    /// If multiple sources are defined, this determines evaluation order.
     /// Sources are evaluated in ascending order (0, 1, 2, etc.).
     /// </summary>
     public int Order { get; set; }
@@ -37,26 +36,29 @@ public class ObjectMatchingRuleSource
     public MetaverseAttribute? MetaverseAttribute { get; set; }
 
     /// <summary>
-    /// If populated, a function (built-in or extensible) should be used to determine the match value.
+    /// If populated, denotes that an expression should be used to determine the match value.
+    /// Expressions use DynamicExpresso syntax and can reference mv["AttributeName"] and cs["AttributeName"].
     /// </summary>
-    public Function? Function { get; set; }
+    public string? Expression { get; set; }
 
     /// <summary>
-    /// If a Function is used, parameter values for the function call.
+    /// Parameter values for legacy function calls. Not used with expression-based matching.
     /// </summary>
     public List<ObjectMatchingRuleSourceParamValue> ParameterValues { get; set; } = new();
 
     /// <summary>
     /// Validates that the source is correctly configured.
-    /// Must have either an attribute (CS or MV) or a function, but not both.
+    /// Must have exactly one of: attribute (CS or MV), or expression.
     /// </summary>
     public bool IsValid()
     {
-        // If we have no Function, we require either a metaverse or connected system attribute
-        if (Function == null)
-            return MetaverseAttribute != null || ConnectedSystemAttribute != null;
+        var hasAttribute = MetaverseAttribute != null || ConnectedSystemAttribute != null;
+        var hasExpression = !string.IsNullOrWhiteSpace(Expression);
 
-        // If we do have a Function, we don't want either attribute values
-        return MetaverseAttribute == null && ConnectedSystemAttribute == null;
+        // Must have exactly one source type
+        if (hasExpression)
+            return !hasAttribute; // Expression cannot coexist with attributes
+
+        return hasAttribute; // Must have an attribute if no expression
     }
 }

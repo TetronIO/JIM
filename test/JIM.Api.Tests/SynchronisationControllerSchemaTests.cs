@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using JIM.Application;
+using JIM.Application.Expressions;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -28,6 +29,7 @@ public class SynchronisationControllerSchemaTests
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<ILogger<SynchronisationController>> _mockLogger = null!;
+    private IExpressionEvaluator _expressionEvaluator = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
 
@@ -40,8 +42,9 @@ public class SynchronisationControllerSchemaTests
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
+        _expressionEvaluator = new DynamicExpressoEvaluator();
         _application = new JimApplication(_mockRepository.Object);
-        _controller = new SynchronisationController(_mockLogger.Object, _application);
+        _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator);
 
         // Set up API key authentication context for the controller
         var claims = new List<Claim>

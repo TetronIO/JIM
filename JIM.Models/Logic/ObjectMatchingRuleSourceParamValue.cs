@@ -1,19 +1,19 @@
 using JIM.Models.Core;
-using JIM.Models.Extensibility;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
 /// <summary>
-/// Holds a parameter value for a function call within an ObjectMatchingRuleSource.
+/// Holds a parameter value for an ObjectMatchingRuleSource.
 /// The value can come from an attribute or be a constant value.
+/// Note: This class is retained for backwards compatibility but is not used with expression-based matching.
+/// Expressions access attributes directly via mv["AttributeName"] and cs["AttributeName"] syntax.
 /// </summary>
 public class ObjectMatchingRuleSourceParamValue
 {
     public int Id { get; set; }
 
     /// <summary>
-    /// The name of this parameter. Will be the attribute name if sourced from an attribute,
-    /// or an auto-generated/custom name if using a constant value.
+    /// The name of this parameter.
     /// </summary>
     public string Name { get; set; } = null!;
 
@@ -22,12 +22,6 @@ public class ObjectMatchingRuleSourceParamValue
     /// </summary>
     public int ObjectMatchingRuleSourceId { get; set; }
     public ObjectMatchingRuleSource ObjectMatchingRuleSource { get; set; } = null!;
-
-    /// <summary>
-    /// Relates this param value to a defined parameter on a Function.
-    /// Can be null if expressions are used instead of functions.
-    /// </summary>
-    public FunctionParameter? FunctionParameter { get; set; }
 
     /// <summary>
     /// For export matching: A Metaverse Attribute can be used as the source for this parameter.
