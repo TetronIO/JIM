@@ -74,9 +74,6 @@ JIM is currently targeting the following means of connecting to systems via it's
 - PowerShell (Core)
 - SCIM 2.0
 
-## Roadmap
-JIM is in active development. There are many plans for new features. Check back soon for more details.
-
 ## Getting Started
 
 JIM uses GitHub Codespaces to provide a fully configured development environment in the cloud with all dependencies pre-installed (.NET 9.0, Docker, PostgreSQL).
