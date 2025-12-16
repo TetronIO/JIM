@@ -42,7 +42,8 @@ public class ActivityRepository : IActivityRepository
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        Guid? initiatedById = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -62,6 +63,12 @@ public class ActivityRepository : IActivityRepository
             .ThenInclude(ib => ib!.Type)
             .Where(a => a.ParentActivityId == null)
             .AsQueryable();
+
+        // Apply initiated by filter
+        if (initiatedById.HasValue)
+        {
+            query = query.Where(a => a.InitiatedBy != null && a.InitiatedBy.Id == initiatedById.Value);
+        }
 
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))

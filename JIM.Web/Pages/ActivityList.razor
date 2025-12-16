@@ -1,19 +1,22 @@
 @page "/activity"
+@page "/activity/mine"
 @attribute [Authorize(Roles = "User")]
+@implements IDisposable
 @using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Utility;
 @using JIM.Utilities;
+@using Microsoft.AspNetCore.Components.Authorization
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
-<PageTitle>Activity</PageTitle>
-<MudText Typo="Typo.h4">Activity</MudText>
+<PageTitle>@_pageTitle</PageTitle>
+<MudText Typo="Typo.h4">@_pageTitle</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2 mb-2">
-    Monitor all activity across the system. View operations initiated by users or automated processes, including
-    synchronisations, configuration changes, and system events.
+    @_pageDescription
 </MudText>
 
 <MudTable @ref="_table" T="Activity" ServerData="ServerReload" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
@@ -100,12 +103,58 @@
     private MudTable<Activity>? _table;
     private string _searchString = "";
     private bool _loading;
+    private bool _isMyActivity;
+    private Guid? _currentUserId;
+    private string _pageTitle = "Activity";
+    private string _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
+    private List<BreadcrumbItem> _breadcrumbs = new();
 
-    private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
-{
-new("Home", href: "/", icon: Icons.Material.Filled.Home),
-new("Activity", href: null, disabled: true),
-};
+    protected override async Task OnInitializedAsync()
+    {
+        NavManager.LocationChanged += OnLocationChanged;
+        await UpdatePageStateAsync();
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        await UpdatePageStateAsync();
+        await InvokeAsync(StateHasChanged);
+
+        // Reload the table data when location changes
+        if (_table != null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task UpdatePageStateAsync()
+    {
+        _isMyActivity = NavManager.Uri.EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
+
+        if (_isMyActivity)
+        {
+            _pageTitle = "My Activity";
+            _pageDescription = "View operations you have initiated, including synchronisations, configuration changes, and other actions.";
+
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            _currentUserId = IdentityUtilities.GetUserId(authState.User);
+        }
+        else
+        {
+            _pageTitle = "Activity";
+            _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
+            _currentUserId = null;
+        }
+
+        _breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new(_pageTitle, href: null, disabled: true),
+        };
+    }
+
+    public void Dispose()
+    {
+        NavManager.LocationChanged -= OnLocationChanged;
+    }
 
     private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
     {
@@ -119,11 +168,12 @@ new("Activity", href: null, disabled: true),
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
             var result = await Jim.Activities.GetActivitiesAsync(
-            page,
-            state.PageSize,
-            string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-            state.SortLabel,
-            sortDescending);
+                page,
+                state.PageSize,
+                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                state.SortLabel,
+                sortDescending,
+                _currentUserId);
 
             return new TableData<Activity>
             {

@@ -198,6 +198,8 @@ alias jim-stack-build='docker compose -f docker-compose.yml -f docker-compose.ov
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
 alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down'
 alias jim-web-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.web'
+alias jim-worker-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.worker'
+alias jim-scheduler-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.scheduler'
 alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-stack-build to start fresh."'
 EOF
 
@@ -221,6 +223,8 @@ echo "  jim-stack          → Start full Docker stack (all services)"
 echo "  jim-stack-build    → Build and start Docker stack"
 echo "  jim-stack-logs     → View Docker stack logs"
 echo "  jim-stack-down     → Stop Docker stack"
+echo "  jim-web-build      → Quick rebuild just jim.web container"
+echo "  jim-worker-build   → Quick rebuild just jim.worker container"
 echo "  jim-reset          → Reset JIM (delete database & logs volumes)"
 echo ""
 echo "🔧 Database Commands:"
