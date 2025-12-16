@@ -168,7 +168,7 @@ The Integration Testing Framework provides end-to-end validation of JIM's synchr
 
 - **Realistic Systems**: Test against actual Samba AD, SQL Server, Oracle, etc., not mocks
 - **Idempotent**: Complete stand-up/tear-down for repeatable testing
-- **Scalable**: Template-based data sets from 10 to 1M objects
+- **Scalable**: Template-based data sets from 3 to 1M objects
 - **Phased**: Phase 1 (MVP) uses LDAP/CSV; Phase 2 adds databases
 - **Opt-In**: Manual trigger only, not automatic on every commit
 
@@ -184,7 +184,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 
 **Common parameters across all scenario scripts**:
 - `-Step <StepName>` - Execute a specific test step (or `All` for full sequence)
-- `-Template <Size>` - Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+- `-Template <Size>` - Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
 
@@ -269,6 +269,7 @@ Choose the appropriate template based on test goals:
 
 | Template   | Users     | Groups  | Avg Memberships | Total Objects | Use Case                          | Est. Time  |
 |------------|-----------|---------|-----------------|---------------|-----------------------------------|------------|
+| **Nano**   | 3         | 1       | 1               | 4             | Fast dev iteration, debugging     | < 1 min    |
 | **Micro**  | 10        | 3       | 3               | 13            | Quick smoke tests, development    | < 2 min    |
 | **Small**  | 100       | 20      | 5               | 120           | Small business, unit tests        | < 5 min    |
 | **Medium** | 1,000     | 100     | 8               | 1,100         | Medium enterprise, CI/CD          | < 15 min   |
@@ -1070,16 +1071,31 @@ JIM/
 | API Endpoints | ✅ Complete | Schema management, sync rules, mappings, run profiles |
 | PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
 | Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration working |
-| Invoke-Scenario1 | ⚠️ Partial | Setup runs, tests need sync engine fixes |
+| Invoke-Scenario1 | ✅ Complete | Joiner test passing (users provisioned to AD) |
 | Scenario 2 & 3 | ⏳ Pending | Placeholder scripts exist |
+| GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
-### Known Issues Requiring Fixes
+### Completed Fixes (This Session)
 
-1. **Sync engine not exporting to AD** - The Joiner/Mover tests fail because users aren't being exported to Samba AD. Investigation needed in the Worker sync/export logic.
+1. **API routing fix** - `CreatedAtAction` failed with API versioning. Changed to explicit `Created()` with URL path.
 
-2. **DisplayNameOrId bug** (Fixed) - `ConnectedSystemObject.DisplayNameOrId` was using `SingleOrDefault` which threw "Sequence contains more than one matching element" when duplicate attribute values existed. Fixed by changing to `FirstOrDefault`.
+2. **PowerShell enum serialisation** - `New-JIMMetaverseAttribute` and `Set-JIMMetaverseAttribute` were sending string enum values ("Text") but API expected integers. Added mapping dictionaries.
 
-3. **MetaverseAttribute.MetaverseObjectTypes null** (Fixed) - When updating attribute associations, the collection wasn't loaded. Added `GetMetaverseAttributeWithObjectTypesAsync` method to include navigation property.
+3. **CSV path fix** - Integration test wrote to wrong path. Fixed to use `test/test-data/` which is mounted to JIM containers.
+
+4. **PowerShell array count** - Fixed `$testResults.Steps.Count` to `@($testResults.Steps).Count` for empty arrays.
+
+5. **Hashtable property access** - Fixed strict mode error accessing `.Error` property on hashtables without it.
+
+6. **CSV generation** - Added `userPrincipalName` and `dn` columns to generated CSV files.
+
+7. **Nano template** - Added smallest template (3 users) for fast iteration during development.
+
+### Previously Fixed Issues
+
+1. **DisplayNameOrId bug** - `ConnectedSystemObject.DisplayNameOrId` was using `SingleOrDefault` which threw "Sequence contains more than one matching element" when duplicate attribute values existed. Fixed by changing to `FirstOrDefault`.
+
+2. **MetaverseAttribute.MetaverseObjectTypes null** - When updating attribute associations, the collection wasn't loaded. Added `GetMetaverseAttributeWithObjectTypesAsync` method to include navigation property.
 
 ### Quick Start for New Session
 
@@ -1124,9 +1140,10 @@ docker logs jim.web --tail 100
 
 ### Next Steps
 
-1. **Debug sync engine export** - Investigate why LDAP export isn't creating users in AD
+1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
 2. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC
 3. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+4. **Add remaining Joiner tests** - Mover, Leaver, Reconnection tests
 
 ---
 
@@ -1134,6 +1151,7 @@ docker logs jim.web --tail 100
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.5     | 2025-12-16 | Scenario 1 Joiner test passing, added Nano template, multiple bug fixes |
 | 1.4     | 2025-12-16 | Added Current Progress section, known issues, quick start guide |
 | 1.3     | 2025-12-13 | Added Test Lifecycle Quick Reference section for DevContainer and CI/CD |
 | 1.2     | 2025-12-09 | Added JIM configuration section, step-based execution, dependencies |
