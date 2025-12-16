@@ -535,8 +535,17 @@ internal class LdapConnectorImport
             };
 
             // work out what JIM object type this result is
+            // AD returns objectClass values from most specific to most general (e.g., user, organizationalPerson, person, top)
+            // We need to find the most specific object type that we have selected in our schema
             var objectClasses = (string[])searchResult.Attributes["objectclass"].GetValues(typeof(string));
-            var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(ot => objectClasses.Any(oc => oc.Equals(ot.Name, StringComparison.OrdinalIgnoreCase)));
+            ConnectedSystemObjectType? objectType = null;
+            foreach (var objectClass in objectClasses)
+            {
+                objectType = _connectedSystem.ObjectTypes.FirstOrDefault(ot =>
+                    ot.Selected && ot.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase));
+                if (objectType != null)
+                    break;
+            }
             if (objectType == null)
             {
                 importObject.ErrorType = ConnectedSystemImportObjectError.CouldNotDetermineObjectType;

@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.7
+> **Version**: 1.8
 > **Last Updated**: 2025-12-16
-> **Status**: In Progress (~90% Complete)
+> **Status**: In Progress (~92% Complete)
 
 ---
 
@@ -15,11 +15,11 @@
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
 | Admin UI | `█████████░` | 13 | 14 | 93% |
-| Security | `███████░░░` | 5 | 7 | 71% |
+| Security | `██████████` | 5 | 5 | 100% |
 | Operations | `██████████` | 7 | 7 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
 | PowerShell | `██████████` | 3 | 3 | 100% |
-| **Overall** | `█████████░` | **78** | **87** | **90%** |
+| **Overall** | `█████████░` | **78** | **85** | **92%** |
 
 ### Priority Order for Remaining Work
 
@@ -32,7 +32,7 @@
 
 **Nice to Have (Can follow MVP):**
 - Dashboard admin home page (#169)
-- Full RBAC (#21)
+- Full RBAC (#21) and Synchronisation Readers role (#9)
 - Change history (#14)
 - Sync preview
 - Delta sync support
@@ -183,8 +183,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 #### 6.2 Authorisation
 - [x] Basic role model
-- [ ] Full RBAC implementation (#21)
-- [ ] Synchronisation Readers role (#9)
 
 #### 6.3 Data Protection
 - [ ] Connector credential encryption at rest (#171)
