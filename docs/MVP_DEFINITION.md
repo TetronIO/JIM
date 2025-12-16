@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.8
+> **Version**: 1.9
 > **Last Updated**: 2025-12-16
-> **Status**: In Progress (~92% Complete)
+> **Status**: In Progress (~94% Complete)
 
 ---
 
@@ -16,10 +16,10 @@
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
 | Admin UI | `█████████░` | 13 | 14 | 93% |
 | Security | `██████████` | 5 | 5 | 100% |
-| Operations | `██████████` | 7 | 7 | 100% |
+| Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
 | PowerShell | `██████████` | 3 | 3 | 100% |
-| **Overall** | `█████████░` | **78** | **85** | **92%** |
+| **Overall** | `█████████░` | **78** | **83** | **94%** |
 
 ### Priority Order for Remaining Work
 
@@ -193,13 +193,11 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Docker containerisation
 - [x] Docker Compose for full stack
 - [x] Environment-based configuration
-- [ ] Continuous deployment to demo site (#39)
 
 #### 7.2 Monitoring & Troubleshooting
 - [x] Activity logging
 - [x] Run profile execution tracking
 - [x] Error capture and display
-- [ ] Change history / audit trail (#14)
 
 ### 8. API Coverage (#183)
 

@@ -206,8 +206,25 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
 
-        if (request.IsExternalId.HasValue)
+        if (request.IsExternalId.HasValue && request.IsExternalId.Value)
+        {
+            // Clear existing external ID on other attributes in the same object type
+            // There can only be one external ID per object type
+            var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+            if (objectType?.Attributes != null)
+            {
+                foreach (var attr in objectType.Attributes.Where(a => a.IsExternalId && a.Id != attributeId))
+                {
+                    attr.IsExternalId = false;
+                    await _application.ConnectedSystems.UpdateAttributeAsync(attr, initiatedBy);
+                }
+            }
+            attribute.IsExternalId = true;
+        }
+        else if (request.IsExternalId.HasValue)
+        {
             attribute.IsExternalId = request.IsExternalId.Value;
+        }
 
         if (request.IsSecondaryExternalId.HasValue)
             attribute.IsSecondaryExternalId = request.IsSecondaryExternalId.Value;
