@@ -53,6 +53,9 @@ $users = @()
 for ($i = 1; $i -le $scale.Users; $i++) {
     $user = New-TestUser -Index $i -Domain "testdomain.local"
 
+    $upn = "$($user.SamAccountName)@testdomain.local"
+    $dn = "CN=$($user.DisplayName),CN=Users,DC=testdomain,DC=local"
+
     $users += [PSCustomObject]@{
         employeeId = $user.EmployeeId
         firstName = $user.FirstName
@@ -63,6 +66,8 @@ for ($i = 1; $i -le $scale.Users; $i++) {
         samAccountName = $user.SamAccountName
         displayName = $user.DisplayName
         status = "Active"
+        userPrincipalName = $upn
+        dn = $dn
     }
 
     if (($i % 1000) -eq 0 -or $i -eq $scale.Users) {

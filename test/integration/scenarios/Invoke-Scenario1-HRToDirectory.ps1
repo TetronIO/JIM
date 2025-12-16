@@ -340,10 +340,10 @@ try {
 
         Write-Host "$status $($stepResult.Name)" -ForegroundColor $color
 
-        if ($stepResult.Error) {
+        if ($stepResult.ContainsKey('Error') -and $stepResult.Error) {
             Write-Host "  Error: $($stepResult.Error)" -ForegroundColor Red
         }
-        if ($stepResult.Warning) {
+        if ($stepResult.ContainsKey('Warning') -and $stepResult.Warning) {
             Write-Host "  Warning: $($stepResult.Warning)" -ForegroundColor Yellow
         }
     }
