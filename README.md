@@ -33,14 +33,19 @@ Why choose JIM?
 - Flexible. We're developing it now, so you can suggest your must-have features
 - Built by people with decades of experience of integrating IDAM systems into the real world
 ## Architecture
-JIM is a container-based distributed application. It is comprised of:
+JIM is a container-based distributed application implementing the metaverse pattern for centralised identity governance.
 
+![JIM System Context](docs/diagrams/images/jim-structurizr-1-SystemContext.svg)
+
+**Components:**
 - **JIM.Web** - A website with integrated REST API, built using [ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/` with Swagger documentation at `/api/swagger`.
 - **JIM.Scheduler** - A console app, built using .NET
 - **JIM.Worker** - A console app, built using .NET
 - **JIM.PowerShell** - A PowerShell module for scripting and automation
 - A database - PostgreSQL
 - A database admin website - Adminer
+
+For detailed architecture diagrams (Container and Component levels), see the [Architecture Diagrams](docs/diagrams/structurizr/README.md).
 
 ## Dependencies
 - A container host, i.e. Docker

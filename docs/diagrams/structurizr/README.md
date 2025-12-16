@@ -2,7 +2,41 @@
 
 This folder contains the C4 model architecture diagrams for JIM, defined using [Structurizr DSL](https://docs.structurizr.com/dsl).
 
-## Viewing the Diagrams
+## Diagrams
+
+### Level 1: System Context
+
+Shows JIM's interactions with external systems and users.
+
+![System Context](../images/jim-structurizr-1-SystemContext.svg)
+
+### Level 2: Container
+
+Shows JIM's internal deployable units.
+
+![Containers](../images/jim-structurizr-1-Containers.svg)
+
+### Level 3: Component
+
+#### Application Layer Components
+
+The business logic and domain services.
+
+![Application Layer Components](../images/jim-structurizr-1-AppLayerComponents.svg)
+
+#### Connector Components
+
+External system integration adapters.
+
+![Connector Components](../images/jim-structurizr-1-ConnectorComponents.svg)
+
+#### Scheduler Components
+
+Scheduled job execution.
+
+![Scheduler Components](../images/jim-structurizr-1-SchedulerComponents.svg)
+
+## Viewing Interactive Diagrams
 
 ### Using Structurizr Lite (Local Docker)
 
