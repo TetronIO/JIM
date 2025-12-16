@@ -45,7 +45,9 @@ JIM is a container-based distributed application implementing the metaverse patt
 - A database - PostgreSQL
 - A database admin website - Adminer
 
-For detailed architecture diagrams (Container and Component levels), see the [Architecture Diagrams](docs/diagrams/structurizr/README.md).
+![JIM Containers](docs/diagrams/images/jim-structurizr-1-Containers.svg)
+
+For detailed architecture diagrams (Component level), see the [Architecture Diagrams](docs/diagrams/structurizr/README.md).
 
 ## Dependencies
 - A container host, i.e. Docker
