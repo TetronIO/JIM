@@ -1,0 +1,241 @@
+workspace "JIM Identity Management System" "C4 model for JIM - a central identity hub implementing the metaverse pattern" {
+
+    !identifiers hierarchical
+
+    configuration {
+        scope softwaresystem
+    }
+
+    model {
+        # People
+        admin = person "Administrator" "Identity management administrator who configures connected systems, sync rules, and monitors synchronisation"
+        automation = person "Automation Client" "CI/CD pipelines and scripts using API keys"
+
+        # External Systems
+        idp = softwareSystem "Identity Provider" "OIDC/SSO provider (Keycloak, Entra ID, Auth0, AD FS)" "External"
+        pwsh = softwareSystem "JIM PowerShell Module" "Cross-platform module with 35+ cmdlets for automation and scripting" "External"
+        ad = softwareSystem "Active Directory / LDAP" "Enterprise directory services for users and groups" "External"
+        hr = softwareSystem "HR Systems" "Authoritative source for employee identity data" "External"
+        databases = softwareSystem "Enterprise Databases" "PostgreSQL, MySQL, Oracle, SQL Server with identity data" "External"
+        files = softwareSystem "File Systems" "CSV file-based bulk import/export" "External"
+        scim = softwareSystem "SCIM 2.0 Systems" "Cloud applications supporting SCIM provisioning" "External"
+
+        # JIM System
+        jim = softwareSystem "JIM" "Central identity hub implementing the metaverse pattern. Synchronises identities across enterprise systems with bidirectional data flow and transformation" {
+
+            webApp = container "Web Application" "Provides interactive admin UI and REST API endpoints" "ASP.NET Core 9.0, Blazor Server, MudBlazor" "Web Browser" {
+                blazorPages = component "Blazor Pages" "Interactive admin UI - Dashboard, Activities, Connected Systems, Sync Rules, Types" "Blazor Server Components"
+                apiControllers = component "API Controllers" "REST endpoints - MetaverseController, SynchronisationController, ActivitiesController, ApiKeysController" "ASP.NET Core Controllers"
+                authMiddleware = component "Authentication Middleware" "OIDC/SSO authentication and API key validation" "ASP.NET Core Middleware"
+            }
+
+            appLayer = container "Application Layer" "Business logic and domain services" "JIM.Application" {
+                jimApplication = component "JimApplication Facade" "Single entry point to all domain services" "C# Facade Class"
+                metaverseServer = component "MetaverseServer" "Metaverse object CRUD, querying, attribute management" "C# Service"
+                connectedSystemServer = component "ConnectedSystemServer" "Connected system lifecycle, configuration, run profiles" "C# Service"
+                syncRuleServer = component "SyncRuleServer" "Sync rule configuration, attribute mappings" "C# Service"
+                objectMatchingServer = component "ObjectMatchingServer" "Join logic between ConnectedSystemObjects and MetaverseObjects" "C# Service"
+                exportEvaluationServer = component "ExportEvaluationServer" "Determines pending exports based on attribute changes" "C# Service"
+                exportExecutionServer = component "ExportExecutionServer" "Executes pending exports with retry logic" "C# Service"
+                activityServer = component "ActivityServer" "Activity logging, audit trail, execution statistics" "C# Service"
+                taskingServer = component "TaskingServer" "Worker task queue management" "C# Service"
+            }
+
+            worker = container "Worker Service" "Processes queued synchronisation tasks - import, sync, export operations" ".NET 9.0 Background Service" {
+                workerHost = component "Worker Host" "Main processing loop, polls for tasks, manages execution" ".NET BackgroundService"
+                importProcessor = component "SyncImportTaskProcessor" "Imports data from connectors into staging area" "C# Task Processor"
+                syncProcessor = component "SyncFullSyncTaskProcessor" "Applies attribute flows, projects objects to metaverse" "C# Task Processor"
+                exportProcessor = component "SyncExportTaskProcessor" "Exports pending changes to connected systems" "C# Task Processor"
+            }
+
+            connectors = container "Connectors" "External system integration adapters" "JIM.Connectors" {
+                connectorRegistry = component "Connector Registry" "Maintains available connector types, capability discovery" "C# Service"
+                ldapConnector = component "LDAP Connector" "Active Directory, OpenLDAP, AD-LDS - schema discovery, LDAPS, partitions" "IConnector Implementation"
+                fileConnector = component "File Connector" "CSV import/export, configurable delimiters, schema discovery" "IConnector Implementation"
+                databaseConnector = component "Database Connector" "PostgreSQL, MySQL, Oracle, SQL Server - SQL queries, stored procedures" "IConnector Implementation"
+                scimConnector = component "SCIM 2.0 Connector" "Cloud application provisioning via SCIM protocol" "IConnector Implementation"
+            }
+
+            scheduler = container "Scheduler Service" "Triggers scheduled synchronisation jobs based on run profile schedules" ".NET 9.0 Background Service" {
+                schedulerHost = component "Scheduler Host" "Main scheduling loop, evaluates run profile schedules" ".NET BackgroundService"
+                scheduleEvaluator = component "Schedule Evaluator" "Determines which run profiles are due for execution" "C# Service"
+            }
+
+            database = container "PostgreSQL Database" "Stores configuration, metaverse objects, staging area, sync rules, activity history, task queue" "PostgreSQL 18" "Database"
+
+            !docs docs
+            !adrs adrs
+        }
+
+        # ===== System Context Relationships =====
+        admin -> jim "Manages via" "Blazor Web UI"
+        admin -> pwsh "Scripts with" "PowerShell cmdlets"
+        automation -> pwsh "Automates via" "PowerShell scripts"
+        automation -> jim "Calls" "REST API"
+        pwsh -> jim "Calls" "REST API /api/v1/"
+        idp -> jim "Authenticates" "OIDC/OpenID Connect"
+        jim -> ad "Synchronises" "LDAP/LDAPS"
+        jim -> hr "Imports from" "CSV/Database"
+        jim -> databases "Synchronises" "SQL"
+        jim -> files "Imports/Exports" "CSV files"
+        jim -> scim "Provisions to" "SCIM 2.0"
+
+        # ===== Container Relationships =====
+        admin -> jim.webApp "Uses" "HTTPS"
+        automation -> jim.webApp "Calls" "REST API"
+        pwsh -> jim.webApp "Calls" "REST API /api/v1/"
+        idp -> jim.webApp "Authenticates" "OIDC"
+
+        jim.webApp -> jim.appLayer "Uses" "Method calls"
+
+        jim.appLayer -> jim.database "Reads/Writes" "EF Core"
+        jim.appLayer -> jim.connectors "Invokes" "Method calls"
+
+        jim.worker -> jim.appLayer "Uses" "Method calls"
+
+        jim.scheduler -> jim.appLayer "Uses" "Method calls"
+
+        jim.connectors -> ad "Connects to" "LDAP/LDAPS"
+        jim.connectors -> hr "Imports from" "CSV/SQL"
+        jim.connectors -> databases "Connects to" "SQL"
+        jim.connectors -> files "Reads/Writes" "File I/O"
+        jim.connectors -> scim "Provisions to" "HTTPS"
+
+        # ===== Web Application Component Relationships =====
+        admin -> jim.webApp.blazorPages "Uses" "HTTPS"
+        automation -> jim.webApp.apiControllers "Calls" "REST/JSON"
+        pwsh -> jim.webApp.apiControllers "Calls" "REST/JSON"
+        jim.webApp.authMiddleware -> idp "Authenticates via" "OIDC"
+        jim.webApp.authMiddleware -> jim.webApp.blazorPages "Validates requests" "ASP.NET Pipeline"
+        jim.webApp.authMiddleware -> jim.webApp.apiControllers "Validates requests" "ASP.NET Pipeline"
+        jim.webApp.blazorPages -> jim.appLayer.jimApplication "Uses" "Method calls"
+        jim.webApp.apiControllers -> jim.appLayer.jimApplication "Uses" "Method calls"
+
+        # ===== Application Layer Component Relationships =====
+        jim.appLayer.jimApplication -> jim.appLayer.metaverseServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.connectedSystemServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.syncRuleServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.objectMatchingServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.exportEvaluationServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.exportExecutionServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.activityServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.taskingServer "Delegates to" "Method calls"
+
+        jim.appLayer.objectMatchingServer -> jim.appLayer.metaverseServer "Uses" "Method calls"
+        jim.appLayer.exportEvaluationServer -> jim.appLayer.syncRuleServer "Uses" "Method calls"
+        jim.appLayer.exportExecutionServer -> jim.appLayer.metaverseServer "Uses" "Method calls"
+        jim.appLayer.exportExecutionServer -> jim.appLayer.connectedSystemServer "Uses" "Method calls"
+
+        jim.appLayer.connectedSystemServer -> jim.connectors.connectorRegistry "Invokes" "Method calls"
+
+        jim.appLayer.metaverseServer -> jim.database "Reads/Writes" "EF Core"
+        jim.appLayer.connectedSystemServer -> jim.database "Reads/Writes" "EF Core"
+        jim.appLayer.syncRuleServer -> jim.database "Reads/Writes" "EF Core"
+        jim.appLayer.activityServer -> jim.database "Reads/Writes" "EF Core"
+        jim.appLayer.taskingServer -> jim.database "Reads/Writes" "EF Core"
+
+        # ===== Worker Component Relationships =====
+        jim.worker.workerHost -> jim.appLayer.jimApplication "Polls for tasks" "Method calls"
+        jim.worker.workerHost -> jim.worker.importProcessor "Dispatches" "Method calls"
+        jim.worker.workerHost -> jim.worker.syncProcessor "Dispatches" "Method calls"
+        jim.worker.workerHost -> jim.worker.exportProcessor "Dispatches" "Method calls"
+
+        jim.worker.importProcessor -> jim.appLayer.jimApplication "Uses" "Method calls"
+        jim.worker.syncProcessor -> jim.appLayer.jimApplication "Uses" "Method calls"
+        jim.worker.exportProcessor -> jim.appLayer.jimApplication "Uses" "Method calls"
+
+        # ===== Scheduler Component Relationships =====
+        jim.scheduler.schedulerHost -> jim.scheduler.scheduleEvaluator "Uses" "Method calls"
+        jim.scheduler.schedulerHost -> jim.appLayer.jimApplication "Creates tasks" "Method calls"
+        jim.scheduler.scheduleEvaluator -> jim.appLayer.jimApplication "Reads schedules" "Method calls"
+
+        # ===== Connector Component Relationships =====
+        jim.connectors.connectorRegistry -> jim.connectors.ldapConnector "Manages" "IConnector interface"
+        jim.connectors.connectorRegistry -> jim.connectors.fileConnector "Manages" "IConnector interface"
+        jim.connectors.connectorRegistry -> jim.connectors.databaseConnector "Manages" "IConnector interface"
+        jim.connectors.connectorRegistry -> jim.connectors.scimConnector "Manages" "IConnector interface"
+
+        jim.connectors.ldapConnector -> ad "Connects to" "LDAP/LDAPS"
+        jim.connectors.fileConnector -> files "Reads/Writes" "File I/O"
+        jim.connectors.databaseConnector -> databases "Connects to" "SQL"
+        jim.connectors.scimConnector -> scim "Provisions to" "HTTPS"
+    }
+
+    views {
+        # Level 1: System Context
+        systemContext jim "SystemContext" "System Context diagram for JIM" {
+            include *
+            autoLayout tb
+        }
+
+        # Level 2: Container Diagram
+        container jim "Containers" "Container diagram for JIM" {
+            include *
+            autoLayout tb
+        }
+
+        # Level 3: Component Diagrams
+
+        component jim.webApp "WebAppComponents" "Component diagram for JIM Web Application" {
+            include *
+            autoLayout tb
+        }
+
+        component jim.appLayer "AppLayerComponents" "Component diagram for JIM Application Layer" {
+            include *
+            autoLayout tb
+        }
+
+        component jim.worker "WorkerComponents" "Component diagram for JIM Worker Service" {
+            include *
+            autoLayout tb
+        }
+
+        component jim.connectors "ConnectorComponents" "Component diagram for JIM Connectors" {
+            include *
+            autoLayout tb
+        }
+
+        component jim.scheduler "SchedulerComponents" "Component diagram for JIM Scheduler Service" {
+            include *
+            autoLayout tb
+        }
+
+        styles {
+            element "Software System" {
+                background #1168bd
+                color #ffffff
+                shape RoundedBox
+            }
+            element "External" {
+                background #999999
+                color #ffffff
+            }
+            element "Person" {
+                background #08427b
+                color #ffffff
+                shape Person
+            }
+            element "Container" {
+                background #438dd5
+                color #ffffff
+            }
+            element "Web Browser" {
+                shape WebBrowser
+            }
+            element "Database" {
+                shape Cylinder
+            }
+            element "Component" {
+                background #85bbf0
+                color #000000
+            }
+            relationship "Relationship" {
+                dashed false
+            }
+        }
+
+        theme default
+    }
+
+}

@@ -455,3 +455,7 @@ test/integration/results/
 test/integration/test-data/
 test/integration/.api-key
 test-data/
+
+# Structurizr Lite working files
+docs/diagrams/structurizr/.structurizr/
+docs/diagrams/structurizr/workspace.json
