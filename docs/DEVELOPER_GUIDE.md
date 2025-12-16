@@ -36,6 +36,17 @@ The metaverse is the authoritative identity repository:
 
 **Rule**: Extend through interfaces, not modification. Keep connectors independent.
 
+### 4. Architecture Diagrams
+
+JIM's architecture is documented using C4 model diagrams (System Context, Container, Component levels).
+
+**Viewing Diagrams**: See [docs/diagrams/structurizr/README.md](diagrams/structurizr/README.md) for instructions on running Structurizr Lite locally.
+
+**Available Diagrams**:
+- **System Context**: JIM's interactions with external systems and users
+- **Container**: Internal deployable units (Web App, Worker, Scheduler, Connectors, Database)
+- **Component**: Detailed views of Web Application, Application Layer, Worker Service, Connectors, and Scheduler
+
 ## Technology Stack
 
 ### Core Technologies (Required)

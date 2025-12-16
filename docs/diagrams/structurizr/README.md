@@ -1,0 +1,67 @@
+# JIM C4 Architecture Diagrams
+
+This folder contains the C4 model architecture diagrams for JIM, defined using [Structurizr DSL](https://docs.structurizr.com/dsl).
+
+## Viewing the Diagrams
+
+### Using Structurizr Lite (Local Docker)
+
+1. Start Structurizr Lite from the repository root:
+
+   ```powershell
+   # PowerShell (Windows/Linux/macOS)
+   docker run -it --rm -p 8085:8080 -v ${PWD}/docs/diagrams/structurizr:/usr/local/structurizr structurizr/lite
+   ```
+
+   ```bash
+   # Bash
+   docker run -it --rm -p 8085:8080 -v $(pwd)/docs/diagrams/structurizr:/usr/local/structurizr structurizr/lite
+   ```
+
+2. Open http://localhost:8085 in your browser
+
+3. Click on diagram thumbnails in the left panel to view each diagram
+
+### Troubleshooting
+
+- **Port already in use**: Change `8085:8080` to another port like `8090:8080`
+- **Browser shows 400 Bad Request**: Try using a private/incognito browser window, or access from outside VS Code port forwarding
+- **Diagrams not updating**: Refresh the browser after editing `workspace.dsl`
+
+## Diagram Structure
+
+The workspace contains C4 diagrams at three levels:
+
+### Level 1: System Context
+- **SystemContext** - JIM's interactions with external systems and users
+
+### Level 2: Container
+- **Containers** - JIM's internal deployable units (Web App, Worker, Scheduler, Connectors, Database)
+
+### Level 3: Component
+- **WebAppComponents** - Blazor Pages, API Controllers, Authentication Middleware
+- **AppLayerComponents** - JimApplication Facade and domain services
+- **WorkerComponents** - Worker Host and task processors
+- **ConnectorComponents** - Connector Registry and connector implementations
+- **SchedulerComponents** - Scheduler Host and Schedule Evaluator
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `workspace.dsl` | Structurizr DSL model defining all diagrams |
+| `docs/01-overview.md` | System overview documentation (shown in Structurizr) |
+| `adrs/0001-metaverse-pattern.md` | Architecture Decision Record for metaverse pattern |
+
+## Editing the Diagrams
+
+1. Edit `workspace.dsl` using any text editor
+2. Refresh Structurizr Lite in your browser to see changes
+3. The DSL syntax is documented at https://docs.structurizr.com/dsl/language
+
+## Exporting Diagrams
+
+From Structurizr Lite, you can export diagrams as:
+- PNG images (click the export button on each diagram)
+- SVG for documentation
+- PlantUML for alternative rendering
