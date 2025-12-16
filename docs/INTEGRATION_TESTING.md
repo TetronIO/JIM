@@ -1141,9 +1141,29 @@ docker logs jim.web --tail 100
 ### Next Steps
 
 1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
-2. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC
-3. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
-4. **Add remaining Joiner tests** - Mover, Leaver, Reconnection tests
+2. **Fix file connector change detection** - Mover test fails because attribute updates aren't detected (see Known Issue below)
+3. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC
+4. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+
+### Known Issue: File Connector Not Detecting Attribute Changes
+
+**Symptom**: The Mover test fails - when `bob.smith1` department is changed from "HR" to "IT" in the CSV, the change is not exported to AD.
+
+**Root Cause**: During import, the file connector correctly identifies existing CSOs and calls update instead of create. However, `UpdateConnectedSystemObjectAttributeValuesAsync` reports "No work to do. No pending attribute value changes" - the connector is not properly comparing new values with existing values.
+
+**Log Evidence**:
+```
+WRN: Connector indicated Create for object type 'person' but CSO already exists. Updating instead.
+VRB: UpdateConnectedSystemObjectAttributeValuesAsync: No work to do. No pending attribute value changes for CSO: ...
+```
+
+**Impact**:
+- Joiner test: ✅ PASSES (new user creation works)
+- Mover test: ❌ FAILS (attribute updates not detected)
+- Leaver test: ⚠️ PARTIAL (user removal detection may also be affected)
+- Reconnection test: ✅ PASSES (user preservation works)
+
+**Fix Required**: Investigate `ProcessImportObjectsAsync` and `UpdateConnectedSystemObjectAttributeValuesAsync` in the worker to ensure attribute value comparison correctly detects changes.
 
 ---
 
@@ -1151,6 +1171,7 @@ docker logs jim.web --tail 100
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.6     | 2025-12-16 | Ran full Scenario 1 tests, documented file connector change detection issue |
 | 1.5     | 2025-12-16 | Scenario 1 Joiner test passing, added Nano template, multiple bug fixes |
 | 1.4     | 2025-12-16 | Added Current Progress section, known issues, quick start guide |
 | 1.3     | 2025-12-13 | Added Test Lifecycle Quick Reference section for DevContainer and CI/CD |
