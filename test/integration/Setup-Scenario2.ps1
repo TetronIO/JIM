@@ -233,8 +233,8 @@ catch {
     throw
 }
 
-# Step 6: Import Schemas
-Write-TestStep "Step 6" "Importing Connected System Schemas"
+# Step 6: Import Schemas and Hierarchy
+Write-TestStep "Step 6" "Importing Connected System Schemas and Hierarchy"
 
 # Source schema
 $sourceObjectTypes = Get-JIMConnectedSystem -Id $sourceSystem.id -ObjectTypes
@@ -254,6 +254,24 @@ else {
     }
 }
 
+# Source hierarchy (partitions/containers)
+$sourcePartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
+if ($sourcePartitionsCheck -and $sourcePartitionsCheck.Count -gt 0) {
+    Write-Host "  Source hierarchy already imported ($($sourcePartitionsCheck.Count) partitions)" -ForegroundColor Gray
+}
+else {
+    try {
+        Write-Host "  Importing Source LDAP hierarchy..." -ForegroundColor Gray
+        Import-JIMConnectedSystemHierarchy -Id $sourceSystem.id | Out-Null
+        $sourcePartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
+        Write-Host "  ✓ Source hierarchy imported ($($sourcePartitionsCheck.Count) partitions)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ✗ Failed to import Source hierarchy: $_" -ForegroundColor Red
+        throw
+    }
+}
+
 # Target schema
 $targetObjectTypes = Get-JIMConnectedSystem -Id $targetSystem.id -ObjectTypes
 if ($targetObjectTypes -and $targetObjectTypes.Count -gt 0) {
@@ -268,6 +286,24 @@ else {
     }
     catch {
         Write-Host "  ✗ Failed to import Target schema: $_" -ForegroundColor Red
+        throw
+    }
+}
+
+# Target hierarchy (partitions/containers)
+$targetPartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id
+if ($targetPartitionsCheck -and $targetPartitionsCheck.Count -gt 0) {
+    Write-Host "  Target hierarchy already imported ($($targetPartitionsCheck.Count) partitions)" -ForegroundColor Gray
+}
+else {
+    try {
+        Write-Host "  Importing Target LDAP hierarchy..." -ForegroundColor Gray
+        Import-JIMConnectedSystemHierarchy -Id $targetSystem.id | Out-Null
+        $targetPartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id
+        Write-Host "  ✓ Target hierarchy imported ($($targetPartitionsCheck.Count) partitions)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ✗ Failed to import Target hierarchy: $_" -ForegroundColor Red
         throw
     }
 }

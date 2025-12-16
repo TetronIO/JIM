@@ -608,6 +608,65 @@ public class SynchronisationController(ILogger<SynchronisationController> logger
     }
 
     /// <summary>
+    /// Imports hierarchy (partitions and containers) from the connected system.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint connects to the external system and retrieves its partition and container hierarchy.
+    /// For LDAP connectors, this retrieves naming contexts and organisational units.
+    ///
+    /// After importing the hierarchy, you can select which partitions and containers to include
+    /// in import operations using the partition and container update endpoints.
+    ///
+    /// **Note:** This operation is destructive - it will replace any existing partition/container configuration.
+    /// Any partition/container selections will be lost.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <returns>The updated connected system with imported hierarchy.</returns>
+    /// <response code="200">Hierarchy imported successfully.</response>
+    /// <response code="400">Hierarchy import failed (e.g., connection error, invalid settings).</response>
+    /// <response code="404">Connected system not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/import-hierarchy", Name = "ImportConnectedSystemHierarchy")]
+    [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId)
+    {
+        _logger.LogInformation("Hierarchy import requested for connected system: {Id}", connectedSystemId);
+
+        // Get the current user from the JWT claims (may be null for API key auth)
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for hierarchy import");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Get the connected system
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        try
+        {
+            await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
+
+            _logger.LogInformation("Hierarchy imported for connected system: {Id} ({Name}), {Count} partitions",
+                connectedSystemId, connectedSystem.Name, connectedSystem.Partitions?.Count ?? 0);
+
+            // Retrieve the updated system
+            var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+            return Ok(ConnectedSystemDetailDto.FromEntity(updated!));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import hierarchy for connected system: {Id}", connectedSystemId);
+            return BadRequest(ApiErrorResponse.BadRequest($"Hierarchy import failed: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
     /// Deletes a Connected System and all its related data.
     /// </summary>
     /// <remarks>

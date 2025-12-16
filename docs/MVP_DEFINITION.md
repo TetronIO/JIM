@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.6
-> **Last Updated**: 2025-12-11
-> **Status**: In Progress (~88% Complete)
+> **Version**: 1.7
+> **Last Updated**: 2025-12-16
+> **Status**: In Progress (~90% Complete)
 
 ---
 
@@ -14,12 +14,12 @@
 | Inbound Sync | `█████████░` | 14 | 15 | 93% |
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
-| Admin UI | `█████████░` | 13 | 15 | 87% |
+| Admin UI | `█████████░` | 13 | 14 | 93% |
 | Security | `███████░░░` | 5 | 7 | 71% |
 | Operations | `██████████` | 7 | 7 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
 | PowerShell | `██████████` | 3 | 3 | 100% |
-| **Overall** | `█████████░` | **78** | **88** | **89%** |
+| **Overall** | `█████████░` | **78** | **87** | **90%** |
 
 ### Priority Order for Remaining Work
 
@@ -28,10 +28,10 @@
 
 **Important (Highly Desirable for MVP):**
 2. Background job for scheduled MVO deletions (#120)
-3. Dashboard admin home page (#169)
-4. **Connector credential encryption** - Encrypt passwords at rest (#171)
+3. **Connector credential encryption** - Encrypt passwords at rest (#171)
 
 **Nice to Have (Can follow MVP):**
+- Dashboard admin home page (#169)
 - Full RBAC (#21)
 - Change history (#14)
 - Sync preview
@@ -155,7 +155,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 5. Administration UI
 
 #### 5.1 Core Views
-- [ ] Dashboard (summary metrics, system health) (#169)
 - [x] Operations view (run activities, task status)
 - [x] Connected System list and detail
 - [x] Connector configuration

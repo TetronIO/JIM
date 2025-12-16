@@ -39,6 +39,7 @@
         'Set-JIMConnectedSystem',
         'Remove-JIMConnectedSystem',
         'Import-JIMConnectedSystemSchema',
+        'Import-JIMConnectedSystemHierarchy',
         'Get-JIMConnectorDefinition',
         'Set-JIMConnectedSystemObjectType',
         'Set-JIMConnectedSystemAttribute',
