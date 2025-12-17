@@ -14,27 +14,28 @@
 **First time running integration tests?** Follow these steps:
 
 ```powershell
-# 1. Create Infrastructure API Key (one-time setup)
+# 1. Start JIM stack (if not already running)
+jim-stack  # or: docker compose up -d
+
+# 2. Start test infrastructure (Samba AD)
+docker compose -f docker-compose.integration-tests.yml up -d
+# Wait ~2 minutes for Samba AD to initialise
+
+# 3. Create Infrastructure API Key (one-time setup per JIM database)
 ./test/integration/Setup-InfrastructureApiKey.ps1
 
-# 2. Start test infrastructure (Samba AD, etc) - NOT YET IMPLEMENTED
-#    TODO: Create docker-compose.integration-tests.yml in project root
-#    docker compose -f docker-compose.integration-tests.yml up -d
-#    ./test/integration/Wait-SystemsReady.ps1
-
-# 3. Run Scenario 1 with Nano template (3 users)
-cd test/integration/scenarios
-./Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
+# 4. Run Scenario 1 with Nano template (3 users)
+./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
 ```
 
 **Prerequisites:**
 - JIM stack running (`jim-stack` or `docker compose up -d`)
-- Samba AD container running (see step 2 above)
-- API key created (step 1 creates one automatically)
+- Samba AD running (`docker compose -f docker-compose.integration-tests.yml up -d`)
+- API key created (step 3 creates one automatically)
 
 **Current Limitations:**
-- ⚠️ Samba AD infrastructure setup not yet automated
-- ⚠️ Progress bars not yet implemented (see [TODO](#known-issues--todos))
+- ⚠️ Samba AD takes ~2 minutes to initialise on first start
+- ⚠️ Progress bars not yet implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
 - ✅ Unit tests all passing (553 tests)
 - ✅ Expression evaluation support implemented
 
@@ -1334,20 +1335,14 @@ Integration test scripts should provide visual progress feedback including:
 - Better user experience during test execution
 
 #### 2. Docker Compose Files for Test Infrastructure
-**Priority: High | Status: Not Started**
+**Priority: High | Status: ✅ Complete**
 
-Create `docker-compose.integration-tests.yml` in project root to automate test infrastructure setup.
-
-**Required Services:**
-- Samba AD (Primary instance) - for Scenario 1
-- Samba AD (Source & Target instances) - for Scenario 2
-- Test data volumes for CSV files
-- Profile-based service selection (scenario1, scenario2, etc.)
-
-**Current Workaround:**
-- Manual Samba AD setup required
-- Tests fail if infrastructure not running
-- No automated way to stand up/tear down test systems
+`docker-compose.integration-tests.yml` exists in project root with:
+- ✅ Samba AD (Primary instance) - for Scenario 1
+- ✅ Samba AD (Source & Target instances) - for Scenario 2 (profile: scenario2)
+- ✅ Test data volumes for CSV files
+- ✅ Profile-based service selection
+- ✅ Phase 2 services (SQL Server, Oracle, PostgreSQL, MySQL, OpenLDAP)
 
 #### 3. Stand-up Performance Optimization
 **Priority: Medium | Status: Investigation Needed**
