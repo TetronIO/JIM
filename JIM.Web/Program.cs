@@ -63,10 +63,14 @@ try
     if (logSensitiveInfo)
         connectionString += ";Include Error Detail=True";
 
-    builder.Services.AddDbContext<JimDbContext>(options =>
+    // Use DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
+    // Blazor Server pre-rendering and interactive rendering can happen concurrently
+    builder.Services.AddDbContextFactory<JimDbContext>(options =>
         options.UseNpgsql(connectionString)
-            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)),
-        ServiceLifetime.Scoped);
+            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
+
+    // Also register DbContext as scoped for non-Blazor scenarios (API controllers, background services)
+    builder.Services.AddScoped<JimDbContext>(sp => sp.GetRequiredService<IDbContextFactory<JimDbContext>>().CreateDbContext());
 
     builder.Services.AddScoped<IRepository>(sp => new PostgresDataRepository(sp.GetRequiredService<JimDbContext>()));
     builder.Services.AddScoped<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
