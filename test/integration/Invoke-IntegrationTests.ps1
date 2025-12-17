@@ -135,7 +135,8 @@ try {
         if (Test-Path $jimComposeOverride) {
             $jimComposeArgs += @("-f", $jimComposeOverride)
         }
-        $jimComposeArgs += @("--profile", "with-db", "up", "-d")
+        # Use --build to ensure containers are rebuilt with latest code changes
+        $jimComposeArgs += @("--profile", "with-db", "up", "-d", "--build")
         docker compose @jimComposeArgs 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
 
         if ($LASTEXITCODE -ne 0) {
