@@ -222,8 +222,16 @@ internal class LdapConnectorExport
 
             var attrName = attrChange.Attribute.Name;
 
-            // Skip distinguished name - it cannot be modified via ModifyRequest
-            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
+            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest
+            // These require a ModifyDNRequest (rename operation) instead.
+            // - distinguishedName: The full DN, immutable via MODIFY
+            // - cn: Common Name, the RDN for most object types (users, groups, etc.)
+            // - ou: Organisational Unit name, RDN for OUs
+            // - dc: Domain Component, RDN for domain objects
+            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("dc", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var modification = CreateModification(attrChange);
