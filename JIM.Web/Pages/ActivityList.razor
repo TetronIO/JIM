@@ -6,6 +6,7 @@
 @using JIM.Models.Activities
 @using JIM.Models.Utility;
 @using JIM.Utilities;
+@using Humanizer
 @using Microsoft.AspNetCore.Components.Authorization
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -89,7 +90,7 @@
                 Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
                 @context.Status.ToString().SplitOnCapitalLetters()</MudChip>
         </MudTd>
-        <MudTd DataLabel="Execution Time">@context.ExecutionTime</MudTd>
+        <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Millisecond) ?? "-")</MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There is no activity to show yet.
