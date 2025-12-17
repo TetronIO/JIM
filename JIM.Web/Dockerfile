@@ -2,6 +2,7 @@
 # See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 ARG VERSION=dev
+ARG TARGET=release
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 
@@ -40,18 +41,24 @@ RUN --mount=type=cache,target=/root/.nuget/packages \
 COPY . .
 WORKDIR "/src/JIM.Web"
 
-# Build with BuildKit cache mount
+# Build stage for dev - Debug configuration
+FROM build AS build-debug
 RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet build "JIM.Web.csproj" -c Release -o /app/build
+    dotnet build "JIM.Web.csproj" -c Debug -o /app/build-debug
 
-# Dev target - use build output directly (faster, ~10-15s saved)
+# Build stage for release - Release configuration
+FROM build AS build-release
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet build "JIM.Web.csproj" -c Release -o /app/build-release
+
+# Dev target - use Debug build output directly (faster, ~10-15s saved, better debugging)
 FROM base AS dev
 WORKDIR /app
-COPY --from=build /app/build .
+COPY --from=build-debug /app/build-debug .
 ENTRYPOINT ["dotnet", "JIM.Web.dll"]
 
 # Publish stage - optimised for production
-FROM build AS publish
+FROM build-release AS publish
 RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
@@ -62,4 +69,4 @@ COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "JIM.Web.dll"]
 
 # Default target is release for backwards compatibility
-FROM release AS final
+FROM ${TARGET} AS final
