@@ -90,6 +90,35 @@ catch {
     throw
 }
 
+# Step 2b: Clean up existing configuration from previous runs
+Write-TestStep "Step 2b" "Cleaning up existing JIM configuration"
+
+try {
+    $existingSystems = Get-JIMConnectedSystem -ErrorAction SilentlyContinue
+    if ($existingSystems -and $existingSystems.Count -gt 0) {
+        Write-Host "  Found $($existingSystems.Count) existing Connected System(s) - removing..." -ForegroundColor Yellow
+        foreach ($system in $existingSystems) {
+            Write-Host "    Deleting '$($system.name)' (ID: $($system.id))..." -ForegroundColor Gray
+            try {
+                Remove-JIMConnectedSystem -Id $system.id -Force -ErrorAction Stop
+                Write-Host "    ✓ Deleted '$($system.name)'" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "    ⚠ Could not delete '$($system.name)': $_" -ForegroundColor Yellow
+            }
+        }
+        Write-Host "  ✓ Existing Connected Systems removed" -ForegroundColor Green
+        Write-Host "  ⚠ Note: Orphaned MVOs may remain. Run Reset-JIM.ps1 for full cleanup." -ForegroundColor DarkYellow
+    }
+    else {
+        Write-Host "  ✓ No existing Connected Systems found (clean slate)" -ForegroundColor Green
+    }
+}
+catch {
+    Write-Host "  ⚠ Could not check for existing systems: $_" -ForegroundColor Yellow
+    Write-Host "    Continuing with setup..." -ForegroundColor Gray
+}
+
 # Step 3: Get connector definitions
 Write-TestStep "Step 3" "Getting connector definitions"
 
