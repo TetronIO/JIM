@@ -69,10 +69,14 @@ try
         options.UseNpgsql(connectionString)
             .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
-    // Also register DbContext as scoped for non-Blazor scenarios (API controllers, background services)
-    builder.Services.AddScoped<JimDbContext>(sp => sp.GetRequiredService<IDbContextFactory<JimDbContext>>().CreateDbContext());
-
-    builder.Services.AddScoped<IRepository>(sp => new PostgresDataRepository(sp.GetRequiredService<JimDbContext>()));
+    // Register repository and application as scoped
+    // Each scoped instance gets a fresh DbContext from the factory
+    builder.Services.AddScoped<IRepository>(sp =>
+    {
+        var factory = sp.GetRequiredService<IDbContextFactory<JimDbContext>>();
+        var context = factory.CreateDbContext();
+        return new PostgresDataRepository(context);
+    });
     builder.Services.AddScoped<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
     builder.Services.AddExpressionEvaluation();
 
