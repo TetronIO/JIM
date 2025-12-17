@@ -50,20 +50,20 @@ public static class Helpers
 
     /// <summary>
     /// Extension method that converts a TimeSpan into a human-readable string with abbreviated units.
-    /// Examples: "143 ms", "14 s, 210 ms", "2 m, 15 s"
+    /// Examples: "143 ms", "14 sec, 210 ms", "2 min, 15 sec"
     /// </summary>
     public static string ToAbbreviatedString(this TimeSpan timeSpan, int precision = 2)
     {
         var parts = new List<string>();
 
         if (timeSpan.Days > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Days} d");
+            parts.Add($"{timeSpan.Days} day{(timeSpan.Days == 1 ? "" : "s")}");
         if (timeSpan.Hours > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Hours} h");
+            parts.Add($"{timeSpan.Hours} hr{(timeSpan.Hours == 1 ? "" : "s")}");
         if (timeSpan.Minutes > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Minutes} m");
+            parts.Add($"{timeSpan.Minutes} min");
         if (timeSpan.Seconds > 0 && parts.Count < precision)
-            parts.Add($"{timeSpan.Seconds} s");
+            parts.Add($"{timeSpan.Seconds} sec");
         if (timeSpan.Milliseconds > 0 && parts.Count < precision)
             parts.Add($"{timeSpan.Milliseconds} ms");
 
@@ -72,19 +72,25 @@ public static class Helpers
 
     /// <summary>
     /// Extension method that converts a TimeSpan into a casual, rounded approximation using the largest appropriate unit.
-    /// Examples: "~143 ms", "~14 s", "~16 s", "~2 m"
+    /// Examples: "143 ms", "~14 sec", "~16 sec", "~2 min"
     /// </summary>
     public static string ToCasualString(this TimeSpan timeSpan)
     {
         // Round to the largest appropriate unit
         if (timeSpan.TotalDays >= 1)
-            return $"~{Math.Round(timeSpan.TotalDays)} d";
+        {
+            var days = Math.Round(timeSpan.TotalDays);
+            return $"~{days} day{(days == 1 ? "" : "s")}";
+        }
         if (timeSpan.TotalHours >= 1)
-            return $"~{Math.Round(timeSpan.TotalHours)} h";
+        {
+            var hours = Math.Round(timeSpan.TotalHours);
+            return $"~{hours} hr{(hours == 1 ? "" : "s")}";
+        }
         if (timeSpan.TotalMinutes >= 1)
-            return $"~{Math.Round(timeSpan.TotalMinutes)} m";
+            return $"~{Math.Round(timeSpan.TotalMinutes)} min";
         if (timeSpan.TotalSeconds >= 1)
-            return $"~{Math.Round(timeSpan.TotalSeconds)} s";
+            return $"~{Math.Round(timeSpan.TotalSeconds)} sec";
 
         return $"{Math.Round(timeSpan.TotalMilliseconds)} ms";
     }
