@@ -414,9 +414,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             pageSize = 500;
 
         // start building the query for all the CSOs for a particular system.
+        // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
+        // The MVO AttributeValues are needed during full sync to detect attribute changes and create PendingExports.
         var query = Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues);
-        
+            .Include(cso => cso.AttributeValues)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues);
+
         // for optimum performance, do not include attributes
         // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema whilst in memory
         // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
