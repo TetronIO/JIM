@@ -1452,16 +1452,21 @@ public class SynchronisationController(
             }
             else // Export
             {
-                // Attribute-based export source
-                if (!sourceRequest.MetaverseAttributeId.HasValue)
+                // Expression-based or attribute-based export source
+                if (!sourceRequest.MetaverseAttributeId.HasValue && string.IsNullOrWhiteSpace(sourceRequest.Expression))
                     return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId or Expression is required for export rule sources."));
 
-                var mvAttr = await _application.Metaverse.GetMetaverseAttributeAsync(sourceRequest.MetaverseAttributeId.Value);
-                if (mvAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
+                // If attribute-based, validate the attribute exists
+                if (sourceRequest.MetaverseAttributeId.HasValue)
+                {
+                    var mvAttr = await _application.Metaverse.GetMetaverseAttributeAsync(sourceRequest.MetaverseAttributeId.Value);
+                    if (mvAttr == null)
+                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
 
-                source.MetaverseAttributeId = mvAttr.Id;
-                source.MetaverseAttribute = mvAttr;
+                    source.MetaverseAttributeId = mvAttr.Id;
+                    source.MetaverseAttribute = mvAttr;
+                }
+                // Expression is already set on source from sourceRequest.Expression above
             }
 
             mapping.Sources.Add(source);
