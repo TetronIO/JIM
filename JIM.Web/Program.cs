@@ -69,15 +69,16 @@ try
         options.UseNpgsql(connectionString)
             .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
-    // Register repository and application as scoped
-    // Each scoped instance gets a fresh DbContext from the factory
-    builder.Services.AddScoped<IRepository>(sp =>
+    // Register repository and application as transient to prevent DbContext concurrency issues
+    // In Blazor Server, multiple async operations within a page can run concurrently
+    // Using transient lifetime ensures each operation gets its own DbContext instance
+    builder.Services.AddTransient<IRepository>(sp =>
     {
         var factory = sp.GetRequiredService<IDbContextFactory<JimDbContext>>();
         var context = factory.CreateDbContext();
         return new PostgresDataRepository(context);
     });
-    builder.Services.AddScoped<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
+    builder.Services.AddTransient<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
     builder.Services.AddExpressionEvaluation();
 
     // setup OpenID Connect (OIDC) authentication for Blazor UI
