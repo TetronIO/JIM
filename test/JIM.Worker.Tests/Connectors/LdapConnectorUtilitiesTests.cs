@@ -199,4 +199,125 @@ public class LdapConnectorUtilitiesTests
     }
 
     #endregion
+
+    #region ParseDistinguishedName tests
+
+    [Test]
+    public void ParseDistinguishedName_StandardDn_ReturnsRdnAndParent()
+    {
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName("CN=John Smith,OU=Users,DC=example,DC=com");
+
+        Assert.That(rdn, Is.EqualTo("CN=John Smith"));
+        Assert.That(parentDn, Is.EqualTo("OU=Users,DC=example,DC=com"));
+    }
+
+    [Test]
+    public void ParseDistinguishedName_SingleComponent_ReturnsRdnWithNullParent()
+    {
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName("DC=local");
+
+        Assert.That(rdn, Is.EqualTo("DC=local"));
+        Assert.That(parentDn, Is.Null);
+    }
+
+    [Test]
+    public void ParseDistinguishedName_EmptyString_ReturnsNulls()
+    {
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName("");
+
+        Assert.That(rdn, Is.Null);
+        Assert.That(parentDn, Is.Null);
+    }
+
+    [Test]
+    public void ParseDistinguishedName_NullInput_ReturnsNulls()
+    {
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(null!);
+
+        Assert.That(rdn, Is.Null);
+        Assert.That(parentDn, Is.Null);
+    }
+
+    [Test]
+    public void ParseDistinguishedName_EscapedCommaInRdn_ReturnsCorrectComponents()
+    {
+        // DN with escaped comma in the CN value: "Smith\, John"
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(@"CN=Smith\, John,OU=Users,DC=example,DC=com");
+
+        Assert.That(rdn, Is.EqualTo(@"CN=Smith\, John"));
+        Assert.That(parentDn, Is.EqualTo("OU=Users,DC=example,DC=com"));
+    }
+
+    [Test]
+    public void ParseDistinguishedName_TwoComponents_ReturnsCorrectComponents()
+    {
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName("CN=Test User,CN=Users");
+
+        Assert.That(rdn, Is.EqualTo("CN=Test User"));
+        Assert.That(parentDn, Is.EqualTo("CN=Users"));
+    }
+
+    [Test]
+    public void ParseDistinguishedName_ComplexDn_ReturnsCorrectComponents()
+    {
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName("CN=Test Joiner,CN=Users,DC=testdomain,DC=local");
+
+        Assert.That(rdn, Is.EqualTo("CN=Test Joiner"));
+        Assert.That(parentDn, Is.EqualTo("CN=Users,DC=testdomain,DC=local"));
+    }
+
+    #endregion
+
+    #region FindUnescapedComma tests
+
+    [Test]
+    public void FindUnescapedComma_StandardDn_ReturnsFirstCommaIndex()
+    {
+        var result = LdapConnectorUtilities.FindUnescapedComma("CN=John,OU=Users,DC=local");
+
+        Assert.That(result, Is.EqualTo(7)); // Index of comma after "CN=John"
+    }
+
+    [Test]
+    public void FindUnescapedComma_NoComma_ReturnsMinusOne()
+    {
+        var result = LdapConnectorUtilities.FindUnescapedComma("DC=local");
+
+        Assert.That(result, Is.EqualTo(-1));
+    }
+
+    [Test]
+    public void FindUnescapedComma_EscapedComma_SkipsEscapedAndFindUnescaped()
+    {
+        // "CN=Smith\, John,OU=Users" - escaped comma at index 8, unescaped at index 16
+        var result = LdapConnectorUtilities.FindUnescapedComma(@"CN=Smith\, John,OU=Users");
+
+        Assert.That(result, Is.EqualTo(15)); // Index of unescaped comma after "John"
+    }
+
+    [Test]
+    public void FindUnescapedComma_OnlyEscapedCommas_ReturnsMinusOne()
+    {
+        var result = LdapConnectorUtilities.FindUnescapedComma(@"CN=Smith\, John\, Jr");
+
+        Assert.That(result, Is.EqualTo(-1));
+    }
+
+    [Test]
+    public void FindUnescapedComma_EmptyString_ReturnsMinusOne()
+    {
+        var result = LdapConnectorUtilities.FindUnescapedComma("");
+
+        Assert.That(result, Is.EqualTo(-1));
+    }
+
+    [Test]
+    public void FindUnescapedComma_CommaAtStart_ReturnsZero()
+    {
+        var result = LdapConnectorUtilities.FindUnescapedComma(",CN=Test");
+
+        Assert.That(result, Is.EqualTo(0));
+    }
+
+    #endregion
 }

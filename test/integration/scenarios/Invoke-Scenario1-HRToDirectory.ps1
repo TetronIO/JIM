@@ -243,6 +243,73 @@ try {
         }
     }
 
+    # Test 2b: Mover - Rename (DN Change)
+    if ($Step -eq "Mover" -or $Step -eq "All") {
+        Write-TestSection "Test 2b: Mover - Rename (DN Change)"
+
+        Write-Host "Updating user display name in CSV (triggers AD rename)..." -ForegroundColor Gray
+
+        # The DN is computed from displayName: "CN=" + EscapeDN(mv["Display Name"]) + ",CN=Users,DC=testdomain,DC=local"
+        # So changing firstName + lastName in CSV will change displayName, which changes DN
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvContent = Get-Content $csvPath
+
+        # Change test.joiner's first name from "Test" to "Renamed"
+        # This will change displayName from "Test Joiner" to "Renamed Joiner"
+        # Which should trigger a DN rename from "CN=Test Joiner,..." to "CN=Renamed Joiner,..."
+        #
+        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName,dn
+        # We need to update: firstName (col 2), displayName (col 8), and dn (col 11)
+        $updatedContent = $csvContent | ForEach-Object {
+            if ($_ -match "test\.joiner") {
+                # Update firstName from "Test" to "Renamed" (between employeeId and lastName)
+                $line = $_ -replace '"Test","Joiner"', '"Renamed","Joiner"'
+                # Update displayName from "Test Joiner" to "Renamed Joiner"
+                $line = $line -replace '"Test Joiner"', '"Renamed Joiner"'
+                # Update dn from "CN=Test Joiner,..." to "CN=Renamed Joiner,..."
+                $line = $line -replace 'CN=Test Joiner,', 'CN=Renamed Joiner,'
+                $line
+            }
+            else {
+                $_
+            }
+        }
+
+        $updatedContent | Set-Content $csvPath
+        Write-Host "  ✓ Changed test.joiner display name to 'Renamed Joiner'" -ForegroundColor Green
+
+        # Copy updated CSV
+        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+        # Trigger sync (Import → Full Sync → Export)
+        Write-Host "Triggering synchronisation..." -ForegroundColor Gray
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
+
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
+
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Validate rename in AD
+        # The user should now have DN "CN=Renamed Joiner,CN=Users,DC=testdomain,DC=local"
+        Write-Host "Validating rename in AD..." -ForegroundColor Gray
+
+        # Try to find the user with the new name
+        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn displayName 2>&1"
+
+        if ($adUserInfo -match "CN=Renamed Joiner") {
+            Write-Host "  ✓ User renamed to 'CN=Renamed Joiner' in AD" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Mover-Rename"; Success = $true }
+        }
+        else {
+            Write-Host "  ✗ User NOT renamed in AD" -ForegroundColor Red
+            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
+            $testResults.Steps += @{ Name = "Mover-Rename"; Success = $false; Error = "DN not renamed" }
+        }
+    }
+
     # Test 3: Leaver (Deprovisioning)
     if ($Step -eq "Leaver" -or $Step -eq "All") {
         Write-TestSection "Test 3: Leaver (Deprovisioning)"

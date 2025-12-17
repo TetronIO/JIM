@@ -365,6 +365,12 @@ public class ExportEvaluationServer
         if (exportRule.ConnectedSystemObjectType == null)
             throw new InvalidOperationException($"Export rule {exportRule.Name} has no ConnectedSystemObjectType configured.");
 
+        // Find the external ID and secondary external ID attributes from the object type
+        var externalIdAttribute = exportRule.ConnectedSystemObjectType.Attributes
+            .FirstOrDefault(a => a.IsExternalId);
+        var secondaryExternalIdAttribute = exportRule.ConnectedSystemObjectType.Attributes
+            .FirstOrDefault(a => a.IsSecondaryExternalId);
+
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
@@ -376,7 +382,9 @@ public class ExportEvaluationServer
             MetaverseObject = mvo,
             MetaverseObjectId = mvo.Id,
             DateJoined = DateTime.UtcNow,
-            Created = DateTime.UtcNow
+            Created = DateTime.UtcNow,
+            ExternalIdAttributeId = externalIdAttribute?.Id ?? 0,
+            SecondaryExternalIdAttributeId = secondaryExternalIdAttribute?.Id
         };
 
         // Add the CSO to the MVO's collection for navigation

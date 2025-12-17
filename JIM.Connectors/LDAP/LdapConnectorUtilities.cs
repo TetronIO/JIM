@@ -265,4 +265,48 @@ internal static class LdapConnectorUtilities
             _ => throw new InvalidDataException("Unsupported omSyntax value: " + omSyntax),
         };
     }
+
+    /// <summary>
+    /// Parses a distinguished name into its RDN and parent DN components.
+    /// For example: "CN=John Smith,OU=Users,DC=example,DC=com" returns ("CN=John Smith", "OU=Users,DC=example,DC=com")
+    /// </summary>
+    internal static (string? Rdn, string? ParentDn) ParseDistinguishedName(string dn)
+    {
+        if (string.IsNullOrEmpty(dn))
+            return (null, null);
+
+        // Find the first unescaped comma to split RDN from parent
+        var commaIndex = FindUnescapedComma(dn);
+
+        if (commaIndex == -1)
+        {
+            // No comma found - the entire DN is the RDN (root object)
+            return (dn, null);
+        }
+
+        var rdn = dn.Substring(0, commaIndex);
+        var parentDn = dn.Substring(commaIndex + 1);
+
+        return (rdn, parentDn);
+    }
+
+    /// <summary>
+    /// Finds the index of the first unescaped comma in a DN string.
+    /// Commas can be escaped with backslash (\,) in LDAP DNs.
+    /// </summary>
+    internal static int FindUnescapedComma(string dn)
+    {
+        for (var i = 0; i < dn.Length; i++)
+        {
+            if (dn[i] == ',')
+            {
+                // Check if this comma is escaped (preceded by backslash)
+                if (i == 0 || dn[i - 1] != '\\')
+                {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
 }

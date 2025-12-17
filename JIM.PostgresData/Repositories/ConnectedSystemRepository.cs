@@ -873,9 +873,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // does not include PendingExport.AttributeValueChanges.Attributes.
         // it's expected that the schema is retrieved separately by the caller.
         // this is to keep the latency as low as possible for this method.
-        
+        //
+        // Note: We DO include CSO.AttributeValues because connectors need access to
+        // the current attribute values (e.g., current DN for LDAP rename operations).
+
         return await Repository.Database.PendingExports
             .Include(pe => pe.AttributeValueChanges)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
     }
 

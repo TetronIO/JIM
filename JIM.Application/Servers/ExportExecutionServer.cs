@@ -443,7 +443,10 @@ public class ExportExecutionServer
             export.Status = PendingExportStatus.Exported;
 
             // For Create exports, update the CSO with the system-assigned external ID and status
-            if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
+            // For Update exports with SecondaryExternalId (e.g., LDAP renames), update the CSO's secondary ID
+            if (export.ConnectedSystemObject != null &&
+                (export.ChangeType == PendingExportChangeType.Create ||
+                 !string.IsNullOrEmpty(exportResult.SecondaryExternalId)))
             {
                 await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
             }
