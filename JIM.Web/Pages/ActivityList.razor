@@ -65,19 +65,21 @@
             </MudTableSortLabel>
         </MudTh>
     </HeaderContent>
-    <RowTemplate>
+    <RowTemplate Context="context">
         <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
         <MudTd DataLabel="Target">
-            <MudLink Href="@($"/activity/{context.Id}")">@(!string.IsNullOrEmpty(context.TargetName) ?
-                                context.TargetName : "(no name)")</MudLink>
+            <MudLink Href="@($"/activity/{context.Id}")" Underline="Underline.Always">
+                @(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")
+            </MudLink>
         </MudTd>
         <MudTd DataLabel="Operation">@context.TargetOperationType.ToString().SplitOnCapitalLetters()</MudTd>
         <MudTd DataLabel="Created">@context.Created.ToFriendlyDate()</MudTd>
         <MudTd DataLabel="Initiated By">
             @if (context.InitiatedBy != null)
             {
-                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">
-                    @Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)</MudLink>
+                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)" Underline="Underline.Always">
+                    @Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)
+                </MudLink>
             }
             else if (!string.IsNullOrEmpty(context.InitiatedByName))
             {
@@ -87,7 +89,8 @@
         <MudTd DataLabel="Status">
             <MudChip T="string" Variant="Variant.Text"
                 Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
-                @context.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                @context.Status.ToString().SplitOnCapitalLetters()
+            </MudChip>
         </MudTd>
         <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.ToCasualString() ?? "-")</MudTd>
     </RowTemplate>
