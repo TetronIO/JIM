@@ -48,6 +48,28 @@ public static class Helpers
         return $"{dateTime.ToShortDateString()} ({dateTime.ToShortTimeString()})";
     }
 
+    /// <summary>
+    /// Extension method that converts a TimeSpan into a human-readable string with abbreviated units.
+    /// Examples: "143 ms", "14 s, 210 ms", "2 m, 15 s"
+    /// </summary>
+    public static string ToAbbreviatedString(this TimeSpan timeSpan, int precision = 2)
+    {
+        var parts = new List<string>();
+
+        if (timeSpan.Days > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Days} d");
+        if (timeSpan.Hours > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Hours} h");
+        if (timeSpan.Minutes > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Minutes} m");
+        if (timeSpan.Seconds > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Seconds} s");
+        if (timeSpan.Milliseconds > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Milliseconds} ms");
+
+        return parts.Count > 0 ? string.Join(", ", parts) : "0 ms";
+    }
+
     #region mudblazor related
     public static Color GetActivityMudBlazorColorForStatus(ActivityStatus status)
     {

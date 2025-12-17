@@ -7,7 +7,6 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility;
 @using JIM.Utilities;
-@using Humanizer
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
@@ -76,11 +75,11 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Execution Time:</MudText>
-                <MudText Class="mud-text-secondary">@(_activity.ExecutionTime?.Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Millisecond, maxUnit: Humanizer.Localisation.TimeUnit.Hour, toWords: false) ?? "-")</MudText>
+                <MudText Class="mud-text-secondary">@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Total Activity Time:</MudText>
-                <MudText Class="mud-text-secondary">@(_activity.TotalActivityTime?.Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Millisecond, maxUnit: Humanizer.Localisation.TimeUnit.Hour, toWords: false) ?? "-")</MudText>
+                <MudText Class="mud-text-secondary">@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
