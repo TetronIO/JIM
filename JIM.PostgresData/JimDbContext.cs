@@ -73,8 +73,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
-    private readonly string _connectionString;
+    private readonly string? _connectionString;
 
+    // Parameterless constructor for migrations and manual instantiation
     public JimDbContext()
     {
         var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
@@ -104,10 +105,20 @@ public class JimDbContext : DbContext
             _connectionString += ";Include Error Detail=True";
     }
 
+    // Constructor for dependency injection with DbContextOptions
+    public JimDbContext(DbContextOptions<JimDbContext> options) : base(options)
+    {
+        // When using DI, options are already configured, so we don't need to build connection string
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.UseNpgsql(_connectionString)
-            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        // Only configure if not already configured (i.e., when using parameterless constructor)
+        if (!optionsBuilder.IsConfigured && _connectionString != null)
+        {
+            optionsBuilder.UseNpgsql(_connectionString)
+                .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

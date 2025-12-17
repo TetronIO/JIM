@@ -2,10 +2,12 @@ using System.Text.Json;
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Application.Expressions;
+using JIM.Data;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -48,7 +50,26 @@ try
     await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
-    builder.Services.AddScoped<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
+
+    // Configure database connection
+    var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
+    var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
+    var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
+    var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
+    var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
+
+    var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle Lifetime=300;Connection Pruning Interval=30";
+    _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
+    if (logSensitiveInfo)
+        connectionString += ";Include Error Detail=True";
+
+    builder.Services.AddDbContext<JimDbContext>(options =>
+        options.UseNpgsql(connectionString)
+            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)),
+        ServiceLifetime.Scoped);
+
+    builder.Services.AddScoped<IRepository>(sp => new PostgresDataRepository(sp.GetRequiredService<JimDbContext>()));
+    builder.Services.AddScoped<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
     builder.Services.AddExpressionEvaluation();
 
     // setup OpenID Connect (OIDC) authentication for Blazor UI
