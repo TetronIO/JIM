@@ -181,33 +181,43 @@
     private ConnectedSystemHeader? _connectedSystemHeader;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
+    private readonly SemaphoreSlim _loadSemaphore = new(1, 1);
 
     protected override async Task OnParametersSetAsync()
     {
-        _activityRunProfileExecutionItem = await Jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
-        if (_activityRunProfileExecutionItem == null)
+        // Prevent concurrent database operations on the same DbContext
+        await _loadSemaphore.WaitAsync();
+        try
         {
-            // ActivityRunProfileExecutionItem not found, redirect to index page
-            NavManager.NavigateTo("/activity");
-            return;
+            _activityRunProfileExecutionItem = await Jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
+            if (_activityRunProfileExecutionItem == null)
+            {
+                // ActivityRunProfileExecutionItem not found, redirect to index page
+                NavManager.NavigateTo("/activity");
+                return;
+            }
+
+            _breadcrumbs = new List<BreadcrumbItem>
+            {
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new("Activity", href: "/activity"),
+                new("Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
+                new(_activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
+            };
+
+            _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
+
+            // try and get the external id attribute value. we'll need the value and attribute name
+            _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
+
+            // try and get the connected system this relates to (might not exist if it's been deleted)
+            var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
+            if (connectedSystemId != null)
+                _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
         }
-
-        _breadcrumbs = new List<BreadcrumbItem>
+        finally
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Activity", href: "/activity"),
-            new("Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
-            new(_activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
-        };
-
-        _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
-
-        // try and get the external id attribute value. we'll need the value and attribute name
-        _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
-
-        // try and get the connected system this relates to (might not exist if it's been deleted)
-        var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
-        if (connectedSystemId != null)
-            _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
+            _loadSemaphore.Release();
+        }
     }
 }
