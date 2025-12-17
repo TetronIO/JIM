@@ -123,44 +123,72 @@ try {
             # Tear down external systems
             docker compose -f $integrationCompose down -v --remove-orphans 2>&1 | Out-Null
 
+            # Remove the shared network (will be recreated in Step 1)
+            docker network rm jim-network 2>$null | Out-Null
+
             Write-Host "  Environment reset complete" -ForegroundColor Green
         }
 
-        # Step 1: Stand up JIM (must start first to create jim-network)
+        # Step 1: Stand up systems (JIM + external systems in parallel)
         Write-TestSection "Step 1: Stand Up Systems"
 
-        Write-Host "Starting JIM (creates jim-network)..." -ForegroundColor Gray
+        # Create jim-network first so both compose files can use it
+        Write-Host "Creating jim-network..." -ForegroundColor Gray
+        docker network create jim-network 2>$null | Out-Null
+        # Network may already exist, that's fine
 
+        # Start JIM and external systems in parallel for faster startup
+        Write-Host "Starting JIM and external systems in parallel..." -ForegroundColor Gray
+        $parallelStartTime = Get-Date
+
+        # Build JIM compose arguments
         $jimComposeArgs = @("-f", $jimCompose)
         if (Test-Path $jimComposeOverride) {
             $jimComposeArgs += @("-f", $jimComposeOverride)
         }
         # Use --build to ensure containers are rebuilt with latest code changes
         $jimComposeArgs += @("--profile", "with-db", "up", "-d", "--build")
-        docker compose @jimComposeArgs 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to start JIM containers"
+        # Build external systems compose arguments
+        $externalComposeArgs = if ($Phase -eq 2) {
+            @("-f", $integrationCompose, "--profile", "phase2", "up", "-d")
+        } else {
+            @("-f", $integrationCompose, "up", "-d")
         }
 
-        Write-Host "  JIM started" -ForegroundColor Green
+        # Start both in parallel using background jobs
+        $jimJob = Start-Job -ScriptBlock {
+            param($args)
+            docker compose @args 2>&1
+        } -ArgumentList (,$jimComposeArgs)
 
-        # Step 1b: Stand up external systems (requires jim-network from JIM)
-        Write-Host ""
-        if ($Phase -eq 1) {
-            Write-Host "Starting Phase 1 external systems (Samba AD)..." -ForegroundColor Gray
-            docker compose -f $integrationCompose up -d
+        $externalJob = Start-Job -ScriptBlock {
+            param($args)
+            docker compose @args 2>&1
+        } -ArgumentList (,$externalComposeArgs)
+
+        # Wait for both jobs to complete
+        $null = Wait-Job -Job $jimJob, $externalJob
+
+        # Check results
+        $jimResult = Receive-Job -Job $jimJob
+        $jimExitCode = $jimJob.State -eq 'Completed'
+        Remove-Job -Job $jimJob
+
+        $externalResult = Receive-Job -Job $externalJob
+        $externalExitCode = $externalJob.State -eq 'Completed'
+        Remove-Job -Job $externalJob
+
+        # Show output
+        if ($jimResult) {
+            $jimResult | ForEach-Object { Write-Host "    [JIM] $_" -ForegroundColor Gray }
         }
-        elseif ($Phase -eq 2) {
-            Write-Host "Starting Phase 2 external systems (all)..." -ForegroundColor Gray
-            docker compose -f $integrationCompose --profile phase2 up -d
+        if ($externalResult) {
+            $externalResult | ForEach-Object { Write-Host "    [External] $_" -ForegroundColor Gray }
         }
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to start external system containers"
-        }
-
-        Write-Host "  External systems started" -ForegroundColor Green
+        $parallelDuration = (Get-Date) - $parallelStartTime
+        Write-Host "  Systems started in $($parallelDuration.TotalSeconds.ToString('F1'))s (parallel)" -ForegroundColor Green
 
         # Step 2: Wait for systems to be ready
         Write-TestSection "Step 2: Wait for Systems Ready"
