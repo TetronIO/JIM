@@ -69,6 +69,8 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `docker compose exec jim.web dotnet ef database update` - Apply migrations in Docker
 
 **Shell Aliases (Recommended):**
+- Aliases are automatically configured from `.devcontainer/jim-aliases.sh`
+- If aliases don't work, run: `source ~/.zshrc` (or restart terminal)
 - `jim-build` - Build entire solution
 - `jim-test` - Run all tests
 - `jim-db` - Start PostgreSQL (for local debugging)
@@ -80,17 +82,11 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
 
-**Development Builds (fast - skips publish stage, ~10-15s faster per service):**
-- `jim-dev` - Build all services in dev mode + start
-- `jim-dev-web` - Build jim.web in dev mode + start
-- `jim-dev-worker` - Build jim.worker in dev mode + start
-- `jim-dev-scheduler` - Build jim.scheduler in dev mode + start
-
-**Release Builds (production-ready, includes publish stage):**
-- `jim-release` - Build all services for release + start
-- `jim-release-web` - Build jim.web for release + start
-- `jim-release-worker` - Build jim.worker for release + start
-- `jim-release-scheduler` - Build jim.scheduler for release + start
+**Docker Builds (rebuild and start services):**
+- `jim-build-stack` - Build all services + start
+- `jim-build-web` - Build jim.web + start
+- `jim-build-worker` - Build jim.worker + start
+- `jim-build-scheduler` - Build jim.scheduler + start
 
 **Reset:**
 - `jim-reset` - Reset JIM (delete database & logs volumes)
