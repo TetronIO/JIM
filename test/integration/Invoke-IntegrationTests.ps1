@@ -202,14 +202,16 @@ try {
             throw "External systems not ready"
         }
 
-        # Wait for JIM
-        Write-Host "Waiting for JIM to be ready..." -ForegroundColor Gray
+        # Wait for JIM with progress bar
+        $jimOp = Start-TimedOperation -Name "Waiting for JIM" -TotalSteps 60
         $maxAttempts = 60
         $attempt = 0
         $jimReady = $false
 
         while ($attempt -lt $maxAttempts -and -not $jimReady) {
             $attempt++
+            Update-OperationProgress -Operation $jimOp -CurrentStep $attempt -Status "Checking http://localhost:5200..."
+
             try {
                 $response = Invoke-WebRequest -Uri "http://localhost:5200" -Method GET -TimeoutSec 2 -ErrorAction SilentlyContinue
                 if ($response.StatusCode -in @(200, 302)) {
@@ -220,18 +222,16 @@ try {
             }
 
             if (-not $jimReady) {
-                if ($attempt % 10 -eq 0) {
-                    Write-Host "  Still waiting... ($attempt/$maxAttempts)" -ForegroundColor Gray
-                }
                 Start-Sleep -Seconds 2
             }
         }
 
         if (-not $jimReady) {
+            Complete-TimedOperation -Operation $jimOp -Success $false -Message "JIM did not become ready within timeout"
             throw "JIM did not become ready within timeout"
         }
 
-        Write-Host "  JIM is ready" -ForegroundColor Green
+        Complete-TimedOperation -Operation $jimOp -Success $true -Message "JIM is ready"
 
         # Step 2b: Set up infrastructure API key (if not provided)
         if (-not $effectiveApiKey) {

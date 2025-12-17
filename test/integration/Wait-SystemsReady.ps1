@@ -158,37 +158,57 @@ if ($Phase -eq 2) {
 
 Write-Host "`nChecking $($systemsToCheck.Count) systems..." -ForegroundColor Gray
 
+$systemIndex = 0
 foreach ($system in $systemsToCheck) {
-    Write-Host "`nWaiting for $($system.Description)..." -ForegroundColor Yellow
+    $systemIndex++
+    Write-Host "`n[$systemIndex/$($systemsToCheck.Count)] Waiting for $($system.Description)..." -ForegroundColor Yellow
 
-    # Wait for container to be running
-    $running = Wait-ForCondition `
-        -Condition { Test-ContainerRunning -ContainerName $system.Name } `
-        -TimeoutSeconds $TimeoutSeconds `
-        -IntervalSeconds 5 `
-        -Description "$($system.Name) container running"
+    # Wait for container to be running with progress bar
+    $runningOp = Start-TimedOperation -Name "Container starting" -TotalSteps ($TimeoutSeconds / 5)
+    $running = $false
+    $attempts = 0
+    $maxAttempts = $TimeoutSeconds / 5
 
-    if (-not $running) {
-        Write-Host "✗ Container $($system.Name) not running" -ForegroundColor Red
-        exit 1
+    while ($attempts -lt $maxAttempts -and -not $running) {
+        $attempts++
+        Update-OperationProgress -Operation $runningOp -CurrentStep $attempts -Status "$($system.Name) starting..."
+        $running = Test-ContainerRunning -ContainerName $system.Name
+        if (-not $running) {
+            Start-Sleep -Seconds 5
+        }
     }
 
-    # Wait for health check if applicable
+    if (-not $running) {
+        Complete-TimedOperation -Operation $runningOp -Success $false -Message "Container $($system.Name) not running"
+        exit 1
+    }
+    Complete-TimedOperation -Operation $runningOp -Success $true -Message "Container running"
+
+    # Wait for health check if applicable with progress bar
     if ($system.HasHealthCheck) {
-        $healthy = Wait-ForCondition `
-            -Condition { Test-ContainerHealthy -ContainerName $system.Name } `
-            -TimeoutSeconds $TimeoutSeconds `
-            -IntervalSeconds 10 `
-            -Description "$($system.Name) health check"
+        $healthOp = Start-TimedOperation -Name "Health check" -TotalSteps ($TimeoutSeconds / 10)
+        $healthy = $false
+        $attempts = 0
+        $maxAttempts = $TimeoutSeconds / 10
+
+        while ($attempts -lt $maxAttempts -and -not $healthy) {
+            $attempts++
+            Update-OperationProgress -Operation $healthOp -CurrentStep $attempts -Status "Waiting for healthy status..."
+            $healthy = Test-ContainerHealthy -ContainerName $system.Name
+            if (-not $healthy) {
+                Start-Sleep -Seconds 10
+            }
+        }
 
         if (-not $healthy) {
-            Write-Host "✗ Container $($system.Name) not healthy" -ForegroundColor Red
+            Complete-TimedOperation -Operation $healthOp -Success $false -Message "Container $($system.Name) not healthy"
 
             # Show container logs for debugging
             Write-Host "`nContainer logs:" -ForegroundColor Yellow
             docker logs --tail 50 $system.Name
             exit 1
         }
+        Complete-TimedOperation -Operation $healthOp -Success $true -Message "Health check passed"
     }
 
     # Run additional checks if defined
@@ -205,7 +225,7 @@ foreach ($system in $systemsToCheck) {
         }
     }
 
-    Write-Host "✓ $($system.Description) is ready" -ForegroundColor Green
+    Write-Host "  ✓ $($system.Description) is ready" -ForegroundColor Green
 
     # Run post-ready setup if defined (e.g., configure TLS)
     if ($null -ne $system.PostReadySetup) {
@@ -213,7 +233,7 @@ foreach ($system in $systemsToCheck) {
             & $system.PostReadySetup
         }
         catch {
-            Write-Host "⚠ Post-ready setup failed for $($system.Name): $_" -ForegroundColor Yellow
+            Write-Host "  ⚠ Post-ready setup failed for $($system.Name): $_" -ForegroundColor Yellow
             # Don't fail - post-ready setup is optional configuration
         }
     }

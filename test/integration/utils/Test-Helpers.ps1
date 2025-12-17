@@ -274,5 +274,257 @@ function Get-RandomSubset {
     return $shuffled[0..($Count - 1)]
 }
 
+# Progress bar functions for visual feedback during long operations
+
+function Write-ProgressBar {
+    <#
+    .SYNOPSIS
+        Write a progress bar to the console
+
+    .DESCRIPTION
+        Displays a visual progress bar with percentage, elapsed time, and optional ETA.
+        Uses carriage return to update in place.
+
+    .PARAMETER Activity
+        The activity being performed (shown above the bar)
+
+    .PARAMETER Status
+        Current status message (shown on the bar line)
+
+    .PARAMETER PercentComplete
+        Percentage complete (0-100)
+
+    .PARAMETER SecondsElapsed
+        Seconds elapsed since operation started
+
+    .PARAMETER ShowETA
+        Whether to show estimated time remaining
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Activity,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Status = "",
+
+        [Parameter(Mandatory=$true)]
+        [int]$PercentComplete,
+
+        [Parameter(Mandatory=$false)]
+        [int]$SecondsElapsed = 0,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$ShowETA
+    )
+
+    # Clamp percentage to 0-100
+    $PercentComplete = [Math]::Max(0, [Math]::Min(100, $PercentComplete))
+
+    # Calculate bar width (leave room for percentage and time)
+    $barWidth = 30
+    $filledWidth = [Math]::Floor($barWidth * $PercentComplete / 100)
+    $emptyWidth = $barWidth - $filledWidth
+
+    # Build the bar
+    $filled = "█" * $filledWidth
+    $empty = "░" * $emptyWidth
+    $bar = "[$filled$empty]"
+
+    # Format elapsed time
+    $elapsed = ""
+    if ($SecondsElapsed -gt 0) {
+        $ts = [TimeSpan]::FromSeconds($SecondsElapsed)
+        $elapsed = " {0:mm\:ss}" -f $ts
+    }
+
+    # Calculate ETA
+    $eta = ""
+    if ($ShowETA -and $PercentComplete -gt 0 -and $PercentComplete -lt 100 -and $SecondsElapsed -gt 0) {
+        $estimatedTotal = $SecondsElapsed / ($PercentComplete / 100)
+        $remaining = $estimatedTotal - $SecondsElapsed
+        if ($remaining -gt 0) {
+            $ts = [TimeSpan]::FromSeconds($remaining)
+            $eta = " ETA: {0:mm\:ss}" -f $ts
+        }
+    }
+
+    # Build status line
+    $statusText = if ($Status) { " $Status" } else { "" }
+    $line = "`r  $bar $PercentComplete%$elapsed$eta$statusText"
+
+    # Pad to clear any previous longer text
+    $line = $line.PadRight(100)
+
+    Write-Host $line -NoNewline -ForegroundColor Cyan
+}
+
+function Complete-ProgressBar {
+    <#
+    .SYNOPSIS
+        Complete a progress bar and move to next line
+
+    .PARAMETER Success
+        Whether the operation succeeded
+
+    .PARAMETER Message
+        Completion message to display
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [bool]$Success = $true,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Message = ""
+    )
+
+    # Clear the progress bar line
+    Write-Host "`r$(' ' * 100)`r" -NoNewline
+
+    # Write completion message
+    if ($Success) {
+        $icon = "✓"
+        $color = "Green"
+    } else {
+        $icon = "✗"
+        $color = "Red"
+    }
+
+    if ($Message) {
+        Write-Host "  $icon $Message" -ForegroundColor $color
+    }
+}
+
+function Start-TimedOperation {
+    <#
+    .SYNOPSIS
+        Start tracking a timed operation
+
+    .DESCRIPTION
+        Returns a hashtable with start time that can be passed to Write-OperationProgress
+
+    .PARAMETER Name
+        Name of the operation
+
+    .PARAMETER TotalSteps
+        Total number of steps (for percentage calculation)
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false)]
+        [int]$TotalSteps = 100
+    )
+
+    return @{
+        Name = $Name
+        StartTime = Get-Date
+        TotalSteps = $TotalSteps
+        CurrentStep = 0
+    }
+}
+
+function Update-OperationProgress {
+    <#
+    .SYNOPSIS
+        Update progress for a timed operation
+
+    .PARAMETER Operation
+        The operation hashtable from Start-TimedOperation
+
+    .PARAMETER CurrentStep
+        Current step number
+
+    .PARAMETER Status
+        Current status message
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Operation,
+
+        [Parameter(Mandatory=$false)]
+        [int]$CurrentStep = -1,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Status = ""
+    )
+
+    if ($CurrentStep -ge 0) {
+        $Operation.CurrentStep = $CurrentStep
+    }
+
+    $elapsed = ((Get-Date) - $Operation.StartTime).TotalSeconds
+    $percent = if ($Operation.TotalSteps -gt 0) {
+        [Math]::Floor(($Operation.CurrentStep / $Operation.TotalSteps) * 100)
+    } else {
+        0
+    }
+
+    Write-ProgressBar -Activity $Operation.Name -Status $Status -PercentComplete $percent -SecondsElapsed $elapsed -ShowETA
+}
+
+function Complete-TimedOperation {
+    <#
+    .SYNOPSIS
+        Complete a timed operation and show final time
+
+    .PARAMETER Operation
+        The operation hashtable from Start-TimedOperation
+
+    .PARAMETER Success
+        Whether the operation succeeded
+
+    .PARAMETER Message
+        Optional completion message (defaults to operation name + duration)
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Operation,
+
+        [Parameter(Mandatory=$false)]
+        [bool]$Success = $true,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Message = ""
+    )
+
+    $elapsed = ((Get-Date) - $Operation.StartTime).TotalSeconds
+    $ts = [TimeSpan]::FromSeconds($elapsed)
+    $duration = "{0:mm\:ss}" -f $ts
+
+    if (-not $Message) {
+        $Message = "$($Operation.Name) completed in $duration"
+    } else {
+        $Message = "$Message ($duration)"
+    }
+
+    Complete-ProgressBar -Success $Success -Message $Message
+}
+
+function Write-Spinner {
+    <#
+    .SYNOPSIS
+        Write a spinner animation for indeterminate progress
+
+    .PARAMETER Message
+        Message to display next to spinner
+
+    .PARAMETER Frame
+        Current frame number (cycles through spinner characters)
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message,
+
+        [Parameter(Mandatory=$true)]
+        [int]$Frame
+    )
+
+    $spinChars = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+    $spinner = $spinChars[$Frame % $spinChars.Length]
+
+    Write-Host "`r  $spinner $Message".PadRight(80) -NoNewline -ForegroundColor Yellow
+}
+
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember
