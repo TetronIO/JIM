@@ -156,6 +156,7 @@ public class ActivityRepository : IActivityRepository
 
         var objects = from o in Repository.Database.ActivityRunProfileExecutionItems
                 .Include(a => a.ConnectedSystemObject)
+                    .ThenInclude(cso => cso!.Type)
                 .Where(a => a.Activity.Id == activityId)
             select o;
 
