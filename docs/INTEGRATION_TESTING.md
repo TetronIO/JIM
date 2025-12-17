@@ -9,18 +9,51 @@
 
 ---
 
+## ⚡ Quick Start
+
+**First time running integration tests?** Follow these steps:
+
+```powershell
+# 1. Create Infrastructure API Key (one-time setup)
+./test/integration/Setup-InfrastructureApiKey.ps1
+
+# 2. Start test infrastructure (Samba AD, etc) - NOT YET IMPLEMENTED
+#    TODO: Create docker-compose.integration-tests.yml in project root
+#    docker compose -f docker-compose.integration-tests.yml up -d
+#    ./test/integration/Wait-SystemsReady.ps1
+
+# 3. Run Scenario 1 with Nano template (3 users)
+cd test/integration/scenarios
+./Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
+```
+
+**Prerequisites:**
+- JIM stack running (`jim-stack` or `docker compose up -d`)
+- Samba AD container running (see step 2 above)
+- API key created (step 1 creates one automatically)
+
+**Current Limitations:**
+- ⚠️ Samba AD infrastructure setup not yet automated
+- ⚠️ Progress bars not yet implemented (see [TODO](#known-issues--todos))
+- ✅ Unit tests all passing (553 tests)
+- ✅ Expression evaluation support implemented
+
+---
+
 ## Table of Contents
 
-1. [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference)
-2. [Overview](#overview)
-3. [Architecture](#architecture)
-4. [Data Scale Templates](#data-scale-templates)
-5. [Test Scenarios](#test-scenarios)
-6. [Setup & Configuration](#setup--configuration)
-7. [Running Tests Locally](#running-tests-locally)
-8. [CI/CD Integration](#cicd-integration)
-9. [Writing New Scenarios](#writing-new-scenarios)
-10. [Troubleshooting](#troubleshooting)
+1. [Quick Start](#-quick-start)
+2. [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference)
+3. [Overview](#overview)
+4. [Architecture](#architecture)
+5. [Data Scale Templates](#data-scale-templates)
+6. [Test Scenarios](#test-scenarios)
+7. [Setup & Configuration](#setup--configuration)
+8. [Running Tests Locally](#running-tests-locally)
+9. [CI/CD Integration](#cicd-integration)
+10. [Writing New Scenarios](#writing-new-scenarios)
+11. [Troubleshooting](#troubleshooting)
+12. [Known Issues & TODOs](#known-issues--todos)
 
 ---
 
@@ -1274,6 +1307,94 @@ var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
 | 1.2     | 2025-12-09 | Added JIM configuration section, step-based execution, dependencies |
 | 1.1     | 2025-12-08 | Updated file paths to use existing test/ folder |
 | 1.0     | 2025-12-08 | Initial version - Phase 1 & 2 specification     |
+
+---
+
+## Known Issues & TODOs
+
+### Infrastructure Improvements Needed
+
+#### 1. Progress Bars for Test Execution
+**Priority: Medium | Status: Not Started**
+
+Integration test scripts should provide visual progress feedback including:
+- **Stand-up phase**: Infrastructure container startup progress (Samba AD, databases)
+- **Execution phase**: Test step progress with sub-steps (import, sync, export, validation)
+- **Tear-down phase**: Container shutdown and volume cleanup progress
+
+**Implementation Notes:**
+- Use PowerShell `Write-Progress` cmdlet with `-Activity`, `-Status`, `-PercentComplete`
+- Show elapsed time and estimated time remaining where possible
+- Provide detailed status messages (e.g., "Waiting for Samba AD to initialize LDAP...")
+- Example: `Write-Progress -Activity "Running Scenario 1" -Status "Step 2 of 4: Full Sync" -PercentComplete 50`
+
+**Benefits:**
+- Easier to track long-running operations
+- Helps identify where time is spent
+- Better user experience during test execution
+
+#### 2. Docker Compose Files for Test Infrastructure
+**Priority: High | Status: Not Started**
+
+Create `docker-compose.integration-tests.yml` in project root to automate test infrastructure setup.
+
+**Required Services:**
+- Samba AD (Primary instance) - for Scenario 1
+- Samba AD (Source & Target instances) - for Scenario 2
+- Test data volumes for CSV files
+- Profile-based service selection (scenario1, scenario2, etc.)
+
+**Current Workaround:**
+- Manual Samba AD setup required
+- Tests fail if infrastructure not running
+- No automated way to stand up/tear down test systems
+
+#### 3. Stand-up Performance Optimization
+**Priority: Medium | Status: Investigation Needed**
+
+**Current Issues:**
+- JIM.Web rebuild takes ~19 seconds on code changes
+- Samba AD initialization takes ~2 minutes (LDAP/DC startup)
+- No parallelization of independent startup tasks
+
+**Investigation Areas:**
+- Can Samba AD startup be optimized (pre-initialized image)?
+- Can JIM.Web use incremental builds in Docker?
+- Can we start JIM services while waiting for Samba AD?
+- Is there unnecessary sequential waiting?
+
+**Baseline Timings to Establish:**
+- JIM stack cold start: ?
+- JIM stack warm start (after code change): ~19s (measured)
+- Samba AD cold start: ~120s (documented)
+- Samba AD warm restart: ?
+- CSV file generation (Nano): <1s (measured)
+- Schema import: ?
+- Run profile execution: ?
+
+#### 4. Test Data Reset Automation
+**Priority: Low | Status: Partial**
+
+**Current State:**
+- CSV reset works (`Generate-TestCSV.ps1`)
+- AD cleanup attempts but often fails (users don't exist)
+- JIM database reset requires full stack down/up
+
+**Improvements Needed:**
+- Silent cleanup (suppress "user not found" warnings)
+- Faster JIM reset without full stack restart
+- Automated metaverse purge API endpoint for testing
+
+### Documentation Improvements
+
+#### 5. Quick Start Consolidation
+**Priority: High | Status: Done (2025-12-17)**
+
+✅ Added Quick Start section to top of INTEGRATION_TESTING.md with:
+- Step-by-step first-run instructions
+- Prerequisites checklist
+- Current limitations clearly stated
+- Direct commands to copy-paste
 
 ---
 
