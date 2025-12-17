@@ -1,3 +1,4 @@
+using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
@@ -14,10 +15,12 @@ namespace JIM.Application.Servers;
 public class ExportEvaluationServer
 {
     private JimApplication Application { get; }
+    private IExpressionEvaluator ExpressionEvaluator { get; }
 
     internal ExportEvaluationServer(JimApplication application)
     {
         Application = application;
+        ExpressionEvaluator = new DynamicExpressoEvaluator();
     }
 
     /// <summary>
@@ -412,6 +415,67 @@ public class ExportEvaluationServer
 
             foreach (var source in mapping.Sources)
             {
+                // Handle expression-based mappings
+                if (!string.IsNullOrWhiteSpace(source.Expression))
+                {
+                    try
+                    {
+                        // Build expression context with MVO attributes
+                        var mvAttributes = BuildAttributeDictionary(mvo);
+                        var context = new ExpressionContext(mvAttributes, null);
+
+                        // Evaluate the expression
+                        var result = ExpressionEvaluator.Evaluate(source.Expression, context);
+
+                        if (result != null)
+                        {
+                            var change = new PendingExportAttributeValueChange
+                            {
+                                Id = Guid.NewGuid(),
+                                AttributeId = mapping.TargetConnectedSystemAttribute.Id,
+                                ChangeType = PendingExportAttributeChangeType.Update
+                            };
+
+                            // Set the value based on the result type
+                            switch (result)
+                            {
+                                case string strValue:
+                                    change.StringValue = strValue;
+                                    break;
+                                case int intValue:
+                                    change.IntValue = intValue;
+                                    break;
+                                case DateTime dtValue:
+                                    change.DateTimeValue = dtValue;
+                                    break;
+                                case bool boolValue:
+                                    change.StringValue = boolValue.ToString();
+                                    break;
+                                case Guid guidValue:
+                                    change.StringValue = guidValue.ToString();
+                                    break;
+                                case byte[] byteValue:
+                                    change.ByteValue = byteValue;
+                                    break;
+                                default:
+                                    // Fall back to string representation
+                                    change.StringValue = result.ToString();
+                                    break;
+                            }
+
+                            changes.Add(change);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "CreateAttributeValueChanges: Failed to evaluate expression '{Expression}' for attribute {AttributeName}",
+                            source.Expression, mapping.TargetConnectedSystemAttribute.Name);
+                    }
+
+                    continue;
+                }
+
+                // Handle direct attribute flow mappings
                 if (source.MetaverseAttribute == null)
                     continue;
 
@@ -426,7 +490,7 @@ public class ExportEvaluationServer
                 if (mvoValue == null)
                     continue;
 
-                var change = new PendingExportAttributeValueChange
+                var attributeChange = new PendingExportAttributeValueChange
                 {
                     Id = Guid.NewGuid(),
                     AttributeId = mapping.TargetConnectedSystemAttribute.Id,
@@ -437,38 +501,75 @@ public class ExportEvaluationServer
                 switch (source.MetaverseAttribute.Type)
                 {
                     case AttributeDataType.Text:
-                        change.StringValue = mvoValue.StringValue;
+                        attributeChange.StringValue = mvoValue.StringValue;
                         break;
                     case AttributeDataType.Number:
-                        change.IntValue = mvoValue.IntValue;
+                        attributeChange.IntValue = mvoValue.IntValue;
                         break;
                     case AttributeDataType.DateTime:
-                        change.DateTimeValue = mvoValue.DateTimeValue;
+                        attributeChange.DateTimeValue = mvoValue.DateTimeValue;
                         break;
                     case AttributeDataType.Boolean:
                         // Convert bool to string for now (model doesn't have BoolValue)
-                        change.StringValue = mvoValue.BoolValue?.ToString();
+                        attributeChange.StringValue = mvoValue.BoolValue?.ToString();
                         break;
                     case AttributeDataType.Guid:
                         // Convert Guid to string for now (model doesn't have GuidValue)
-                        change.StringValue = mvoValue.GuidValue?.ToString();
+                        attributeChange.StringValue = mvoValue.GuidValue?.ToString();
                         break;
                     case AttributeDataType.Binary:
-                        change.ByteValue = mvoValue.ByteValue;
+                        attributeChange.ByteValue = mvoValue.ByteValue;
                         break;
                     case AttributeDataType.Reference:
                         // For reference attributes, store the MVO ID as unresolved reference - will be resolved during export execution
                         if (mvoValue.ReferenceValue != null)
                         {
-                            change.UnresolvedReferenceValue = mvoValue.ReferenceValue.Id.ToString();
+                            attributeChange.UnresolvedReferenceValue = mvoValue.ReferenceValue.Id.ToString();
                         }
                         break;
                 }
 
-                changes.Add(change);
+                changes.Add(attributeChange);
             }
         }
 
         return changes;
+    }
+
+    /// <summary>
+    /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
+    /// The dictionary keys are attribute names, and values are the attribute values.
+    /// </summary>
+    private Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+    {
+        var attributes = new Dictionary<string, object?>();
+
+        if (mvo.Type == null)
+            return attributes;
+
+        foreach (var attributeValue in mvo.AttributeValues)
+        {
+            if (attributeValue.Attribute == null)
+                continue;
+
+            var attributeName = attributeValue.Attribute.Name;
+
+            // Use the appropriate typed value based on the attribute type
+            object? value = attributeValue.Attribute.Type switch
+            {
+                AttributeDataType.Text => attributeValue.StringValue,
+                AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.DateTime => attributeValue.DateTimeValue,
+                AttributeDataType.Boolean => attributeValue.BoolValue,
+                AttributeDataType.Guid => attributeValue.GuidValue,
+                AttributeDataType.Binary => attributeValue.ByteValue,
+                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString(),
+                _ => null
+            };
+
+            attributes[attributeName] = value;
+        }
+
+        return attributes;
     }
 }

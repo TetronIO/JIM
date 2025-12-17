@@ -670,5 +670,112 @@ public class ExportEvaluationTests
         }
     }
 
+    /// <summary>
+    /// Q1.Expression: Tests that expression-based export mappings correctly evaluate and create pending exports.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_WithExpressionBasedMapping_CreatesCorrectPendingExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        // Set up MVO attribute values that will be used in the expression
+        var displayNameAttr = mvo.Type.Attributes.Single(a => a.Name == "Display Name");
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameAttr,
+            AttributeId = displayNameAttr.Id,
+            StringValue = "Test User"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Add a DN attribute to the target system
+        var dnAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 999,
+            ConnectedSystemObjectType = targetUserType,
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        targetUserType.Attributes.Add(dnAttr);
+
+        // Configure export rule with expression-based mapping
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.AttributeFlowRules.Clear();
+
+        // Add expression-based mapping for DN generation
+        var expressionMapping = new SyncRuleMapping
+        {
+            Id = 888,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = dnAttr,
+            TargetConnectedSystemAttributeId = dnAttr.Id
+        };
+        expressionMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 777,
+            Order = 1,
+            Expression = "\"CN=\" + EscapeDN(mv[\"Display Name\"]) + \",CN=Users,DC=testdomain,DC=local\""
+        });
+        exportRule.AttributeFlowRules.Add(expressionMapping);
+
+        // Track pending exports created
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        // Track CSOs created
+        var createdCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
+            .Callback((ConnectedSystemObject entity) =>
+            {
+                createdCsos.Add(entity);
+                ConnectedSystemObjectsData.Add(entity);
+            });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1), "Should create one pending export");
+        var pendingExport = result[0];
+
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+            "Should be a Create operation since no CSO exists");
+
+        Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(1),
+            "Should have one attribute change for the expression-based DN");
+
+        var dnChange = pendingExport.AttributeValueChanges.First();
+        Assert.That(dnChange.AttributeId, Is.EqualTo(dnAttr.Id),
+            "Attribute change should be for the DN attribute");
+
+        Assert.That(dnChange.StringValue, Is.EqualTo("CN=Test User,CN=Users,DC=testdomain,DC=local"),
+            "DN should be correctly generated from the expression using Display Name");
+
+        // Verify a PendingProvisioning CSO was created
+        Assert.That(createdCsos, Has.Count.EqualTo(1),
+            "Should create one PendingProvisioning CSO for the new provision");
+        Assert.That(createdCsos[0].Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            "CSO should be in PendingProvisioning state");
+    }
+
     #endregion
 }
