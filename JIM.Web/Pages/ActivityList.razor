@@ -66,9 +66,13 @@
         </MudTh>
     </HeaderContent>
     <RowTemplate Context="context">
-        <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Type">
+            <MudLink Href="@($"/activity/{context.Id}")">
+                @context.TargetType.ToString().SplitOnCapitalLetters()
+            </MudLink>
+        </MudTd>
         <MudTd DataLabel="Target">
-            <MudLink Href="@($"/activity/{context.Id}")" Underline="Underline.Always">
+            <MudLink Href="@($"/activity/{context.Id}")">
                 @(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")
             </MudLink>
         </MudTd>
@@ -77,7 +81,7 @@
         <MudTd DataLabel="Initiated By">
             @if (context.InitiatedBy != null)
             {
-                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)" Underline="Underline.Always">
+                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">
                     @Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)
                 </MudLink>
             }
