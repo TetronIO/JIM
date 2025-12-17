@@ -1,4 +1,5 @@
-#See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
+# syntax=docker/dockerfile:1
+# See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 ARG VERSION=dev
 
@@ -31,15 +32,34 @@ COPY ["JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
 COPY ["JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
 COPY ["JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
 COPY ["JIM.Data/JIM.Data.csproj", "JIM.Data/"]
-RUN dotnet restore "./JIM.Web/JIM.Web.csproj"
+
+# Restore with BuildKit cache mount for NuGet packages
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet restore "./JIM.Web/JIM.Web.csproj"
+
 COPY . .
 WORKDIR "/src/JIM.Web"
-RUN dotnet build "JIM.Web.csproj" -c Release -o /app/build
 
+# Build with BuildKit cache mount
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet build "JIM.Web.csproj" -c Release -o /app/build
+
+# Dev target - use build output directly (faster, ~10-15s saved)
+FROM base AS dev
+WORKDIR /app
+COPY --from=build /app/build .
+ENTRYPOINT ["dotnet", "JIM.Web.dll"]
+
+# Publish stage - optimised for production
 FROM build AS publish
-RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-FROM base AS final
+# Release target - use published output (production-ready)
+FROM base AS release
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "JIM.Web.dll"]
+
+# Default target is release for backwards compatibility
+FROM release AS final

@@ -74,21 +74,36 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `jim-db` - Start PostgreSQL (for local debugging)
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply migrations
-- `jim-stack` - Start full Docker stack (all services containerized)
-- `jim-stack-build` - Rebuild and start Docker stack (use after code changes)
+
+**Docker Stack Management:**
+- `jim-stack` - Start Docker stack (no build, uses existing images)
 - `jim-stack-logs` - View Docker stack logs
-- `jim-stack-down` - Stop full Docker stack
+- `jim-stack-down` - Stop Docker stack
+
+**Development Builds (fast - skips publish stage, ~10-15s faster per service):**
+- `jim-dev` - Build all services in dev mode + start
+- `jim-dev-web` - Build jim.web in dev mode + start
+- `jim-dev-worker` - Build jim.worker in dev mode + start
+- `jim-dev-scheduler` - Build jim.scheduler in dev mode + start
+
+**Release Builds (production-ready, includes publish stage):**
+- `jim-release` - Build all services for release + start
+- `jim-release-web` - Build jim.web for release + start
+- `jim-release-worker` - Build jim.worker for release + start
+- `jim-release-scheduler` - Build jim.scheduler for release + start
+
+**Reset:**
+- `jim-reset` - Reset JIM (delete database & logs volumes)
 
 **Docker (Manual Commands):**
 - `docker compose -f db.yml up -d` - Start database only (same as jim-db)
 - `docker compose -f db.yml down` - Stop database
-- `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d` - Start full stack in Codespaces (same as jim-stack)
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**
-When running the Docker stack (`jim-stack`) and you make code changes to JIM.Web, JIM.Worker, or JIM.Scheduler, you MUST rebuild the affected container(s) for changes to take effect:
-- `jim-stack-build` - Rebuild and restart all containers
-- Or rebuild specific service: `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.web`
+When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, or JIM.Scheduler, you MUST rebuild the affected container(s) for changes to take effect:
+- `jim-dev` or `jim-dev-web` - Fast rebuild for development (recommended)
+- `jim-release` or `jim-release-web` - Full rebuild for production-like testing
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 

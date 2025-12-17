@@ -160,12 +160,32 @@ jim-migrate        # Apply migrations
 jim-migration [N]  # Create new migration
 ```
 
-### Docker Stack (Full Containerized Environment)
+### Docker Stack Management
 ```bash
-jim-stack          # Start all services in Docker (web, api, worker, scheduler, db)
-jim-stack-build    # Build and start all Docker services
+jim-stack          # Start Docker stack (no build, uses existing images)
 jim-stack-logs     # View all Docker service logs
 jim-stack-down     # Stop all Docker services
+```
+
+### Development Builds (fast - skips publish stage)
+```bash
+jim-dev            # Build all services in dev mode + start
+jim-dev-web        # Build jim.web in dev mode + start
+jim-dev-worker     # Build jim.worker in dev mode + start
+jim-dev-scheduler  # Build jim.scheduler in dev mode + start
+```
+
+### Release Builds (production-ready)
+```bash
+jim-release        # Build all services for release + start
+jim-release-web    # Build jim.web for release + start
+jim-release-worker # Build jim.worker for release + start
+jim-release-scheduler # Build jim.scheduler for release + start
+```
+
+### Reset
+```bash
+jim-reset          # Reset JIM (delete database & logs volumes)
 ```
 
 ## 🔀 Development Workflows

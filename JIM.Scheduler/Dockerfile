@@ -1,4 +1,5 @@
-#See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
+# syntax=docker/dockerfile:1
+# See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 ARG VERSION=dev
 
@@ -15,15 +16,34 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 COPY ["JIM.Scheduler/JIM.Scheduler.csproj", "JIM.Scheduler/"]
-RUN dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj"
+
+# Restore with BuildKit cache mount for NuGet packages
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj"
+
 COPY . .
 WORKDIR "/src/JIM.Scheduler"
-RUN dotnet build "JIM.Scheduler.csproj" -c Release -o /app/build
 
+# Build with BuildKit cache mount
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet build "JIM.Scheduler.csproj" -c Release -o /app/build
+
+# Dev target - use build output directly (faster, ~10-15s saved)
+FROM base AS dev
+WORKDIR /app
+COPY --from=build /app/build .
+ENTRYPOINT ["dotnet", "JIM.Scheduler.dll"]
+
+# Publish stage - optimised for production
 FROM build AS publish
-RUN dotnet publish "JIM.Scheduler.csproj" -c Release -o /app/publish
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet publish "JIM.Scheduler.csproj" -c Release -o /app/publish
 
-FROM base AS final
+# Release target - use published output (production-ready)
+FROM base AS release
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "JIM.Scheduler.dll"]
+
+# Default target is release for backwards compatibility
+FROM release AS final

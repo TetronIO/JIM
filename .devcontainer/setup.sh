@@ -181,26 +181,47 @@ cat >> ~/.zshrc << 'EOF'
 # Unset GITHUB_TOKEN to allow gh CLI to use its own authentication with project scopes
 unset GITHUB_TOKEN
 
+# Enable BuildKit for faster Docker builds with better caching
+export DOCKER_BUILDKIT=1
+
+# Compose file variables for cleaner aliases
+JIM_COMPOSE="docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db"
+
+# .NET local development
 alias jim-build='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 alias jim-web='dotnet run --project JIM.Web'
 alias jim-api='dotnet run --project JIM.Api'
 alias jim-worker='dotnet run --project JIM.Worker'
+
+# Database management
 alias jim-migrate='dotnet ef database update --project JIM.PostgresData'
 alias jim-migration='dotnet ef migrations add --project JIM.PostgresData'
 alias jim-db='docker compose -f db.yml up -d'
 alias jim-db-stop='docker compose -f db.yml down'
 alias jim-db-logs='docker compose -f db.yml logs -f'
 alias jim-adminer='echo "Adminer running at http://localhost:8080"'
+
+# Docker stack management (no build)
 alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
-alias jim-stack-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
 alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down'
-alias jim-web-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.web'
-alias jim-worker-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.worker'
-alias jim-scheduler-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.scheduler'
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-stack-build to start fresh."'
+
+# Development builds (fast - skip publish stage, ~10-15s faster per service)
+alias jim-dev='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build --build-arg TARGET=dev && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
+alias jim-dev-web='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build --build-arg TARGET=dev jim.web && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.web'
+alias jim-dev-worker='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build --build-arg TARGET=dev jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.worker'
+alias jim-dev-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build --build-arg TARGET=dev jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.scheduler'
+
+# Release builds (full publish - production-ready)
+alias jim-release='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
+alias jim-release-web='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.web'
+alias jim-release-worker='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.worker'
+alias jim-release-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.scheduler'
+
+# Reset
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-dev or jim-release to start fresh."'
 EOF
 
 print_success "Shell aliases created (restart terminal or run: source ~/.zshrc)"
@@ -219,12 +240,23 @@ echo "  jim-api            → Run the API (local, debuggable)"
 echo "  jim-db             → Start PostgreSQL database only"
 echo ""
 echo "🐳 Docker Stack Commands:"
-echo "  jim-stack          → Start full Docker stack (all services)"
-echo "  jim-stack-build    → Build and start Docker stack"
+echo "  jim-stack          → Start Docker stack (no build)"
 echo "  jim-stack-logs     → View Docker stack logs"
 echo "  jim-stack-down     → Stop Docker stack"
-echo "  jim-web-build      → Quick rebuild just jim.web container"
-echo "  jim-worker-build   → Quick rebuild just jim.worker container"
+echo ""
+echo "🚧 Development Builds (fast - skips publish stage):"
+echo "  jim-dev            → Build all services in dev mode + start"
+echo "  jim-dev-web        → Build jim.web in dev mode + start"
+echo "  jim-dev-worker     → Build jim.worker in dev mode + start"
+echo "  jim-dev-scheduler  → Build jim.scheduler in dev mode + start"
+echo ""
+echo "📦 Release Builds (production-ready):"
+echo "  jim-release        → Build all services for release + start"
+echo "  jim-release-web    → Build jim.web for release + start"
+echo "  jim-release-worker → Build jim.worker for release + start"
+echo "  jim-release-scheduler → Build jim.scheduler for release + start"
+echo ""
+echo "🔄 Reset:"
 echo "  jim-reset          → Reset JIM (delete database & logs volumes)"
 echo ""
 echo "🔧 Database Commands:"

@@ -78,6 +78,9 @@ $jimComposeOverride = Join-Path $repoRoot "docker-compose.override.codespaces.ym
 
 $startTime = Get-Date
 
+# Enable BuildKit for faster Docker builds with better caching
+$env:DOCKER_BUILDKIT = "1"
+
 Write-Host ""
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " JIM Integration Test Suite" -ForegroundColor Cyan
