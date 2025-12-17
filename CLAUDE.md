@@ -228,6 +228,42 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - No cloud service dependencies (no Azure Key Vault, AWS KMS, etc.)
 - All features must work with on-premises infrastructure only
 
+## Feature Planning
+
+**IMPORTANT: When creating plans for new features or significant changes:**
+
+1. **Create a plan document in `docs/plans/`:**
+   - Use uppercase filename with underscores: e.g., `PROGRESS_REPORTING.md`, `SCIM_SERVER_DESIGN.md`
+   - Include comprehensive details: Overview, Architecture, Implementation Phases, Success Criteria, Benefits
+   - Mark status (Planned/In Progress/Completed) and milestone (MVP/Post-MVP)
+   - Keep plan focused but detailed enough for implementation
+
+2. **Create a GitHub issue:**
+   - Brief description of the feature/change
+   - Link to the plan document in `docs/plans/` for full details
+   - Assign to appropriate milestone (MVP, Post-MVP, etc.)
+   - Add relevant labels (enhancement, bug, documentation, etc.)
+   - Example: "See full implementation plan: [`docs/plans/PROGRESS_REPORTING.md`](docs/plans/PROGRESS_REPORTING.md)"
+
+3. **Plan structure guidelines:**
+   - **Overview**: Brief summary of what and why
+   - **Business Value**: Problem being solved and benefits
+   - **Technical Architecture**: Current state, proposed solution, data flow
+   - **Implementation Phases**: Numbered phases with specific deliverables
+   - **Success Criteria**: Measurable outcomes
+   - **Benefits**: Performance, UX, architecture improvements
+   - **Dependencies**: External packages, services, infrastructure
+   - **Risks & Mitigations**: Potential issues and solutions
+
+**Documentation organisation:**
+- `docs/plans/` - Feature plans and design documents (future work)
+- `docs/` - Active guides and references (current/completed work)
+  - DEVELOPER_GUIDE.md - Comprehensive development guide
+  - INTEGRATION_TESTING.md - Integration testing guide
+  - MVP_DEFINITION.md - MVP scope and criteria
+  - RELEASE_PROCESS.md - Release and deployment procedures
+  - SSO_SETUP_GUIDE.md - SSO configuration instructions
+
 ## Architecture Quick Reference
 
 **Metaverse Pattern:**
