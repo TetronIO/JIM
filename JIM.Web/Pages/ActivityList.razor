@@ -90,7 +90,7 @@
                 Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
                 @context.Status.ToString().SplitOnCapitalLetters()</MudChip>
         </MudTd>
-        <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Millisecond) ?? "-")</MudTd>
+        <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Millisecond, maxUnit: Humanizer.Localisation.TimeUnit.Hour, toWords: false) ?? "-")</MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There is no activity to show yet.
