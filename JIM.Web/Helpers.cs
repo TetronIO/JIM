@@ -70,6 +70,25 @@ public static class Helpers
         return parts.Count > 0 ? string.Join(", ", parts) : "0 ms";
     }
 
+    /// <summary>
+    /// Extension method that converts a TimeSpan into a casual, rounded approximation using the largest appropriate unit.
+    /// Examples: "~143 ms", "~14 s", "~16 s", "~2 m"
+    /// </summary>
+    public static string ToCasualString(this TimeSpan timeSpan)
+    {
+        // Round to the largest appropriate unit
+        if (timeSpan.TotalDays >= 1)
+            return $"~{Math.Round(timeSpan.TotalDays)} d";
+        if (timeSpan.TotalHours >= 1)
+            return $"~{Math.Round(timeSpan.TotalHours)} h";
+        if (timeSpan.TotalMinutes >= 1)
+            return $"~{Math.Round(timeSpan.TotalMinutes)} m";
+        if (timeSpan.TotalSeconds >= 1)
+            return $"~{Math.Round(timeSpan.TotalSeconds)} s";
+
+        return $"{Math.Round(timeSpan.TotalMilliseconds)} ms";
+    }
+
     #region mudblazor related
     public static Color GetActivityMudBlazorColorForStatus(ActivityStatus status)
     {

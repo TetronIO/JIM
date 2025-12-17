@@ -89,7 +89,7 @@
                 Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
                 @context.Status.ToString().SplitOnCapitalLetters()</MudChip>
         </MudTd>
-        <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudTd>
+        <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.ToCasualString() ?? "-")</MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There is no activity to show yet.
