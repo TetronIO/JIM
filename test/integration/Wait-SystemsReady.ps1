@@ -69,24 +69,39 @@ $phase1Systems = @(
         HasHealthCheck = $true
         AdditionalCheck = $null
         PostReadySetup = {
-            # Configure TLS for LDAPS support
-            # This enables encrypted LDAP connections (port 636)
-            Write-Host "  Configuring LDAPS (TLS) on Samba AD..." -ForegroundColor Gray
-
-            # Check if TLS is already configured
+            # Pre-built images already have TLS configured at build time
+            # Only need to configure TLS if using the standard nowsci/samba-domain image
             $tlsConfigured = docker exec samba-ad-primary grep -q "tls enabled" /etc/samba/smb.conf 2>$null; $LASTEXITCODE -eq 0
 
-            if (-not $tlsConfigured) {
+            if ($tlsConfigured) {
+                Write-Host "  ✓ Samba AD already configured with LDAPS (pre-built image)" -ForegroundColor Green
+            }
+            else {
+                # Fallback: Configure TLS for standard nowsci/samba-domain image
+                Write-Host "  Configuring LDAPS (TLS) on Samba AD (standard image)..." -ForegroundColor Gray
+
                 # Add TLS settings to [global] section of smb.conf
                 $script = @'
-# Check if TLS already configured
+# Generate TLS certificates if they don't exist
+mkdir -p /var/lib/samba/private/tls
+if [ ! -f /var/lib/samba/private/tls/cert.pem ]; then
+    openssl req -x509 -nodes -days 3650 \
+        -newkey rsa:2048 \
+        -keyout /var/lib/samba/private/tls/key.pem \
+        -out /var/lib/samba/private/tls/cert.pem \
+        -subj "/CN=testdomain.local/O=JIM Integration Testing" 2>/dev/null
+    cp /var/lib/samba/private/tls/cert.pem /var/lib/samba/private/tls/ca.pem
+    chmod 600 /var/lib/samba/private/tls/key.pem
+fi
+
+# Add TLS settings to smb.conf if not present
 if ! grep -q "tls enabled" /etc/samba/smb.conf; then
-    # Add TLS settings right after [global]
     sed -i '/^\[global\]/a\
 tls enabled = yes\
 tls keyfile = /var/lib/samba/private/tls/key.pem\
 tls certfile = /var/lib/samba/private/tls/cert.pem\
 tls cafile = /var/lib/samba/private/tls/ca.pem' /etc/samba/smb.conf
+    cp /etc/samba/smb.conf /etc/samba/external/smb.conf
     echo "TLS configuration added to smb.conf"
 fi
 '@
@@ -109,12 +124,12 @@ fi
                 if ($retries -ge 12) {
                     Write-Host "  ⚠ Samba AD may not be fully ready after TLS configuration" -ForegroundColor Yellow
                 }
+
+                Write-Host "  ✓ Samba AD configured with LDAPS support" -ForegroundColor Green
             }
 
-            # Ensure Administrator password is set correctly
+            # Ensure Administrator password is set correctly (idempotent)
             docker exec samba-ad-primary samba-tool user setpassword Administrator --newpassword="Test@123!" 2>$null
-
-            Write-Host "  ✓ Samba AD configured with LDAPS support" -ForegroundColor Green
         }
     }
 )
