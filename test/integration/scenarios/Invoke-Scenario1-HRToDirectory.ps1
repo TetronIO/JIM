@@ -82,10 +82,11 @@ try {
     & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
     Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
-    # Clean up AD users from previous test runs
-    # This prevents "object already exists" errors during export
-    Write-Host "Cleaning up AD test users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("bob.smith1", "charlie.smith2", "diana.smith3", "test.joiner", "test.reconnect")
+    # Clean up test-specific AD users from previous test runs
+    # Only delete test.joiner and test.reconnect - NOT the baseline users (bob.smith1, etc.)
+    # Baseline users are created by Populate-SambaAD.ps1 and are needed for Mover tests
+    Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
+    $testUsers = @("test.joiner", "test.reconnect")
     $deletedCount = 0
     foreach ($user in $testUsers) {
         # Try to delete the user - if they don't exist, samba-tool will error but that's OK
@@ -100,7 +101,7 @@ try {
             Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
         }
     }
-    Write-Host "  ✓ AD cleanup complete ($deletedCount users deleted)" -ForegroundColor Green
+    Write-Host "  ✓ AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
     $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template
 
@@ -194,13 +195,15 @@ try {
 
         Write-Host "Updating user department in CSV..." -ForegroundColor Gray
 
-        # Update CSV - change bob.smith1's department
+        # Update CSV - change test.joiner's department (user provisioned in Joiner test)
+        # We use test.joiner because they were provisioned via JIM and have proper CSO linkage
+        # Using a user created by Populate-SambaAD wouldn't work as JIM doesn't know about them
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $csvContent = Get-Content $csvPath
 
         $updatedContent = $csvContent | ForEach-Object {
-            if ($_ -match "bob\.smith1") {
-                $_ -replace '"HR"', '"IT"'  # Change department from HR to IT
+            if ($_ -match "test\.joiner") {
+                $_ -replace '"Admin"', '"IT"'  # Change department from Admin to IT (index 9999 % 10 = 9 = Admin)
             }
             else {
                 $_
@@ -208,7 +211,7 @@ try {
         }
 
         $updatedContent | Set-Content $csvPath
-        Write-Host "  ✓ Changed bob.smith1 department to IT" -ForegroundColor Green
+        Write-Host "  ✓ Changed test.joiner department to IT" -ForegroundColor Green
 
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
@@ -227,7 +230,7 @@ try {
         # Validate department change
         Write-Host "Validating attribute update in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec samba-ad-primary samba-tool user show bob.smith1 2>&1
+        $adUserInfo = docker exec samba-ad-primary samba-tool user show test.joiner 2>&1
 
         if ($adUserInfo -match "department:.*IT") {
             Write-Host "  ✓ Department updated to IT in AD" -ForegroundColor Green
@@ -235,6 +238,7 @@ try {
         }
         else {
             Write-Host "  ✗ Department not updated in AD" -ForegroundColor Red
+            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover"; Success = $false; Error = "Attribute not updated" }
         }
     }
