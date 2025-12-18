@@ -158,14 +158,22 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 - [ ] Outbound scope filter test (Test 6) - **BLOCKED: requires API support for ObjectScopingCriteriaGroups**
 - [x] **All tests use PowerShell cmdlets, NOT direct API calls**
 
-### Phase 6: Scope Filter API Support (Post-MVP)
-To enable proper scope filter testing, the following API enhancements are needed:
+### Phase 6: Scope Filter API Support ⏳ BLOCKED (MVP Required)
+**This is blocking MVP scope filter integration tests.** The following API enhancements are needed:
 - [ ] Add `OutboundDeprovisionAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
 - [ ] Add `InboundOutOfScopeAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
 - [ ] Add API endpoints for managing `ObjectScopingCriteriaGroups` on sync rules
 - [ ] Update PowerShell cmdlets (`New-JIMSyncRule`, `Set-JIMSyncRule`) with scoping parameters
 - [ ] Implement inbound scope filter integration test (Test 5)
 - [ ] Implement outbound scope filter integration test (Test 6)
+
+### Phase 7: Matching Rules Integration Tests ⏳ PENDING (MVP Required)
+- [ ] Create Scenario 5 integration test script for matching rules
+- [ ] Basic matching: projection when no MVO exists
+- [ ] Basic matching: join to existing MVO without connector from same CS
+- [ ] Basic matching: join failure when MVO already has connector from same CS
+- [ ] Multiple rules: fallback to second/third rule when earlier rules don't match
+- [ ] Edge cases: ambiguous matches, null values, case sensitivity
 
 ## Critical Files
 
@@ -195,13 +203,14 @@ To enable proper scope filter testing, the following API enhancements are needed
 - MVOs actually deleted when grace period expires
 - Admin/service accounts protected from automatic deletion
 
-### Post-MVP (Scope Filter Testing)
+### MVP (Scope Filter Testing) - BLOCKED
+**Blocker:** API does not yet support ObjectScopingCriteriaGroups configuration
 - API supports ObjectScopingCriteriaGroups configuration
 - Integration tests pass for:
   - Inbound scope filter changes (Test 5)
   - Outbound scope filter changes (Test 6)
 
-### Post-MVP (Matching Rules Testing)
+### MVP (Matching Rules Testing)
 Integration tests needed for Object Matching Rules to validate all permutations:
 
 **Basic Matching Scenarios:**
