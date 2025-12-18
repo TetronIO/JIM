@@ -340,6 +340,45 @@ try {
     }
 
     Write-Host ""
+    Write-Host "Running Scenario 4: MVO Deletion Rules" -ForegroundColor Cyan
+    Write-Host ""
+
+    try {
+        & "$scriptRoot/scenarios/Invoke-Scenario4-DeletionRules.ps1" `
+            -Template $Template `
+            -Step All `
+            -JIMUrl $jimUrl `
+            -ApiKey $effectiveApiKey
+
+        if ($LASTEXITCODE -eq 0) {
+            $results.Scenarios += @{
+                Name = "Scenario 4: MVO Deletion Rules"
+                Success = $true
+            }
+            Write-Host ""
+            Write-Host "  Scenario 4 passed" -ForegroundColor Green
+        }
+        else {
+            $results.Scenarios += @{
+                Name = "Scenario 4: MVO Deletion Rules"
+                Success = $false
+                Error = "Test failed with exit code $LASTEXITCODE"
+            }
+            Write-Host ""
+            Write-Host "  Scenario 4 failed" -ForegroundColor Red
+        }
+    }
+    catch {
+        $results.Scenarios += @{
+            Name = "Scenario 4: MVO Deletion Rules"
+            Success = $false
+            Error = $_.Exception.Message
+        }
+        Write-Host ""
+        Write-Host "  Scenario 4 failed: $_" -ForegroundColor Red
+    }
+
+    Write-Host ""
     Write-Host "Scenarios 2 and 3 not yet implemented:" -ForegroundColor Gray
     Write-Host "  - Scenario 2: Directory to Directory Sync (placeholder)" -ForegroundColor Gray
     Write-Host "  - Scenario 3: GALSYNC (placeholder)" -ForegroundColor Gray
