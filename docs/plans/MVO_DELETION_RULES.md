@@ -158,8 +158,11 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 - [ ] Outbound scope filter test (Test 6) - **BLOCKED: requires API support for ObjectScopingCriteriaGroups**
 - [x] **All tests use PowerShell cmdlets, NOT direct API calls**
 
-### Phase 6: Scope Filter API Support ⏳ BLOCKED (MVP Required)
-**This is blocking MVP scope filter integration tests.** The following API enhancements are needed:
+### Phase 6: Scope Filter API Support ⏳ IN PROGRESS (MVP Required)
+**Note:** Scope filtering is fully implemented in the sync engine and UI. The blocker is that the REST API
+doesn't expose `ObjectScopingCriteriaGroups` - the UI calls the application layer directly.
+
+To enable PowerShell-based integration tests, the following API enhancements are needed:
 - [ ] Add `OutboundDeprovisionAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
 - [ ] Add `InboundOutOfScopeAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
 - [ ] Add API endpoints for managing `ObjectScopingCriteriaGroups` on sync rules
@@ -167,12 +170,13 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 - [ ] Implement inbound scope filter integration test (Test 5)
 - [ ] Implement outbound scope filter integration test (Test 6)
 
-### Phase 7: Matching Rules Integration Tests ⏳ PENDING (MVP Required)
-- [ ] Create Scenario 5 integration test script for matching rules
-- [ ] Basic matching: projection when no MVO exists
-- [ ] Basic matching: join to existing MVO without connector from same CS
-- [ ] Basic matching: join failure when MVO already has connector from same CS
-- [ ] Multiple rules: fallback to second/third rule when earlier rules don't match
+### Phase 7: Matching Rules Integration Tests 🔄 IN PROGRESS (MVP Required)
+- [x] Create Scenario 5 integration test script for matching rules (`Invoke-Scenario5-MatchingRules.ps1`)
+- [x] Add LDAP matching rule to Setup-Scenario1.ps1
+- [x] Basic matching: projection when no MVO exists (Test 1)
+- [x] Basic matching: join to existing MVO without connector from same CS (Test 2)
+- [x] Duplicate prevention: join conflict when MVO already has connector from same CS (Test 3)
+- [ ] Multiple rules: fallback to second/third rule when earlier rules don't match (Test 4)
 - [ ] Edge cases: ambiguous matches, null values, case sensitivity
 
 ## Critical Files

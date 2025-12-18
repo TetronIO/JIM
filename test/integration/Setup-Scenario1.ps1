@@ -580,7 +580,42 @@ try {
             }
         }
         else {
-            Write-Host "  ⚠ Could not find required attributes for matching rule" -ForegroundColor Yellow
+            Write-Host "  ⚠ Could not find required attributes for CSV matching rule" -ForegroundColor Yellow
+        }
+
+        # Add object matching rule for LDAP object type (how to match CSOs to existing MVOs during export)
+        # This is important for joining to pre-existing AD accounts rather than provisioning duplicates
+        Write-Host "  Configuring LDAP object matching rule..." -ForegroundColor Gray
+
+        $ldapEmployeeIdAttr = $ldapUserType.attributes | Where-Object { $_.name -eq 'employeeID' }
+
+        if ($ldapEmployeeIdAttr -and $mvEmployeeIdAttr) {
+            # Check if matching rule already exists
+            $existingLdapMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id
+
+            $ldapMatchingRuleExists = $existingLdapMatchingRules | Where-Object {
+                $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id -and
+                ($_.sources | Where-Object { $_.connectedSystemAttributeId -eq $ldapEmployeeIdAttr.id })
+            }
+
+            if (-not $ldapMatchingRuleExists) {
+                try {
+                    New-JIMMatchingRule -ConnectedSystemId $ldapSystem.id `
+                        -ObjectTypeId $ldapUserType.id `
+                        -TargetMetaverseAttributeName 'Employee ID' `
+                        -SourceConnectedSystemAttributeName 'employeeID' | Out-Null
+                    Write-Host "  ✓ LDAP object matching rule configured (employeeID → Employee ID)" -ForegroundColor Green
+                }
+                catch {
+                    Write-Host "  ⚠ Could not configure LDAP object matching rule: $_" -ForegroundColor Yellow
+                }
+            }
+            else {
+                Write-Host "  LDAP object matching rule already exists" -ForegroundColor Gray
+            }
+        }
+        else {
+            Write-Host "  ⚠ Could not find required attributes for LDAP matching rule (employeeID attribute may not exist in AD schema)" -ForegroundColor Yellow
         }
 
         # Restart jim.worker to pick up schema changes (API modifications may require reload)
