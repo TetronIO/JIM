@@ -190,7 +190,7 @@ try {
             Write-Host "Checking MVO deletion status..." -ForegroundColor Gray
 
             # Get MVOs and check if test.leaver MVO has LastConnectorDisconnectedDate set
-            $mvos = Get-JIMMetaverseObject -ObjectType "User" -SearchQuery "test.leaver" -PageSize 10 -ErrorAction SilentlyContinue
+            $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -SearchQuery "test.leaver" -PageSize 10 -ErrorAction SilentlyContinue
 
             if ($mvos -and $mvos.items) {
                 $leaverMvo = $mvos.items | Where-Object { $_.displayName -match "Test Leaver" }
@@ -278,7 +278,7 @@ try {
                 Write-Host "  ✓ Reconnection successful - user preserved in AD" -ForegroundColor Green
 
                 # Additional check: verify MVO no longer has LastConnectorDisconnectedDate set
-                $mvos = Get-JIMMetaverseObject -ObjectType "User" -SearchQuery "test.reconnect2" -PageSize 10 -ErrorAction SilentlyContinue
+                $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -SearchQuery "test.reconnect2" -PageSize 10 -ErrorAction SilentlyContinue
 
                 if ($mvos -and $mvos.items) {
                     $reconnectMvo = $mvos.items | Where-Object { $_.displayName -match "Test Reconnect Two" }
@@ -339,7 +339,7 @@ try {
 
         # The built-in admin user should have Origin=Internal
         # Query the API to verify
-        $adminUser = Get-JIMMetaverseObject -ObjectType "User" -SearchQuery "admin" -PageSize 10 -ErrorAction SilentlyContinue
+        $adminUser = Get-JIMMetaverseObject -ObjectTypeName "User" -SearchQuery "admin" -PageSize 10 -ErrorAction SilentlyContinue
 
         if ($adminUser -and $adminUser.items) {
             $admin = $adminUser.items | Where-Object { $_.displayName -match "admin" -or $_.userName -match "admin" } | Select-Object -First 1
