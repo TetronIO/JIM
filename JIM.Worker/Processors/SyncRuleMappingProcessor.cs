@@ -294,13 +294,13 @@ public static class SyncRuleMappingProcessor
                     }
                 }
             }
-            else if (source.Function != null)
-                throw new NotImplementedException("Functions have not been implemented yet.");
+            else if (!string.IsNullOrWhiteSpace(source.Expression))
+                throw new NotImplementedException("Expression-based mappings not yet implemented in SyncRuleMappingProcessor. This will be implemented soon.");
             else if (source.MetaverseAttribute != null)
                 throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. " +
                                                "This operation is focused on import flow, so Connected System to Metaverse Object.");
             else
-                throw new InvalidDataException("Expected ConnectedSystemAttribute or Function to be populated in a SyncRuleMappingSource object.");
+                throw new InvalidDataException("Expected ConnectedSystemAttribute or Expression to be populated in a SyncRuleMappingSource object.");
         }
     }
 }

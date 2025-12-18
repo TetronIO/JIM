@@ -81,8 +81,8 @@ function Get-JIMSyncRule {
                 Write-Verbose "Getting all Sync Rules"
                 $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules"
 
-                # Handle paginated response
-                $rules = if ($response.items) { $response.items } else { $response }
+                # Handle paginated response - check if 'items' property exists (not if it's truthy)
+                $rules = if ($null -ne $response.items) { $response.items } else { $response }
 
                 # Filter by Connected System if specified
                 if ($PSBoundParameters.ContainsKey('ConnectedSystemId') -or $PSBoundParameters.ContainsKey('ConnectedSystemName')) {

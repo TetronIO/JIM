@@ -31,23 +31,26 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// </summary>
     public const string ApiKeyPrefix = "jim_ak_";
 
-    private readonly JimApplication _jim;
+    private readonly IServiceProvider _serviceProvider;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<ApiKeyAuthenticationOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        JimApplication jim)
+        IServiceProvider serviceProvider)
         : base(options, logger, encoder)
     {
-        _jim = jim;
+        _serviceProvider = serviceProvider;
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        Log.Debug("ApiKeyAuthenticationHandler: Checking for X-API-Key header on path {Path}", Request.Path);
+
         // Check if the X-API-Key header is present
         if (!Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKeyHeader))
         {
+            Log.Debug("ApiKeyAuthenticationHandler: No X-API-Key header found");
             // No API key header - let other authentication schemes handle it
             return AuthenticateResult.NoResult();
         }
@@ -63,9 +66,14 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
         try
         {
+            // Create a scope to get a fresh DbContext for this authentication operation
+            // This prevents DbContext threading issues when the controller also uses the same context
+            using var scope = _serviceProvider.CreateScope();
+            var jim = scope.ServiceProvider.GetRequiredService<JimApplication>();
+
             // Hash the provided key to look it up
             var keyHash = HashApiKey(providedKey);
-            var apiKey = await _jim.Repository.ApiKeys.GetByHashAsync(keyHash);
+            var apiKey = await jim.Repository.ApiKeys.GetByHashAsync(keyHash);
 
             if (apiKey == null)
             {
@@ -73,6 +81,9 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
                     providedKey.Length >= 12 ? providedKey[..12] : providedKey);
                 return AuthenticateResult.Fail("Invalid API key");
             }
+
+            Log.Debug("ApiKeyAuthenticationHandler: Found key '{Name}', IsEnabled={IsEnabled}, Roles={RoleCount}",
+                apiKey.Name, apiKey.IsEnabled, apiKey.Roles.Count);
 
             // Check if the key is enabled
             if (!apiKey.IsEnabled)
@@ -90,11 +101,15 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
             // Record usage (fire and forget - don't block authentication)
             var ipAddress = Context.Connection.RemoteIpAddress?.ToString();
+            var apiKeyId = apiKey.Id;
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _jim.Repository.ApiKeys.RecordUsageAsync(apiKey.Id, ipAddress);
+                    // Create a new scope for the background task since the original scope will be disposed
+                    using var usageScope = _serviceProvider.CreateScope();
+                    var usageJim = usageScope.ServiceProvider.GetRequiredService<JimApplication>();
+                    await usageJim.Repository.ApiKeys.RecordUsageAsync(apiKeyId, ipAddress);
                 }
                 catch (Exception ex)
                 {
@@ -124,8 +139,9 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, SchemeName);
 
-            Log.Debug("ApiKeyAuthenticationHandler: Authenticated API key '{KeyName}' (prefix: {KeyPrefix}) with roles: {Roles}",
-                apiKey.Name, apiKey.KeyPrefix, string.Join(", ", apiKey.Roles.Select(r => r.Name)));
+            var rolesList = string.Join(", ", apiKey.Roles.Select(r => r.Name));
+            Log.Information("ApiKeyAuthenticationHandler: Successfully authenticated API key '{KeyName}' (prefix: {KeyPrefix}) with roles: {Roles}",
+                apiKey.Name, apiKey.KeyPrefix, rolesList);
 
             return AuthenticateResult.Success(ticket);
         }

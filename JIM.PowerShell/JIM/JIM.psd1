@@ -38,12 +38,39 @@
         'New-JIMConnectedSystem',
         'Set-JIMConnectedSystem',
         'Remove-JIMConnectedSystem',
+        'Import-JIMConnectedSystemSchema',
+        'Import-JIMConnectedSystemHierarchy',
+        'Get-JIMConnectorDefinition',
+        'Set-JIMConnectedSystemObjectType',
+        'Set-JIMConnectedSystemAttribute',
+        'Get-JIMConnectedSystemPartition',
+        'Set-JIMConnectedSystemPartition',
+        'Set-JIMConnectedSystemContainer',
 
         # Sync Rules
         'Get-JIMSyncRule',
         'New-JIMSyncRule',
         'Set-JIMSyncRule',
         'Remove-JIMSyncRule',
+
+        # Sync Rule Mappings
+        'Get-JIMSyncRuleMapping',
+        'New-JIMSyncRuleMapping',
+        'Remove-JIMSyncRuleMapping',
+
+        # Object Matching Rules
+        'Get-JIMMatchingRule',
+        'New-JIMMatchingRule',
+        'Set-JIMMatchingRule',
+        'Remove-JIMMatchingRule',
+
+        # Scoping Criteria
+        'Get-JIMScopingCriteria',
+        'New-JIMScopingCriteriaGroup',
+        'Set-JIMScopingCriteriaGroup',
+        'Remove-JIMScopingCriteriaGroup',
+        'New-JIMScopingCriterion',
+        'Remove-JIMScopingCriterion',
 
         # Run Profiles
         'Get-JIMRunProfile',
@@ -59,7 +86,11 @@
         # Metaverse
         'Get-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
+        'Set-JIMMetaverseObjectType',
         'Get-JIMMetaverseAttribute',
+        'New-JIMMetaverseAttribute',
+        'Set-JIMMetaverseAttribute',
+        'Remove-JIMMetaverseAttribute',
 
         # API Keys
         'Get-JIMApiKey',
@@ -81,7 +112,10 @@
         # Data Generation
         'Get-JIMExampleDataSet',
         'Get-JIMDataGenerationTemplate',
-        'Invoke-JIMDataGenerationTemplate'
+        'Invoke-JIMDataGenerationTemplate',
+
+        # Expressions
+        'Test-JIMExpression'
     )
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

@@ -52,6 +52,61 @@ public enum MetaverseObjectDeletionRule
 }
 
 /// <summary>
+/// Tracks how a Metaverse Object was created - determines deletion rule applicability.
+/// </summary>
+public enum MetaverseObjectOrigin
+{
+    /// <summary>
+    /// MVO was projected from a Connected System Object.
+    /// Subject to automatic deletion rules when configured.
+    /// </summary>
+    Projected = 0,
+
+    /// <summary>
+    /// MVO was created directly in JIM (e.g., admin accounts, service accounts).
+    /// NOT subject to automatic deletion when connectors disconnect.
+    /// </summary>
+    Internal = 1
+}
+
+/// <summary>
+/// Action to take when an MVO falls out of an export sync rule's scope.
+/// </summary>
+public enum OutboundDeprovisionAction
+{
+    /// <summary>
+    /// Break the join, mark CSO as disconnected/unmanaged.
+    /// CSO remains in the connected system but JIM no longer manages it.
+    /// </summary>
+    Disconnect = 0,
+
+    /// <summary>
+    /// Break the join AND delete the CSO from the connected system.
+    /// </summary>
+    Delete = 1
+
+    // Post-MVP: Disable = 2, MoveToArchiveOU = 3
+}
+
+/// <summary>
+/// Action to take when a CSO falls out of an import sync rule's scope.
+/// </summary>
+public enum InboundOutOfScopeAction
+{
+    /// <summary>
+    /// Keep the join intact even though CSO no longer matches scope.
+    /// Useful for "once managed, always managed" scenarios.
+    /// </summary>
+    RemainJoined = 0,
+
+    /// <summary>
+    /// Break the join (disconnect CSO from MVO).
+    /// CSO marked Obsolete, MVO deletion rules may then trigger.
+    /// </summary>
+    Disconnect = 1
+}
+
+/// <summary>
 /// Specifies how a trusted certificate was added to the certificate store.
 /// </summary>
 public enum CertificateSourceType

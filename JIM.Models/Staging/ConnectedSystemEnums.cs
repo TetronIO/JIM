@@ -3,7 +3,29 @@
 public enum ConnectedSystemObjectStatus
 {
     Normal = 0,
-    Obsolete = 1
+    Obsolete = 1,
+    /// <summary>
+    /// The CSO was created as part of provisioning evaluation but the export has not yet been confirmed.
+    /// Once the export succeeds or import confirms the object exists, status transitions to Normal.
+    /// </summary>
+    PendingProvisioning = 2
+}
+
+/// <summary>
+/// Determines where object matching rules are configured for a Connected System.
+/// </summary>
+public enum ObjectMatchingRuleMode
+{
+    /// <summary>
+    /// Default: Object matching rules are defined at the Connected System Object Type level.
+    /// These rules are shared across all sync rules for that object type.
+    /// </summary>
+    ConnectedSystem = 0,
+    /// <summary>
+    /// Advanced: Object matching rules are defined per sync rule.
+    /// Allows different matching logic for different sync rules.
+    /// </summary>
+    SyncRule = 1
 }
 
 public enum ConnectedSystemObjectJoinType

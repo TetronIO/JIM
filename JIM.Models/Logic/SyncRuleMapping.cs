@@ -4,19 +4,8 @@ namespace JIM.Models.Logic;
 
 /// <summary>
 /// Defines how data should flow from JIM to a connected system (or vice versa) for a specific attribute.
-/// Mappings can be used for either attribute flow, or object matching scenarios. They have slightly different rules:
-/// 
-/// Rules:
-/// 
-/// ** Object Matching Scenario **
-/// 
-/// There can be multiple mappings against a sync rule for the same target Metaverse attribute.
-/// i.e. you might have a primary connected system attribute you want to join on defined in one mapping, and then match on a fall-back attribute in another mapping.
-/// 
-/// ** Attribute Flow Scenario **
-/// 
 /// There can only be one mapping per target attribute.
-/// i.e. you might be mapping a single attribute source attribute to a target attribute, or your might use a function or expression as a 
+/// i.e. you might be mapping a single attribute source attribute to a target attribute, or you might use a function or expression as a
 /// source and in that be using multiple attributes as sources (parameters).
 /// </summary>
 public class SyncRuleMapping
@@ -28,27 +17,9 @@ public class SyncRuleMapping
     public MetaverseObject? CreatedBy { get; set; }
 
     /// <summary>
-    /// Applies to: Object Matching scenario.
-    /// If multiple mappings are defined for a target attribute, then the order in which they appear matters.
-    /// Mappings will be evaluated in order, i.e. order 0 item will be evaluated first, then 1, etc.
-    /// Does not apply to attribute flow rules. This wouldn't make sense. There can only be one mapping for each target attribute.
+    /// A backlink to the parent SynchronisationRule.
     /// </summary>
-    public int? Order { get; set; }
-
-    /// <summary>
-    /// A backlink to the parent SynchronisationRule for when this is an AttributeFlow type SyncRuleMapping.
-    /// </summary>
-    public SyncRule? AttributeFlowSynchronisationRule { get; set; }
-
-    /// <summary>
-    /// A backlink to the parent SynchronisationRule for when this is an ObjectMatching type SyncRuleMapping.
-    /// </summary>
-    public SyncRule? ObjectMatchingSynchronisationRule { get; set; }
-
-    /// <summary>
-    /// Denotes what the purpose of this mapping is for, i.e. attribute flow, or object matching (aka joining/correlating).
-    /// </summary>
-    public SyncRuleMappingType Type { get; set; } = SyncRuleMappingType.NotSet;
+    public SyncRule? SyncRule { get; set; }
 
     /// <summary>
     /// The sources that provide the value for the target attribute when the mapping is evaluated. 
@@ -61,15 +32,13 @@ public class SyncRuleMapping
     public List<SyncRuleMappingSource> Sources { get; } = new();
 
     /// <summary>
-    /// For an import rule, this is where the imported attribute value ends up being assigned to.
-    /// Also, where Object Matching Rules map to. i.e. a Connected System Attribute (source) might be a direct, or transform comparison to the Metaverse Object (target) attribute.
+    /// For an import rule, this is where the imported attribute value ends up being assigned to in the Metaverse.
     /// </summary>
     public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
     public int? TargetMetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// For an export rule, this is where the exported attribute value ends up being assigned to.
-    /// Does not apply to Object Matching Rules, as the target is always a Metaverse attribute in that context.
+    /// For an export rule, this is where the exported attribute value ends up being assigned to in the Connected System.
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? TargetConnectedSystemAttribute { get; set; }
     public int? TargetConnectedSystemAttributeId { get; set; }
@@ -85,10 +54,9 @@ public class SyncRuleMapping
         if (Sources.All(s => s.ConnectedSystemAttribute != null || s.MetaverseAttribute != null))
             return SyncRuleMappingSourcesType.AttributeMapping;
 
-        if (Sources.All(s => s.Function != null))
-            return SyncRuleMappingSourcesType.FunctionMapping;
+        if (Sources.All(s => !string.IsNullOrWhiteSpace(s.Expression)))
+            return SyncRuleMappingSourcesType.ExpressionMapping;
 
-        // expressions not yet supported
         return SyncRuleMappingSourcesType.AdvancedMapping;
     }
 }

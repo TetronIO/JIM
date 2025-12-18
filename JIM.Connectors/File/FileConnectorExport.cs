@@ -32,14 +32,14 @@ internal class FileConnectorExport
         _logger = logger;
     }
 
-    internal void Execute()
+    internal List<ExportResult> Execute()
     {
         _logger.Debug("FileConnectorExport.Execute: Starting export of {Count} pending exports", _pendingExports.Count);
 
         if (_pendingExports.Count == 0)
         {
             _logger.Information("FileConnectorExport.Execute: No pending exports to process");
-            return;
+            return new List<ExportResult>();
         }
 
         var exportFilePath = GetSettingValue("File Path");
@@ -76,6 +76,10 @@ internal class FileConnectorExport
         }
 
         _logger.Information("FileConnectorExport.Execute: Wrote {Count} records to {Path}", _pendingExports.Count, exportFilePath);
+
+        // File-based exports don't return system-generated external IDs
+        // Return success for all exports
+        return _pendingExports.Select(_ => ExportResult.Succeeded()).ToList();
     }
 
     private static string GetObjectTypeName(PendingExport pendingExport)

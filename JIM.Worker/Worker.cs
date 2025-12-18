@@ -105,6 +105,10 @@ public class Worker : BackgroundService
                 if (newWorkerTasksToProcess.Count == 0)
                 {
                     Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
+
+                    // During idle time, perform housekeeping tasks like orphan MVO cleanup
+                    await PerformHousekeepingAsync(mainLoopJim);
+
                     await Task.Delay(2000, stoppingToken);
                 }
                 else
@@ -157,12 +161,9 @@ public class Worker : BackgroundService
                                 }
                                 case SynchronisationWorkerTask syncWorkerTask:
                                 {
-                                    Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: " + syncWorkerTask.ConnectedSystemRunProfileId);
-                                    if (newWorkerTask.InitiatedBy == null)
-                                    {
-                                        Log.Error("ExecuteAsync: syncWorkerTask.InitiatedBy was null. Cannot execute sync task");
-                                    }
-                                    else
+                                    var initiatedByDisplay = newWorkerTask.InitiatedBy?.DisplayName ?? newWorkerTask.InitiatedByName ?? "Unknown";
+                                    Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
+                                        syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     {
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
                                         if (connectedSystem != null)
@@ -212,9 +213,14 @@ public class Worker : BackgroundService
                                                     }
 
                                                     // task completed. determine final status, depending on how the run profile execution went
-                                                    if (newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
+                                                    // Note: .All() returns true for empty collections, so we must check for Any() first
+                                                    var hasItems = newWorkerTask.Activity.RunProfileExecutionItems.Count > 0;
+                                                    var hasErrors = newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+                                                    var allErrors = hasItems && newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+
+                                                    if (allErrors)
                                                         await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
-                                                    else if (newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
+                                                    else if (hasErrors)
                                                         await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
                                                     else
                                                         await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
@@ -283,6 +289,34 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
+                                {
+                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for connected system id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}",
+                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+
+                                    try
+                                    {
+                                        // Execute the deletion (marks orphaned MVOs for deletion before deleting CS)
+                                        await taskJim.ConnectedSystems.ExecuteDeletionAsync(
+                                            deleteConnectedSystemTask.ConnectedSystemId,
+                                            deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+
+                                        // Task completed successfully, complete the activity
+                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing delete connected system task.");
+                                    }
+                                    finally
+                                    {
+                                        Log.Information("ExecuteAsync: Completed deleting connected system ({ConnectedSystemId}) in {ExecutionTime}",
+                                            deleteConnectedSystemTask.ConnectedSystemId, newWorkerTask.Activity.ExecutionTime);
+                                    }
+
+                                    break;
+                                }
                             }
                         
                             // very important: we must mark the task as complete once we're done
@@ -311,6 +345,62 @@ public class Worker : BackgroundService
     }
 
     #region private methods
+
+    /// <summary>
+    /// Tracks when the last housekeeping run occurred to avoid running too frequently.
+    /// </summary>
+    private DateTime _lastHousekeepingRun = DateTime.MinValue;
+
+    /// <summary>
+    /// Performs housekeeping tasks during worker idle time.
+    /// Currently includes: orphaned MVO cleanup based on deletion rules.
+    /// </summary>
+    private async Task PerformHousekeepingAsync(JimApplication jim)
+    {
+        // Only run housekeeping every 60 seconds to avoid unnecessary database queries
+        if ((DateTime.UtcNow - _lastHousekeepingRun).TotalSeconds < 60)
+            return;
+
+        _lastHousekeepingRun = DateTime.UtcNow;
+
+        try
+        {
+            // Get MVOs that are eligible for deletion (grace period has passed)
+            var mvosToDelete = await jim.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync(maxResults: 50);
+
+            if (mvosToDelete.Count > 0)
+            {
+                Log.Information("PerformHousekeepingAsync: Found {Count} orphaned MVOs eligible for deletion", mvosToDelete.Count);
+
+                foreach (var mvo in mvosToDelete)
+                {
+                    try
+                    {
+                        Log.Information("PerformHousekeepingAsync: Deleting orphaned MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}",
+                            mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate);
+
+                        // Evaluate export rules for the MVO deletion (create delete pending exports for provisioned CSOs)
+                        // Note: Most orphaned MVOs won't have CSOs, but this handles edge cases
+                        await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+                        // Delete the MVO
+                        await jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+
+                        Log.Information("PerformHousekeepingAsync: Successfully deleted orphaned MVO {MvoId}", mvo.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "PerformHousekeepingAsync: Failed to delete orphaned MVO {MvoId}", mvo.Id);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
+        }
+    }
+
     private static void InitialiseLogging()
     {
         var loggerConfiguration = new LoggerConfiguration();

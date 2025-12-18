@@ -18,7 +18,21 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count != 1) return null;
-        return (bool)entry.Attributes[attributeName][0];
+
+        var value = entry.Attributes[attributeName][0];
+
+        // LDAP returns Boolean values as strings ("TRUE"/"FALSE")
+        if (value is string stringValue)
+        {
+            return stringValue.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (value is bool boolValue)
+        {
+            return boolValue;
+        }
+
+        return null;
     }
 
     internal static List<Guid>? GetEntryAttributeGuidValues(SearchResultEntry entry, string attributeName)
@@ -52,7 +66,119 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count != 1) return null;
-        return (DateTime)entry.Attributes[attributeName][0];
+
+        var value = entry.Attributes[attributeName][0];
+
+        // LDAP returns DateTime values as strings in GeneralizedTime format (RFC 4517)
+        // Format: yyyyMMddHHmmss[.fraction][Z|±hhmm]
+        if (value is string stringValue)
+        {
+            var result = ParseLdapGeneralizedTime(stringValue);
+            if (result.HasValue)
+                return result;
+
+            // Fallback: try standard ISO 8601 parsing
+            if (DateTime.TryParse(stringValue, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedDate))
+            {
+                return parsedDate;
+            }
+            return null;
+        }
+
+        if (value is DateTime dateValue)
+        {
+            return dateValue;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Parses LDAP GeneralizedTime format (RFC 4517).
+    /// Supports: yyyyMMddHHmmss[.fraction][Z|±hhmm|±hh]
+    /// Examples: "20231215143000Z", "20231215143000.123456Z", "20231215143000+0530", "20231215143000-05"
+    /// </summary>
+    private static DateTime? ParseLdapGeneralizedTime(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length < 14)
+            return null;
+
+        // Extract the base datetime part (yyyyMMddHHmmss)
+        var basePart = value[..14];
+        var remaining = value[14..];
+
+        if (!DateTime.TryParseExact(basePart, "yyyyMMddHHmmss",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var dateTime))
+        {
+            return null;
+        }
+
+        // Handle fractional seconds and timezone
+        var fractionTicks = 0L;
+        var offset = TimeSpan.Zero;
+        var isUtc = false;
+
+        if (remaining.Length > 0)
+        {
+            // Handle fractional seconds (starts with '.')
+            if (remaining[0] == '.')
+            {
+                var fractionEnd = 1;
+                while (fractionEnd < remaining.Length && char.IsDigit(remaining[fractionEnd]))
+                    fractionEnd++;
+
+                var fractionStr = remaining[1..fractionEnd];
+                // Pad or truncate to 7 digits for .NET ticks precision
+                fractionStr = fractionStr.PadRight(7, '0')[..7];
+                if (long.TryParse(fractionStr, out fractionTicks))
+                {
+                    // fractionTicks is in 100-nanosecond units
+                }
+                remaining = remaining[fractionEnd..];
+            }
+
+            // Handle timezone: Z, +hhmm, -hhmm, +hh, -hh
+            if (remaining.Length > 0)
+            {
+                if (remaining == "Z")
+                {
+                    isUtc = true;
+                }
+                else if (remaining[0] == '+' || remaining[0] == '-')
+                {
+                    var sign = remaining[0] == '+' ? 1 : -1;
+                    var tzPart = remaining[1..];
+
+                    int hours = 0, minutes = 0;
+                    if (tzPart.Length >= 2 && int.TryParse(tzPart[..2], out hours))
+                    {
+                        if (tzPart.Length >= 4 && int.TryParse(tzPart[2..4], out minutes))
+                        {
+                            // Format: ±hhmm
+                        }
+                        // Format: ±hh (minutes remain 0)
+                        offset = new TimeSpan(sign * hours, sign * minutes, 0);
+                        isUtc = true; // Has explicit timezone
+                    }
+                }
+            }
+        }
+
+        // Add fractional ticks
+        dateTime = dateTime.AddTicks(fractionTicks);
+
+        // Convert to UTC
+        if (isUtc)
+        {
+            // Subtract offset to get UTC (if +0530, subtract 5:30 to get UTC)
+            dateTime = dateTime - offset;
+            return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
+        }
+
+        // No timezone specified - assume UTC (most LDAP servers use UTC)
+        return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
     }
 
     internal static List<string>? GetEntryAttributeStringValues(SearchResultEntry entry, string attributeName)
@@ -60,8 +186,9 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
+        // PostgreSQL cannot store null bytes (0x00) in text columns, so strip them
         return (from string value in entry.Attributes[attributeName].GetValues(typeof(string))
-            select value).ToList();
+            select value.Replace("\0", string.Empty)).ToList();
     }
 
     internal static List<byte[]>? GetEntryAttributeBinaryValues(SearchResultEntry entry, string attributeName)
@@ -78,8 +205,19 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
-        return (from int value in entry.Attributes[attributeName].GetValues(typeof(int))
-            select value).ToList();
+        // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
+        // Some AD attributes (like Large Integer syntax) may exceed Int32 range, so use TryParse
+        var result = new List<int>();
+        foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
+        {
+            if (int.TryParse(value, out var intValue))
+            {
+                result.Add(intValue);
+            }
+            // Values that overflow Int32 are silently skipped - this is a limitation
+            // of JIM's current data model which doesn't have a separate Int64 type
+        }
+        return result.Count > 0 ? result : null;
     }
 
     internal static int? GetEntryAttributeIntValue(SearchResultEntry entry, string attributeName)
@@ -126,5 +264,49 @@ internal static class LdapConnectorUtilities
             127 => AttributeDataType.Reference,
             _ => throw new InvalidDataException("Unsupported omSyntax value: " + omSyntax),
         };
+    }
+
+    /// <summary>
+    /// Parses a distinguished name into its RDN and parent DN components.
+    /// For example: "CN=John Smith,OU=Users,DC=example,DC=com" returns ("CN=John Smith", "OU=Users,DC=example,DC=com")
+    /// </summary>
+    internal static (string? Rdn, string? ParentDn) ParseDistinguishedName(string dn)
+    {
+        if (string.IsNullOrEmpty(dn))
+            return (null, null);
+
+        // Find the first unescaped comma to split RDN from parent
+        var commaIndex = FindUnescapedComma(dn);
+
+        if (commaIndex == -1)
+        {
+            // No comma found - the entire DN is the RDN (root object)
+            return (dn, null);
+        }
+
+        var rdn = dn.Substring(0, commaIndex);
+        var parentDn = dn.Substring(commaIndex + 1);
+
+        return (rdn, parentDn);
+    }
+
+    /// <summary>
+    /// Finds the index of the first unescaped comma in a DN string.
+    /// Commas can be escaped with backslash (\,) in LDAP DNs.
+    /// </summary>
+    internal static int FindUnescapedComma(string dn)
+    {
+        for (var i = 0; i < dn.Length; i++)
+        {
+            if (dn[i] == ',')
+            {
+                // Check if this comma is escaped (preceded by backslash)
+                if (i == 0 || dn[i - 1] != '\\')
+                {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 }

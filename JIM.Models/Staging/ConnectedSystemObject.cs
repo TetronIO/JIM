@@ -87,7 +87,7 @@ public class ConnectedSystemObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.SingleOrDefault(q => q.Attribute.Id == ExternalIdAttributeId);
+            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == ExternalIdAttributeId);
         } 
     }
 
@@ -99,7 +99,7 @@ public class ConnectedSystemObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.SingleOrDefault(q => q.Attribute.Id == SecondaryExternalIdAttributeId);
+            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == SecondaryExternalIdAttributeId);
         }
     }
 
@@ -113,7 +113,8 @@ public class ConnectedSystemObject
 
             // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that are not so standards based
             // we may have to look at supporting a configurable attribute on the Connected System to use as the label.
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
+            // Use FirstOrDefault to handle edge cases where duplicate attributes might exist
+            var av = AttributeValues.FirstOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
             if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 

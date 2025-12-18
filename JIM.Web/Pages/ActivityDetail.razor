@@ -54,19 +54,33 @@
 
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">When:</MudText>
-                <MudText Class="mud-text-secondary">@_activity.Created</MudText>
+                <MudText Class="mud-text-secondary" title="@_activity.Created.ToLocalTime().ToFriendlyDate()">@_activity.Created.ToLocalTime().ToRelativeTime()</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Initiated By:</MudText>
-                @if (_activity.InitiatedBy != null)
-                {
-                    <MudText>
-                        <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedBy)</MudLink>
-                    </MudText>
-                }
-                else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
-                {
-                    <MudText>@_activity.InitiatedByName</MudText>
+                @{
+                    if (_activity.InitiatedBy != null)
+                    {
+                        <MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedBy)</MudLink>
+                        </MudText>
+                    }
+                    else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
+                    {
+                        var apiKeyName = Utilities.ExtractApiKeyName(_activity.InitiatedByName);
+                        if (apiKeyName != null)
+                        {
+                            <MudText>
+                                <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                                <MudLink Href="@Utilities.GetApiKeysHref()">@apiKeyName</MudLink>
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText>@_activity.InitiatedByName</MudText>
+                        }
+                    }
                 }
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
@@ -75,11 +89,11 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Execution Time:</MudText>
-                <MudText Class="mud-text-secondary">@_activity.ExecutionTime</MudText>
+                <MudText Class="mud-text-secondary">@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Total Activity Time:</MudText>
-                <MudText Class="mud-text-secondary">@_activity.TotalActivityTime</MudText>
+                <MudText Class="mud-text-secondary">@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>

@@ -1,0 +1,259 @@
+# Integration Testing Systems
+# This compose file defines external systems used for integration testing
+# See docs/INTEGRATION_TESTING.md for usage instructions
+#
+# PERFORMANCE OPTIMISATION:
+# By default, this uses pre-built Samba AD images with domain provisioning already complete.
+# This reduces startup time from ~5 minutes to ~30 seconds per instance.
+#
+# To use pre-built images (default, fast):
+#   docker compose -f docker-compose.integration-tests.yml up -d
+#
+# To build pre-built images locally:
+#   pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
+#
+# To fall back to standard images (slow, but no pre-build required):
+#   SAMBA_IMAGE=nowsci/samba-domain docker compose -f docker-compose.integration-tests.yml up -d
+
+services:
+  # Phase 1 - Scenario 1 & 3: HR to Directory, GALSYNC
+  # Primary Samba AD instance for most scenarios
+  samba-ad-primary:
+    image: ${SAMBA_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-samba-ad:primary}
+    build:
+      context: ./test/integration/docker/samba-ad-prebuilt
+      dockerfile: Dockerfile
+      args:
+        SAMBA_DOMAIN: TESTDOMAIN.LOCAL
+        SAMBA_PASSWORD: Test@123!
+    container_name: samba-ad-primary
+    privileged: true
+    environment:
+      - DOMAIN=TESTDOMAIN.LOCAL
+      - DOMAINPASS=Test@123!
+      - DNSFORWARDER=8.8.8.8
+      - HOSTIP=172.18.0.2
+      - NOCOMPLEXITY=true
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - samba-primary-data:/var/lib/samba
+      - samba-primary-config:/etc/samba/external
+      - test-csv-data:/connector-files
+    hostname: dc1
+    networks:
+      - jim-network
+    healthcheck:
+      test: ["CMD-SHELL", "smbclient -L localhost -U% -N || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Pre-built image starts much faster (30s vs 180s)
+      start_period: ${SAMBA_START_PERIOD:-30s}
+
+  # Phase 1 - Scenario 2: Directory to Directory Sync (Source)
+  samba-ad-source:
+    image: ${SAMBA_IMAGE_SOURCE:-ghcr.io/tetronio/jim-samba-ad:source}
+    build:
+      context: ./test/integration/docker/samba-ad-prebuilt
+      dockerfile: Dockerfile
+      args:
+        SAMBA_DOMAIN: SOURCEDOMAIN.LOCAL
+        SAMBA_PASSWORD: Test@123!
+    container_name: samba-ad-source
+    privileged: true
+    environment:
+      - DOMAIN=SOURCEDOMAIN.LOCAL
+      - DOMAINPASS=Test@123!
+      - DNSFORWARDER=8.8.8.8
+      - NOCOMPLEXITY=true
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - samba-source-data:/var/lib/samba
+      - samba-source-config:/etc/samba/external
+    hostname: dc1-source
+    networks:
+      - jim-network
+    profiles:
+      - scenario2
+    healthcheck:
+      test: ["CMD-SHELL", "smbclient -L localhost -U% -N || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: ${SAMBA_START_PERIOD:-30s}
+
+  # Phase 1 - Scenario 2: Directory to Directory Sync (Target)
+  samba-ad-target:
+    image: ${SAMBA_IMAGE_TARGET:-ghcr.io/tetronio/jim-samba-ad:target}
+    build:
+      context: ./test/integration/docker/samba-ad-prebuilt
+      dockerfile: Dockerfile
+      args:
+        SAMBA_DOMAIN: TARGETDOMAIN.LOCAL
+        SAMBA_PASSWORD: Test@123!
+    container_name: samba-ad-target
+    privileged: true
+    environment:
+      - DOMAIN=TARGETDOMAIN.LOCAL
+      - DOMAINPASS=Test@123!
+      - DNSFORWARDER=8.8.8.8
+      - NOCOMPLEXITY=true
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - samba-target-data:/var/lib/samba
+      - samba-target-config:/etc/samba/external
+    hostname: dc1-target
+    networks:
+      - jim-network
+    profiles:
+      - scenario2
+    healthcheck:
+      test: ["CMD-SHELL", "smbclient -L localhost -U% -N || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: ${SAMBA_START_PERIOD:-30s}
+
+  # Phase 2 - Scenario 4: Multi-Source (SQL Server - HRIS A)
+  sqlserver-hris-a:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver-hris-a
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=Test@123!
+      - MSSQL_PID=Developer
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - jim-network
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "Test@123!", "-Q", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Phase 2 - Scenario 4: Multi-Source (Oracle - HRIS B)
+  oracle-hris-b:
+    image: container-registry.oracle.com/database/express:21c-slim
+    container_name: oracle-hris-b
+    environment:
+      - ORACLE_PWD=Test@123!
+      - ORACLE_CHARACTERSET=AL32UTF8
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    networks:
+      - jim-network
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "sh", "-c", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s sys/Test@123!@localhost/XE as sysdba"]
+      interval: 60s
+      timeout: 30s
+      retries: 10
+      start_period: 300s
+
+  # Phase 2 - Scenario 5: Database Target
+  postgres-test:
+    image: postgres:16
+    container_name: postgres-target
+    environment:
+      - POSTGRES_PASSWORD=Test@123!
+      - POSTGRES_USER=jimtest
+      - POSTGRES_DB=jimtest
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    networks:
+      - jim-network
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "jimtest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Phase 2 - Additional LDAP validation
+  openldap:
+    image: osixia/openldap:latest
+    container_name: openldap-test
+    environment:
+      - LDAP_ORGANISATION=TestOrg
+      - LDAP_DOMAIN=test.local
+      - LDAP_ADMIN_PASSWORD=admin
+      - LDAP_CONFIG_PASSWORD=config
+      - LDAP_READONLY_USER=false
+      - LDAP_TLS=false
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - openldap-data:/var/lib/ldap
+      - openldap-config:/etc/ldap/slapd.d
+    networks:
+      - jim-network
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost", "-b", "dc=test,dc=local", "-D", "cn=admin,dc=test,dc=local", "-w", "admin"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Phase 2 - MySQL testing
+  mysql-test:
+    image: mysql:8
+    container_name: mysql-test
+    environment:
+      - MYSQL_ROOT_PASSWORD=Test@123!
+      - MYSQL_DATABASE=jimtest
+      - MYSQL_USER=jimtest
+      - MYSQL_PASSWORD=Test@123!
+    # No ports exposed - internal to Docker network only for testing
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - jim-network
+    profiles:
+      - phase2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pTest@123!"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  samba-primary-data:
+    name: jim-integration-samba-primary
+  samba-primary-config:
+    name: jim-integration-samba-primary-config
+  samba-source-data:
+    name: jim-integration-samba-source
+  samba-source-config:
+    name: jim-integration-samba-source-config
+  samba-target-data:
+    name: jim-integration-samba-target
+  samba-target-config:
+    name: jim-integration-samba-target-config
+  test-csv-data:
+    name: jim-integration-csv-data
+  openldap-data:
+    name: jim-integration-openldap-data
+  openldap-config:
+    name: jim-integration-openldap-config
+  sqlserver-data:
+    name: jim-integration-sqlserver-data
+  postgres-test-data:
+    name: jim-integration-postgres-test-data
+  mysql-data:
+    name: jim-integration-mysql-data
+  oracle-data:
+    name: jim-integration-oracle-data
+
+networks:
+  jim-network:
+    external: true
+    name: jim-network

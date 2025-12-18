@@ -2,6 +2,7 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -68,6 +69,61 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Updates a metaverse object type's deletion rules.
+    /// </summary>
+    /// <param name="id">The unique identifier of the object type.</param>
+    /// <param name="request">The update request containing deletion rule settings.</param>
+    /// <returns>The updated object type details.</returns>
+    /// <response code="200">Object type updated successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="404">Object type not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPut("object-types/{id:int}", Name = "UpdateObjectType")]
+    [ProducesResponseType(typeof(MetaverseObjectTypeDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateObjectTypeAsync(int id, [FromBody] UpdateMetaverseObjectTypeRequest request)
+    {
+        _logger.LogInformation("Updating metaverse object type: {Id}", id);
+
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+        // Apply updates
+        if (request.DeletionRule.HasValue)
+            objectType.DeletionRule = request.DeletionRule.Value;
+
+        if (request.DeletionGracePeriodDays.HasValue)
+        {
+            if (request.DeletionGracePeriodDays.Value < 0)
+                return BadRequest(ApiErrorResponse.BadRequest("DeletionGracePeriodDays cannot be negative."));
+            objectType.DeletionGracePeriodDays = request.DeletionGracePeriodDays.Value == 0 ? null : request.DeletionGracePeriodDays.Value;
+        }
+
+        if (request.DeletionTriggerConnectedSystemIds != null)
+        {
+            // Validate that the connected system IDs exist
+            foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
+            {
+                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+                if (connectedSystem == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
+            }
+            objectType.DeletionTriggerConnectedSystemIds = request.DeletionTriggerConnectedSystemIds;
+        }
+
+        await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
+
+        _logger.LogInformation("Updated metaverse object type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
+            objectType.Id, objectType.Name, objectType.DeletionRule, objectType.DeletionGracePeriodDays);
+
+        var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
+        return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
     /// Gets all metaverse attributes with optional pagination, sorting, and filtering.
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
@@ -105,6 +161,159 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
 
         return Ok(MetaverseAttributeDetailDto.FromEntity(attribute));
+    }
+
+    /// <summary>
+    /// Creates a new metaverse attribute.
+    /// </summary>
+    /// <param name="request">The attribute creation request.</param>
+    /// <returns>The created attribute details.</returns>
+    /// <response code="201">Attribute created successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("attributes", Name = "CreateAttribute")]
+    [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateAttributeAsync([FromBody] CreateMetaverseAttributeRequest request)
+    {
+        _logger.LogInformation("Creating metaverse attribute: {Name}", request.Name);
+
+        // Check if attribute with same name already exists
+        var existing = await _application.Metaverse.GetMetaverseAttributeAsync(request.Name);
+        if (existing != null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Attribute with name '{request.Name}' already exists."));
+
+        var attribute = new MetaverseAttribute
+        {
+            Name = request.Name,
+            Type = request.Type,
+            AttributePlurality = request.AttributePlurality,
+            Created = DateTime.UtcNow,
+            MetaverseObjectTypes = new List<MetaverseObjectType>()
+        };
+
+        // Associate with object types if specified
+        if (request.ObjectTypeIds != null && request.ObjectTypeIds.Count > 0)
+        {
+            foreach (var objectTypeId in request.ObjectTypeIds)
+            {
+                var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, false);
+                if (objectType == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Object type with ID {objectTypeId} not found."));
+
+                attribute.MetaverseObjectTypes.Add(objectType);
+            }
+        }
+
+        await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, null);
+
+        _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
+
+        var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
+        // Use Created with explicit URL instead of CreatedAtAction to avoid API versioning route generation issues
+        return Created($"/api/v1/metaverse/attributes/{attribute.Id}", MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Updates an existing metaverse attribute.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute.</param>
+    /// <param name="request">The attribute update request.</param>
+    /// <returns>The updated attribute details.</returns>
+    /// <response code="200">Attribute updated successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="404">Attribute not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPut("attributes/{id:int}", Name = "UpdateAttribute")]
+    [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateAttributeAsync(int id, [FromBody] UpdateMetaverseAttributeRequest request)
+    {
+        _logger.LogInformation("Updating metaverse attribute: {Id}", id);
+
+        // If we're updating object type associations, include them in the query to properly manage the many-to-many relationship
+        var attribute = request.ObjectTypeIds != null
+            ? await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id)
+            : await _application.Metaverse.GetMetaverseAttributeAsync(id);
+
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        if (attribute.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Cannot modify built-in attributes."));
+
+        // Apply updates
+        if (!string.IsNullOrEmpty(request.Name))
+        {
+            // Check if new name conflicts with existing
+            var existing = await _application.Metaverse.GetMetaverseAttributeAsync(request.Name);
+            if (existing != null && existing.Id != id)
+                return BadRequest(ApiErrorResponse.BadRequest($"Attribute with name '{request.Name}' already exists."));
+            attribute.Name = request.Name;
+        }
+
+        if (request.Type.HasValue)
+            attribute.Type = request.Type.Value;
+
+        if (request.AttributePlurality.HasValue)
+            attribute.AttributePlurality = request.AttributePlurality.Value;
+
+        // Update object type associations if specified
+        if (request.ObjectTypeIds != null)
+        {
+            // Collection is loaded from the query when ObjectTypeIds is specified
+            attribute.MetaverseObjectTypes.Clear();
+            foreach (var objectTypeId in request.ObjectTypeIds)
+            {
+                var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, false);
+                if (objectType == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Object type with ID {objectTypeId} not found."));
+
+                attribute.MetaverseObjectTypes.Add(objectType);
+            }
+        }
+
+        await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, null);
+
+        _logger.LogInformation("Updated metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
+
+        var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
+        return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Deletes a metaverse attribute.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute to delete.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Attribute deleted successfully.</response>
+    /// <response code="400">Cannot delete built-in or in-use attribute.</response>
+    /// <response code="404">Attribute not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpDelete("attributes/{id:int}", Name = "DeleteAttribute")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteAttributeAsync(int id)
+    {
+        _logger.LogInformation("Deleting metaverse attribute: {Id}", id);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        if (attribute.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Cannot delete built-in attributes."));
+
+        await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, null);
+
+        _logger.LogInformation("Deleted metaverse attribute: {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -176,5 +385,109 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
 
         return Ok(MetaverseObjectDto.FromEntity(obj));
+    }
+
+    /// <summary>
+    /// Gets a paginated list of metaverse objects pending deletion.
+    /// </summary>
+    /// <remarks>
+    /// Returns MVOs that have been disconnected from their last connector and are awaiting
+    /// automatic deletion after their grace period expires. Use this endpoint to monitor
+    /// identities scheduled for cleanup.
+    /// </remarks>
+    /// <param name="pagination">Pagination parameters (page, pageSize).</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>A paginated list of MVOs pending deletion.</returns>
+    [HttpGet("pending-deletions", Name = "GetPendingDeletions")]
+    [ProducesResponseType(typeof(PaginatedResponse<PendingDeletionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingDeletionsAsync(
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] int? objectTypeId = null)
+    {
+        _logger.LogDebug("Getting pending deletions (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId})",
+            pagination.Page, pagination.PageSize, objectTypeId);
+
+        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+            page: pagination.Page,
+            pageSize: pagination.PageSize,
+            objectTypeId: objectTypeId);
+
+        var dtos = result.Results.Select(PendingDeletionDto.FromEntity);
+
+        var response = new PaginatedResponse<PendingDeletionDto>
+        {
+            Items = dtos,
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Gets the count of metaverse objects pending deletion.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>The count of MVOs pending deletion.</returns>
+    [HttpGet("pending-deletions/count", Name = "GetPendingDeletionsCount")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingDeletionsCountAsync([FromQuery] int? objectTypeId = null)
+    {
+        _logger.LogDebug("Getting pending deletions count (TypeId: {TypeId})", objectTypeId);
+        var count = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+        return Ok(count);
+    }
+
+    /// <summary>
+    /// Gets summary statistics for pending deletions.
+    /// </summary>
+    /// <remarks>
+    /// Provides an overview of deletion status including total count and counts by status:
+    /// - Deprovisioning: MVOs still connected to other systems, awaiting cascade deletion
+    /// - AwaitingGracePeriod: MVOs fully disconnected, waiting for grace period to expire
+    /// - ReadyForDeletion: MVOs eligible for deletion (grace period expired, no connectors)
+    /// </remarks>
+    /// <returns>Summary statistics for pending deletions.</returns>
+    [HttpGet("pending-deletions/summary", Name = "GetPendingDeletionsSummary")]
+    [ProducesResponseType(typeof(PendingDeletionSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingDeletionsSummaryAsync()
+    {
+        _logger.LogDebug("Getting pending deletions summary");
+
+        // Get all pending deletions to calculate summary
+        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+            page: 1,
+            pageSize: 100,
+            objectTypeId: null);
+
+        var now = DateTime.UtcNow;
+        var allPending = result.Results;
+
+        // Get total count (may be more than 100)
+        var totalCount = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync();
+
+        // Calculate status counts
+        var deprovisioningCount = allPending.Count(m => m.ConnectedSystemObjects.Any());
+        var readyForDeletionCount = allPending.Count(m =>
+            !m.ConnectedSystemObjects.Any() &&
+            (!m.DeletionEligibleDate.HasValue || m.DeletionEligibleDate.Value <= now));
+        var awaitingGracePeriodCount = allPending.Count(m =>
+            !m.ConnectedSystemObjects.Any() &&
+            m.DeletionEligibleDate.HasValue &&
+            m.DeletionEligibleDate.Value > now);
+
+        var summary = new PendingDeletionSummary
+        {
+            TotalCount = totalCount,
+            DeprovisioningCount = deprovisioningCount,
+            AwaitingGracePeriodCount = awaitingGracePeriodCount,
+            ReadyForDeletionCount = readyForDeletionCount
+        };
+
+        return Ok(summary);
     }
 }

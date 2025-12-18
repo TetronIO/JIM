@@ -111,8 +111,8 @@ function Get-JIMConnectedSystem {
                 Write-Verbose "Getting all Connected Systems"
                 $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems"
 
-                # Handle paginated response
-                $systems = if ($response.items) { $response.items } else { $response }
+                # Handle paginated response - check if 'items' property exists (not if it's truthy)
+                $systems = if ($null -ne $response.items) { $response.items } else { $response }
 
                 # Filter by name if specified
                 if ($Name) {

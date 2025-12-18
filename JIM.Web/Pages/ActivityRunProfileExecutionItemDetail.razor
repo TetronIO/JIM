@@ -38,11 +38,31 @@
             </MudPaper>
         }
 
+        @{
+            string? apiKeyName = null;
+            if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
+            {
+                apiKeyName = Utilities.ExtractApiKeyName(_activity.InitiatedByName);
+            }
+        }
         @if (_activity is { InitiatedBy: not null })
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Initiated By</MudText>
-                <MudText><MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedBy))" Typo="Typo.h5">@_activity.InitiatedBy.DisplayName</MudLink></MudText>
+                <MudText>
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    <MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedBy))" Typo="Typo.h5">@_activity.InitiatedBy.DisplayName</MudLink>
+                </MudText>
+            </MudPaper>
+        }
+        else if (apiKeyName != null)
+        {
+            <MudPaper Class="pa-5" Outlined="true">
+                <MudText Typo="Typo.overline">Initiated By</MudText>
+                <MudText>
+                    <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    <MudLink Href="@Utilities.GetApiKeysHref()" Typo="Typo.h5">@apiKeyName</MudLink>
+                </MudText>
             </MudPaper>
         }
         else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))

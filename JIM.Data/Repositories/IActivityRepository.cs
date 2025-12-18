@@ -20,7 +20,8 @@ public interface IActivityRepository
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true);
+        bool sortDescending = true,
+        Guid? initiatedById = null);
 
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize);
 

@@ -70,3 +70,65 @@ public class ConnectedSystemSettingValueUpdate
     /// </summary>
     public bool? CheckboxValue { get; set; }
 }
+
+/// <summary>
+/// Request DTO for updating a Connected System Object Type.
+/// </summary>
+public class UpdateConnectedSystemObjectTypeRequest
+{
+    /// <summary>
+    /// Whether this object type is selected for management by JIM.
+    /// </summary>
+    public bool? Selected { get; set; }
+
+    /// <summary>
+    /// Controls whether Metaverse Object attribute values contributed by a Connected System Object of this type
+    /// should be removed when the CSO is obsoleted.
+    /// </summary>
+    public bool? RemoveContributedAttributesOnObsoletion { get; set; }
+}
+
+/// <summary>
+/// Request DTO for updating a Connected System Attribute.
+/// </summary>
+public class UpdateConnectedSystemAttributeRequest
+{
+    /// <summary>
+    /// Whether this attribute is selected for management by JIM.
+    /// </summary>
+    public bool? Selected { get; set; }
+
+    /// <summary>
+    /// Indicates if this attribute is a unique identifier for the object type in the connected system.
+    /// </summary>
+    public bool? IsExternalId { get; set; }
+
+    /// <summary>
+    /// Indicates if this attribute is used as a secondary identifier by the connected system (e.g., DN in LDAP).
+    /// </summary>
+    public bool? IsSecondaryExternalId { get; set; }
+}
+
+/// <summary>
+/// Request DTO for updating a Connected System Partition.
+/// </summary>
+public class UpdateConnectedSystemPartitionRequest
+{
+    /// <summary>
+    /// Whether this partition is selected for import operations.
+    /// When selected, objects within this partition will be imported during sync.
+    /// </summary>
+    public bool? Selected { get; set; }
+}
+
+/// <summary>
+/// Request DTO for updating a Connected System Container.
+/// </summary>
+public class UpdateConnectedSystemContainerRequest
+{
+    /// <summary>
+    /// Whether this container is selected for import operations.
+    /// When selected, objects within this container will be imported during sync.
+    /// </summary>
+    public bool? Selected { get; set; }
+}

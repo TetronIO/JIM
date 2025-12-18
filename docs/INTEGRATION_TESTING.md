@@ -2,24 +2,189 @@
 
 | | |
 |---|---|
-| **Status** | Planned |
+| **Status** | **In Progress** |
 | **Phase 1 Target** | MVP Validation |
 | **Phase 2 Target** | Post-MVP (after Database Connector #170) |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 
 ---
 
+## ⚡ Quick Start
+
+**First time running integration tests?** Follow these steps:
+
+```powershell
+# 1. Start JIM stack (if not already running)
+jim-stack  # or: docker compose up -d
+
+# 2. Start test infrastructure (Samba AD)
+docker compose -f docker-compose.integration-tests.yml up -d
+# Wait ~2 minutes for Samba AD to initialise
+
+# 3. Create Infrastructure API Key (one-time setup per JIM database)
+./test/integration/Setup-InfrastructureApiKey.ps1
+
+# 4. Run Scenario 1 with Nano template (3 users)
+./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
+```
+
+**Prerequisites:**
+- JIM stack running (`jim-stack` or `docker compose up -d`)
+- Samba AD running (`docker compose -f docker-compose.integration-tests.yml up -d`)
+- API key created (step 3 creates one automatically)
+
+**Current Limitations:**
+- ⚠️ Samba AD takes ~2 minutes to initialise on first start
+- ⚠️ Progress bars not yet implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
+- ✅ Unit tests all passing (553 tests)
+- ✅ Expression evaluation support implemented
+
+---
+
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Data Scale Templates](#data-scale-templates)
-4. [Test Scenarios](#test-scenarios)
-5. [Setup & Configuration](#setup--configuration)
-6. [Running Tests Locally](#running-tests-locally)
-7. [CI/CD Integration](#cicd-integration)
-8. [Writing New Scenarios](#writing-new-scenarios)
-9. [Troubleshooting](#troubleshooting)
+1. [Quick Start](#-quick-start)
+2. [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference)
+3. [Overview](#overview)
+4. [Architecture](#architecture)
+5. [Data Scale Templates](#data-scale-templates)
+6. [Test Scenarios](#test-scenarios)
+7. [Setup & Configuration](#setup--configuration)
+8. [Running Tests Locally](#running-tests-locally)
+9. [CI/CD Integration](#cicd-integration)
+10. [Writing New Scenarios](#writing-new-scenarios)
+11. [Troubleshooting](#troubleshooting)
+12. [Known Issues & TODOs](#known-issues--todos)
+
+---
+
+## Test Lifecycle Quick Reference
+
+Integration tests require a complete environment reset between runs to ensure repeatable, idempotent results. This includes resetting **both** external systems (Samba AD, databases) **and** JIM itself (metaverse, configuration).
+
+### DevContainer / Local Development
+
+For developers running tests locally in a DevContainer or development environment:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         LOCAL DEVELOPMENT LIFECYCLE                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. STAND UP                     2. POPULATE                                │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐                │
+│  │ # Start external systems│     │ # Populate test data    │                │
+│  │ docker compose -f       │     │ ./Populate-SambaAD.ps1  │                │
+│  │   docker-compose.       │ ──▶ │   -Template Small       │                │
+│  │   integration-tests.yml │     │ ./Generate-TestCSV.ps1  │                │
+│  │   up -d                 │     │   -Template Small       │                │
+│  └─────────────────────────┘     └─────────────────────────┘                │
+│                                            │                                │
+│                                            ▼                                │
+│  3. CONFIGURE JIM                4. EXECUTE TESTS                           │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐                │
+│  │ # Configure via API     │     │ # Run scenario steps    │                │
+│  │ ./Setup-Scenario1.ps1   │ ──▶ │ ./Invoke-Scenario1...   │                │
+│  │   -ApiKey $key          │     │   -Step All             │                │
+│  │                         │     │   -Template Small       │                │
+│  └─────────────────────────┘     └─────────────────────────┘                │
+│                                            │                                │
+│                                            ▼                                │
+│  5. RESET (for next run)                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ # Reset BOTH external systems AND JIM database                      │    │
+│  │ docker compose -f docker-compose.integration-tests.yml down -v      │    │
+│  │ docker compose -f docker-compose.yml down -v  # Reset JIM's DB      │    │
+│  │                                                                     │    │
+│  │ # Then stand up fresh for next test run                             │    │
+│  │ docker compose -f docker-compose.yml up -d    # JIM stack           │    │
+│  │ docker compose -f docker-compose.integration-tests.yml up -d        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Commands:**
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| Stand up external systems | `docker compose -f docker-compose.integration-tests.yml up -d` | Start Samba AD, databases |
+| Stand up JIM | `jim-stack` or `docker compose up -d` | Start JIM services |
+| Populate test data | `./Populate-SambaAD.ps1 -Template Small` | Create users/groups in external systems |
+| Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Sync Rules |
+| Run tests | `./Invoke-Scenario1-HRToDirectory.ps1 -Step All` | Execute test scenario |
+| Reset external systems | `docker compose -f docker-compose.integration-tests.yml down -v` | Remove external system data |
+| Reset JIM | `docker compose -f docker-compose.yml down -v` | Remove JIM database (metaverse, config) |
+
+### CI/CD Pipeline
+
+For automated testing in GitHub Actions:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            CI/CD PIPELINE LIFECYCLE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ WORKFLOW TRIGGER (Manual via workflow_dispatch)                      │   │
+│  │ - Select Template: Micro / Small / Medium / Large / XLarge / XXLarge │   │
+│  │ - Select Phase: 1 (MVP) or 2 (Post-MVP)                              │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                     │                                       │
+│                                     ▼                                       │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
+│  │ 1. STAND UP     │  │ 2. BUILD JIM    │  │ 3. CONFIGURE    │              │
+│  │ - JIM stack     │─▶│ - dotnet build  │─▶│ - Setup scripts │              │
+│  │ - External sys  │  │ - Wait ready    │  │ - Populate data │              │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
+│                                                    │                        │
+│                                                    ▼                        │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
+│  │ 6. TEAR DOWN    │  │ 5. COLLECT      │  │ 4. EXECUTE      │              │
+│  │ (always runs)   │◀─│ - Test results  │◀─│ - Run scenarios │              │
+│  │ - down -v ALL   │  │ - Upload artefacts│ │ - Validate      │              │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
+│         │                                                                   │
+│         ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ CLEAN STATE: Runner is fresh for next workflow run                   │   │
+│  │ No persistent volumes = automatic reset                              │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**CI/CD Characteristics:**
+
+| Aspect | Behaviour |
+|--------|-----------|
+| **Trigger** | Manual only (`workflow_dispatch`) - not on every commit |
+| **Isolation** | Fresh GitHub runner = clean state guaranteed |
+| **Reset** | `docker compose down -v` in `always()` step ensures cleanup even on failure |
+| **Idempotency** | Each run is fully independent; no state persists between runs |
+| **Timeout** | 2 hours maximum to prevent runaway costs |
+
+### Why Reset JIM's Database?
+
+Integration tests create real data in JIM:
+
+- **Metaverse Objects** - Identity records from imports
+- **Connected System Objects** - Links to external systems
+- **Sync Rules** - Attribute flow configurations
+- **Run Profiles** - Execution schedules
+- **Activity History** - Sync operation logs
+
+Without resetting JIM, subsequent test runs would:
+- Fail join rules (objects already exist)
+- Have incorrect object counts
+- Accumulate stale configuration
+- Produce non-deterministic results
+
+**The `-v` flag removes Docker volumes**, which contain:
+- JIM's PostgreSQL database (all metaverse data, configuration)
+- External system data (Samba AD, SQL Server, etc.)
+
+This guarantees a clean slate for each test run.
 
 ---
 
@@ -37,7 +202,7 @@ The Integration Testing Framework provides end-to-end validation of JIM's synchr
 
 - **Realistic Systems**: Test against actual Samba AD, SQL Server, Oracle, etc., not mocks
 - **Idempotent**: Complete stand-up/tear-down for repeatable testing
-- **Scalable**: Template-based data sets from 10 to 1M objects
+- **Scalable**: Template-based data sets from 3 to 1M objects
 - **Phased**: Phase 1 (MVP) uses LDAP/CSV; Phase 2 adds databases
 - **Opt-In**: Manual trigger only, not automatic on every commit
 
@@ -53,7 +218,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 
 **Common parameters across all scenario scripts**:
 - `-Step <StepName>` - Execute a specific test step (or `All` for full sequence)
-- `-Template <Size>` - Data scale template (Micro, Small, Medium, Large, XLarge, XXLarge)
+- `-Template <Size>` - Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
 
@@ -138,6 +303,7 @@ Choose the appropriate template based on test goals:
 
 | Template   | Users     | Groups  | Avg Memberships | Total Objects | Use Case                          | Est. Time  |
 |------------|-----------|---------|-----------------|---------------|-----------------------------------|------------|
+| **Nano**   | 3         | 1       | 1               | 4             | Fast dev iteration, debugging     | < 1 min    |
 | **Micro**  | 10        | 3       | 3               | 13            | Quick smoke tests, development    | < 2 min    |
 | **Small**  | 100       | 20      | 5               | 120           | Small business, unit tests        | < 5 min    |
 | **Medium** | 1,000     | 100     | 8               | 1,100         | Medium enterprise, CI/CD          | < 15 min   |
@@ -504,10 +670,56 @@ Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
 
 #### Dependencies
 
-| Dependency | Issue | Status | Required For |
-|------------|-------|--------|--------------|
-| API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | Planned | Non-interactive auth |
-| PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | Planned | JIM configuration |
+| Dependency | Issue | Status | Notes |
+|------------|-------|--------|-------|
+| API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | **✅ Complete** | API key authentication fully functional for all endpoints |
+| PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | **✅ Complete** | Core cmdlets implemented and tested |
+
+#### API Key Authentication Status (Issue #175)
+
+**✅ RESOLVED** - API key authentication is now fully functional for both GET and POST/PUT/DELETE operations.
+
+**Completed:**
+- ✅ Created 3 connector definition API endpoints (GET list, GET by ID, GET by name)
+- ✅ Created `Get-JIMConnectorDefinition` PowerShell cmdlet
+- ✅ Added cmdlet to module manifest exports
+- ✅ OIDC redirect suppressed for API requests (returns 401 JSON instead of 302)
+- ✅ Added detailed logging to API key authentication handler
+- ✅ **Fixed**: API key handler now invoked for `[Authorize]` protected endpoints
+- ✅ **Fixed**: DbContext threading issues in authentication handler
+- ✅ **Fixed**: Write operations (POST/PUT/DELETE) now work with API key auth
+- ✅ **Fixed**: Null initiatedBy handling for API key authentication
+- ✅ Build succeeds, all 395 unit tests pass
+
+**Root Cause & Fix:**
+The issue was that ASP.NET Core's authentication pipeline only runs the DefaultScheme (Cookie) by default. Other schemes are only tried when explicitly requested. The fix was to add `ForwardDefaultSelector` to Cookie authentication options, which conditionally forwards to API Key authentication when the `X-API-Key` header is present.
+
+**Technical Details:**
+- Added `ForwardDefaultSelector` in Program.cs Cookie options
+- Changed `ApiKeyAuthenticationHandler` to inject `IServiceProvider` instead of `JimApplication`
+- Create new DI scope for each database operation to prevent DbContext threading issues
+- Separate scope for background usage tracking task
+- Allow null `initiatedBy` for API key auth in SynchronisationController
+- Use appropriate constructors for worker tasks when user context unavailable
+
+#### PowerShell Module Status (Issue #176)
+
+**✅ Core cmdlets implemented and tested.**
+
+**Completed Cmdlets:**
+- ✅ `Connect-JIM` - API key authentication
+- ✅ `Get-JIMConnectorDefinition` - List and retrieve connector definitions
+- ✅ `Get-JIMConnectedSystem` / `New-JIMConnectedSystem` / `Set-JIMConnectedSystem` - Manage connected systems
+- ✅ `Get-JIMRunProfile` / `New-JIMRunProfile` / `Start-JIMRunProfile` - Manage and execute run profiles
+- ✅ `Get-JIMSyncRule` / `New-JIMSyncRule` - Manage sync rules
+
+**Fixes Applied:**
+- ✅ Fixed pagination handling for empty arrays (Get-JIMConnectedSystem, Get-JIMSyncRule)
+- ✅ Fixed parameter types (Get-JIMConnectorDefinition -Id uses int, not Guid)
+- ✅ Fixed JSON serialization of hashtable keys (Set-JIMConnectedSystem)
+
+**Remaining Work:**
+- Sync rules require object type IDs from imported connector schema (needs schema import cmdlet)
 
 ---
 
@@ -734,6 +946,45 @@ function Get-ADUser {
 5. **Documentation**: Clear parameter descriptions and examples
 6. **Assertions**: Use helper functions for consistent assertion messages
 
+### Development Guidelines
+
+#### No Direct SQL for JIM Configuration
+
+**CRITICAL REQUIREMENT**: Integration test scripts must **NEVER** use direct SQL queries to configure JIM or manipulate its database for test setup/teardown. All JIM configuration must be performed through:
+
+1. **REST API** (`/api/v1/...` endpoints)
+2. **PowerShell Module** (`JIM.PowerShell` cmdlets)
+
+**Rationale**:
+- Direct SQL bypasses business logic, validation, and audit trails
+- SQL-based workarounds create technical debt and hide API gaps
+- Tests should validate the same interfaces that users and administrators use
+- API/PowerShell gaps discovered during testing are valuable feedback
+
+**When API/PowerShell Gaps Are Identified**:
+
+If a test scenario requires functionality not exposed via API or PowerShell:
+
+1. **STOP** - Do not work around with SQL
+2. **Document** - Record the missing functionality in the test documentation
+3. **Ask** - Consult with the user/team on how to proceed
+4. **Assume** - The default assumption is that we will implement the missing API/PowerShell functionality
+
+**Example of Blocked Scenario**:
+
+Scenario 2 (Directory-to-Directory) was initially blocked because no API existed for partition selection. Following this process:
+1. Documented the blocking issue in this document
+2. Created GitHub issue #191 for the required API endpoints
+3. Implemented the missing API (partition management, hierarchy import)
+4. Updated test scripts to use the new API
+
+The scenario is now blocked by a different issue (LDAP connector object type matching bug) which was discovered through integration testing - exactly the kind of issue these tests are designed to find.
+
+**Acceptable SQL Usage**:
+- **External systems only**: Querying Samba AD, test databases, or other external systems being tested
+- **Verification queries**: Read-only queries to verify JIM's internal state (not for setup/teardown)
+- **Emergency debugging**: Temporary diagnostic queries during development (never committed)
+
 ---
 
 ## Troubleshooting
@@ -883,13 +1134,262 @@ JIM/
 
 ---
 
+## Current Progress & Known Issues
+
+### Phase 1 Status (as of 2025-12-16) - ✅ COMPLETE
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
+| API Endpoints | ✅ Complete | Schema management, sync rules, mappings, run profiles |
+| PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
+| Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration working |
+| Invoke-Scenario1 | ✅ Complete | All 4 tests passing (Joiner, Mover, Leaver, Reconnection) |
+| Scenario 2 & 3 | ⏳ Pending | Placeholder scripts exist |
+| GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
+
+### Completed Fixes (This Session)
+
+1. **API routing fix** - `CreatedAtAction` failed with API versioning. Changed to explicit `Created()` with URL path.
+
+2. **PowerShell enum serialisation** - `New-JIMMetaverseAttribute` and `Set-JIMMetaverseAttribute` were sending string enum values ("Text") but API expected integers. Added mapping dictionaries.
+
+3. **CSV path fix** - Integration test wrote to wrong path. Fixed to use `test/test-data/` which is mounted to JIM containers.
+
+4. **PowerShell array count** - Fixed `$testResults.Steps.Count` to `@($testResults.Steps).Count` for empty arrays.
+
+5. **Hashtable property access** - Fixed strict mode error accessing `.Error` property on hashtables without it.
+
+6. **CSV generation** - Added `userPrincipalName` and `dn` columns to generated CSV files.
+
+7. **Nano template** - Added smallest template (3 users) for fast iteration during development.
+
+8. **File connector change detection** - `.Include()` calls were missing in repository methods that retrieve CSOs. Added eager loading for `AttributeValues` and `Attributes` navigation properties.
+
+9. **Test data reset** - Added CSV test data reset and AD user cleanup at start of each test run for repeatable execution.
+
+### Previously Fixed Issues
+
+1. **DisplayNameOrId bug** - `ConnectedSystemObject.DisplayNameOrId` was using `SingleOrDefault` which threw "Sequence contains more than one matching element" when duplicate attribute values existed. Fixed by changing to `FirstOrDefault`.
+
+2. **MetaverseAttribute.MetaverseObjectTypes null** - When updating attribute associations, the collection wasn't loaded. Added `GetMetaverseAttributeWithObjectTypesAsync` method to include navigation property.
+
+### Quick Start for New Session
+
+```powershell
+# 1. Start the full Docker stack (JIM + external systems)
+jim-stack
+docker compose -f docker-compose.integration-tests.yml up -d
+
+# 2. Wait for systems to be ready
+pwsh test/integration/Wait-SystemsReady.ps1
+
+# 3. Set up infrastructure API key (if not already done)
+pwsh test/integration/Setup-InfrastructureApiKey.ps1
+
+# 4. Run Scenario 1 setup (creates connected systems, sync rules, mappings)
+pwsh test/integration/Setup-Scenario1.ps1 -ApiKey "jim_ak_xxx" -Template Micro
+
+# 5. Run the full test scenario
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -ApiKey "jim_ak_xxx" -Template Micro
+
+# 6. Check logs if tests fail
+docker logs jim.worker --tail 100
+docker logs jim.web --tail 100
+```
+
+### Files Modified in This Branch
+
+**New Files:**
+- `test/JIM.Api.Tests/SynchronisationControllerSchemaTests.cs` - 14 tests
+- `test/JIM.Api.Tests/MetaverseControllerAttributeTests.cs` - 18 tests
+- `test/JIM.Api.Tests/SynchronisationControllerMappingTests.cs` - 11 tests
+
+**Bug Fixes:**
+- `JIM.Application/Servers/ConnectedSystemServer.cs` - Activity.ConnectedSystemId for UPDATE operations
+- `JIM.Web/Controllers/Api/MetaverseController.cs` - Collection initialisation, eager loading for updates
+- `JIM.Models/Staging/ConnectedSystemObject.cs` - DisplayNameOrId FirstOrDefault fix
+- `JIM.Data/Repositories/IMetaverseRepository.cs` - Added GetMetaverseAttributeWithObjectTypesAsync
+- `JIM.PostgresData/Repositories/MetaverseRepository.cs` - Implemented GetMetaverseAttributeWithObjectTypesAsync
+- `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` - Added .Include() for AttributeValues in CSO retrieval methods
+
+**Integration Test Improvements:**
+- `test/integration/Setup-Scenario1.ps1` - Fixed API response property names (metaverseObjectTypes)
+- `test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1` - Added CSV reset and AD cleanup for repeatable tests
+
+### Next Steps
+
+1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
+2. ~~**Fix file connector change detection**~~ - ✅ Fixed! All Scenario 1 tests now passing
+3. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC (blocked - see below)
+4. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+
+### Blocking Issue: LDAP Connector Object Type Matching Bug
+
+**Status**: 🚧 BLOCKED
+
+**Symptom**: Scenario 2 (Directory-to-Directory) LDAP import fails with error: `Sequence contains more than one matching element`
+
+**Root Cause**: The LDAP connector's `ConvertLdapResults` method (line 539 in `LdapConnectorImport.cs`) uses `SingleOrDefault` to match object types by object class. Active Directory objects inherit from multiple object classes (e.g., `user`, `organizationalPerson`, `person`, `top`), and when multiple of these classes are defined in the schema as object types, the match fails.
+
+```csharp
+// Line 539 - fails when multiple object types match
+var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
+    ot => objectClasses.Any(oc => oc.Equals(ot.Name, StringComparison.OrdinalIgnoreCase)));
+```
+
+**Impact**:
+- Scenario 2 (Directory-to-Directory): ❌ BLOCKED - LDAP import fails during object conversion
+- Scenario 3 (GALSYNC): ❌ BLOCKED - LDAP import required for this scenario
+
+**Fix Required**: The LDAP connector needs to prioritise the most specific object class (e.g., `user` over `person`). Potential fixes:
+1. Use the first (most specific) object class in the array
+2. Implement object class hierarchy awareness
+3. Filter schema to only include leaf object types
+
+**GitHub Issue**: To be created
+
+**Files Created (Ready for Use Once Bug Fixed)**:
+- `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync (fully functional)
+- `test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1` - Test execution script
+
+### Resolved Issue: LDAP Partition Management API Missing
+
+**Status**: ✅ RESOLVED (2025-12-16)
+
+**Original Symptom**: Scenario 2 setup completed but imports returned no objects because partitions were not selected.
+
+**Fix Applied**: Implemented partition and container management API:
+- `GET /api/v1/synchronisation/connected-systems/{id}/partitions` - List partitions
+- `PUT /api/v1/synchronisation/connected-systems/{id}/partitions/{partitionId}` - Update partition selection
+- `PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` - Update container selection
+- `POST /api/v1/synchronisation/connected-systems/{id}/import-hierarchy` - Import hierarchy from LDAP
+
+**PowerShell Cmdlets Added**:
+- `Get-JIMConnectedSystemPartition` - List partitions
+- `Set-JIMConnectedSystemPartition` - Update partition selection
+- `Set-JIMConnectedSystemContainer` - Update container selection
+- `Import-JIMConnectedSystemHierarchy` - Import hierarchy from connector
+
+**Commit**: 9d7445f - feat(api): Add hierarchy import endpoint and PowerShell cmdlet
+
+### Resolved Issue: File Connector Not Detecting Attribute Changes
+
+**Status**: ✅ RESOLVED (2025-12-16)
+
+**Symptom**: The Mover test was failing - when `bob.smith1` department changed from "HR" to "IT" in the CSV, the change was not exported to AD.
+
+**Root Cause**: Repository methods that retrieve CSOs for comparison were missing `.Include()` calls for navigation properties. When the sync engine compared incoming attribute values with existing CSO values, the existing values were null because they weren't eagerly loaded.
+
+**Fix Applied**: Added `.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute)` to these methods in `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`:
+- `GetConnectedSystemObjectByAnchorAsync`
+- `GetConnectedSystemObjectByDnAsync`
+- `FindExistingConnectedSystemObjectAsync`
+
+**Test Results After Fix**:
+- Joiner test: ✅ PASSES (new user creation works)
+- Mover test: ✅ PASSES (attribute updates now detected and exported)
+- Leaver test: ✅ PASSES (user flagged for deletion - actual deletion is policy-based)
+- Reconnection test: ✅ PASSES (user preservation works)
+
+---
+
 ## Version History
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 1.9     | 2025-12-16 | Resolved partition API blocking issue. Added partition/container management API and PowerShell cmdlets. Discovered LDAP connector object type matching bug (new blocker). |
+| 1.8     | 2025-12-16 | Added Scenario 2 scripts (Setup-Scenario2.ps1, Invoke-Scenario2-DirectorySync.ps1). Documented blocking issue - LDAP partition management API needed. |
+| 1.7     | 2025-12-16 | **Phase 1 Complete!** All Scenario 1 tests passing. Fixed file connector change detection (missing .Include() calls). Added test data reset and AD cleanup for repeatable tests. |
+| 1.6     | 2025-12-16 | Ran full Scenario 1 tests, documented file connector change detection issue |
+| 1.5     | 2025-12-16 | Scenario 1 Joiner test passing, added Nano template, multiple bug fixes |
+| 1.4     | 2025-12-16 | Added Current Progress section, known issues, quick start guide |
+| 1.3     | 2025-12-13 | Added Test Lifecycle Quick Reference section for DevContainer and CI/CD |
 | 1.2     | 2025-12-09 | Added JIM configuration section, step-based execution, dependencies |
 | 1.1     | 2025-12-08 | Updated file paths to use existing test/ folder |
 | 1.0     | 2025-12-08 | Initial version - Phase 1 & 2 specification     |
+
+---
+
+## Known Issues & TODOs
+
+### Infrastructure Improvements Needed
+
+#### 1. Progress Bars for Test Execution
+**Priority: Medium | Status: Not Started**
+
+Integration test scripts should provide visual progress feedback including:
+- **Stand-up phase**: Infrastructure container startup progress (Samba AD, databases)
+- **Execution phase**: Test step progress with sub-steps (import, sync, export, validation)
+- **Tear-down phase**: Container shutdown and volume cleanup progress
+
+**Implementation Notes:**
+- Use PowerShell `Write-Progress` cmdlet with `-Activity`, `-Status`, `-PercentComplete`
+- Show elapsed time and estimated time remaining where possible
+- Provide detailed status messages (e.g., "Waiting for Samba AD to initialize LDAP...")
+- Example: `Write-Progress -Activity "Running Scenario 1" -Status "Step 2 of 4: Full Sync" -PercentComplete 50`
+
+**Benefits:**
+- Easier to track long-running operations
+- Helps identify where time is spent
+- Better user experience during test execution
+
+#### 2. Docker Compose Files for Test Infrastructure
+**Priority: High | Status: ✅ Complete**
+
+`docker-compose.integration-tests.yml` exists in project root with:
+- ✅ Samba AD (Primary instance) - for Scenario 1
+- ✅ Samba AD (Source & Target instances) - for Scenario 2 (profile: scenario2)
+- ✅ Test data volumes for CSV files
+- ✅ Profile-based service selection
+- ✅ Phase 2 services (SQL Server, Oracle, PostgreSQL, MySQL, OpenLDAP)
+
+#### 3. Stand-up Performance Optimization
+**Priority: Medium | Status: Investigation Needed**
+
+**Current Issues:**
+- JIM.Web rebuild takes ~19 seconds on code changes
+- Samba AD initialization takes ~2 minutes (LDAP/DC startup)
+- No parallelization of independent startup tasks
+
+**Investigation Areas:**
+- Can Samba AD startup be optimized (pre-initialized image)?
+- Can JIM.Web use incremental builds in Docker?
+- Can we start JIM services while waiting for Samba AD?
+- Is there unnecessary sequential waiting?
+
+**Baseline Timings to Establish:**
+- JIM stack cold start: ?
+- JIM stack warm start (after code change): ~19s (measured)
+- Samba AD cold start: ~120s (documented)
+- Samba AD warm restart: ?
+- CSV file generation (Nano): <1s (measured)
+- Schema import: ?
+- Run profile execution: ?
+
+#### 4. Test Data Reset Automation
+**Priority: Low | Status: Partial**
+
+**Current State:**
+- CSV reset works (`Generate-TestCSV.ps1`)
+- AD cleanup attempts but often fails (users don't exist)
+- JIM database reset requires full stack down/up
+
+**Improvements Needed:**
+- Silent cleanup (suppress "user not found" warnings)
+- Faster JIM reset without full stack restart
+- Automated metaverse purge API endpoint for testing
+
+### Documentation Improvements
+
+#### 5. Quick Start Consolidation
+**Priority: High | Status: Done (2025-12-17)**
+
+✅ Added Quick Start section to top of INTEGRATION_TESTING.md with:
+- Step-by-step first-run instructions
+- Prerequisites checklist
+- Current limitations clearly stated
+- Direct commands to copy-paste
 
 ---
 

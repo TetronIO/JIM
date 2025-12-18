@@ -42,7 +42,8 @@ public class ActivityRepository : IActivityRepository
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        Guid? initiatedById = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -62,6 +63,12 @@ public class ActivityRepository : IActivityRepository
             .ThenInclude(ib => ib!.Type)
             .Where(a => a.ParentActivityId == null)
             .AsQueryable();
+
+        // Apply initiated by filter
+        if (initiatedById.HasValue)
+        {
+            query = query.Where(a => a.InitiatedBy != null && a.InitiatedBy.Id == initiatedById.Value);
+        }
 
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -149,6 +156,10 @@ public class ActivityRepository : IActivityRepository
 
         var objects = from o in Repository.Database.ActivityRunProfileExecutionItems
                 .Include(a => a.ConnectedSystemObject)
+                    .ThenInclude(cso => cso!.Type)
+                .Include(a => a.ConnectedSystemObject)
+                    .ThenInclude(cso => cso!.AttributeValues)
+                        .ThenInclude(av => av.Attribute)
                 .Where(a => a.Activity.Id == activityId)
             select o;
 
@@ -156,15 +167,17 @@ public class ActivityRepository : IActivityRepository
         var grossCount = objects.Count();
         var offset = (page - 1) * pageSize;
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var results = await objects.Skip(offset).Take(itemsToGet).Select(i => new ActivityRunProfileExecutionItemHeader
+        // Materialize the entities first, then project to DTO in memory
+        var entities = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
+        var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
         {
             Id = i.Id,
-            ExternalIdValue = i.ConnectedSystemObject != null && i.ConnectedSystemObject.AttributeValues.Any(av => av.Attribute.IsExternalId) ? i.ConnectedSystemObject.AttributeValues.Single(av => av.Attribute.IsExternalId).ToString() : null,
-            DisplayName = i.ConnectedSystemObject != null && i.ConnectedSystemObject.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? i.ConnectedSystemObject.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
-            ConnectedSystemObjectType = i.ConnectedSystemObject != null ? i.ConnectedSystemObject.Type.Name : null,
+            ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName(),
+            DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue,
+            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type.Name,
             ErrorType = i.ErrorType,
-            ObjectChangeType = i.ObjectChangeType                
-        }).ToListAsync();
+            ObjectChangeType = i.ObjectChangeType
+        }).ToList();
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ActivityRunProfileExecutionItemHeader>

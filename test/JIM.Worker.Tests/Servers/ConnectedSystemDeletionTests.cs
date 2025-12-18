@@ -16,6 +16,7 @@ public class ConnectedSystemDeletionTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IConnectedSystemRepository> _mockCsRepo = null!;
+    private Mock<IMetaverseRepository> _mockMvRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<ITaskingRepository> _mockTaskingRepo = null!;
     private JimApplication _jim = null!;
@@ -28,10 +29,12 @@ public class ConnectedSystemDeletionTests
 
         _mockRepository = new Mock<IRepository>();
         _mockCsRepo = new Mock<IConnectedSystemRepository>();
+        _mockMvRepo = new Mock<IMetaverseRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockTaskingRepo = new Mock<ITaskingRepository>();
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
+        _mockRepository.Setup(r => r.Metaverse).Returns(_mockMvRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.Tasking).Returns(_mockTaskingRepo.Object);
 
@@ -44,6 +47,12 @@ public class ConnectedSystemDeletionTests
         // Setup tasking repository
         _mockTaskingRepo.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()))
             .Returns(Task.CompletedTask);
+
+        // Default setup for metaverse repository
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<MetaverseObject>());
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(0);
 
         _jim = new JimApplication(_mockRepository.Object);
         _initiatedBy = TestUtilities.GetInitiatedBy();
@@ -595,6 +604,206 @@ public class ConnectedSystemDeletionTests
 
         // Assert
         _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1), Times.Once);
+    }
+
+    [Test]
+    public async Task ExecuteDeletionAsync_WithEvaluateMvoDeletionRulesTrue_MarksOrphanedMvosAsync()
+    {
+        // Arrange
+        var orphanedMvo1 = new MetaverseObject { Id = Guid.NewGuid() };
+        var orphanedMvo2 = new MetaverseObject { Id = Guid.NewGuid() };
+        var orphanedMvos = new List<MetaverseObject> { orphanedMvo1, orphanedMvo2 };
+
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(orphanedMvos);
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(2);
+        _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1)).Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, evaluateMvoDeletionRules: true);
+
+        // Assert
+        _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(
+            It.Is<IEnumerable<Guid>>(ids => ids.Count() == 2 &&
+                ids.Contains(orphanedMvo1.Id) && ids.Contains(orphanedMvo2.Id))), Times.Once);
+        _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1), Times.Once);
+    }
+
+    [Test]
+    public async Task ExecuteDeletionAsync_WithEvaluateMvoDeletionRulesFalse_DoesNotMarkOrphanedMvosAsync()
+    {
+        // Arrange
+        _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1)).Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, evaluateMvoDeletionRules: false);
+
+        // Assert
+        _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(It.IsAny<int>()), Times.Never);
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()), Times.Never);
+        _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1), Times.Once);
+    }
+
+    [Test]
+    public async Task ExecuteDeletionAsync_WithNoOrphanedMvos_SkipsMarkingAsync()
+    {
+        // Arrange
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject>());
+        _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1)).Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, evaluateMvoDeletionRules: true);
+
+        // Assert
+        _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()), Times.Never);
+        _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1), Times.Once);
+    }
+
+    [Test]
+    public async Task ExecuteDeletionAsync_DefaultsToEvaluateMvoDeletionRulesTrueAsync()
+    {
+        // Arrange
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject>());
+        _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1)).Returns(Task.CompletedTask);
+
+        // Act - call without the parameter to test default behaviour
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1);
+
+        // Assert - should call orphan detection by default
+        _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
+        _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1), Times.Once);
+    }
+
+    #endregion
+
+    #region MarkOrphanedMvosForDeletionAsync Tests
+
+    [Test]
+    public async Task MarkOrphanedMvosForDeletionAsync_WithOrphanedMvos_ReturnsCountAsync()
+    {
+        // Arrange
+        var orphanedMvo1 = new MetaverseObject { Id = Guid.NewGuid() };
+        var orphanedMvo2 = new MetaverseObject { Id = Guid.NewGuid() };
+        var orphanedMvos = new List<MetaverseObject> { orphanedMvo1, orphanedMvo2 };
+
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(orphanedMvos);
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(2);
+
+        // Act
+        var result = await _jim.Metaverse.MarkOrphanedMvosForDeletionAsync(1);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task MarkOrphanedMvosForDeletionAsync_WithNoOrphanedMvos_ReturnsZeroAsync()
+    {
+        // Arrange
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject>());
+
+        // Act
+        var result = await _jim.Metaverse.MarkOrphanedMvosForDeletionAsync(1);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(0));
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()), Times.Never);
+    }
+
+    #endregion
+
+    #region DeleteAsync Orphan Marking Tests
+
+    [Test]
+    public async Task DeleteAsync_WithSmallCsoCount_MarksOrphanedMvosAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+        var orphanedMvo = new MetaverseObject { Id = Guid.NewGuid() };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
+        _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1)).Returns(Task.CompletedTask);
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject> { orphanedMvo });
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(1);
+
+        // Act
+        var result = await _jim.ConnectedSystems.DeleteAsync(1, _initiatedBy);
+
+        // Assert
+        Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.CompletedImmediately));
+        _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(
+            It.Is<IEnumerable<Guid>>(ids => ids.Contains(orphanedMvo.Id))), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteAsync_WithLargeCsoCount_TaskIncludesEvaluateMvoDeletionRulesTrueAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Large System",
+            Status = ConnectedSystemStatus.Active
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(5000);
+
+        // Act
+        await _jim.ConnectedSystems.DeleteAsync(1, _initiatedBy);
+
+        // Assert - the task should have EvaluateMvoDeletionRules = true
+        _mockTaskingRepo.Verify(r => r.CreateWorkerTaskAsync(
+            It.Is<DeleteConnectedSystemWorkerTask>(t =>
+                t.ConnectedSystemId == 1 &&
+                t.EvaluateMvoDeletionRules == true)), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteAsync_WithRunningSyncTask_TaskIncludesEvaluateMvoDeletionRulesTrueAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+        var runningTask = new SynchronisationWorkerTask { Id = Guid.NewGuid() };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync(runningTask);
+
+        // Act
+        await _jim.ConnectedSystems.DeleteAsync(1, _initiatedBy);
+
+        // Assert - the task should have EvaluateMvoDeletionRules = true
+        _mockTaskingRepo.Verify(r => r.CreateWorkerTaskAsync(
+            It.Is<DeleteConnectedSystemWorkerTask>(t =>
+                t.ConnectedSystemId == 1 &&
+                t.EvaluateMvoDeletionRules == true)), Times.Once);
     }
 
     #endregion

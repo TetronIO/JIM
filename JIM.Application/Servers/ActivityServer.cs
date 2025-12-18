@@ -14,7 +14,13 @@ public class ActivityServer
         Application = application;
     }
 
-    public async Task CreateActivityAsync(Activity activity, MetaverseObject? initiatedBy)
+    /// <summary>
+    /// Creates and persists an Activity, optionally attributing it to a user or API key.
+    /// </summary>
+    /// <param name="activity">The Activity to create.</param>
+    /// <param name="initiatedBy">The MetaverseObject representing the user who initiated the action (null for API key auth).</param>
+    /// <param name="initiatedByName">Optional name to attribute the action to when initiatedBy is null (e.g., "API Key: MyKey").</param>
+    public async Task CreateActivityAsync(Activity activity, MetaverseObject? initiatedBy, string? initiatedByName = null)
     {
         activity.Status = ActivityStatus.InProgress;
         activity.Executed = DateTime.UtcNow;
@@ -23,6 +29,11 @@ public class ActivityServer
         {
             activity.InitiatedBy = initiatedBy;
             activity.InitiatedByName = initiatedBy.DisplayName;
+        }
+        else if (initiatedByName != null)
+        {
+            // API key or system-initiated action - use the provided name
+            activity.InitiatedByName = initiatedByName;
         }
 
         if (activity.TargetType == ActivityTargetType.ConnectedSystem)
@@ -135,14 +146,16 @@ public class ActivityServer
     /// <param name="searchQuery">Optional search query to filter by TargetName or TargetType.</param>
     /// <param name="sortBy">Optional column to sort by (e.g., "type", "target", "created", "status").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <param name="initiatedById">Optional filter to only show activities initiated by a specific user.</param>
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page = 1,
         int pageSize = 20,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        Guid? initiatedById = null)
     {
-        return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
+        return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending, initiatedById);
     }
 
     #region synchronisation related

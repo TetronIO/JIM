@@ -148,6 +148,16 @@ public class SyncExportTaskProcessor
                 DataSnapshot = description
             };
 
+            // Link to the Connected System Object if available (for Create and Update operations)
+            if (preview.ConnectedSystemObjectId.HasValue)
+            {
+                var cso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, preview.ConnectedSystemObjectId.Value);
+                if (cso != null)
+                {
+                    executionItem.ConnectedSystemObject = cso;
+                }
+            }
+
             _activity.RunProfileExecutionItems.Add(executionItem);
         }
 

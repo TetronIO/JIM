@@ -14,8 +14,10 @@ public class JimApplication
     public DataGenerationServer DataGeneration { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
+    public ScopingEvaluationServer ScopingEvaluation { get; }
     public FileSystemServer FileSystem { get; }
     public MetaverseServer Metaverse { get; }
+    public ObjectMatchingServer ObjectMatching { get; }
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
     public ServiceSettingsServer ServiceSettings { get; }
@@ -29,8 +31,10 @@ public class JimApplication
         DataGeneration = new DataGenerationServer(this);
         ExportEvaluation = new ExportEvaluationServer(this);
         ExportExecution = new ExportExecutionServer(this);
+        ScopingEvaluation = new ScopingEvaluationServer();
         FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);
+        ObjectMatching = new ObjectMatchingServer(this);
         Repository = dataRepository;
         Search = new SearchServer(this);
         Security = new SecurityServer(this);
@@ -135,7 +139,12 @@ public class JimApplication
         else
         {
             // no matching user found, create them in stub form; just enough to sign in
-            user = new MetaverseObject { Type = objectType };
+            // Set Origin to Internal to protect admin from automatic deletion rules
+            user = new MetaverseObject
+            {
+                Type = objectType,
+                Origin = MetaverseObjectOrigin.Internal
+            };
             user.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
                 MetaverseObject = user,

@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.6
-> **Last Updated**: 2025-12-11
-> **Status**: In Progress (~88% Complete)
+> **Version**: 1.9
+> **Last Updated**: 2025-12-16
+> **Status**: In Progress (~94% Complete)
 
 ---
 
@@ -14,12 +14,12 @@
 | Inbound Sync | `█████████░` | 14 | 15 | 93% |
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
-| Admin UI | `█████████░` | 13 | 15 | 87% |
-| Security | `███████░░░` | 5 | 7 | 71% |
-| Operations | `██████████` | 7 | 7 | 100% |
+| Admin UI | `█████████░` | 13 | 14 | 93% |
+| Security | `██████████` | 5 | 5 | 100% |
+| Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
 | PowerShell | `██████████` | 3 | 3 | 100% |
-| **Overall** | `█████████░` | **78** | **88** | **89%** |
+| **Overall** | `█████████░` | **78** | **83** | **94%** |
 
 ### Priority Order for Remaining Work
 
@@ -28,11 +28,11 @@
 
 **Important (Highly Desirable for MVP):**
 2. Background job for scheduled MVO deletions (#120)
-3. Dashboard admin home page (#169)
-4. **Connector credential encryption** - Encrypt passwords at rest (#171)
+3. **Connector credential encryption** - Encrypt passwords at rest (#171)
 
 **Nice to Have (Can follow MVP):**
-- Full RBAC (#21)
+- Dashboard admin home page (#169)
+- Full RBAC (#21) and Synchronisation Readers role (#9)
 - Change history (#14)
 - Sync preview
 - Delta sync support
@@ -155,7 +155,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 5. Administration UI
 
 #### 5.1 Core Views
-- [ ] Dashboard (summary metrics, system health) (#169)
 - [x] Operations view (run activities, task status)
 - [x] Connected System list and detail
 - [x] Connector configuration
@@ -184,8 +183,6 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 #### 6.2 Authorisation
 - [x] Basic role model
-- [ ] Full RBAC implementation (#21)
-- [ ] Synchronisation Readers role (#9)
 
 #### 6.3 Data Protection
 - [ ] Connector credential encryption at rest (#171)
@@ -196,13 +193,11 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Docker containerisation
 - [x] Docker Compose for full stack
 - [x] Environment-based configuration
-- [ ] Continuous deployment to demo site (#39)
 
 #### 7.2 Monitoring & Troubleshooting
 - [x] Activity logging
 - [x] Run profile execution tracking
 - [x] Error capture and display
-- [ ] Change history / audit trail (#14)
 
 ### 8. API Coverage (#183)
 

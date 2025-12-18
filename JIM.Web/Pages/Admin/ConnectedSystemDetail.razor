@@ -3,6 +3,7 @@
 @using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
+@using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
@@ -288,12 +289,17 @@
 
                 </DialogContent>
                 <DialogActions>
-                    <MudButton 
-                        Disabled="!_objectTypeAttributeBeingEditedIsEditable" 
-                        DropShadow="false" 
-                        Variant="Variant.Filled" 
-                        Color="Color.Primary" 
-                        OnClick="HandleEditAttributeDataTypeButtonClick" 
+                    <MudButton
+                        DropShadow="false"
+                        Variant="Variant.Text"
+                        OnClick="@(() => _editSchemaAttributeDialogVisible = false)"
+                        Class="ma-4">Cancel</MudButton>
+                    <MudButton
+                        Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+                        DropShadow="false"
+                        Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        OnClick="HandleEditAttributeDataTypeButtonClick"
                         Class="ma-4">Confirm Change</MudButton>
                 </DialogActions>
             </MudDialog>
@@ -643,6 +649,156 @@
             </MudTabPanel>
         }
 
+        <MudTabPanel Text="Object Matching" Disabled="@AreSettingDependentTabsDisabled()">
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                Object matching rules define how objects from this Connected System are correlated with Metaverse Objects during import (join)
+                and how existing objects are found during export (provisioning). Configure rules per object type.
+            </MudAlert>
+
+            @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
+            {
+                <MudAlert Severity="Severity.Warning">
+                    No object types have been configured. Import the schema first to configure object matching rules.
+                </MudAlert>
+            }
+            else
+            {
+                <MudSelect T="ConnectedSystemObjectType"
+                           @bind-Value="_selectedMatchingRuleObjectType"
+                           Label="Select Object Type"
+                           Variant="Variant.Outlined"
+                           Class="mb-4">
+                    @foreach (var objectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
+                    {
+                        <MudSelectItem Value="@objectType">@objectType.Name</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_selectedMatchingRuleObjectType != null)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mb-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Matching Rules for @_selectedMatchingRuleObjectType.Name</MudText>
+
+                        @if (_selectedMatchingRuleObjectType.ObjectMatchingRules.Count == 0)
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                                No matching rules configured. Objects will only match if explicitly joined.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudTable Items="@_selectedMatchingRuleObjectType.ObjectMatchingRules.OrderBy(r => r.Order)"
+                                      Hover="true"
+                                      Dense="true"
+                                      Outlined="true"
+                                      Elevation="0"
+                                      Class="mb-4">
+                                <HeaderContent>
+                                    <MudTh>Order</MudTh>
+                                    <MudTh>Source Attribute</MudTh>
+                                    <MudTh>Target MV Attribute</MudTh>
+                                    <MudTh>Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Order">@context.Order</MudTd>
+                                    <MudTd DataLabel="Source">
+                                        @if (context.Sources.Count > 0)
+                                        {
+                                            var source = context.Sources.First();
+                                            @if (source.ConnectedSystemAttribute != null)
+                                            {
+                                                <text>@source.ConnectedSystemAttribute.Name</text>
+                                            }
+                                            else if (source.MetaverseAttribute != null)
+                                            {
+                                                <text>@source.MetaverseAttribute.Name (MV)</text>
+                                            }
+                                            else
+                                            {
+                                                <text>-</text>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <text>-</text>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
+                                    <MudTd>
+                                        <MudTooltip Text="Move up">
+                                            <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                                           Size="Size.Small"
+                                                           Color="Color.Default"
+                                                           Disabled="@(context.Order == 0)"
+                                                           OnClick="() => HandleMoveMatchingRuleUpAsync(context)" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="Move down">
+                                            <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                                           Size="Size.Small"
+                                                           Color="Color.Default"
+                                                           Disabled="@(context.Order == _selectedMatchingRuleObjectType!.ObjectMatchingRules.Max(r => r.Order))"
+                                                           OnClick="() => HandleMoveMatchingRuleDownAsync(context)" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="Delete">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                           Size="Size.Small"
+                                                           Color="Color.Error"
+                                                           OnClick="() => HandleDeleteMatchingRuleAsync(context)" />
+                                        </MudTooltip>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.subtitle1" Class="mb-3">Add New Matching Rule</MudText>
+
+                        <MudGrid>
+                            <MudItem xs="12" md="5">
+                                <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                                           @bind-Value="_newMatchingRuleSourceAttribute"
+                                           Label="Source CS Attribute"
+                                           Variant="Variant.Outlined"
+                                           HelperText="The Connected System attribute to match from">
+                                    @foreach (var attr in _selectedMatchingRuleObjectType.Attributes.Where(a => a.Selected).OrderBy(a => a.Name))
+                                    {
+                                        <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
+                                <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
+                            </MudItem>
+                            <MudItem xs="12" md="5">
+                                <MudSelect T="MetaverseAttribute"
+                                           @bind-Value="_newMatchingRuleTargetAttribute"
+                                           Label="Target MV Attribute"
+                                           Variant="Variant.Outlined"
+                                           HelperText="The Metaverse attribute to match against">
+                                    @if (_metaverseAttributes != null)
+                                    {
+                                        @foreach (var attr in _metaverseAttributes.OrderBy(a => a.Name))
+                                        {
+                                            <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
+                                        }
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Class="mt-4"
+                                   DropShadow="false"
+                                   Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
+                                   OnClick="HandleAddMatchingRuleAsync">
+                            Add Matching Rule
+                        </MudButton>
+                    </MudPaper>
+                }
+            }
+        </MudTabPanel>
+
         <MudTabPanel Text="Run Profiles" Disabled="@IsRunProfilesTabDisabled()">
             <MudAlert Severity="Severity.Info">Run profiles define what operations can be performed on a Connector, i.e. import, export and synchronisation, with any required settings.</MudAlert>
 
@@ -947,6 +1103,12 @@
     private bool _deletionInProgress;
     private string? _deleteConfirmationText;
 
+    // Object Matching Rules
+    private ConnectedSystemObjectType? _selectedMatchingRuleObjectType;
+    private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
+    private MetaverseAttribute? _newMatchingRuleTargetAttribute;
+    private IList<MetaverseAttribute>? _metaverseAttributes;
+
     protected override async Task OnInitializedAsync()
     {
         _connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(Id);
@@ -993,6 +1155,9 @@
 
         // load the pending export count for the quick links section
         _pendingExportCount = await Jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
+
+        // load metaverse attributes for object matching rules
+        _metaverseAttributes = await Jim.Metaverse.GetMetaverseAttributesAsync();
     }
 
     private bool AreSettingDependentTabsDisabled()
@@ -1215,10 +1380,21 @@
         StateHasChanged();
         await Task.Delay(1);
 
-        await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(_connectedSystem, user);
-        _hierarchyBeingRetrieved = false;
-        StateHasChanged();
-        await Task.Delay(1);
+        try
+        {
+            await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(_connectedSystem, user);
+            Snackbar.Add("Hierarchy has been retrieved successfully.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to import hierarchy for Connected System {ConnectedSystemId}", _connectedSystem.Id);
+            Snackbar.Add($"Failed to retrieve hierarchy: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _hierarchyBeingRetrieved = false;
+            StateHasChanged();
+        }
     }
 
     private async Task HandleHierarchySelectionSubmitAsync()
@@ -1230,6 +1406,128 @@
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         await Jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, user);
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
+    }
+
+    private async Task HandleAddMatchingRuleAsync()
+    {
+        if (_connectedSystem == null || _selectedMatchingRuleObjectType == null ||
+            _newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        // Calculate the next order value
+        var nextOrder = _selectedMatchingRuleObjectType.ObjectMatchingRules.Count > 0
+            ? _selectedMatchingRuleObjectType.ObjectMatchingRules.Max(r => r.Order) + 1
+            : 0;
+
+        var rule = new ObjectMatchingRule
+        {
+            Order = nextOrder,
+            ConnectedSystemObjectTypeId = _selectedMatchingRuleObjectType.Id,
+            ConnectedSystemObjectType = _selectedMatchingRuleObjectType,
+            TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute.Id,
+            TargetMetaverseAttribute = _newMatchingRuleTargetAttribute,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Order = 0,
+                    ConnectedSystemAttributeId = _newMatchingRuleSourceAttribute.Id,
+                    ConnectedSystemAttribute = _newMatchingRuleSourceAttribute
+                }
+            }
+        };
+
+        try
+        {
+            await Jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, user);
+
+            // Note: EF Core automatically adds the rule to the ObjectMatchingRules collection
+            // because we set ConnectedSystemObjectType on the rule before saving
+
+            // Reset the form
+            _newMatchingRuleSourceAttribute = null;
+            _newMatchingRuleTargetAttribute = null;
+
+            Snackbar.Add("Matching rule has been created.", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to create matching rule for object type {ObjectTypeId}", _selectedMatchingRuleObjectType.Id);
+            Snackbar.Add($"Failed to create matching rule: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleDeleteMatchingRuleAsync(ObjectMatchingRule rule)
+    {
+        if (_connectedSystem == null || _selectedMatchingRuleObjectType == null)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        try
+        {
+            await Jim.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, user);
+
+            // Remove from the local list for immediate UI update
+            _selectedMatchingRuleObjectType.ObjectMatchingRules.Remove(rule);
+
+            Snackbar.Add("Matching rule has been deleted.", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to delete matching rule {RuleId}", rule.Id);
+            Snackbar.Add($"Failed to delete matching rule: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleMoveMatchingRuleUpAsync(ObjectMatchingRule rule)
+    {
+        await SwapMatchingRuleOrderAsync(rule, -1);
+    }
+
+    private async Task HandleMoveMatchingRuleDownAsync(ObjectMatchingRule rule)
+    {
+        await SwapMatchingRuleOrderAsync(rule, 1);
+    }
+
+    private async Task SwapMatchingRuleOrderAsync(ObjectMatchingRule rule, int direction)
+    {
+        if (_connectedSystem == null || _selectedMatchingRuleObjectType == null)
+            return;
+
+        var rules = _selectedMatchingRuleObjectType.ObjectMatchingRules.OrderBy(r => r.Order).ToList();
+        var currentIndex = rules.IndexOf(rule);
+        var targetIndex = currentIndex + direction;
+
+        if (targetIndex < 0 || targetIndex >= rules.Count)
+            return;
+
+        var targetRule = rules[targetIndex];
+
+        // Swap the order values
+        var tempOrder = rule.Order;
+        rule.Order = targetRule.Order;
+        targetRule.Order = tempOrder;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        try
+        {
+            // Update both rules
+            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
+            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(targetRule, user);
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to reorder matching rules");
+            Snackbar.Add($"Failed to reorder matching rules: {ex.Message}", Severity.Error);
+        }
     }
 
     private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter);

@@ -69,26 +69,37 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `docker compose exec jim.web dotnet ef database update` - Apply migrations in Docker
 
 **Shell Aliases (Recommended):**
+- Aliases are automatically configured from `.devcontainer/jim-aliases.sh`
+- If aliases don't work, run: `source ~/.zshrc` (or restart terminal)
 - `jim-build` - Build entire solution
 - `jim-test` - Run all tests
 - `jim-db` - Start PostgreSQL (for local debugging)
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply migrations
-- `jim-stack` - Start full Docker stack (all services containerized)
-- `jim-stack-build` - Rebuild and start Docker stack (use after code changes)
+
+**Docker Stack Management:**
+- `jim-stack` - Start Docker stack (no build, uses existing images)
 - `jim-stack-logs` - View Docker stack logs
-- `jim-stack-down` - Stop full Docker stack
+- `jim-stack-down` - Stop Docker stack
+
+**Docker Builds (rebuild and start services):**
+- `jim-build-stack` - Build all services + start
+- `jim-build-web` - Build jim.web + start
+- `jim-build-worker` - Build jim.worker + start
+- `jim-build-scheduler` - Build jim.scheduler + start
+
+**Reset:**
+- `jim-reset` - Reset JIM (delete database & logs volumes)
 
 **Docker (Manual Commands):**
 - `docker compose -f db.yml up -d` - Start database only (same as jim-db)
 - `docker compose -f db.yml down` - Stop database
-- `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d` - Start full stack in Codespaces (same as jim-stack)
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**
-When running the Docker stack (`jim-stack`) and you make code changes to JIM.Web, JIM.Worker, or JIM.Scheduler, you MUST rebuild the affected container(s) for changes to take effect:
-- `jim-stack-build` - Rebuild and restart all containers
-- Or rebuild specific service: `docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.web`
+When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, or JIM.Scheduler, you MUST rebuild the affected container(s) for changes to take effect:
+- `jim-dev` or `jim-dev-web` - Fast rebuild for development (recommended)
+- `jim-release` or `jim-release-web` - Full rebuild for production-like testing
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
@@ -212,6 +223,42 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - JIM must work in air-gapped environments with no internet connectivity
 - No cloud service dependencies (no Azure Key Vault, AWS KMS, etc.)
 - All features must work with on-premises infrastructure only
+
+## Feature Planning
+
+**IMPORTANT: When creating plans for new features or significant changes:**
+
+1. **Create a plan document in `docs/plans/`:**
+   - Use uppercase filename with underscores: e.g., `PROGRESS_REPORTING.md`, `SCIM_SERVER_DESIGN.md`
+   - Include comprehensive details: Overview, Architecture, Implementation Phases, Success Criteria, Benefits
+   - Mark status (Planned/In Progress/Completed) and milestone (MVP/Post-MVP)
+   - Keep plan focused but detailed enough for implementation
+
+2. **Create a GitHub issue:**
+   - Brief description of the feature/change
+   - Link to the plan document in `docs/plans/` for full details
+   - Assign to appropriate milestone (MVP, Post-MVP, etc.)
+   - Add relevant labels (enhancement, bug, documentation, etc.)
+   - Example: "See full implementation plan: [`docs/plans/PROGRESS_REPORTING.md`](docs/plans/PROGRESS_REPORTING.md)"
+
+3. **Plan structure guidelines:**
+   - **Overview**: Brief summary of what and why
+   - **Business Value**: Problem being solved and benefits
+   - **Technical Architecture**: Current state, proposed solution, data flow
+   - **Implementation Phases**: Numbered phases with specific deliverables
+   - **Success Criteria**: Measurable outcomes
+   - **Benefits**: Performance, UX, architecture improvements
+   - **Dependencies**: External packages, services, infrastructure
+   - **Risks & Mitigations**: Potential issues and solutions
+
+**Documentation organisation:**
+- `docs/plans/` - Feature plans and design documents (future work)
+- `docs/` - Active guides and references (current/completed work)
+  - DEVELOPER_GUIDE.md - Comprehensive development guide
+  - INTEGRATION_TESTING.md - Integration testing guide
+  - MVP_DEFINITION.md - MVP scope and criteria
+  - RELEASE_PROCESS.md - Release and deployment procedures
+  - SSO_SETUP_GUIDE.md - SSO configuration instructions
 
 ## Architecture Quick Reference
 

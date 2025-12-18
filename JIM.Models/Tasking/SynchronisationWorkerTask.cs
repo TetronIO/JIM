@@ -34,4 +34,14 @@ public class SynchronisationWorkerTask : WorkerTask
         InitiatedBy = initiatingBy;
         InitiatedByName = initiatingBy.DisplayName;
     }
+
+    /// <summary>
+    /// When a synchronisation service task is triggered by an API key (automation), this overload should be used to attribute the action to the API key.
+    /// </summary>
+    public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId, string apiKeyName)
+    {
+        ConnectedSystemId = connectedSystemId;
+        ConnectedSystemRunProfileId = connectedSystemRunProfileId;
+        InitiatedByName = $"API Key: {apiKeyName}";
+    }
 }

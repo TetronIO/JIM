@@ -60,6 +60,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<Role> Roles { get; set; } = null!;
     public virtual DbSet<ApiKey> ApiKeys { get; set; } = null!;
     public virtual DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
+    public virtual DbSet<ObjectMatchingRule> ObjectMatchingRules { get; set; } = null!;
+    public virtual DbSet<ObjectMatchingRuleSource> ObjectMatchingRuleSources { get; set; } = null!;
+    public virtual DbSet<ObjectMatchingRuleSourceParamValue> ObjectMatchingRuleSourceParamValues { get; set; } = null!;
     public virtual DbSet<SyncRule> SyncRules { get; set; } = null!;
     public virtual DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
@@ -70,8 +73,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
-    private readonly string _connectionString;
+    private readonly string? _connectionString;
 
+    // Parameterless constructor for migrations and manual instantiation
     public JimDbContext()
     {
         var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
@@ -101,10 +105,20 @@ public class JimDbContext : DbContext
             _connectionString += ";Include Error Detail=True";
     }
 
+    // Constructor for dependency injection with DbContextOptions
+    public JimDbContext(DbContextOptions<JimDbContext> options) : base(options)
+    {
+        // When using DI, options are already configured, so we don't need to build connection string
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.UseNpgsql(_connectionString)
-            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        // Only configure if not already configured (i.e., when using parameterless constructor)
+        if (!optionsBuilder.IsConfigured && _connectionString != null)
+        {
+            optionsBuilder.UseNpgsql(_connectionString)
+                .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -168,11 +182,30 @@ public class JimDbContext : DbContext
 
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.AttributeFlowRules)
-            .WithOne(afr => afr.AttributeFlowSynchronisationRule);
+            .WithOne(afr => afr.SyncRule);
 
+        // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)
-            .WithOne(omr => omr.ObjectMatchingSynchronisationRule);
+            .WithOne(omr => omr.SyncRule)
+            .HasForeignKey(omr => omr.SyncRuleId);
+
+        modelBuilder.Entity<ConnectedSystemObjectType>()
+            .HasMany(csot => csot.ObjectMatchingRules)
+            .WithOne(omr => omr.ConnectedSystemObjectType)
+            .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId);
+
+        modelBuilder.Entity<ObjectMatchingRule>()
+            .HasMany(omr => omr.Sources)
+            .WithOne(s => s.ObjectMatchingRule)
+            .HasForeignKey(s => s.ObjectMatchingRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ObjectMatchingRuleSource>()
+            .HasMany(s => s.ParameterValues)
+            .WithOne(pv => pv.ObjectMatchingRuleSource)
+            .HasForeignKey(pv => pv.ObjectMatchingRuleSourceId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // reduce the chance of concurrency issues by using a system attribute to identify row versions
         // for our most heavily updated objects.

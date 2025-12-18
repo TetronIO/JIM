@@ -74,6 +74,12 @@ public class MetaverseRepository : IMetaverseRepository
 
         return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
     }
+
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
+    {
+        Repository.Database.MetaverseObjectTypes.Update(metaverseObjectType);
+        await Repository.Database.SaveChangesAsync();
+    }
     #endregion
 
     #region metaverse attributes
@@ -101,9 +107,34 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Id == id);
     }
 
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id)
+    {
+        return await Repository.Database.MetaverseAttributes
+            .Include(a => a.MetaverseObjectTypes)
+            .SingleOrDefaultAsync(x => x.Id == id);
+    }
+
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
     {
         return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);
+    }
+
+    public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
+    {
+        Repository.Database.MetaverseAttributes.Add(attribute);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute)
+    {
+        Repository.Database.Update(attribute);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute)
+    {
+        Repository.Database.MetaverseAttributes.Remove(attribute);
+        await Repository.Database.SaveChangesAsync();
     }
     #endregion
 
@@ -517,48 +548,48 @@ public class MetaverseRepository : IMetaverseRepository
     /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
     /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified. This is not yet supported.</exception>
     /// <exception cref="ArgumentNullException">Will be thrown if the sync rule mapping source connected system attribute is null.</exception>
-    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the sync rule mapping. These are not yet supported.</exception>
+    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the matching rule. These are not yet supported.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
-    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the sync rule mapping criteria.</exception>
-    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, SyncRuleMapping syncRuleMapping)
+    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
+    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
     {
-        if (syncRuleMapping.Sources.Count > 1)
-            throw new NotImplementedException("Sync Rule Mappings with more than one Source at not yet supported (i.e. functions).");
+        if (objectMatchingRule.Sources.Count > 1)
+            throw new NotImplementedException("Object Matching Rules with more than one Source are not yet supported (i.e. functions).");
 
         // at this point in development, we expect and can process a single source.
-        var source = syncRuleMapping.Sources[0];
+        var source = objectMatchingRule.Sources[0];
         if (source.ConnectedSystemAttribute == null)
-            throw new InvalidDataException("syncRuleMapping.Sources[0].ConnectedSystemAttribute");
-        
+            throw new InvalidDataException("objectMatchingRule.Sources[0].ConnectedSystemAttribute is null");
+
         // get the source attribute value(s)
         var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.AttributeId == source.ConnectedSystemAttribute.Id);
-        
+
         // try and find a match for any of the source attribute values.
         // this enables an MVA such as 'CN' to be used as a matching attribute.
         foreach (var csoAttributeValue in csoAttributeValues)
         {
-            // construct the base query. This much is true, regardless of the sync rule mapping properties.
+            // construct the base query. This much is true, regardless of the matching rule properties.
             var metaVerseObjects = from o in Repository.Database.MetaverseObjects.
                     Include(mvo => mvo.AttributeValues).
                     ThenInclude(av => av.Attribute).
                     Where(mvo => mvo.Type.Id == metaverseObjectType.Id)
                     select o;
-            
+
             // work out what type of attribute it is
             switch (source.ConnectedSystemAttribute.Type)
             {
                 case AttributeDataType.Text:
-                    metaVerseObjects = metaVerseObjects.Where(mvo => 
-                        mvo.AttributeValues.Any(av => 
-                            syncRuleMapping.TargetMetaverseAttribute != null && 
-                            av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
+                    metaVerseObjects = metaVerseObjects.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
                             av.StringValue == csoAttributeValue.StringValue));
                     break;
                 case AttributeDataType.Number:
-                    metaVerseObjects = metaVerseObjects.Where(mvo => 
-                        mvo.AttributeValues.Any(av => 
-                            syncRuleMapping.TargetMetaverseAttribute != null && 
-                            av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
+                    metaVerseObjects = metaVerseObjects.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
                             av.IntValue == csoAttributeValue.IntValue));
                     break;
                 case AttributeDataType.DateTime:
@@ -568,10 +599,10 @@ public class MetaverseRepository : IMetaverseRepository
                 case AttributeDataType.Reference:
                     throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
                 case AttributeDataType.Guid:
-                    metaVerseObjects = metaVerseObjects.Where(mvo => 
-                        mvo.AttributeValues.Any(av => 
-                            syncRuleMapping.TargetMetaverseAttribute != null && 
-                            av.Attribute.Id == syncRuleMapping.TargetMetaverseAttribute.Id && 
+                    metaVerseObjects = metaVerseObjects.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
                             av.GuidValue == csoAttributeValue.GuidValue));
                     break;
                 case AttributeDataType.Boolean:
@@ -580,7 +611,7 @@ public class MetaverseRepository : IMetaverseRepository
                 default:
                     throw new InvalidDataException("Unexpected Connected System Attribute Type");
             }
-            
+
             // execute the search. did we find an MVO?
             var result = await metaVerseObjects.ToListAsync();
             switch (result.Count)
@@ -593,7 +624,7 @@ public class MetaverseRepository : IMetaverseRepository
                         result.Select(q => q.Id).ToList());
             }
         }
-        
+
         // no match
         return null;
     }
@@ -620,6 +651,164 @@ public class MetaverseRepository : IMetaverseRepository
 
         Repository.Database.MetaverseObjects.Remove(metaverseObject);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
+    /// Returns MVOs where:
+    /// - Origin = Projected (not Internal - protects admin accounts)
+    /// - Type.DeletionRule = WhenLastConnectorDisconnected
+    /// - LastConnectorDisconnectedDate + GracePeriodDays less than or equal to now
+    /// - No connected system objects remain
+    /// </summary>
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100)
+    {
+        var now = DateTime.UtcNow;
+
+        var eligibleObjects = await Repository.Database.MetaverseObjects
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo =>
+                // Must be a projected object (not internal like admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have a type with WhenLastConnectorDisconnected deletion rule
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                // Must have been disconnected (has a last connector disconnected date)
+                mvo.LastConnectorDisconnectedDate != null &&
+                // Must have no remaining connected system objects
+                !mvo.ConnectedSystemObjects.Any() &&
+                // Grace period must have elapsed (or no grace period configured)
+                (mvo.Type.DeletionGracePeriodDays == null ||
+                 mvo.Type.DeletionGracePeriodDays == 0 ||
+                 mvo.LastConnectorDisconnectedDate.Value.AddDays(mvo.Type.DeletionGracePeriodDays.Value) <= now))
+            .OrderBy(mvo => mvo.LastConnectorDisconnectedDate)
+            .Take(maxResults)
+            .ToListAsync();
+
+        return eligibleObjects;
+    }
+
+    public async Task<List<MetaverseObject>> GetMvosOrphanedByConnectedSystemDeletionAsync(int connectedSystemId)
+    {
+        // Find MVOs that:
+        // 1. Are projected (not internal admin accounts)
+        // 2. Have deletion rule WhenLastConnectorDisconnected
+        // 3. Have ALL their CSOs in the specified connected system (will become orphaned)
+        var orphanedMvos = await Repository.Database.MetaverseObjects
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo =>
+                // Must be a projected object (not internal like admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have a type with WhenLastConnectorDisconnected deletion rule
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                // Must have at least one CSO in the system being deleted
+                mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId == connectedSystemId) &&
+                // Must NOT have any CSOs in OTHER connected systems (would become orphaned)
+                !mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId != connectedSystemId))
+            .ToListAsync();
+
+        return orphanedMvos;
+    }
+
+    public async Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds)
+    {
+        var mvoIdList = mvoIds.ToList();
+        if (mvoIdList.Count == 0)
+            return 0;
+
+        var now = DateTime.UtcNow;
+
+        // Use raw SQL for efficiency with large numbers of MVOs
+        var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects""
+              SET ""LastConnectorDisconnectedDate"" = {0}
+              WHERE ""Id"" = ANY({1})
+                AND ""LastConnectorDisconnectedDate"" IS NULL",
+            now, mvoIdList.ToArray());
+
+        return rowsAffected;
+    }
+
+    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionAsync(
+        int page,
+        int pageSize,
+        int? objectTypeId = null)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        // Build base query for MVOs pending deletion
+        var query = Repository.Database.MetaverseObjects
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo =>
+                // Must have LastConnectorDisconnectedDate set (pending deletion)
+                mvo.LastConnectorDisconnectedDate != null &&
+                // Must be projected (not internal admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have deletion rule WhenLastConnectorDisconnected
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+
+        // Apply object type filter if specified
+        if (objectTypeId.HasValue)
+        {
+            query = query.Where(mvo => mvo.Type.Id == objectTypeId.Value);
+        }
+
+        // Order by deletion eligible date (soonest first)
+        query = query.OrderBy(mvo => mvo.LastConnectorDisconnectedDate);
+
+        // Get total count
+        var totalCount = await query.CountAsync();
+
+        // Apply pagination
+        var offset = (page - 1) * pageSize;
+        var results = await query
+            .Skip(offset)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultSet<MetaverseObject>
+        {
+            PageSize = pageSize,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            Results = results
+        };
+    }
+
+    public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
+    {
+        var query = Repository.Database.MetaverseObjects
+            .Where(mvo =>
+                // Must have LastConnectorDisconnectedDate set (pending deletion)
+                mvo.LastConnectorDisconnectedDate != null &&
+                // Must be projected (not internal admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have deletion rule WhenLastConnectorDisconnected
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+
+        // Apply object type filter if specified
+        if (objectTypeId.HasValue)
+        {
+            query = query.Where(mvo => mvo.Type.Id == objectTypeId.Value);
+        }
+
+        return await query.CountAsync();
     }
 
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)

@@ -1,4 +1,5 @@
-﻿using JIM.Models.Enums;
+﻿using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
@@ -87,12 +88,46 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// Gets the count of Connected System Objects joined to a specific Metaverse Object.
+    /// Used to determine if an MVO has any remaining connectors before deletion.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
+    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
     /// Used for finding existing CSOs during export evaluation.
     /// </summary>
     /// <param name="metaverseObjectId">The MVO ID.</param>
     /// <param name="connectedSystemId">The Connected System ID.</param>
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
+
+    /// <summary>
+    /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
+    /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
+    /// Used during export evaluation to find existing CSOs for provisioning decisions.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to find a matching CSO for.</param>
+    /// <param name="connectedSystem">The target Connected System.</param>
+    /// <param name="connectedSystemObjectType">The target CSO type.</param>
+    /// <param name="objectMatchingRule">The matching rule defining how to match.</param>
+    /// <returns>The matching CSO, or null if no match found.</returns>
+    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ObjectMatchingRule objectMatchingRule);
+
+    /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value.
+    /// Used to find PendingProvisioning CSOs during import reconciliation when the
+    /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System ID.</param>
+    /// <param name="objectTypeId">The object type ID.</param>
+    /// <param name="secondaryExternalIdValue">The secondary external ID value (e.g., DN for LDAP).</param>
+    /// <returns>The matching CSO, or null if not found.</returns>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
 
     /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
@@ -102,6 +137,30 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Gets a Connected System Partition by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the partition.</param>
+    Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Partition.
+    /// </summary>
+    /// <param name="partition">The partition to update.</param>
+    Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition);
+
+    /// <summary>
+    /// Gets a Connected System Container by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the container.</param>
+    Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Container.
+    /// </summary>
+    /// <param name="container">The container to update.</param>
+    Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
     public Task<List<SyncRule>> GetSyncRulesAsync();
 
@@ -113,6 +172,39 @@ public interface IConnectedSystemRepository
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules);
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
+
+    #region Sync Rule Mappings
+    /// <summary>
+    /// Gets all mappings for a sync rule.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId);
+
+    /// <summary>
+    /// Gets a specific sync rule mapping by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the mapping.</param>
+    Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id);
+
+    /// <summary>
+    /// Creates a new sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to create.</param>
+    Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping);
+
+    /// <summary>
+    /// Updates an existing sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to update.</param>
+    Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping);
+
+    /// <summary>
+    /// Deletes a sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to delete.</param>
+    Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping);
+    #endregion
+
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
@@ -193,6 +285,54 @@ public interface IConnectedSystemRepository
     public Task DeleteSyncRuleAsync(SyncRule syncRule);
 
     public Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute);
+
+    #region Object Types and Attributes
+    /// <summary>
+    /// Gets a Connected System Object Type by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the object type.</param>
+    Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Object Type.
+    /// </summary>
+    /// <param name="objectType">The object type to update.</param>
+    Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType);
+
+    /// <summary>
+    /// Gets a Connected System Attribute by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute.</param>
+    Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id);
+
+    /// <summary>
+    /// Updates a Connected System Attribute.
+    /// </summary>
+    /// <param name="attribute">The attribute to update.</param>
+    Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute);
+    #endregion
+
+    #region Object Matching Rules
+    /// <summary>
+    /// Creates a new object matching rule for a Connected System Object Type.
+    /// </summary>
+    Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule);
+
+    /// <summary>
+    /// Updates an existing object matching rule.
+    /// </summary>
+    Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule);
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources.
+    /// </summary>
+    Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule);
+
+    /// <summary>
+    /// Gets an object matching rule by ID with all related entities loaded.
+    /// </summary>
+    Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id);
+    #endregion
 
     #region Connected System Deletion
     /// <summary>

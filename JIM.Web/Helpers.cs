@@ -48,6 +48,87 @@ public static class Helpers
         return $"{dateTime.ToShortDateString()} ({dateTime.ToShortTimeString()})";
     }
 
+    /// <summary>
+    /// Extension method that converts a DateTime into a relative time string (e.g., "2 hours ago", "just now").
+    /// </summary>
+    public static string ToRelativeTime(this DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (timeSpan.TotalSeconds < 60)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+        {
+            var minutes = (int)timeSpan.TotalMinutes;
+            return $"{minutes} {(minutes == 1 ? "minute" : "minutes")} ago";
+        }
+        if (timeSpan.TotalHours < 24)
+        {
+            var hours = (int)timeSpan.TotalHours;
+            return $"{hours} {(hours == 1 ? "hour" : "hours")} ago";
+        }
+        if (timeSpan.TotalDays < 30)
+        {
+            var days = (int)timeSpan.TotalDays;
+            return $"{days} {(days == 1 ? "day" : "days")} ago";
+        }
+        if (timeSpan.TotalDays < 365)
+        {
+            var months = (int)(timeSpan.TotalDays / 30);
+            return $"{months} {(months == 1 ? "month" : "months")} ago";
+        }
+
+        var years = (int)(timeSpan.TotalDays / 365);
+        return $"{years} {(years == 1 ? "year" : "years")} ago";
+    }
+
+    /// <summary>
+    /// Extension method that converts a TimeSpan into a human-readable string with abbreviated units.
+    /// Examples: "143 ms", "14 sec, 210 ms", "2 min, 15 sec"
+    /// </summary>
+    public static string ToAbbreviatedString(this TimeSpan timeSpan, int precision = 2)
+    {
+        var parts = new List<string>();
+
+        if (timeSpan.Days > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Days} day{(timeSpan.Days == 1 ? "" : "s")}");
+        if (timeSpan.Hours > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Hours} hr{(timeSpan.Hours == 1 ? "" : "s")}");
+        if (timeSpan.Minutes > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Minutes} min");
+        if (timeSpan.Seconds > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Seconds} sec");
+        if (timeSpan.Milliseconds > 0 && parts.Count < precision)
+            parts.Add($"{timeSpan.Milliseconds} ms");
+
+        return parts.Count > 0 ? string.Join(", ", parts) : "0 ms";
+    }
+
+    /// <summary>
+    /// Extension method that converts a TimeSpan into a casual, rounded approximation using the largest appropriate unit.
+    /// Examples: "143 ms", "~14 sec", "~16 sec", "~2 min"
+    /// </summary>
+    public static string ToCasualString(this TimeSpan timeSpan)
+    {
+        // Round to the largest appropriate unit
+        if (timeSpan.TotalDays >= 1)
+        {
+            var days = Math.Round(timeSpan.TotalDays);
+            return $"~{days} day{(days == 1 ? "" : "s")}";
+        }
+        if (timeSpan.TotalHours >= 1)
+        {
+            var hours = Math.Round(timeSpan.TotalHours);
+            return $"~{hours} hr{(hours == 1 ? "" : "s")}";
+        }
+        if (timeSpan.TotalMinutes >= 1)
+            return $"~{Math.Round(timeSpan.TotalMinutes)} min";
+        if (timeSpan.TotalSeconds >= 1)
+            return $"~{Math.Round(timeSpan.TotalSeconds)} sec";
+
+        return $"{Math.Round(timeSpan.TotalMilliseconds)} ms";
+    }
+
     #region mudblazor related
     public static Color GetActivityMudBlazorColorForStatus(ActivityStatus status)
     {

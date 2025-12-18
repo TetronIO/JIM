@@ -476,13 +476,13 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorExportUsingFiles members
-    public void Export(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports)
+    public List<ExportResult> Export(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports)
     {
         var logger = Log.ForContext<FileConnector>();
         logger.Verbose("Export() called with {Count} pending exports", pendingExports.Count);
 
         var export = new FileConnectorExport(settings, pendingExports, logger);
-        export.Execute();
+        return export.Execute();
     }
     #endregion
 

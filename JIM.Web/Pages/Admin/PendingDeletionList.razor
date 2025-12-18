@@ -1,0 +1,312 @@
+@page "/admin/pending-deletions"
+@attribute [Authorize(Roles = "Administrator")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Utility
+@using JIM.Utilities
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Pending Deletions</PageTitle>
+<MudText Typo="Typo.h4">Pending Deletions</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    Metaverse objects in the deletion pipeline. Includes identities being deprovisioned from connected systems
+    and those awaiting automatic deletion after their grace period expires.
+</MudText>
+
+@* Summary cards *@
+<MudGrid Class="mt-5">
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Total Pending</MudText>
+            <MudText Typo="Typo.h4">@_totalCount</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-warning);">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Deprovisioning</MudText>
+            <MudTooltip Text="MVOs still connected to other systems, awaiting cascade deletion">
+                <MudText Typo="Typo.h4" Color="@(_deprovisioningCount > 0 ? Color.Warning : Color.Default)">@_deprovisioningCount</MudText>
+            </MudTooltip>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-info);">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Awaiting Grace Period</MudText>
+            <MudTooltip Text="MVOs fully disconnected, waiting for grace period to expire">
+                <MudText Typo="Typo.h4">@_awaitingGracePeriodCount</MudText>
+            </MudTooltip>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-error);">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Ready for Deletion</MudText>
+            <MudTooltip Text="MVOs eligible for deletion (grace period expired, no connectors)">
+                <MudText Typo="Typo.h4" Color="@(_readyForDeletionCount > 0 ? Color.Error : Color.Default)">@_readyForDeletionCount</MudText>
+            </MudTooltip>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* Object type filter *@
+<MudGrid Class="mt-5">
+    <MudItem xs="6">
+        <MudSelect T="int?" Label="Filter by Object Type" Value="_selectedObjectTypeId"
+                   ValueChanged="OnObjectTypeFilterChanged"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+            @foreach (var objectType in _objectTypes)
+            {
+                <MudSelectItem T="int?" Value="@objectType.Id">@objectType.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+</MudGrid>
+
+<MudTable @ref="_table"
+          T="PendingDeletionItem"
+          ServerData="ServerReload"
+          Hover="true"
+          Dense="true"
+          Breakpoint="Breakpoint.Sm"
+          Class="mt-5"
+          Outlined="true"
+          Elevation="0"
+          OnRowClick="HandleRowClick"
+          RowClass="cursor-pointer"
+          Loading="@_loading"
+          LoadingProgressColor="Color.Primary">
+    <ToolBarContent>
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Showing @_table?.GetFilteredItemsCount() of @_totalCount pending deletions
+        </MudText>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>
+            <MudTableSortLabel SortLabel="displayname" T="PendingDeletionItem">
+                <MudText Typo="Typo.button">Display Name</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="type" T="PendingDeletionItem">
+                <MudText Typo="Typo.button">Type</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Status</MudText>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="disconnected" T="PendingDeletionItem" InitialDirection="SortDirection.Ascending">
+                <MudText Typo="Typo.button">Disconnected</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="eligible" T="PendingDeletionItem">
+                <MudText Typo="Typo.button">Deletion Eligible</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Connectors</MudText>
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Display Name">
+            <MudLink Href="@GetMvoDetailHref(context)">
+                @(context.DisplayName ?? context.Id.ToString())
+            </MudLink>
+        </MudTd>
+        <MudTd DataLabel="Type">@context.TypeName</MudTd>
+        <MudTd DataLabel="Status">
+            @if (context.ConnectorCount > 0)
+            {
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Size="Size.Small">
+                    Deprovisioning
+                </MudChip>
+            }
+            else if (context.DaysUntilDeletion.HasValue && context.DaysUntilDeletion.Value > 0)
+            {
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Size="Size.Small">
+                    Grace Period
+                </MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                    Ready
+                </MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Disconnected">@context.LastConnectorDisconnectedDate.ToFriendlyDate()</MudTd>
+        <MudTd DataLabel="Deletion Eligible">
+            @if (context.DeletionEligibleDate.HasValue)
+            {
+                if (context.DaysUntilDeletion.HasValue)
+                {
+                    if (context.DaysUntilDeletion.Value <= 0)
+                    {
+                        <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")">
+                            <MudText Color="Color.Error">Overdue by @Math.Abs(context.DaysUntilDeletion.Value) days</MudText>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")">
+                            <span>@context.DaysUntilDeletion days</span>
+                        </MudTooltip>
+                    }
+                }
+            }
+            else
+            {
+                <span class="mud-text-secondary">Immediate</span>
+            }
+        </MudTd>
+        <MudTd DataLabel="Connectors">
+            @if (context.ConnectorCount > 0)
+            {
+                <MudTooltip Text="@($"{context.ConnectorCount} connector(s) remaining - awaiting cascade deletion")">
+                    <MudBadge Content="@context.ConnectorCount.ToString()" Color="Color.Warning" Overlap="false">
+                        <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" />
+                    </MudBadge>
+                </MudTooltip>
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Class="mud-text-secondary" />
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>There are no metaverse objects pending deletion.</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<PendingDeletionItem>? _table;
+    private List<BreadcrumbItem> _breadcrumbs = null!;
+    private bool _loading;
+    private int? _selectedObjectTypeId;
+    private List<MetaverseObjectType> _objectTypes = new();
+
+    // Summary counts
+    private int _totalCount;
+    private int _deprovisioningCount;
+    private int _awaitingGracePeriodCount;
+    private int _readyForDeletionCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Pending Deletions", href: null, disabled: true)
+        };
+
+        // Load object types for filter
+        _objectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(false);
+
+        // Load summary counts
+        await LoadSummaryAsync();
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        // Get all pending to calculate summary
+        var result = await Jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(1, 100, _selectedObjectTypeId);
+        var now = DateTime.UtcNow;
+
+        _totalCount = await Jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(_selectedObjectTypeId);
+
+        // Calculate status counts
+        _deprovisioningCount = result.Results.Count(m => m.ConnectedSystemObjects.Any());
+        _readyForDeletionCount = result.Results.Count(m =>
+            !m.ConnectedSystemObjects.Any() &&
+            (!m.DeletionEligibleDate.HasValue || m.DeletionEligibleDate.Value <= now));
+        _awaitingGracePeriodCount = result.Results.Count(m =>
+            !m.ConnectedSystemObjects.Any() &&
+            m.DeletionEligibleDate.HasValue &&
+            m.DeletionEligibleDate.Value > now);
+    }
+
+    private async Task<TableData<PendingDeletionItem>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Convert MudBlazor's 0-indexed page to our 1-indexed page
+            var page = state.Page + 1;
+
+            var result = await Jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+                page,
+                state.PageSize,
+                _selectedObjectTypeId);
+
+            // Convert to display items
+            var items = result.Results.Select(mvo => new PendingDeletionItem
+            {
+                Id = mvo.Id,
+                DisplayName = mvo.DisplayName,
+                TypeName = mvo.Type?.Name ?? "Unknown",
+                TypeId = mvo.Type?.Id ?? 0,
+                TypePluralName = mvo.Type?.PluralName ?? "objects",
+                LastConnectorDisconnectedDate = mvo.LastConnectorDisconnectedDate!.Value,
+                DeletionEligibleDate = mvo.DeletionEligibleDate,
+                DaysUntilDeletion = mvo.DeletionEligibleDate.HasValue
+                    ? (int)Math.Ceiling((mvo.DeletionEligibleDate.Value - DateTime.UtcNow).TotalDays)
+                    : (int?)null,
+                GracePeriodDays = mvo.Type?.DeletionGracePeriodDays,
+                ConnectorCount = mvo.ConnectedSystemObjects?.Count ?? 0
+            }).ToList();
+
+            return new TableData<PendingDeletionItem>
+            {
+                TotalItems = result.TotalResults,
+                Items = items
+            };
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnObjectTypeFilterChanged(int? newValue)
+    {
+        _selectedObjectTypeId = newValue;
+        await LoadSummaryAsync();
+        _table?.ReloadServerData();
+    }
+
+    private void HandleRowClick(TableRowClickEventArgs<PendingDeletionItem> args)
+    {
+        if (args.Item != null)
+            NavManager.NavigateTo(GetMvoDetailHref(args.Item));
+    }
+
+    private string GetMvoDetailHref(PendingDeletionItem item)
+    {
+        return $"/t/{item.TypePluralName.ToLower()}/v/{item.Id}";
+    }
+
+    // Local display model
+    private class PendingDeletionItem
+    {
+        public Guid Id { get; set; }
+        public string? DisplayName { get; set; }
+        public string TypeName { get; set; } = null!;
+        public int TypeId { get; set; }
+        public string TypePluralName { get; set; } = null!;
+        public DateTime LastConnectorDisconnectedDate { get; set; }
+        public DateTime? DeletionEligibleDate { get; set; }
+        public int? DaysUntilDeletion { get; set; }
+        public int? GracePeriodDays { get; set; }
+        public int ConnectorCount { get; set; }
+    }
+}

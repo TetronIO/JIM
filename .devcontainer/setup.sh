@@ -175,33 +175,31 @@ fi
 
 # 9. Create useful shell aliases
 print_step "Creating shell aliases..."
-cat >> ~/.zshrc << 'EOF'
 
-# JIM Development Aliases
-# Unset GITHUB_TOKEN to allow gh CLI to use its own authentication with project scopes
-unset GITHUB_TOKEN
+# Add source line to .zshrc if not already present
+if ! grep -q "source.*jim-aliases.sh" ~/.zshrc; then
+    echo "" >> ~/.zshrc
+    echo "# Source JIM development aliases" >> ~/.zshrc
+    echo "if [ -f \"\$HOME/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.zshrc
+    echo "    source \"\$HOME/.devcontainer/jim-aliases.sh\"" >> ~/.zshrc
+    echo "elif [ -f \"/workspaces/JIM/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.zshrc
+    echo "    source \"/workspaces/JIM/.devcontainer/jim-aliases.sh\"" >> ~/.zshrc
+    echo "fi" >> ~/.zshrc
+    print_success "Shell aliases configured (restart terminal or run: source ~/.zshrc)"
+else
+    print_success "Shell aliases already configured"
+fi
 
-alias jim-build='dotnet build JIM.sln'
-alias jim-test='dotnet test JIM.sln'
-alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
-alias jim-web='dotnet run --project JIM.Web'
-alias jim-api='dotnet run --project JIM.Api'
-alias jim-worker='dotnet run --project JIM.Worker'
-alias jim-migrate='dotnet ef database update --project JIM.PostgresData'
-alias jim-migration='dotnet ef migrations add --project JIM.PostgresData'
-alias jim-db='docker compose -f db.yml up -d'
-alias jim-db-stop='docker compose -f db.yml down'
-alias jim-db-logs='docker compose -f db.yml logs -f'
-alias jim-adminer='echo "Adminer running at http://localhost:8080"'
-alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
-alias jim-stack-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
-alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
-alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down'
-alias jim-web-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build jim.web'
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-stack-build to start fresh."'
-EOF
-
-print_success "Shell aliases created (restart terminal or run: source ~/.zshrc)"
+# Also add to .bashrc for bash users
+if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
+    echo "" >> ~/.bashrc
+    echo "# Source JIM development aliases" >> ~/.bashrc
+    echo "if [ -f \"\$HOME/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.bashrc
+    echo "    source \"\$HOME/.devcontainer/jim-aliases.sh\"" >> ~/.bashrc
+    echo "elif [ -f \"/workspaces/JIM/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.bashrc
+    echo "    source \"/workspaces/JIM/.devcontainer/jim-aliases.sh\"" >> ~/.bashrc
+    echo "fi" >> ~/.bashrc
+fi
 
 # 10. Display useful information
 echo ""
@@ -217,10 +215,17 @@ echo "  jim-api            → Run the API (local, debuggable)"
 echo "  jim-db             → Start PostgreSQL database only"
 echo ""
 echo "🐳 Docker Stack Commands:"
-echo "  jim-stack          → Start full Docker stack (all services)"
-echo "  jim-stack-build    → Build and start Docker stack"
+echo "  jim-stack          → Start Docker stack (uses existing images)"
 echo "  jim-stack-logs     → View Docker stack logs"
 echo "  jim-stack-down     → Stop Docker stack"
+echo ""
+echo "🔨 Docker Builds (rebuild services):"
+echo "  jim-build-stack    → Build all services + start"
+echo "  jim-build-web      → Build jim.web + start"
+echo "  jim-build-worker   → Build jim.worker + start"
+echo "  jim-build-scheduler → Build jim.scheduler + start"
+echo ""
+echo "🔄 Reset:"
 echo "  jim-reset          → Reset JIM (delete database & logs volumes)"
 echo ""
 echo "🔧 Database Commands:"

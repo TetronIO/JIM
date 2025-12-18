@@ -28,21 +28,24 @@ internal class LdapConnectorExport
         _logger = logger;
     }
 
-    internal void Execute(IList<PendingExport> pendingExports)
+    internal List<ExportResult> Execute(IList<PendingExport> pendingExports)
     {
         _logger.Debug("LdapConnectorExport.Execute: Starting export of {Count} pending exports", pendingExports.Count);
+
+        var results = new List<ExportResult>();
 
         if (pendingExports.Count == 0)
         {
             _logger.Information("LdapConnectorExport.Execute: No pending exports to process");
-            return;
+            return results;
         }
 
         foreach (var pendingExport in pendingExports)
         {
             try
             {
-                ProcessPendingExport(pendingExport);
+                var result = ProcessPendingExport(pendingExport);
+                results.Add(result);
             }
             catch (Exception ex)
             {
@@ -63,27 +66,32 @@ internal class LdapConnectorExport
                     _logger.Warning("LdapConnectorExport.Execute: Pending export {Id} has exceeded max retries and is now Failed",
                         pendingExport.Id);
                 }
+
+                results.Add(ExportResult.Failed(ex.Message));
             }
         }
 
         _logger.Information("LdapConnectorExport.Execute: Completed export processing of {Count} pending exports", pendingExports.Count);
+        return results;
     }
 
-    private void ProcessPendingExport(PendingExport pendingExport)
+    private ExportResult ProcessPendingExport(PendingExport pendingExport)
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
 
+        ExportResult result;
         switch (pendingExport.ChangeType)
         {
             case PendingExportChangeType.Create:
-                ProcessCreate(pendingExport);
+                result = ProcessCreate(pendingExport);
                 break;
             case PendingExportChangeType.Update:
-                ProcessUpdate(pendingExport);
+                result = ProcessUpdate(pendingExport);
                 break;
             case PendingExportChangeType.Delete:
                 ProcessDelete(pendingExport);
+                result = ExportResult.Succeeded();
                 break;
             default:
                 throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}");
@@ -92,9 +100,10 @@ internal class LdapConnectorExport
         pendingExport.Status = PendingExportStatus.Exported;
         _logger.Debug("LdapConnectorExport.ProcessPendingExport: Successfully processed {ChangeType} for {Id}",
             pendingExport.ChangeType, pendingExport.Id);
+        return result;
     }
 
-    private void ProcessCreate(PendingExport pendingExport)
+    private ExportResult ProcessCreate(PendingExport pendingExport)
     {
         // For create, we need to build the DN and all attributes
         var dn = GetDistinguishedNameForCreate(pendingExport);
@@ -142,17 +151,80 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
+
+        // After successful create, fetch the system-assigned objectGUID
+        var objectGuid = FetchObjectGuid(dn);
+        if (objectGuid != null)
+        {
+            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
+            return ExportResult.Succeeded(objectGuid, dn);
+        }
+
+        // objectGUID not available, return success without external ID
+        return ExportResult.Succeeded(null, dn);
     }
 
-    private void ProcessUpdate(PendingExport pendingExport)
+    /// <summary>
+    /// Fetches the objectGUID for a newly created object.
+    /// </summary>
+    private string? FetchObjectGuid(string dn)
     {
-        var dn = GetDistinguishedNameForUpdate(pendingExport);
-        if (string.IsNullOrEmpty(dn))
+        try
+        {
+            var searchRequest = new SearchRequest(
+                dn,
+                "(objectClass=*)",
+                SearchScope.Base,
+                "objectGUID");
+
+            var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest);
+            if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
+            {
+                _logger.Warning("LdapConnectorExport.FetchObjectGuid: Failed to fetch objectGUID for '{Dn}'", dn);
+                return null;
+            }
+
+            var entry = searchResponse.Entries[0];
+            if (entry.Attributes.Contains("objectGUID"))
+            {
+                var guidBytes = entry.Attributes["objectGUID"][0] as byte[];
+                if (guidBytes != null && guidBytes.Length == 16)
+                {
+                    var guid = new Guid(guidBytes);
+                    return guid.ToString();
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "LdapConnectorExport.FetchObjectGuid: Error fetching objectGUID for '{Dn}'", dn);
+            return null;
+        }
+    }
+
+    private ExportResult ProcessUpdate(PendingExport pendingExport)
+    {
+        var currentDn = GetDistinguishedNameForUpdate(pendingExport);
+        if (string.IsNullOrEmpty(currentDn))
             throw new InvalidOperationException("Cannot update object: Distinguished Name (DN) could not be determined.");
 
-        _logger.Debug("LdapConnectorExport.ProcessUpdate: Updating object at DN '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessUpdate: Updating object at DN '{Dn}'", currentDn);
 
-        var modifyRequest = new ModifyRequest(dn);
+        // Check if a rename is needed (DN has changed)
+        var newDn = GetNewDistinguishedName(pendingExport);
+        var workingDn = currentDn;
+        var wasRenamed = false;
+
+        if (!string.IsNullOrEmpty(newDn) && !newDn.Equals(currentDn, StringComparison.OrdinalIgnoreCase))
+        {
+            // DN has changed - perform rename first
+            workingDn = ProcessRename(currentDn, newDn);
+            wasRenamed = true;
+        }
+
+        var modifyRequest = new ModifyRequest(workingDn);
 
         foreach (var attrChange in pendingExport.AttributeValueChanges)
         {
@@ -161,8 +233,16 @@ internal class LdapConnectorExport
 
             var attrName = attrChange.Attribute.Name;
 
-            // Skip distinguished name - it cannot be modified via ModifyRequest
-            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
+            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest
+            // These require a ModifyDNRequest (rename operation) instead, which is handled above.
+            // - distinguishedName: The full DN, immutable via MODIFY
+            // - cn: Common Name, the RDN for most object types (users, groups, etc.)
+            // - ou: Organisational Unit name, RDN for OUs
+            // - dc: Domain Component, RDN for domain objects
+            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("dc", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var modification = CreateModification(attrChange);
@@ -174,8 +254,9 @@ internal class LdapConnectorExport
 
         if (modifyRequest.Modifications.Count == 0)
         {
-            _logger.Debug("LdapConnectorExport.ProcessUpdate: No modifications to apply for '{Dn}'", dn);
-            return;
+            _logger.Debug("LdapConnectorExport.ProcessUpdate: No attribute modifications to apply for '{Dn}'", workingDn);
+            // Return the new DN if renamed, so it can be updated on the CSO
+            return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
         }
 
         var response = (ModifyResponse)_connection.SendRequest(modifyRequest);
@@ -185,7 +266,67 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessUpdate: Successfully updated object at '{Dn}' with {Count} modifications",
-            dn, modifyRequest.Modifications.Count);
+            workingDn, modifyRequest.Modifications.Count);
+
+        // Return the new DN if renamed, so it can be updated on the CSO
+        return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Processes a rename (move) operation using ModifyDNRequest.
+    /// Returns the new DN after the rename.
+    /// </summary>
+    private string ProcessRename(string currentDn, string newDn)
+    {
+        _logger.Debug("LdapConnectorExport.ProcessRename: Renaming object from '{OldDn}' to '{NewDn}'", currentDn, newDn);
+
+        // Parse the new DN to extract the new RDN and new parent DN
+        var (newRdn, newParentDn) = LdapConnectorUtilities.ParseDistinguishedName(newDn);
+        var (_, currentParentDn) = LdapConnectorUtilities.ParseDistinguishedName(currentDn);
+
+        if (string.IsNullOrEmpty(newRdn))
+        {
+            throw new InvalidOperationException($"Cannot rename object: Unable to parse new RDN from DN '{newDn}'");
+        }
+
+        // Determine if this is just a rename or also a move to a different container
+        var isMove = !string.IsNullOrEmpty(newParentDn) &&
+                     !newParentDn.Equals(currentParentDn, StringComparison.OrdinalIgnoreCase);
+
+        var modifyDnRequest = new ModifyDNRequest(
+            currentDn,
+            newParentDn,  // New parent (null if not moving)
+            newRdn        // New RDN (e.g., "CN=New Name")
+        );
+
+        // deleteOldRdn should be true to remove the old RDN value
+        // This is the default behaviour in most LDAP implementations
+
+        _logger.Debug("LdapConnectorExport.ProcessRename: Executing ModifyDNRequest - NewRdn: '{NewRdn}', NewParent: '{NewParent}', IsMove: {IsMove}",
+            newRdn, newParentDn ?? "(same)", isMove);
+
+        var response = (ModifyDNResponse)_connection.SendRequest(modifyDnRequest);
+        if (response.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+        }
+
+        _logger.Information("LdapConnectorExport.ProcessRename: Successfully renamed object from '{OldDn}' to '{NewDn}'",
+            currentDn, newDn);
+
+        return newDn;
+    }
+
+    /// <summary>
+    /// Gets the new distinguished name from the pending export's attribute changes.
+    /// This is used to detect if a rename operation is needed.
+    /// </summary>
+    private static string? GetNewDistinguishedName(PendingExport pendingExport)
+    {
+        var dnAttrChange = pendingExport.AttributeValueChanges
+            .FirstOrDefault(a => a.Attribute?.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) == true);
+
+        return dnAttrChange?.StringValue;
     }
 
     private void ProcessDelete(PendingExport pendingExport)

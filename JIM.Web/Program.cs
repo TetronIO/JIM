@@ -1,11 +1,15 @@
 using System.Text.Json;
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Application.Expressions;
+using JIM.Data;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -46,7 +50,36 @@ try
     await InitialiseJimApplicationAsync();
 
     var builder = WebApplication.CreateBuilder(args);
-    builder.Services.AddScoped<JimApplication>(_ => new JimApplication(new PostgresDataRepository(new JimDbContext())));
+
+    // Configure database connection
+    var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
+    var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
+    var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
+    var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
+    var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
+
+    var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle Lifetime=300;Connection Pruning Interval=30";
+    _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
+    if (logSensitiveInfo)
+        connectionString += ";Include Error Detail=True";
+
+    // Use DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
+    // Blazor Server pre-rendering and interactive rendering can happen concurrently
+    builder.Services.AddDbContextFactory<JimDbContext>(options =>
+        options.UseNpgsql(connectionString)
+            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
+
+    // Register repository and application as transient to prevent DbContext concurrency issues
+    // In Blazor Server, multiple async operations within a page can run concurrently
+    // Using transient lifetime ensures each operation gets its own DbContext instance
+    builder.Services.AddTransient<IRepository>(sp =>
+    {
+        var factory = sp.GetRequiredService<IDbContextFactory<JimDbContext>>();
+        var context = factory.CreateDbContext();
+        return new PostgresDataRepository(context);
+    });
+    builder.Services.AddTransient<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
+    builder.Services.AddExpressionEvaluation();
 
     // setup OpenID Connect (OIDC) authentication for Blazor UI
     var authority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority);
@@ -59,12 +92,28 @@ try
     var validIssuers = GetValidIssuers(authority);
 
     // Configure triple authentication: Cookies for Blazor UI, JWT Bearer for SSO API, API Key for non-interactive API
+    // Configure authentication with multiple schemes
+    // Cookie is default for Blazor UI, but forwards to API Key when X-API-Key header is present
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
     })
-        .AddCookie()
+        .AddApiKeyAuthentication()
+        .AddCookie(options =>
+        {
+            // Forward to API Key authentication when X-API-Key header is present
+            options.ForwardDefaultSelector = context =>
+            {
+                // Check if the request has an API key header
+                if (context.Request.Headers.ContainsKey("X-API-Key"))
+                {
+                    return ApiKeyAuthenticationHandler.SchemeName;
+                }
+                // Otherwise use default Cookie authentication
+                return null;
+            };
+        })
         .AddOpenIdConnect(options =>
         {
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -85,6 +134,19 @@ try
             {
                 await AuthoriseAndUpdateUserAsync(ctx);
             };
+
+            // Prevent OIDC redirects for API requests - they should return 401 instead
+            options.Events.OnRedirectToIdentityProvider = async ctx =>
+            {
+                if (ctx.Request.Path.StartsWithSegments("/api"))
+                {
+                    Log.Debug("Suppressing OIDC redirect for API request: {Path}, returning 401", ctx.Request.Path);
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.WriteAsJsonAsync(new { error = "Unauthorized", message = "Authentication required" });
+                    ctx.HandleResponse(); // Mark response as handled
+                }
+            };
         })
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
         {
@@ -101,16 +163,10 @@ try
 
             // Preserve standard OIDC claim names for API requests
             options.MapInboundClaims = false;
-        })
-        .AddApiKeyAuthentication();
+        });
 
     // setup authorisation policies
-    builder.Services.AddAuthorization(options =>
-    {
-        // require all users to be authenticated with our IdP
-        // eventually this will probably have to change, so we can make some pages anonymous for things like load-balance health monitors
-        options.FallbackPolicy = options.DefaultPolicy;
-    });
+    builder.Services.AddAuthorization();
 
     // Add services to the container.
     builder.Services.AddRazorPages();

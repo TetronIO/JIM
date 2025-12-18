@@ -93,7 +93,7 @@ public class ConnectedSystemServer
         return Application.Repository.ConnectedSystems.GetConnectedSystemCount();
     }
         
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -117,7 +117,11 @@ public class ConnectedSystemServer
             if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
                 settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
 
-            if (connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String && !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
+            // Apply default string values for String, DropDown, and File settings
+            if ((connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String ||
+                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.DropDown ||
+                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.File) &&
+                !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
                 settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
 
             if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
@@ -140,7 +144,7 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy, Activity? parentActivity = null)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, Activity? parentActivity = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -264,7 +268,7 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
     /// <returns>The result of the deletion request.</returns>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject initiatedBy)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}",
             connectedSystemId, initiatedBy?.DisplayName ?? "System");
@@ -298,8 +302,8 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: false)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: false);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
             await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -315,8 +319,8 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: false)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: false);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
             await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -340,6 +344,10 @@ public class ConnectedSystemServer
 
         try
         {
+            // Mark orphaned MVOs for deletion before deleting the Connected System
+            // This sets LastConnectorDisconnectedDate so housekeeping will delete them after grace period
+            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
+
             // Perform the deletion
             await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
 
@@ -371,9 +379,18 @@ public class ConnectedSystemServer
     /// Executes the deletion of a Connected System. Called by the worker service for background deletions.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
-    public async Task ExecuteDeletionAsync(int connectedSystemId)
+    /// <param name="evaluateMvoDeletionRules">Whether to mark orphaned MVOs for deletion before deleting the Connected System.</param>
+    public async Task ExecuteDeletionAsync(int connectedSystemId, bool evaluateMvoDeletionRules = true)
     {
-        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}", connectedSystemId);
+        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}, EvaluateMvoDeletionRules={EvaluateMvo}",
+            connectedSystemId, evaluateMvoDeletionRules);
+
+        if (evaluateMvoDeletionRules)
+        {
+            // Mark orphaned MVOs for deletion before deleting the Connected System
+            // This sets LastConnectorDisconnectedDate so housekeeping will delete them after grace period
+            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
+        }
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
 
@@ -448,7 +465,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new schema.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
+    public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -534,7 +551,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
+    public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -615,6 +632,76 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
     }
+
+    /// <summary>
+    /// Gets a Connected System Object Type by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the object type.</param>
+    public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Object Type.
+    /// </summary>
+    /// <param name="objectType">The object type to update.</param>
+    /// <param name="initiatedBy">The user who initiated the update.</param>
+    public async Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType, MetaverseObject? initiatedBy)
+    {
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+
+        Log.Debug("UpdateObjectTypeAsync() called for {ObjectType}", objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = objectType.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateObjectTypeAsync(objectType);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Gets a Connected System Attribute by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the attribute.</param>
+    public async Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetAttributeAsync(id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Attribute.
+    /// </summary>
+    /// <param name="attribute">The attribute to update.</param>
+    /// <param name="initiatedBy">The user who initiated the update.</param>
+    public async Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute, MetaverseObject? initiatedBy)
+    {
+        if (attribute == null)
+            throw new ArgumentNullException(nameof(attribute));
+
+        Log.Debug("UpdateAttributeAsync() called for {Attribute}", attribute.Name);
+
+        var activity = new Activity
+        {
+            TargetName = attribute.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
     #endregion
 
     #region Connected System Objects
@@ -629,7 +716,7 @@ public class ConnectedSystemServer
         // create a Change Object for this deletion
         var change = new ConnectedSystemObjectChange
         {
-            ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+            ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Delete,
             ChangeTime = DateTime.UtcNow,
@@ -716,6 +803,15 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
     }
 
+    /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value.
+    /// Used to find PendingProvisioning CSOs during import reconciliation.
+    /// </summary>
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
+    }
+
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(connectedSystemId , connectedSystemAttributeId, attributeValue);
@@ -754,6 +850,16 @@ public class ConnectedSystemServer
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects joined to a specific Metaverse Object.
+    /// Used to determine if an MVO has any remaining connectors before deletion.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
+    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
     }
 
     /// <summary>
@@ -819,7 +925,7 @@ public class ConnectedSystemServer
         // create a change object we can add attribute changes to.
         var change = new ConnectedSystemObjectChange
         {
-            ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+            ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Create,
             ChangeTime = DateTime.UtcNow,
@@ -1010,11 +1116,24 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
     }
 
+    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id);
+    }
+
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
+    {
+        if (partition == null)
+            throw new ArgumentNullException(nameof(partition));
+
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+    }
+
     public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
     {
         if (connectedSystemPartition == null)
             throw new ArgumentNullException(nameof(connectedSystemPartition));
-        
+
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemPartitionAsync(connectedSystemPartition);
     }
     #endregion
@@ -1040,6 +1159,19 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemContainersAsync(connectedSystem);
     }
 
+    public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemContainerAsync(id);
+    }
+
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container)
+    {
+        if (container == null)
+            throw new ArgumentNullException(nameof(container));
+
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container);
+    }
+
     public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
     {
         if (connectedSystemContainer == null)
@@ -1050,8 +1182,106 @@ public class ConnectedSystemServer
     }
     #endregion
 
+    #region Sync Rule Mappings
+    /// <summary>
+    /// Gets all mappings for a sync rule.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
+    {
+        return await Application.Repository.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
+    }
+
+    /// <summary>
+    /// Gets a specific sync rule mapping by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the mapping.</param>
+    public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(id);
+    }
+
+    /// <summary>
+    /// Creates a new sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to create.</param>
+    /// <param name="initiatedBy">The user who initiated the creation.</param>
+    public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId}", mapping.SyncRule?.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates an existing sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to update.</param>
+    /// <param name="initiatedBy">The user who initiated the update.</param>
+    public async Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Deletes a sync rule mapping.
+    /// </summary>
+    /// <param name="mapping">The mapping to delete.</param>
+    /// <param name="initiatedBy">The user who initiated the deletion.</param>
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("DeleteSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+    #endregion
+
     #region Connected System Run Profiles
-    public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
+    public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -1077,7 +1307,7 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
+    public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
             return;
@@ -1096,7 +1326,7 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -1267,7 +1497,7 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject initiatedBy, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null)
     {
         // validate the sync rule
         if (syncRule == null)
@@ -1282,8 +1512,8 @@ public class ConnectedSystemServer
         if (syncRule.Direction == SyncRuleDirection.Import)
         {
             // import rule cannot have these properties:
-            syncRule.ObjectScopingCriteriaGroups.Clear();
             syncRule.ProvisionToConnectedSystem = null;
+            // Note: ObjectScopingCriteriaGroups IS valid for import rules - evaluates CSO attributes
         }
         else
         {
@@ -1292,10 +1522,6 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
         
-        // make sure attribute flow rules don't have an order set. that wouldn't be supported.
-        var attributeFlowRulesWithOrders = syncRule.AttributeFlowRules.Where(q => q.Order != null);
-        foreach (var afr in attributeFlowRulesWithOrders)
-            afr.Order = null;
         
         // every crud operation must be tracked via an Activity
         var activity = new Activity
@@ -1326,7 +1552,7 @@ public class ConnectedSystemServer
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject initiatedBy)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
     {
         // every crud operation must be tracked via an Activity
         var activity = new Activity
@@ -1338,6 +1564,64 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+    #endregion
+
+    #region Object Matching Rules
+    /// <summary>
+    /// Creates a new object matching rule for a Connected System Object Type.
+    /// </summary>
+    public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates an existing object matching rule.
+    /// </summary>
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources.
+    /// </summary>
+    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Gets an object matching rule by ID.
+    /// </summary>
+    public async Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(id);
     }
     #endregion
 

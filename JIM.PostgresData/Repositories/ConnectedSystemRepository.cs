@@ -145,6 +145,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var types = await Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes.OrderBy(a => a.Name))
+            .Include(ot => ot.ObjectMatchingRules)
+                .ThenInclude(omr => omr.Sources)
+                    .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(ot => ot.ObjectMatchingRules)
+                .ThenInclude(omr => omr.Sources)
+                    .ThenInclude(s => s.MetaverseAttribute)
+            .Include(ot => ot.ObjectMatchingRules)
+                .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
@@ -180,6 +188,94 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         Repository.Database.Update(connectedSystem);
         await Repository.Database.SaveChangesAsync();
+    }
+    #endregion
+
+    #region Object Types and Attributes
+    /// <summary>
+    /// Gets a Connected System Object Type by ID.
+    /// </summary>
+    public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemObjectTypes
+            .Include(ot => ot.Attributes)
+            .Include(ot => ot.ConnectedSystem)
+            .SingleOrDefaultAsync(ot => ot.Id == id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Object Type.
+    /// </summary>
+    public async Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType)
+    {
+        Repository.Database.Update(objectType);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Gets a Connected System Attribute by ID.
+    /// </summary>
+    public async Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemAttributes
+            .Include(a => a.ConnectedSystemObjectType)
+                .ThenInclude(ot => ot.ConnectedSystem)
+            .SingleOrDefaultAsync(a => a.Id == id);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Attribute.
+    /// </summary>
+    public async Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        Repository.Database.Update(attribute);
+        await Repository.Database.SaveChangesAsync();
+    }
+    #endregion
+
+    #region Object Matching Rules
+    /// <summary>
+    /// Creates a new object matching rule for a Connected System Object Type.
+    /// </summary>
+    public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule)
+    {
+        Repository.Database.ObjectMatchingRules.Add(rule);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Updates an existing object matching rule.
+    /// </summary>
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule)
+    {
+        Repository.Database.Update(rule);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources.
+    /// </summary>
+    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule)
+    {
+        // Remove all sources first
+        Repository.Database.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
+        Repository.Database.ObjectMatchingRules.Remove(rule);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Gets an object matching rule by ID with all related entities loaded.
+    /// </summary>
+    public async Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id)
+    {
+        return await Repository.Database.ObjectMatchingRules
+            .Include(omr => omr.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(omr => omr.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(omr => omr.TargetMetaverseAttribute)
+            .Include(omr => omr.ConnectedSystemObjectType)
+            .SingleOrDefaultAsync(omr => omr.Id == id);
     }
     #endregion
 
@@ -318,9 +414,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             pageSize = 500;
 
         // start building the query for all the CSOs for a particular system.
+        // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
+        // The MVO AttributeValues are needed during full sync to detect attribute changes and create PendingExports.
         var query = Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues);
-        
+            .Include(cso => cso.AttributeValues)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues);
+
         // for optimum performance, do not include attributes
         // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema whilst in memory
         // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
@@ -434,23 +534,61 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
-        return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
-            x.ConnectedSystem.Id == connectedSystemId &&
-            x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == attributeValue.ToLower()));
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(x =>
+                x.ConnectedSystem.Id == connectedSystemId &&
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == attributeValue.ToLower()));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
     {
-        return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(cso =>
-            cso.ConnectedSystem.Id == connectedSystemId &&
-            cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
-        return await Repository.Database.ConnectedSystemObjects.SingleOrDefaultAsync(x =>
-            x.ConnectedSystem.Id == connectedSystemId &&
-            x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue));
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(x =>
+                x.ConnectedSystem.Id == connectedSystemId &&
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue));
+    }
+
+    /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value.
+    /// Used to find PendingProvisioning CSOs during import reconciliation when the
+    /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.
+    /// </summary>
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
+    {
+        // Use EF.Functions.ILike for case-insensitive comparison in PostgreSQL
+        var lowerValue = secondaryExternalIdValue.ToLowerInvariant();
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.MetaverseObject)
+            .SingleOrDefaultAsync(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.TypeId == objectTypeId &&
+                cso.SecondaryExternalIdAttributeId != null &&
+                cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    av.StringValue.ToLower() == lowerValue));
     }
 
     public async Task<int> GetConnectedSystemObjectCountAsync()
@@ -607,6 +745,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemPartitions.Include(csp => csp.Containers).Where(q => q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
     }
 
+    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemPartitions
+            .Include(csp => csp.ConnectedSystem)
+            .Include(csp => csp.Containers)
+            .FirstOrDefaultAsync(csp => csp.Id == id);
+    }
+
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
+    {
+        Repository.Database.ConnectedSystemPartitions.Update(partition);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
     {
         Repository.Database.ConnectedSystemPartitions.Remove(connectedSystemPartition);
@@ -628,6 +780,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
     {
         return await Repository.Database.ConnectedSystemContainers.Where(q => q.ConnectedSystem != null && q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
+    }
+
+    public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
+    {
+        return await Repository.Database.ConnectedSystemContainers
+            .Include(c => c.Partition)
+            .ThenInclude(p => p!.ConnectedSystem)
+            .Include(c => c.ConnectedSystem)
+            .Include(c => c.ChildContainers)
+            .FirstOrDefaultAsync(c => c.Id == id);
+    }
+
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container)
+    {
+        Repository.Database.ConnectedSystemContainers.Update(container);
+        await Repository.Database.SaveChangesAsync();
     }
 
     public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
@@ -705,9 +873,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // does not include PendingExport.AttributeValueChanges.Attributes.
         // it's expected that the schema is retrieved separately by the caller.
         // this is to keep the latency as low as possible for this method.
-        
+        //
+        // Note: We DO include CSO.AttributeValues because connectors need access to
+        // the current attribute values (e.g., current DN for LDAP rename operations).
+
         return await Repository.Database.PendingExports
             .Include(pe => pe.AttributeValueChanges)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
     }
 
@@ -899,17 +1072,123 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .CountAsync(cso => cso.MetaverseObjectId == metaverseObjectId);
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects
             .FirstOrDefaultAsync(cso => cso.MetaverseObjectId == metaverseObjectId && cso.ConnectedSystemId == connectedSystemId);
+    }
+
+    /// <summary>
+    /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
+    /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
+    /// Used during export evaluation to find existing CSOs for provisioning decisions.
+    /// </summary>
+    public async Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ObjectMatchingRule objectMatchingRule)
+    {
+        if (objectMatchingRule.Sources.Count == 0)
+            throw new InvalidDataException("ObjectMatchingRule has no sources.");
+
+        if (objectMatchingRule.Sources.Count > 1)
+            throw new NotImplementedException("Object Matching Rules with more than one Source are not yet supported (i.e. functions).");
+
+        var source = objectMatchingRule.Sources[0];
+
+        // For export matching, the source should reference an MVO attribute
+        if (source.MetaverseAttribute == null)
+        {
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Source does not have a MetaverseAttribute, skipping rule {RuleId}", objectMatchingRule.Id);
+            return null;
+        }
+
+        // Get the source attribute value from the MVO
+        var mvoAttributeValue = metaverseObject.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id || av.Attribute?.Id == source.MetaverseAttribute.Id);
+
+        if (mvoAttributeValue == null)
+        {
+            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: MVO {MvoId} does not have a value for attribute {AttrId}",
+                metaverseObject.Id, source.MetaverseAttribute.Id);
+            return null;
+        }
+
+        // The target is a CS attribute (what we're looking for on the CSO)
+        var targetCsAttribute = objectMatchingRule.TargetMetaverseAttribute;
+        if (targetCsAttribute == null)
+        {
+            // For export matching, we need to find the corresponding CS attribute
+            // Since the matching rule's target is the MV attribute during import,
+            // for export we look at what CS attribute maps to that value
+            // This is typically the external ID attribute of the object type
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: No target attribute configured on rule {RuleId}", objectMatchingRule.Id);
+            return null;
+        }
+
+        // Query CSOs that match the value
+        var query = Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id && cso.TypeId == connectedSystemObjectType.Id);
+
+        // Match based on attribute type
+        switch (source.MetaverseAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.StringValue == mvoAttributeValue.StringValue));
+                break;
+            case AttributeDataType.Number:
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.IntValue == mvoAttributeValue.IntValue));
+                break;
+            case AttributeDataType.Guid:
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.GuidValue == mvoAttributeValue.GuidValue));
+                break;
+            default:
+                throw new NotSupportedException($"Attribute type {source.MetaverseAttribute.Type} is not supported for export matching.");
+        }
+
+        return await query.FirstOrDefaultAsync();
     }
     #endregion
 
     #region Sync Rules
     public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
-        return await Repository.Database.SyncRules.OrderBy(x => x.Name).ToListAsync();
+        return await Repository.Database.SyncRules
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.TargetMetaverseAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Sources)
+            .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Sources)
+            .ThenInclude(s => s.MetaverseAttribute)
+            .Include(sr => sr.ConnectedSystem)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            .Include(sr => sr.MetaverseObjectType)
+            .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
+            .OrderBy(x => x.Name)
+            .ToListAsync();
     }
     
     /// <summary>
@@ -982,6 +1261,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.Criteria)
+            .ThenInclude(c => c.MetaverseAttribute)
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.ChildGroups)
+            .ThenInclude(cg => cg.Criteria)
+            .ThenInclude(c => c.MetaverseAttribute)
             .Include(sr => sr.CreatedBy) // needs basic attributes included to use as a link to the user in the ui
             .ThenInclude(cb => cb!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .Include(sr => sr.MetaverseObjectType)
@@ -992,9 +1277,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.Function)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .SingleOrDefaultAsync(x => x.Id == id);
@@ -1028,6 +1310,70 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         Repository.Database.Remove(syncRule);
+        await Repository.Database.SaveChangesAsync();
+    }
+    #endregion
+
+    #region Sync Rule Mappings
+    /// <summary>
+    /// Gets all mappings for a sync rule.
+    /// </summary>
+    public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Include(m => m.TargetConnectedSystemAttribute)
+            .Where(m => m.SyncRule!.Id == syncRuleId)
+            .OrderBy(m => m.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets a specific sync rule mapping by ID.
+    /// </summary>
+    public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .Include(m => m.SyncRule)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Include(m => m.TargetConnectedSystemAttribute)
+            .SingleOrDefaultAsync(m => m.Id == id);
+    }
+
+    /// <summary>
+    /// Creates a new sync rule mapping.
+    /// </summary>
+    public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping)
+    {
+        Repository.Database.SyncRuleMappings.Add(mapping);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Updates an existing sync rule mapping.
+    /// </summary>
+    public async Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping)
+    {
+        Repository.Database.Update(mapping);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Deletes a sync rule mapping.
+    /// </summary>
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping)
+    {
+        // Remove all sources first
+        Repository.Database.RemoveRange(mapping.Sources);
+        Repository.Database.SyncRuleMappings.Remove(mapping);
         await Repository.Database.SaveChangesAsync();
     }
     #endregion

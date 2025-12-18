@@ -36,6 +36,17 @@ The metaverse is the authoritative identity repository:
 
 **Rule**: Extend through interfaces, not modification. Keep connectors independent.
 
+### 4. Architecture Diagrams
+
+JIM's architecture is documented using C4 model diagrams (System Context, Container, Component levels).
+
+**Viewing Diagrams**: See [docs/diagrams/structurizr/README.md](diagrams/structurizr/README.md) for instructions on running Structurizr Lite locally.
+
+**Available Diagrams**:
+- **System Context**: JIM's interactions with external systems and users
+- **Container**: Internal deployable units (Web App, Worker, Scheduler, Connectors, Database)
+- **Component**: Detailed views of Web Application, Application Layer, Worker Service, Connectors, and Scheduler
+
 ## Technology Stack
 
 ### Core Technologies (Required)
@@ -404,10 +415,23 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim-db` - Start PostgreSQL (local debugging workflow)
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply EF Core migrations
-- `jim-stack` - Start full Docker stack (all services containerised)
-- `jim-stack-build` - Rebuild and start Docker stack (use after code changes)
+- `jim-stack` - Start Docker stack (no build, uses existing images)
 - `jim-stack-logs` - View Docker stack logs
-- `jim-stack-down` - Stop full Docker stack
+- `jim-stack-down` - Stop Docker stack
+
+**Development Builds** (fast - skips publish stage, ~10-15s faster per service):
+- `jim-dev` - Build all services in dev mode + start
+- `jim-dev-web` - Build jim.web in dev mode + start
+- `jim-dev-worker` - Build jim.worker in dev mode + start
+- `jim-dev-scheduler` - Build jim.scheduler in dev mode + start
+
+**Release Builds** (production-ready, includes publish stage):
+- `jim-release` - Build all services for release + start
+- `jim-release-web` - Build jim.web for release + start
+- `jim-release-worker` - Build jim.worker for release + start
+- `jim-release-scheduler` - Build jim.scheduler for release + start
+
+**Reset**:
 - `jim-reset` - Reset JIM (delete database and logs volumes)
 
 **Development Workflows**:
