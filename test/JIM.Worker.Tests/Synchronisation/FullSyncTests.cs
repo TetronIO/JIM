@@ -1861,15 +1861,21 @@ public class FullSyncTests
 
     /// <summary>
     /// Tests that when the DeletionRule is WhenLastConnectorDisconnected and there's no grace period,
-    /// the MVO is deleted immediately when the last CSO is disconnected.
+    /// the MVO is NOT deleted immediately during sync. Instead, LastConnectorDisconnectedDate is set
+    /// and housekeeping will delete it on the next run. This follows the deferred deletion architecture
+    /// where MVOs are never deleted during sync processing.
     /// </summary>
     [Test]
-    public async Task MvoDeletedImmediatelyWhenLastConnectorDisconnectedTestAsync()
+    public async Task MvoMarkedForDeletionWhenLastConnectorDisconnectedNoGracePeriodTestAsync()
     {
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, no grace period
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
         mvoType.DeletionGracePeriodDays = null;
+
+        // configure sync rule to disconnect on obsoletion (required for deletion rule processing)
+        var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
+        importSyncRule.InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect;
 
         // create MVO joined to a single CSO
         var cso = ConnectedSystemObjectsData[0];
@@ -1880,24 +1886,22 @@ public class FullSyncTests
         cso.DateJoined = DateTime.UtcNow;
         mvo.ConnectedSystemObjects.Add(cso);
         mvo.Type = mvoType;
+        mvo.LastConnectorDisconnectedDate = null;
 
         // mark CSO as obsolete to trigger disconnection
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
 
         var initialMvoCount = MetaverseObjectsData.Count;
         var mvoId = mvo.Id;
+        var beforeSync = DateTime.UtcNow;
 
         // setup mock to handle CSO deletion
         MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => {
-                ConnectedSystemObjectsData.Remove(entity);
-            });
+            (ConnectedSystemObject entity) => ConnectedSystemObjectsData.Remove(entity));
 
-        // setup mock for MVO deletion
+        // setup mock for MVO deletion (should NOT be called - deferred to housekeeping)
         MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
-            (MetaverseObject entity) => {
-                MetaverseObjectsData.Remove(entity);
-            });
+            (MetaverseObject entity) => MetaverseObjectsData.Remove(entity));
 
         // run sync
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
@@ -1906,9 +1910,17 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify MVO was deleted
-        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount - 1), "Expected MVO to be deleted when last connector disconnected.");
-        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.False, "Expected specific MVO to be deleted.");
+        // verify MVO was NOT deleted during sync (deferred deletion architecture)
+        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during sync (deferred to housekeeping).");
+        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.True, "Expected specific MVO to still exist.");
+
+        // verify LastConnectorDisconnectedDate was set (for housekeeping to process)
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null, "Expected LastConnectorDisconnectedDate to be set.");
+        Assert.That(mvo.LastConnectorDisconnectedDate!.Value, Is.EqualTo(beforeSync).Within(TimeSpan.FromMinutes(1)),
+            "Expected LastConnectorDisconnectedDate to be approximately now.");
+
+        // With no grace period, DeletionEligibleDate is null (meaning immediately eligible for deletion)
+        Assert.That(mvo.DeletionEligibleDate, Is.Null, "Expected DeletionEligibleDate to be null when no grace period configured.");
     }
 
     /// <summary>
@@ -1922,6 +1934,10 @@ public class FullSyncTests
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
         mvoType.DeletionGracePeriodDays = 30;
+
+        // configure sync rule to disconnect on obsoletion (required for deletion rule processing)
+        var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
+        importSyncRule.InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect;
 
         // create MVO joined to a single CSO
         var cso = ConnectedSystemObjectsData[0];

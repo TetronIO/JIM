@@ -703,7 +703,7 @@ public class ConnectedSystemServer
         // create a Change Object for this deletion
         var change = new ConnectedSystemObjectChange
         {
-            ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+            ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Delete,
             ChangeTime = DateTime.UtcNow,
@@ -837,6 +837,16 @@ public class ConnectedSystemServer
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects joined to a specific Metaverse Object.
+    /// Used to determine if an MVO has any remaining connectors before deletion.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
+    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
     }
 
     /// <summary>

@@ -88,6 +88,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// Gets the count of Connected System Objects joined to a specific Metaverse Object.
+    /// Used to determine if an MVO has any remaining connectors before deletion.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
+    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
     /// Used for finding existing CSOs during export evaluation.
     /// </summary>

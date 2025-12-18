@@ -38,6 +38,33 @@ Implement comprehensive deletion rule and deprovisioning functionality for JIM's
 - **Values**: `Projected` (from CSO) vs `Internal` (created in JIM)
 - **Rule**: Only `Projected` MVOs are subject to automatic deletion
 
+### Deferred MVO Deletion (Critical Architecture Decision)
+
+Following industry-standard identity management practices, **MVOs are NEVER deleted during sync processing**. Instead:
+
+1. **When a trigger connector disconnects** (e.g., HR system CSO deleted):
+   - Set `LastConnectorDisconnectedDate` on the MVO
+   - Evaluate export sync rules for remaining CSOs
+   - Create `PendingExport` records for CSO deletions (based on `OutboundDeprovisionAction`)
+   - The MVO remains in place with its connectors
+
+2. **Export processing runs**:
+   - PendingExports are processed, deleting objects from target connected systems
+   - On next import, deletions are confirmed and CSOs removed
+
+3. **Housekeeping cleanup** (Worker idle time):
+   - Finds orphaned MVOs: no CSOs AND `LastConnectorDisconnectedDate` + grace period expired
+   - Only then is the MVO actually deleted
+
+**Rationale**: This cascade approach ensures:
+- All dependent CSOs are properly deprovisioned before MVO deletion
+- No FK constraint violations (CSOs deleted before MVO)
+- Audit trail of the deprovisioning process
+- Grace period allows reconnection/rehire scenarios
+- Matches expected identity management behaviour
+
+**Key Implementation Rule**: `ProcessMvoDeletionRuleAsync` must NEVER call `DeleteMetaverseObjectAsync`. It only sets `LastConnectorDisconnectedDate` and triggers evaluation of remaining CSOs.
+
 ### Sync Rule Deprovisioning
 
 **Outbound (Export) Out-of-Scope**:
