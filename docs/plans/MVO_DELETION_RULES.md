@@ -248,4 +248,17 @@ Integration tests needed for Object Matching Rules to validate all permutations:
 
 - JIM.Scheduler for configurable cleanup intervals
 - `Disable` and `MoveToArchiveOU` deprovisioning actions (Post-MVP)
-- UI for viewing pending deletions and grace period status
+
+## Completed Enhancements
+
+### Pending Deletions UI and API (December 2024)
+- **UI Page**: `/admin/pending-deletions` - Displays all MVOs in the deletion pipeline
+- **API Endpoints**:
+  - `GET /api/v1/metaverse/pending-deletions` - Paginated list of pending deletions
+  - `GET /api/v1/metaverse/pending-deletions/count` - Count of pending deletions
+  - `GET /api/v1/metaverse/pending-deletions/summary` - Summary statistics by status
+- **Status Categories**:
+  - **Deprovisioning**: MVOs still connected to other systems, awaiting cascade deletion
+  - **Awaiting Grace Period**: MVOs fully disconnected, waiting for grace period to expire
+  - **Ready for Deletion**: MVOs eligible for deletion (grace period expired, no connectors)
+- **Features**: Object type filtering, connector count visibility, deletion timeline display

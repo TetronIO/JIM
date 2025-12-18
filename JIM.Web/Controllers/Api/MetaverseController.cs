@@ -386,4 +386,108 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         return Ok(MetaverseObjectDto.FromEntity(obj));
     }
+
+    /// <summary>
+    /// Gets a paginated list of metaverse objects pending deletion.
+    /// </summary>
+    /// <remarks>
+    /// Returns MVOs that have been disconnected from their last connector and are awaiting
+    /// automatic deletion after their grace period expires. Use this endpoint to monitor
+    /// identities scheduled for cleanup.
+    /// </remarks>
+    /// <param name="pagination">Pagination parameters (page, pageSize).</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>A paginated list of MVOs pending deletion.</returns>
+    [HttpGet("pending-deletions", Name = "GetPendingDeletions")]
+    [ProducesResponseType(typeof(PaginatedResponse<PendingDeletionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingDeletionsAsync(
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] int? objectTypeId = null)
+    {
+        _logger.LogDebug("Getting pending deletions (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId})",
+            pagination.Page, pagination.PageSize, objectTypeId);
+
+        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+            page: pagination.Page,
+            pageSize: pagination.PageSize,
+            objectTypeId: objectTypeId);
+
+        var dtos = result.Results.Select(PendingDeletionDto.FromEntity);
+
+        var response = new PaginatedResponse<PendingDeletionDto>
+        {
+            Items = dtos,
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Gets the count of metaverse objects pending deletion.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>The count of MVOs pending deletion.</returns>
+    [HttpGet("pending-deletions/count", Name = "GetPendingDeletionsCount")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingDeletionsCountAsync([FromQuery] int? objectTypeId = null)
+    {
+        _logger.LogDebug("Getting pending deletions count (TypeId: {TypeId})", objectTypeId);
+        var count = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+        return Ok(count);
+    }
+
+    /// <summary>
+    /// Gets summary statistics for pending deletions.
+    /// </summary>
+    /// <remarks>
+    /// Provides an overview of deletion status including total count and counts by status:
+    /// - Deprovisioning: MVOs still connected to other systems, awaiting cascade deletion
+    /// - AwaitingGracePeriod: MVOs fully disconnected, waiting for grace period to expire
+    /// - ReadyForDeletion: MVOs eligible for deletion (grace period expired, no connectors)
+    /// </remarks>
+    /// <returns>Summary statistics for pending deletions.</returns>
+    [HttpGet("pending-deletions/summary", Name = "GetPendingDeletionsSummary")]
+    [ProducesResponseType(typeof(PendingDeletionSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingDeletionsSummaryAsync()
+    {
+        _logger.LogDebug("Getting pending deletions summary");
+
+        // Get all pending deletions to calculate summary
+        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+            page: 1,
+            pageSize: 100,
+            objectTypeId: null);
+
+        var now = DateTime.UtcNow;
+        var allPending = result.Results;
+
+        // Get total count (may be more than 100)
+        var totalCount = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync();
+
+        // Calculate status counts
+        var deprovisioningCount = allPending.Count(m => m.ConnectedSystemObjects.Any());
+        var readyForDeletionCount = allPending.Count(m =>
+            !m.ConnectedSystemObjects.Any() &&
+            (!m.DeletionEligibleDate.HasValue || m.DeletionEligibleDate.Value <= now));
+        var awaitingGracePeriodCount = allPending.Count(m =>
+            !m.ConnectedSystemObjects.Any() &&
+            m.DeletionEligibleDate.HasValue &&
+            m.DeletionEligibleDate.Value > now);
+
+        var summary = new PendingDeletionSummary
+        {
+            TotalCount = totalCount,
+            DeprovisioningCount = deprovisioningCount,
+            AwaitingGracePeriodCount = awaitingGracePeriodCount,
+            ReadyForDeletionCount = readyForDeletionCount
+        };
+
+        return Ok(summary);
+    }
 }

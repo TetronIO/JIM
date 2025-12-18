@@ -732,6 +732,85 @@ public class MetaverseRepository : IMetaverseRepository
         return rowsAffected;
     }
 
+    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionAsync(
+        int page,
+        int pageSize,
+        int? objectTypeId = null)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        // Build base query for MVOs pending deletion
+        var query = Repository.Database.MetaverseObjects
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo =>
+                // Must have LastConnectorDisconnectedDate set (pending deletion)
+                mvo.LastConnectorDisconnectedDate != null &&
+                // Must be projected (not internal admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have deletion rule WhenLastConnectorDisconnected
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+
+        // Apply object type filter if specified
+        if (objectTypeId.HasValue)
+        {
+            query = query.Where(mvo => mvo.Type.Id == objectTypeId.Value);
+        }
+
+        // Order by deletion eligible date (soonest first)
+        query = query.OrderBy(mvo => mvo.LastConnectorDisconnectedDate);
+
+        // Get total count
+        var totalCount = await query.CountAsync();
+
+        // Apply pagination
+        var offset = (page - 1) * pageSize;
+        var results = await query
+            .Skip(offset)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultSet<MetaverseObject>
+        {
+            PageSize = pageSize,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            Results = results
+        };
+    }
+
+    public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
+    {
+        var query = Repository.Database.MetaverseObjects
+            .Where(mvo =>
+                // Must have LastConnectorDisconnectedDate set (pending deletion)
+                mvo.LastConnectorDisconnectedDate != null &&
+                // Must be projected (not internal admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have deletion rule WhenLastConnectorDisconnected
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+
+        // Apply object type filter if specified
+        if (objectTypeId.HasValue)
+        {
+            query = query.Where(mvo => mvo.Type.Id == objectTypeId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         return predefinedSearch.Attributes

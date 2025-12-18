@@ -123,6 +123,26 @@ public interface IMetaverseRepository
     /// <param name="mvoIds">The IDs of the MVOs to mark as disconnected.</param>
     /// <returns>The number of MVOs updated.</returns>
     public Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds);
+
+    /// <summary>
+    /// Gets MVOs that are pending deletion (have LastConnectorDisconnectedDate set but haven't been deleted yet).
+    /// These are MVOs awaiting their grace period to expire before automatic deletion.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>A paged result set of MVOs pending deletion.</returns>
+    public Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionAsync(
+        int page,
+        int pageSize,
+        int? objectTypeId = null);
+
+    /// <summary>
+    /// Gets the count of MVOs that are pending deletion.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>The count of MVOs pending deletion.</returns>
+    public Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null);
     #endregion
 
     #region attributes
