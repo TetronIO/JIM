@@ -264,6 +264,7 @@ public class SyncFullSyncTaskProcessor
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
+    /// Respects the InboundOutOfScopeAction setting on import sync rules to determine whether to disconnect.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
     /// </summary>
     private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
@@ -280,7 +281,23 @@ public class SyncFullSyncTaskProcessor
             return;
         }
 
-        // CSO is joined to an MVO - handle the obsoletion
+        // CSO is joined to an MVO - check InboundOutOfScopeAction to determine behaviour
+        var inboundOutOfScopeAction = await DetermineInboundOutOfScopeActionAsync(connectedSystemObject);
+
+        if (inboundOutOfScopeAction == InboundOutOfScopeAction.RemainJoined)
+        {
+            // Keep the join intact - just delete the CSO record but don't disconnect from MVO
+            // This implements "once managed, always managed" behaviour
+            Log.Information($"ProcessObsoleteConnectedSystemObjectAsync: InboundOutOfScopeAction=RemainJoined for CSO {connectedSystemObject.Id}. " +
+                "CSO will be deleted but MVO join state preserved (object considered 'always managed').");
+
+            // Note: We still delete the CSO as it's obsolete in the source system,
+            // but we don't disconnect from MVO or trigger deletion rules
+            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+            return;
+        }
+
+        // InboundOutOfScopeAction = Disconnect (default) - break the join and handle MVO deletion rules
         var mvo = connectedSystemObject.MetaverseObject;
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
 
@@ -315,6 +332,28 @@ public class SyncFullSyncTaskProcessor
 
         // Delete the CSO
         await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+    }
+
+    /// <summary>
+    /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import sync rule.
+    /// If multiple import sync rules exist for this CSO type, the first one's setting is used.
+    /// </summary>
+    private async Task<InboundOutOfScopeAction> DetermineInboundOutOfScopeActionAsync(ConnectedSystemObject connectedSystemObject)
+    {
+        // Get import sync rules for this connected system and object type
+        var syncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+        var importSyncRule = syncRules.FirstOrDefault(sr =>
+            sr.Direction == SyncRuleDirection.Import &&
+            sr.Enabled &&
+            sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId);
+
+        if (importSyncRule == null)
+        {
+            // No import sync rule found - default to Disconnect
+            return InboundOutOfScopeAction.Disconnect;
+        }
+
+        return importSyncRule.InboundOutOfScopeAction;
     }
 
     /// <summary>
@@ -443,13 +482,14 @@ public class SyncFullSyncTaskProcessor
     /// <summary>
     /// Evaluates export rules for an MVO that has changed during inbound sync.
     /// Creates PendingExports for any connected systems that need to be updated.
+    /// Also evaluates if MVO has fallen out of scope for any export rules (deprovisioning).
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
-        // Evaluate export rules, passing the current connected system for Q3 circular prevention
+        // Evaluate export rules for MVOs that are IN scope, passing the current connected system for Q3 circular prevention
         var pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
             mvo,
             changedAttributes,
@@ -459,6 +499,17 @@ public class SyncFullSyncTaskProcessor
         {
             Log.Information("EvaluateOutboundExportsAsync: Created {Count} pending exports for MVO {MvoId}",
                 pendingExports.Count, mvo.Id);
+        }
+
+        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning)
+        var deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
+            mvo,
+            _connectedSystem);
+
+        if (deprovisioningExports.Count > 0)
+        {
+            Log.Information("EvaluateOutboundExportsAsync: Created {Count} deprovisioning exports for MVO {MvoId}",
+                deprovisioningExports.Count, mvo.Id);
         }
     }
 

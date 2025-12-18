@@ -778,4 +778,306 @@ public class ExportEvaluationTests
     }
 
     #endregion
+
+    #region Out-of-Scope Deprovisioning Tests
+
+    /// <summary>
+    /// Tests that when MVO falls out of scope and OutboundDeprovisionAction is Disconnect,
+    /// the CSO is disconnected from MVO but no delete pending export is created.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_WithDisconnectAction_DisconnectsCsoAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+        mvo.Origin = MetaverseObjectOrigin.Projected;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Create existing CSO that was previously in scope
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow.AddDays(-30),
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(existingCso);
+        mvo.ConnectedSystemObjects.Add(existingCso);
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        // Configure export rule with scoping criteria that MVO no longer matches
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Add scoping criteria: EmployeeId = "NOT_MATCHING" (MVO has "E123")
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    MetaverseAttribute = employeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "NOT_MATCHING_VALUE"
+                }
+            }
+        });
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
+
+        // Assert - No delete pending export should be created for Disconnect action
+        Assert.That(result, Has.Count.EqualTo(0), "Disconnect action should not create a delete pending export");
+
+        // Assert - CSO should be disconnected from MVO
+        Assert.That(existingCso.MetaverseObject, Is.Null, "CSO should be disconnected from MVO");
+        Assert.That(existingCso.MetaverseObjectId, Is.Null, "CSO MetaverseObjectId should be null");
+        Assert.That(existingCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "CSO JoinType should be NotJoined");
+
+        // Assert - MVO should no longer have the CSO in its collection
+        Assert.That(mvo.ConnectedSystemObjects, Does.Not.Contain(existingCso), "MVO should not contain the disconnected CSO");
+    }
+
+    /// <summary>
+    /// Tests that when MVO falls out of scope and OutboundDeprovisionAction is Delete,
+    /// a delete pending export is created.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_WithDeleteAction_CreatesDeletePendingExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+        mvo.Origin = MetaverseObjectOrigin.Projected;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Create existing CSO that was previously in scope
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow.AddDays(-30),
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(existingCso);
+        mvo.ConnectedSystemObjects.Add(existingCso);
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        // Configure export rule with Delete action
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Add scoping criteria that MVO no longer matches
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    MetaverseAttribute = employeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "NOT_MATCHING_VALUE"
+                }
+            }
+        });
+
+        // Track pending exports created
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
+
+        // Assert - Delete pending export should be created
+        Assert.That(result, Has.Count.EqualTo(1), "Delete action should create a delete pending export");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Pending export should be a Delete operation");
+        Assert.That(result[0].ConnectedSystemObject?.Id, Is.EqualTo(existingCso.Id), "Pending export should reference the CSO");
+    }
+
+    /// <summary>
+    /// Tests that when MVO is still in scope, no deprovisioning occurs.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_WhenMvoStillInScope_NoDeprovisioningAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Create existing CSO
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow.AddDays(-30),
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(existingCso);
+        mvo.ConnectedSystemObjects.Add(existingCso);
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        // Configure export rule with scoping criteria that MVO DOES match
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete; // Even with Delete action
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Add scoping criteria that MVO matches (E123)
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    MetaverseAttribute = employeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "E123"
+                }
+            }
+        });
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
+
+        // Assert - No deprovisioning should occur when MVO is in scope
+        Assert.That(result, Has.Count.EqualTo(0), "No deprovisioning should occur when MVO is in scope");
+        Assert.That(existingCso.MetaverseObject, Is.Not.Null, "CSO should still be joined to MVO");
+        Assert.That(existingCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "CSO should still be Joined");
+    }
+
+    /// <summary>
+    /// Tests that when MVO falls out of scope and is the last connector,
+    /// LastConnectorDisconnectedDate is set on the MVO for Disconnect action.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_WhenLastConnectorDisconnected_SetsLastConnectorDateAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvUserType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvo.Type = mvUserType;
+        mvo.Origin = MetaverseObjectOrigin.Projected;
+        mvo.LastConnectorDisconnectedDate = null;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Create existing CSO - this will be the only connector
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow.AddDays(-30),
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(existingCso);
+        mvo.ConnectedSystemObjects.Clear();
+        mvo.ConnectedSystemObjects.Add(existingCso);
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        // Configure export rule with Disconnect action
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // Add scoping criteria that MVO no longer matches
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    MetaverseAttribute = employeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "NOT_MATCHING_VALUE"
+                }
+            }
+        });
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
+
+        // Assert - LastConnectorDisconnectedDate should be set
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null, "LastConnectorDisconnectedDate should be set when last connector disconnected");
+        Assert.That(mvo.ConnectedSystemObjects, Has.Count.EqualTo(0), "MVO should have no connectors after disconnect");
+    }
+
+    #endregion
 }

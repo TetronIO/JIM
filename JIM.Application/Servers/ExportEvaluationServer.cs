@@ -77,6 +77,138 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Evaluates if an MVO has fallen out of scope for any export rules and handles deprovisioning.
+    /// Called when MVO attributes change to check if scoping criteria no longer match.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object that changed</param>
+    /// <param name="sourceSystem">The connected system that caused this change (for Q3 circular prevention)</param>
+    /// <returns>List of PendingExports for deprovisioning actions</returns>
+    public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
+        MetaverseObject mvo,
+        ConnectedSystem? sourceSystem = null)
+    {
+        var pendingExports = new List<PendingExport>();
+
+        if (mvo.Type == null)
+        {
+            Log.Warning("EvaluateOutOfScopeExportsAsync: MVO {MvoId} has no type set, cannot evaluate scope", mvo.Id);
+            return pendingExports;
+        }
+
+        // Get all enabled export rules for this MVO's object type
+        var exportRules = await GetExportRulesForObjectTypeAsync(mvo.Type.Id);
+
+        foreach (var exportRule in exportRules)
+        {
+            // Q3: Skip if this is the source system (circular sync prevention)
+            if (sourceSystem != null && exportRule.ConnectedSystemId == sourceSystem.Id)
+            {
+                continue;
+            }
+
+            // Check if MVO is in scope for this export rule
+            if (IsMvoInScopeForExportRule(mvo, exportRule))
+            {
+                // Still in scope, no deprovisioning needed
+                continue;
+            }
+
+            // MVO is OUT of scope - check if there's an existing CSO to deprovision
+            var existingCso = await Application.Repository.ConnectedSystems
+                .GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
+
+            if (existingCso == null)
+            {
+                // No CSO exists, nothing to deprovision
+                continue;
+            }
+
+            Log.Information("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}. Handling deprovisioning for CSO {CsoId}",
+                mvo.Id, exportRule.Name, existingCso.Id);
+
+            // Handle based on OutboundDeprovisionAction
+            var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule);
+            if (pendingExport != null)
+            {
+                pendingExports.Add(pendingExport);
+            }
+        }
+
+        return pendingExports;
+    }
+
+    /// <summary>
+    /// Handles deprovisioning based on the sync rule's OutboundDeprovisionAction setting.
+    /// </summary>
+    private async Task<PendingExport?> HandleOutboundDeprovisioningAsync(
+        MetaverseObject mvo,
+        ConnectedSystemObject cso,
+        SyncRule exportRule)
+    {
+        switch (exportRule.OutboundDeprovisionAction)
+        {
+            case OutboundDeprovisionAction.Disconnect:
+                // Break the join between CSO and MVO, but leave CSO in the target system
+                Log.Information("HandleOutboundDeprovisioningAsync: Disconnecting CSO {CsoId} from MVO {MvoId} (OutboundDeprovisionAction=Disconnect)",
+                    cso.Id, mvo.Id);
+
+                // Break the join
+                cso.MetaverseObject = null;
+                cso.MetaverseObjectId = null;
+                cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+                cso.DateJoined = null;
+
+                // Remove from MVO's collection
+                mvo.ConnectedSystemObjects.Remove(cso);
+
+                // Update the CSO in the database
+                await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+
+                // Check if this was the last connector for the MVO
+                if (mvo.ConnectedSystemObjects.Count == 0 && mvo.Origin == MetaverseObjectOrigin.Projected)
+                {
+                    // Handle MVO deletion rules (set LastConnectorDisconnectedDate)
+                    if (mvo.Type?.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected)
+                    {
+                        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+                        Log.Information("HandleOutboundDeprovisioningAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
+                            mvo.Id, mvo.LastConnectorDisconnectedDate);
+                    }
+                }
+
+                return null; // No pending export needed for disconnect
+
+            case OutboundDeprovisionAction.Delete:
+                // Create a pending export to delete the CSO from the target system
+                Log.Information("HandleOutboundDeprovisioningAsync: Creating delete PendingExport for CSO {CsoId} (OutboundDeprovisionAction=Delete)",
+                    cso.Id);
+
+                var pendingExport = new PendingExport
+                {
+                    Id = Guid.NewGuid(),
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ConnectedSystemObject = cso,
+                    ChangeType = PendingExportChangeType.Delete,
+                    Status = PendingExportStatus.Pending,
+                    SourceMetaverseObjectId = mvo.Id,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+
+                Log.Information("HandleOutboundDeprovisioningAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
+                    pendingExport.Id, cso.Id, cso.ConnectedSystemId);
+
+                return pendingExport;
+
+            default:
+                Log.Warning("HandleOutboundDeprovisioningAsync: Unknown OutboundDeprovisionAction {Action} for rule {RuleName}",
+                    exportRule.OutboundDeprovisionAction, exportRule.Name);
+                return null;
+        }
+    }
+
+    /// <summary>
     /// Evaluates export rules for an MVO that is being deleted.
     /// Implements Q4 decision: only create delete exports for Provisioned CSOs.
     /// </summary>
