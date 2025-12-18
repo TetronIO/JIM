@@ -1261,6 +1261,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.Criteria)
+            .ThenInclude(c => c.MetaverseAttribute)
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.ChildGroups)
+            .ThenInclude(cg => cg.Criteria)
+            .ThenInclude(c => c.MetaverseAttribute)
             .Include(sr => sr.CreatedBy) // needs basic attributes included to use as a link to the user in the ui
             .ThenInclude(cb => cb!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .Include(sr => sr.MetaverseObjectType)

@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Application.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
@@ -1526,6 +1527,400 @@ public class SynchronisationController(
         _logger.LogInformation("Deleted mapping {MappingId} from sync rule {SyncRuleId}", mappingId, syncRuleId);
 
         return NoContent();
+    }
+
+    #endregion
+
+    #region Sync Rule Scoping Criteria
+
+    /// <summary>
+    /// Gets all scoping criteria groups for a sync rule.
+    /// </summary>
+    /// <remarks>
+    /// Scoping criteria define which Metaverse objects are included in an export sync rule.
+    /// Only export sync rules support scoping criteria.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <returns>A list of scoping criteria groups with their criteria.</returns>
+    /// <response code="200">Returns the list of scoping criteria groups.</response>
+    /// <response code="400">Sync rule is not an export rule.</response>
+    /// <response code="404">Sync rule not found.</response>
+    [HttpGet("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "GetScopingCriteriaGroups")]
+    [ProducesResponseType(typeof(IEnumerable<SyncRuleScopingCriteriaGroupDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetScopingCriteriaGroupsAsync(int syncRuleId)
+    {
+        _logger.LogTrace("Requested scoping criteria for sync rule: {Id}", syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        if (syncRule.Direction != SyncRuleDirection.Export)
+            return BadRequest(ApiErrorResponse.BadRequest("Scoping criteria are only applicable to export sync rules."));
+
+        var dtos = syncRule.ObjectScopingCriteriaGroups
+            .Where(g => g.ParentGroup == null) // Only return root groups (children are nested)
+            .Select(SyncRuleScopingCriteriaGroupDto.FromEntity);
+
+        return Ok(dtos);
+    }
+
+    /// <summary>
+    /// Gets a specific scoping criteria group by ID.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="groupId">The unique identifier of the criteria group.</param>
+    /// <returns>The scoping criteria group details.</returns>
+    [HttpGet("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "GetScopingCriteriaGroup")]
+    [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetScopingCriteriaGroupAsync(int syncRuleId, int groupId)
+    {
+        _logger.LogTrace("Requested scoping criteria group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
+        if (group == null)
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found in sync rule {syncRuleId}."));
+
+        return Ok(SyncRuleScopingCriteriaGroupDto.FromEntity(group));
+    }
+
+    /// <summary>
+    /// Creates a new root scoping criteria group for a sync rule.
+    /// </summary>
+    /// <remarks>
+    /// Creates a new criteria group at the root level. Use the child-groups endpoint to create nested groups.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="request">The criteria group creation request.</param>
+    /// <returns>The created scoping criteria group.</returns>
+    /// <response code="201">Group created successfully.</response>
+    /// <response code="400">Invalid request or sync rule is not an export rule.</response>
+    /// <response code="404">Sync rule not found.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "CreateScopingCriteriaGroup")]
+    [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateScopingCriteriaGroupAsync(int syncRuleId, [FromBody] CreateScopingCriteriaGroupRequest request)
+    {
+        _logger.LogInformation("Creating scoping criteria group for sync rule: {SyncRuleId}", syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        if (syncRule.Direction != SyncRuleDirection.Export)
+            return BadRequest(ApiErrorResponse.BadRequest("Scoping criteria are only applicable to export sync rules."));
+
+        if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
+            return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));
+
+        var group = new SyncRuleScopingCriteriaGroup
+        {
+            Type = groupType,
+            Position = request.Position
+        };
+
+        syncRule.ObjectScopingCriteriaGroups.Add(group);
+
+        try
+        {
+            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            _logger.LogInformation("Created scoping criteria group {GroupId} for sync rule {SyncRuleId}", group.Id, syncRuleId);
+            return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = group.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(group));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create scoping criteria group: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Creates a new child scoping criteria group nested within a parent group.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="parentGroupId">The unique identifier of the parent criteria group.</param>
+    /// <param name="request">The criteria group creation request.</param>
+    /// <returns>The created scoping criteria group.</returns>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/{parentGroupId:int}/child-groups", Name = "CreateChildScopingCriteriaGroup")]
+    [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateChildScopingCriteriaGroupAsync(int syncRuleId, int parentGroupId, [FromBody] CreateScopingCriteriaGroupRequest request)
+    {
+        _logger.LogInformation("Creating child scoping criteria group under {ParentId} for sync rule: {SyncRuleId}", parentGroupId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var parentGroup = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, parentGroupId);
+        if (parentGroup == null)
+            return NotFound(ApiErrorResponse.NotFound($"Parent scoping criteria group with ID {parentGroupId} not found."));
+
+        if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
+            return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));
+
+        var childGroup = new SyncRuleScopingCriteriaGroup
+        {
+            Type = groupType,
+            Position = request.Position,
+            ParentGroup = parentGroup
+        };
+
+        parentGroup.ChildGroups.Add(childGroup);
+
+        try
+        {
+            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            _logger.LogInformation("Created child scoping criteria group {GroupId} under {ParentId}", childGroup.Id, parentGroupId);
+            return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = childGroup.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(childGroup));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create child scoping criteria group: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Updates a scoping criteria group's type or position.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="groupId">The unique identifier of the criteria group.</param>
+    /// <param name="request">The update request.</param>
+    /// <returns>The updated scoping criteria group.</returns>
+    [HttpPut("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "UpdateScopingCriteriaGroup")]
+    [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateScopingCriteriaGroupAsync(int syncRuleId, int groupId, [FromBody] UpdateScopingCriteriaGroupRequest request)
+    {
+        _logger.LogInformation("Updating scoping criteria group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
+        if (group == null)
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
+
+        if (!string.IsNullOrEmpty(request.Type))
+        {
+            if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
+                return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));
+            group.Type = groupType;
+        }
+
+        if (request.Position.HasValue)
+            group.Position = request.Position.Value;
+
+        try
+        {
+            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            _logger.LogInformation("Updated scoping criteria group {GroupId}", groupId);
+            return Ok(SyncRuleScopingCriteriaGroupDto.FromEntity(group));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update scoping criteria group: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Deletes a scoping criteria group and all its contents.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="groupId">The unique identifier of the criteria group to delete.</param>
+    /// <returns>No content on success.</returns>
+    [HttpDelete("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "DeleteScopingCriteriaGroup")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteScopingCriteriaGroupAsync(int syncRuleId, int groupId)
+    {
+        _logger.LogInformation("Deleting scoping criteria group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
+        if (group == null)
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
+
+        // Remove from parent or root
+        if (group.ParentGroup != null)
+            group.ParentGroup.ChildGroups.Remove(group);
+        else
+            syncRule.ObjectScopingCriteriaGroups.Remove(group);
+
+        try
+        {
+            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            _logger.LogInformation("Deleted scoping criteria group {GroupId}", groupId);
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete scoping criteria group: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Adds a criterion to a scoping criteria group.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="groupId">The unique identifier of the criteria group.</param>
+    /// <param name="request">The criterion creation request.</param>
+    /// <returns>The created criterion.</returns>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}/criteria", Name = "CreateScopingCriterion")]
+    [ProducesResponseType(typeof(SyncRuleScopingCriteriaDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateScopingCriterionAsync(int syncRuleId, int groupId, [FromBody] CreateScopingCriterionRequest request)
+    {
+        _logger.LogInformation("Creating criterion in group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
+        if (group == null)
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
+
+        // Validate attribute exists
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(request.MetaverseAttributeId);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found."));
+
+        // Validate comparison type
+        if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, true, out var comparisonType) || comparisonType == SearchComparisonType.NotSet)
+            return BadRequest(ApiErrorResponse.BadRequest($"Invalid comparison type '{request.ComparisonType}'."));
+
+        var criterion = new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = attribute,
+            ComparisonType = comparisonType,
+            StringValue = request.StringValue,
+            IntValue = request.IntValue,
+            DateTimeValue = request.DateTimeValue,
+            BoolValue = request.BoolValue,
+            GuidValue = request.GuidValue
+        };
+
+        group.Criteria.Add(criterion);
+
+        try
+        {
+            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            _logger.LogInformation("Created criterion {CriterionId} in group {GroupId}", criterion.Id, groupId);
+            return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId }, SyncRuleScopingCriteriaDto.FromEntity(criterion));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create criterion: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Deletes a criterion from a scoping criteria group.
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="groupId">The unique identifier of the criteria group.</param>
+    /// <param name="criterionId">The unique identifier of the criterion to delete.</param>
+    /// <returns>No content on success.</returns>
+    [HttpDelete("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}/criteria/{criterionId:int}", Name = "DeleteScopingCriterion")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteScopingCriterionAsync(int syncRuleId, int groupId, int criterionId)
+    {
+        _logger.LogInformation("Deleting criterion {CriterionId} from group {GroupId}", criterionId, groupId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
+        if (group == null)
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
+
+        var criterion = group.Criteria.FirstOrDefault(c => c.Id == criterionId);
+        if (criterion == null)
+            return NotFound(ApiErrorResponse.NotFound($"Criterion with ID {criterionId} not found in group {groupId}."));
+
+        group.Criteria.Remove(criterion);
+
+        try
+        {
+            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            _logger.LogInformation("Deleted criterion {CriterionId} from group {GroupId}", criterionId, groupId);
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete criterion: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Recursively finds a scoping criteria group by ID within a collection.
+    /// </summary>
+    private static SyncRuleScopingCriteriaGroup? FindScopingCriteriaGroup(IEnumerable<SyncRuleScopingCriteriaGroup> groups, int groupId)
+    {
+        foreach (var group in groups)
+        {
+            if (group.Id == groupId)
+                return group;
+
+            var found = FindScopingCriteriaGroup(group.ChildGroups, groupId);
+            if (found != null)
+                return found;
+        }
+
+        return null;
     }
 
     #endregion
