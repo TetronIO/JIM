@@ -64,6 +64,14 @@
         'Set-JIMMatchingRule',
         'Remove-JIMMatchingRule',
 
+        # Scoping Criteria
+        'Get-JIMScopingCriteria',
+        'New-JIMScopingCriteriaGroup',
+        'Set-JIMScopingCriteriaGroup',
+        'Remove-JIMScopingCriteriaGroup',
+        'New-JIMScopingCriterion',
+        'Remove-JIMScopingCriterion',
+
         # Run Profiles
         'Get-JIMRunProfile',
         'New-JIMRunProfile',
