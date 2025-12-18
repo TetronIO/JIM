@@ -105,6 +105,10 @@ public class Worker : BackgroundService
                 if (newWorkerTasksToProcess.Count == 0)
                 {
                     Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
+
+                    // During idle time, perform housekeeping tasks like orphan MVO cleanup
+                    await PerformHousekeepingAsync(mainLoopJim);
+
                     await Task.Delay(2000, stoppingToken);
                 }
                 else
@@ -313,6 +317,62 @@ public class Worker : BackgroundService
     }
 
     #region private methods
+
+    /// <summary>
+    /// Tracks when the last housekeeping run occurred to avoid running too frequently.
+    /// </summary>
+    private DateTime _lastHousekeepingRun = DateTime.MinValue;
+
+    /// <summary>
+    /// Performs housekeeping tasks during worker idle time.
+    /// Currently includes: orphaned MVO cleanup based on deletion rules.
+    /// </summary>
+    private async Task PerformHousekeepingAsync(JimApplication jim)
+    {
+        // Only run housekeeping every 60 seconds to avoid unnecessary database queries
+        if ((DateTime.UtcNow - _lastHousekeepingRun).TotalSeconds < 60)
+            return;
+
+        _lastHousekeepingRun = DateTime.UtcNow;
+
+        try
+        {
+            // Get MVOs that are eligible for deletion (grace period has passed)
+            var mvosToDelete = await jim.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync(maxResults: 50);
+
+            if (mvosToDelete.Count > 0)
+            {
+                Log.Information("PerformHousekeepingAsync: Found {Count} orphaned MVOs eligible for deletion", mvosToDelete.Count);
+
+                foreach (var mvo in mvosToDelete)
+                {
+                    try
+                    {
+                        Log.Information("PerformHousekeepingAsync: Deleting orphaned MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}",
+                            mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate);
+
+                        // Evaluate export rules for the MVO deletion (create delete pending exports for provisioned CSOs)
+                        // Note: Most orphaned MVOs won't have CSOs, but this handles edge cases
+                        await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+                        // Delete the MVO
+                        await jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+
+                        Log.Information("PerformHousekeepingAsync: Successfully deleted orphaned MVO {MvoId}", mvo.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "PerformHousekeepingAsync: Failed to delete orphaned MVO {MvoId}", mvo.Id);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
+        }
+    }
+
     private static void InitialiseLogging()
     {
         var loggerConfiguration = new LoggerConfiguration();

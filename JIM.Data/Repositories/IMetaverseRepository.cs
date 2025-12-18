@@ -92,6 +92,18 @@ public interface IMetaverseRepository
     /// </summary>
     /// <param name="metaverseObject">The Metaverse Object to delete.</param>
     public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
+
+    /// <summary>
+    /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
+    /// Returns MVOs where:
+    /// - Origin = Projected (not Internal - protects admin accounts)
+    /// - Type.DeletionRule = WhenLastConnectorDisconnected
+    /// - LastConnectorDisconnectedDate + GracePeriodDays <= now
+    /// - No connected system objects remain
+    /// </summary>
+    /// <param name="maxResults">Maximum number of results to return.</param>
+    /// <returns>List of MVOs eligible for deletion.</returns>
+    public Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100);
     #endregion
 
     #region attributes

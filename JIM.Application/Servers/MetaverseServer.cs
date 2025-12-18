@@ -195,6 +195,18 @@ public class MetaverseServer
         await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
     }
 
+    /// <summary>
+    /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
+    /// Returns MVOs where the grace period has elapsed after all connectors were disconnected.
+    /// Protected objects (Origin=Internal) are never returned.
+    /// </summary>
+    /// <param name="maxResults">Maximum number of results to return.</param>
+    /// <returns>List of MVOs eligible for deletion.</returns>
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync(maxResults);
+    }
+
     public async Task<int> GetMetaverseObjectCountAsync()
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectCountAsync();

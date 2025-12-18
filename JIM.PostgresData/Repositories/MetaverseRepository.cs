@@ -653,6 +653,42 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
+    /// Returns MVOs where:
+    /// - Origin = Projected (not Internal - protects admin accounts)
+    /// - Type.DeletionRule = WhenLastConnectorDisconnected
+    /// - LastConnectorDisconnectedDate + GracePeriodDays less than or equal to now
+    /// - No connected system objects remain
+    /// </summary>
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100)
+    {
+        var now = DateTime.UtcNow;
+
+        var eligibleObjects = await Repository.Database.MetaverseObjects
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo =>
+                // Must be a projected object (not internal like admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have a type with WhenLastConnectorDisconnected deletion rule
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                // Must have been disconnected (has a last connector disconnected date)
+                mvo.LastConnectorDisconnectedDate != null &&
+                // Must have no remaining connected system objects
+                !mvo.ConnectedSystemObjects.Any() &&
+                // Grace period must have elapsed (or no grace period configured)
+                (mvo.Type.DeletionGracePeriodDays == null ||
+                 mvo.Type.DeletionGracePeriodDays == 0 ||
+                 mvo.LastConnectorDisconnectedDate.Value.AddDays(mvo.Type.DeletionGracePeriodDays.Value) <= now))
+            .OrderBy(mvo => mvo.LastConnectorDisconnectedDate)
+            .Take(maxResults)
+            .ToListAsync();
+
+        return eligibleObjects;
+    }
+
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         return predefinedSearch.Attributes
