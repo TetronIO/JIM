@@ -1,7 +1,7 @@
 # JIM MVP Definition
 
-> **Version**: 1.9
-> **Last Updated**: 2025-12-16
+> **Version**: 1.10
+> **Last Updated**: 2025-12-18
 > **Status**: In Progress (~94% Complete)
 
 ---
@@ -11,15 +11,15 @@
 | Category | Progress | Complete | Total | % |
 |----------|----------|----------|-------|---|
 | Connectors | `██████████` | 10 | 10 | 100% |
-| Inbound Sync | `█████████░` | 14 | 15 | 93% |
+| Inbound Sync | `██████████` | 15 | 15 | 100% |
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `████░░░░░░` | 4 | 9 | 44% |
-| Admin UI | `█████████░` | 13 | 14 | 93% |
+| Admin UI | `█████████░` | 14 | 15 | 93% |
 | Security | `██████████` | 5 | 5 | 100% |
 | Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
 | PowerShell | `██████████` | 3 | 3 | 100% |
-| **Overall** | `█████████░` | **78** | **83** | **94%** |
+| **Overall** | `█████████░` | **80** | **85** | **94%** |
 
 ### Priority Order for Remaining Work
 
@@ -27,8 +27,7 @@
 1. **Scheduler Service** (#168) - Automate run profile execution (4 items remaining)
 
 **Important (Highly Desirable for MVP):**
-2. Background job for scheduled MVO deletions (#120)
-3. **Connector credential encryption** - Encrypt passwords at rest (#171)
+2. **Connector credential encryption** - Encrypt passwords at rest (#171)
 
 **Nice to Have (Can follow MVP):**
 - Dashboard admin home page (#169)
@@ -39,6 +38,7 @@
 - End-to-End Integration Testing Framework (#173)
 
 ### Recently Completed ✓
+- ~~MVO Deletion Rules (#203)~~ - Pending deletions UI, API endpoints, background housekeeping job
 - ~~PowerShell Module (#176)~~ - 35 cmdlets with full CRUD operations and name-based parameters
 - ~~API Coverage (#183)~~ - Activity, Run Profiles, Connected Systems, Sync Rules, MVO query, Data Generation
 - ~~Release Process (#188)~~ - GitHub Actions workflow, air-gapped bundles, PSGallery publishing
@@ -112,7 +112,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Scheduled deletion date tracking
 - [x] Reconnection clears scheduled deletion
 - [x] Attribute recall on CSO obsoletion (`RemoveContributedAttributesOnObsoletion`)
-- [ ] Background job for processing scheduled deletions (#120)
+- [x] Background job for processing scheduled deletions (#120)
 
 ### 3. Outbound Synchronisation (Metaverse → Target)
 
@@ -166,6 +166,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Activity history
 - [x] API Key management (#175)
 - [x] Certificate management
+- [x] Pending deletions view (#203)
 
 #### 5.2 Synchronisation Management
 - [x] Manual run profile execution
