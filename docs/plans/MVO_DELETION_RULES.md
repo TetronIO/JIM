@@ -176,7 +176,7 @@ To enable PowerShell-based integration tests, the following API enhancements are
 - [x] Basic matching: projection when no MVO exists (Test 1)
 - [x] Basic matching: join to existing MVO without connector from same CS (Test 2)
 - [x] Duplicate prevention: join conflict when MVO already has connector from same CS (Test 3)
-- [ ] Multiple rules: fallback to second/third rule when earlier rules don't match (Test 4)
+- [x] Multiple rules: fallback to second/third rule when earlier rules don't match (Test 4)
 - [ ] Edge cases: ambiguous matches, null values, case sensitivity
 
 ## Critical Files

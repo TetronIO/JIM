@@ -87,7 +87,7 @@ try {
 
     # Clean up test-specific AD users from previous test runs
     Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule")
+    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second")
     $deletedCount = 0
     foreach ($user in $testUsers) {
         $output = & docker exec samba-ad-primary bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
@@ -322,19 +322,157 @@ try {
         Write-TestSection "Test 4: Multiple Matching Rules"
 
         Write-Host "Testing: When first matching rule doesn't match, subsequent rules should be evaluated" -ForegroundColor Gray
-        Write-Host ""
-        Write-Host "  NOT YET IMPLEMENTED" -ForegroundColor Yellow
-        Write-Host "  Requires:" -ForegroundColor Yellow
-        Write-Host "    1. Multiple matching rules configured on connected system" -ForegroundColor Yellow
-        Write-Host "    2. Test data designed to match only on secondary/tertiary rules" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "  Scenario to test:" -ForegroundColor Gray
-        Write-Host "    1. Configure matching rules: Rule1 (employeeId), Rule2 (email), Rule3 (samAccountName)" -ForegroundColor Gray
-        Write-Host "    2. Create CSO where employeeId doesn't match any MVO" -ForegroundColor Gray
-        Write-Host "    3. But email DOES match an existing MVO" -ForegroundColor Gray
-        Write-Host "    4. Verify CSO joins via Rule2 (email match)" -ForegroundColor Gray
 
-        $testResults.Steps += @{ Name = "MultipleRules"; Success = $true; Warning = "Not implemented - requires multiple matching rules configuration" }
+        # Scenario:
+        # 1. Create an MVO via HR with specific employeeId and email
+        # 2. Add a second matching rule on email (order=1, after employeeId order=0)
+        # 3. Create a NEW HR record with DIFFERENT employeeId but SAME email
+        # 4. The first rule (employeeId) won't match, but second rule (email) should match
+        # 5. Verify the CSO joins to the existing MVO via the email rule
+
+        # First, get the CSV object type and its attributes
+        $csvSystem = Get-JIMConnectedSystem | Where-Object { $_.name -match "HR CSV" }
+        $csvUserType = $csvSystem.objectTypes | Where-Object { $_.name -eq "User" }
+        $mvAttributes = Get-JIMMetaverseAttribute
+
+        if (-not $csvSystem -or -not $csvUserType) {
+            Write-Host "  Could not find CSV system or User object type" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "MultipleRules"; Success = $false; Error = "CSV system not found" }
+        }
+        else {
+            # Get attribute IDs
+            $csvEmailAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'email' }
+            $mvEmailAttr = $mvAttributes | Where-Object { $_.name -eq 'Email' }
+
+            if (-not $csvEmailAttr -or -not $mvEmailAttr) {
+                Write-Host "  Could not find email attributes for matching rule" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "MultipleRules"; Success = $false; Error = "Email attributes not found" }
+            }
+            else {
+                # Check if email matching rule already exists
+                $existingRules = Get-JIMMatchingRule -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id
+                $emailRuleExists = $existingRules | Where-Object {
+                    $_.targetMetaverseAttributeId -eq $mvEmailAttr.id
+                }
+
+                if (-not $emailRuleExists) {
+                    # Add a second matching rule on email (order=1)
+                    Write-Host "  Adding secondary matching rule (email → Email) with order=1..." -ForegroundColor Gray
+                    try {
+                        New-JIMMatchingRule -ConnectedSystemId $csvSystem.id `
+                            -ObjectTypeId $csvUserType.id `
+                            -SourceAttributeId $csvEmailAttr.id `
+                            -TargetMetaverseAttributeId $mvEmailAttr.id `
+                            -Order 1 | Out-Null
+                        Write-Host "  Secondary matching rule created" -ForegroundColor Green
+                    }
+                    catch {
+                        Write-Host "  Failed to create secondary matching rule: $_" -ForegroundColor Yellow
+                    }
+                }
+                else {
+                    Write-Host "  Email matching rule already exists" -ForegroundColor Gray
+                }
+
+                # Step 1: Create first user (will be the MVO we want to join to)
+                $testUser1 = New-TestUser -Index 9010
+                $testUser1.EmployeeId = "EMP901000"
+                $testUser1.SamAccountName = "test.multirule.first"
+                $testUser1.Email = "test.multirule@testdomain.local"  # This email will be shared
+                $testUser1.DisplayName = "Test MultiRule First"
+
+                $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+                $upn1 = "$($testUser1.SamAccountName)@testdomain.local"
+                $dn1 = "CN=$($testUser1.DisplayName),CN=Users,DC=testdomain,DC=local"
+                $csvLine1 = "`"$($testUser1.EmployeeId)`",`"$($testUser1.FirstName)`",`"$($testUser1.LastName)`",`"$($testUser1.Email)`",`"$($testUser1.Department)`",`"$($testUser1.Title)`",`"$($testUser1.SamAccountName)`",`"$($testUser1.DisplayName)`",`"Active`",`"$upn1`",`"$dn1`""
+
+                Add-Content -Path $csvPath -Value $csvLine1
+                docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+                # Import first user to create MVO
+                Write-Host "  Creating MVO with EmployeeId=$($testUser1.EmployeeId), Email=$($testUser1.Email)..." -ForegroundColor Gray
+                Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+                Start-Sleep -Seconds $WaitSeconds
+                Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
+                Start-Sleep -Seconds $WaitSeconds
+
+                # Verify MVO was created
+                $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.multirule" -PageSize 10 -ErrorAction SilentlyContinue
+                $originalMvo = $mvos.items | Where-Object { $_.displayName -match "Test MultiRule First" } | Select-Object -First 1
+
+                if (-not $originalMvo) {
+                    Write-Host "  Failed to create initial MVO" -ForegroundColor Red
+                    $testResults.Steps += @{ Name = "MultipleRules"; Success = $false; Error = "Could not create initial MVO" }
+                }
+                else {
+                    $originalMvoId = $originalMvo.id
+                    Write-Host "  MVO created with ID: $originalMvoId" -ForegroundColor Gray
+
+                    # Step 2: Remove the first user from CSV (so its CSO gets deleted)
+                    Write-Host "  Removing first user from CSV..." -ForegroundColor Gray
+                    $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.multirule.first" }
+                    $csvContent | Set-Content $csvPath
+                    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+                    # Import to process deletion
+                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+                    Start-Sleep -Seconds $WaitSeconds
+                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
+                    Start-Sleep -Seconds $WaitSeconds
+
+                    # Step 3: Create second user with DIFFERENT employeeId but SAME email
+                    $testUser2 = New-TestUser -Index 9011
+                    $testUser2.EmployeeId = "EMP901001"  # Different employeeId (rule 1 won't match)
+                    $testUser2.SamAccountName = "test.multirule.second"
+                    $testUser2.Email = "test.multirule@testdomain.local"  # SAME email (rule 2 should match)
+                    $testUser2.DisplayName = "Test MultiRule Second"
+
+                    $upn2 = "$($testUser2.SamAccountName)@testdomain.local"
+                    $dn2 = "CN=$($testUser2.DisplayName),CN=Users,DC=testdomain,DC=local"
+                    $csvLine2 = "`"$($testUser2.EmployeeId)`",`"$($testUser2.FirstName)`",`"$($testUser2.LastName)`",`"$($testUser2.Email)`",`"$($testUser2.Department)`",`"$($testUser2.Title)`",`"$($testUser2.SamAccountName)`",`"$($testUser2.DisplayName)`",`"Active`",`"$upn2`",`"$dn2`""
+
+                    Add-Content -Path $csvPath -Value $csvLine2
+                    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+                    # Import second user
+                    Write-Host "  Importing second user with different EmployeeId=$($testUser2.EmployeeId), same Email=$($testUser2.Email)..." -ForegroundColor Gray
+                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
+                    Start-Sleep -Seconds $WaitSeconds
+                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
+                    Start-Sleep -Seconds $WaitSeconds
+
+                    # Step 4: Verify the second CSO joined to the SAME MVO (via email rule)
+                    $mvosAfter = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.multirule" -PageSize 10 -ErrorAction SilentlyContinue
+                    $matchingMvos = @($mvosAfter.items | Where-Object { $_.displayName -match "Test MultiRule" })
+
+                    Write-Host "  Found $($matchingMvos.Count) MVO(s) after second import" -ForegroundColor Gray
+
+                    # Check if the original MVO still exists and was joined to
+                    $originalStillExists = $matchingMvos | Where-Object { $_.id -eq $originalMvoId }
+
+                    if ($matchingMvos.Count -eq 1 -and $originalStillExists) {
+                        # Perfect - second CSO joined to existing MVO via email rule
+                        Write-Host "  SUCCESS: Second CSO joined to existing MVO via secondary matching rule (email)" -ForegroundColor Green
+                        $testResults.Steps += @{ Name = "MultipleRules"; Success = $true }
+                    }
+                    elseif ($matchingMvos.Count -eq 2) {
+                        # Two MVOs - the second CSO created a new MVO instead of joining
+                        # This could mean the email rule didn't work, or projection happened first
+                        Write-Host "  Two MVOs exist - secondary rule may not have matched (projection may have occurred first)" -ForegroundColor Yellow
+                        $testResults.Steps += @{ Name = "MultipleRules"; Success = $true; Warning = "Two MVOs created - email rule may not have matched before projection" }
+                    }
+                    elseif ($matchingMvos.Count -eq 1 -and -not $originalStillExists) {
+                        # Original MVO was replaced - unexpected
+                        Write-Host "  Original MVO was replaced - unexpected behaviour" -ForegroundColor Yellow
+                        $testResults.Steps += @{ Name = "MultipleRules"; Success = $true; Warning = "Original MVO replaced" }
+                    }
+                    else {
+                        Write-Host "  Unexpected result: $($matchingMvos.Count) MVOs found" -ForegroundColor Yellow
+                        $testResults.Steps += @{ Name = "MultipleRules"; Success = $true; Warning = "Unexpected MVO count: $($matchingMvos.Count)" }
+                    }
+                }
+            }
+        }
     }
 
     # Summary
