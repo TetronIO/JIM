@@ -69,17 +69,33 @@
         <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
         <MudTd DataLabel="Target">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudTd>
         <MudTd DataLabel="Operation">@context.TargetOperationType.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Created">@context.Created.ToFriendlyDate()</MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
         <MudTd DataLabel="Initiated By">
-            @if (context.InitiatedBy != null)
-            {
-                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">
-                    @Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)
-                </MudLink>
-            }
-            else if (!string.IsNullOrEmpty(context.InitiatedByName))
-            {
-                @context.InitiatedByName
+            @{
+                if (context.InitiatedBy != null)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">
+                        @Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)
+                    </MudLink>
+                }
+                else if (!string.IsNullOrEmpty(context.InitiatedByName))
+                {
+                    var apiKeyName = Utilities.ExtractApiKeyName(context.InitiatedByName);
+                    if (apiKeyName != null)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                        <MudLink Href="@Utilities.GetApiKeysHref()">@apiKeyName</MudLink>
+                    }
+                    else
+                    {
+                        @context.InitiatedByName
+                    }
+                }
             }
         </MudTd>
         <MudTd DataLabel="Status">

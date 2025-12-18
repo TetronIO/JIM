@@ -71,6 +71,7 @@
         <MudTd DataLabel="Initiated By">
             @if (context.InitiatedBy != null)
             {
+                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
                 <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)</MudLink>
             }
         </MudTd>

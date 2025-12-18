@@ -80,4 +80,28 @@ public static class Utilities
     {
         return $"/admin/connected-systems/{connectedSystemId}/objects/{connectedSystemObjectId}";
     }
+
+    /// <summary>
+    /// Returns the href for the API Keys list page.
+    /// </summary>
+    public static string GetApiKeysHref()
+    {
+        return "/admin/apikeys";
+    }
+
+    /// <summary>
+    /// Checks if an InitiatedByName string represents an API Key.
+    /// Returns the API key name without the prefix if it's an API key, otherwise returns null.
+    /// </summary>
+    public static string? ExtractApiKeyName(string? initiatedByName)
+    {
+        const string apiKeyPrefix = "API Key: ";
+        if (string.IsNullOrEmpty(initiatedByName))
+            return null;
+
+        if (initiatedByName.StartsWith(apiKeyPrefix, StringComparison.Ordinal))
+            return initiatedByName.Substring(apiKeyPrefix.Length);
+
+        return null;
+    }
 }
