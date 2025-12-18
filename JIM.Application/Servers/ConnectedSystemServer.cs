@@ -302,8 +302,8 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: false)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: false);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
             await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -319,8 +319,8 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: false)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: false);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
             await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -344,6 +344,10 @@ public class ConnectedSystemServer
 
         try
         {
+            // Mark orphaned MVOs for deletion before deleting the Connected System
+            // This sets LastConnectorDisconnectedDate so housekeeping will delete them after grace period
+            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
+
             // Perform the deletion
             await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
 
@@ -375,9 +379,18 @@ public class ConnectedSystemServer
     /// Executes the deletion of a Connected System. Called by the worker service for background deletions.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
-    public async Task ExecuteDeletionAsync(int connectedSystemId)
+    /// <param name="evaluateMvoDeletionRules">Whether to mark orphaned MVOs for deletion before deleting the Connected System.</param>
+    public async Task ExecuteDeletionAsync(int connectedSystemId, bool evaluateMvoDeletionRules = true)
     {
-        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}", connectedSystemId);
+        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}, EvaluateMvoDeletionRules={EvaluateMvo}",
+            connectedSystemId, evaluateMvoDeletionRules);
+
+        if (evaluateMvoDeletionRules)
+        {
+            // Mark orphaned MVOs for deletion before deleting the Connected System
+            // This sets LastConnectorDisconnectedDate so housekeeping will delete them after grace period
+            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
+        }
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
 

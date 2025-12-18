@@ -104,6 +104,25 @@ public interface IMetaverseRepository
     /// <param name="maxResults">Maximum number of results to return.</param>
     /// <returns>List of MVOs eligible for deletion.</returns>
     public Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100);
+
+    /// <summary>
+    /// Gets MVOs that will become orphaned when the specified Connected System is deleted.
+    /// An MVO is considered orphaned if it:
+    /// - Has DeletionRule = WhenLastConnectorDisconnected
+    /// - Has Origin = Projected (not internal)
+    /// - Is ONLY connected to the specified Connected System (no other connectors)
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being deleted.</param>
+    /// <returns>List of MVOs that will become orphaned.</returns>
+    public Task<List<MetaverseObject>> GetMvosOrphanedByConnectedSystemDeletionAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Marks MVOs as disconnected by setting their LastConnectorDisconnectedDate.
+    /// Used when a Connected System is deleted to prepare orphaned MVOs for housekeeping deletion.
+    /// </summary>
+    /// <param name="mvoIds">The IDs of the MVOs to mark as disconnected.</param>
+    /// <returns>The number of MVOs updated.</returns>
+    public Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds);
     #endregion
 
     #region attributes

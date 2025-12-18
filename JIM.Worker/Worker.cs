@@ -289,6 +289,34 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
+                                {
+                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for connected system id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}",
+                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+
+                                    try
+                                    {
+                                        // Execute the deletion (marks orphaned MVOs for deletion before deleting CS)
+                                        await taskJim.ConnectedSystems.ExecuteDeletionAsync(
+                                            deleteConnectedSystemTask.ConnectedSystemId,
+                                            deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+
+                                        // Task completed successfully, complete the activity
+                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing delete connected system task.");
+                                    }
+                                    finally
+                                    {
+                                        Log.Information("ExecuteAsync: Completed deleting connected system ({ConnectedSystemId}) in {ExecutionTime}",
+                                            deleteConnectedSystemTask.ConnectedSystemId, newWorkerTask.Activity.ExecutionTime);
+                                    }
+
+                                    break;
+                                }
                             }
                         
                             // very important: we must mark the task as complete once we're done

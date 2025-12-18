@@ -689,6 +689,49 @@ public class MetaverseRepository : IMetaverseRepository
         return eligibleObjects;
     }
 
+    public async Task<List<MetaverseObject>> GetMvosOrphanedByConnectedSystemDeletionAsync(int connectedSystemId)
+    {
+        // Find MVOs that:
+        // 1. Are projected (not internal admin accounts)
+        // 2. Have deletion rule WhenLastConnectorDisconnected
+        // 3. Have ALL their CSOs in the specified connected system (will become orphaned)
+        var orphanedMvos = await Repository.Database.MetaverseObjects
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo =>
+                // Must be a projected object (not internal like admin accounts)
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                // Must have a type with WhenLastConnectorDisconnected deletion rule
+                mvo.Type != null &&
+                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                // Must have at least one CSO in the system being deleted
+                mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId == connectedSystemId) &&
+                // Must NOT have any CSOs in OTHER connected systems (would become orphaned)
+                !mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId != connectedSystemId))
+            .ToListAsync();
+
+        return orphanedMvos;
+    }
+
+    public async Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds)
+    {
+        var mvoIdList = mvoIds.ToList();
+        if (mvoIdList.Count == 0)
+            return 0;
+
+        var now = DateTime.UtcNow;
+
+        // Use raw SQL for efficiency with large numbers of MVOs
+        var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects""
+              SET ""LastConnectorDisconnectedDate"" = {0}
+              WHERE ""Id"" = ANY({1})
+                AND ""LastConnectorDisconnectedDate"" IS NULL",
+            now, mvoIdList.ToArray());
+
+        return rowsAffected;
+    }
+
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         return predefinedSearch.Attributes

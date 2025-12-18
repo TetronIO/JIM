@@ -275,5 +275,35 @@ public class MetaverseServer
 
         return await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
     }
+
+    /// <summary>
+    /// Marks MVOs as disconnected that will become orphaned when the specified Connected System is deleted.
+    /// This sets LastConnectorDisconnectedDate so housekeeping will delete them after the grace period.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being deleted.</param>
+    /// <returns>The number of MVOs marked for deletion.</returns>
+    public async Task<int> MarkOrphanedMvosForDeletionAsync(int connectedSystemId)
+    {
+        Log.Information("MarkOrphanedMvosForDeletionAsync: Finding orphaned MVOs for Connected System {Id}", connectedSystemId);
+
+        // Find MVOs that will become orphaned when this Connected System is deleted
+        var orphanedMvos = await Application.Repository.Metaverse.GetMvosOrphanedByConnectedSystemDeletionAsync(connectedSystemId);
+
+        if (orphanedMvos.Count == 0)
+        {
+            Log.Information("MarkOrphanedMvosForDeletionAsync: No orphaned MVOs found for Connected System {Id}", connectedSystemId);
+            return 0;
+        }
+
+        Log.Information("MarkOrphanedMvosForDeletionAsync: Found {Count} orphaned MVOs for Connected System {Id}", orphanedMvos.Count, connectedSystemId);
+
+        // Mark them as disconnected so housekeeping will delete them after the grace period
+        var mvoIds = orphanedMvos.Select(mvo => mvo.Id).ToList();
+        var markedCount = await Application.Repository.Metaverse.MarkMvosAsDisconnectedAsync(mvoIds);
+
+        Log.Information("MarkOrphanedMvosForDeletionAsync: Marked {Count} MVOs for deletion for Connected System {Id}", markedCount, connectedSystemId);
+
+        return markedCount;
+    }
     #endregion
 }
