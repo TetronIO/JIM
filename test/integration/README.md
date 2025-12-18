@@ -8,10 +8,14 @@ End-to-end integration tests for JIM against real external systems running in Do
 
 ```powershell
 # From anywhere in the repo - runs full lifecycle
-pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Small
+# Use Micro for Codespaces/CI, Small for local development
+pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Micro
 
 # With debugging (keeps containers running after tests)
-pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Small -SkipTearDown
+pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Micro -SkipTearDown
+
+# For minimal testing (3 users)
+pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Nano
 ```
 
 This will automatically:
@@ -96,12 +100,15 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 
 | Template | Users | Groups | Use Case |
 |----------|-------|--------|----------|
-| **Micro** | 10 | 3 | Quick smoke tests |
-| **Small** | 100 | 20 | Small business, unit tests |
+| **Nano** | 3 | 2 | Minimal testing, debugging |
+| **Micro** | 10 | 3 | Quick smoke tests, Codespaces |
+| **Small** | 100 | 20 | Small business, local development |
 | **Medium** | 1,000 | 100 | Medium enterprise, CI/CD |
 | **Large** | 10,000 | 500 | Large enterprise, baselines |
 | **XLarge** | 100,000 | 2,000 | Very large enterprise |
 | **XXLarge** | 1,000,000 | 10,000 | Global enterprise |
+
+> **Note**: For GitHub Codespaces or resource-constrained environments, use **Nano** or **Micro** templates.
 
 ## External Systems
 

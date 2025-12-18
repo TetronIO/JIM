@@ -178,23 +178,11 @@ if ($Restart) {
     Write-Host "[Step 4] Restarting environment..." -ForegroundColor Cyan
     Write-Host ""
 
-    # Start external test systems first
-    if (-not $JIMOnly) {
-        Write-Host "  Starting external test systems (Samba AD)..." -ForegroundColor Gray
-        docker compose -f $integrationCompose up -d 2>&1 | ForEach-Object {
-            Write-Host "    $_" -ForegroundColor Gray
-        }
+    # IMPORTANT: JIM must start first because it creates the jim-network.
+    # External test systems (Samba AD) declare this network as external and depend on it.
+    # Order: JIM -> JIM ready -> External systems -> External systems ready
 
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  Failed to start external test systems" -ForegroundColor Red
-            $success = $false
-        } else {
-            Write-Host "  External test systems started" -ForegroundColor Green
-        }
-        Write-Host ""
-    }
-
-    # Start JIM
+    # Start JIM first (creates the jim-network that external systems depend on)
     if (-not $ExternalOnly) {
         Write-Host "  Starting JIM..." -ForegroundColor Gray
 
@@ -243,6 +231,22 @@ if ($Restart) {
         } else {
             Write-Host "  Warning: JIM did not become ready within timeout" -ForegroundColor Yellow
             Write-Host "  Check logs: docker logs jim.web" -ForegroundColor Yellow
+        }
+        Write-Host ""
+    }
+
+    # Start external test systems AFTER JIM (they depend on jim-network created by JIM)
+    if (-not $JIMOnly) {
+        Write-Host "  Starting external test systems (Samba AD)..." -ForegroundColor Gray
+        docker compose -f $integrationCompose up -d 2>&1 | ForEach-Object {
+            Write-Host "    $_" -ForegroundColor Gray
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  Failed to start external test systems" -ForegroundColor Red
+            $success = $false
+        } else {
+            Write-Host "  External test systems started" -ForegroundColor Green
         }
         Write-Host ""
     }
