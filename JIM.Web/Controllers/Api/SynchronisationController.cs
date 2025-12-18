@@ -1799,6 +1799,10 @@ public class SynchronisationController(
     /// <summary>
     /// Adds a criterion to a scoping criteria group.
     /// </summary>
+    /// <remarks>
+    /// For Export sync rules: provide MetaverseAttributeId to evaluate MVO attributes.
+    /// For Import sync rules: provide ConnectedSystemAttributeId to evaluate CSO attributes.
+    /// </remarks>
     /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="request">The criterion creation request.</param>
@@ -1824,18 +1828,12 @@ public class SynchronisationController(
         if (group == null)
             return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
 
-        // Validate attribute exists
-        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(request.MetaverseAttributeId);
-        if (attribute == null)
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found."));
-
         // Validate comparison type
         if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, true, out var comparisonType) || comparisonType == SearchComparisonType.NotSet)
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid comparison type '{request.ComparisonType}'."));
 
         var criterion = new SyncRuleScopingCriteria
         {
-            MetaverseAttribute = attribute,
             ComparisonType = comparisonType,
             StringValue = request.StringValue,
             IntValue = request.IntValue,
@@ -1843,6 +1841,35 @@ public class SynchronisationController(
             BoolValue = request.BoolValue,
             GuidValue = request.GuidValue
         };
+
+        // Set the appropriate attribute based on sync rule direction
+        if (syncRule.Direction == SyncRuleDirection.Export)
+        {
+            // Export rules evaluate Metaverse attributes
+            if (!request.MetaverseAttributeId.HasValue)
+                return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export sync rules."));
+
+            var mvAttribute = await _application.Metaverse.GetMetaverseAttributeAsync(request.MetaverseAttributeId.Value);
+            if (mvAttribute == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found."));
+
+            criterion.MetaverseAttribute = mvAttribute;
+        }
+        else
+        {
+            // Import rules evaluate Connected System attributes
+            if (!request.ConnectedSystemAttributeId.HasValue)
+                return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import sync rules."));
+
+            // Get the CS attribute from the sync rule's connected system object type
+            var csAttribute = syncRule.ConnectedSystemObjectType?.Attributes
+                .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId.Value);
+
+            if (csAttribute == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in sync rule's object type."));
+
+            criterion.ConnectedSystemAttribute = csAttribute;
+        }
 
         group.Criteria.Add(criterion);
 

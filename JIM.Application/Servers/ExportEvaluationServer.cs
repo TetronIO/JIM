@@ -16,11 +16,13 @@ public class ExportEvaluationServer
 {
     private JimApplication Application { get; }
     private IExpressionEvaluator ExpressionEvaluator { get; }
+    private ScopingEvaluationServer ScopingEvaluation { get; }
 
     internal ExportEvaluationServer(JimApplication application)
     {
         Application = application;
         ExpressionEvaluator = new DynamicExpressoEvaluator();
+        ScopingEvaluation = new ScopingEvaluationServer();
     }
 
     /// <summary>
@@ -270,155 +272,7 @@ public class ExportEvaluationServer
     /// </summary>
     public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule)
     {
-        // No scoping criteria means all objects are in scope
-        if (exportRule.ObjectScopingCriteriaGroups.Count == 0)
-            return true;
-
-        // Evaluate each criteria group (they are ORed together at the top level)
-        foreach (var criteriaGroup in exportRule.ObjectScopingCriteriaGroups)
-        {
-            if (EvaluateScopingCriteriaGroup(mvo, criteriaGroup))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Evaluates a single scoping criteria group against an MVO.
-    /// </summary>
-    private bool EvaluateScopingCriteriaGroup(MetaverseObject mvo, SyncRuleScopingCriteriaGroup group)
-    {
-        var criteriaResults = new List<bool>();
-
-        // Evaluate individual criteria
-        foreach (var criterion in group.Criteria)
-        {
-            criteriaResults.Add(EvaluateScopingCriterion(mvo, criterion));
-        }
-
-        // Evaluate child groups recursively
-        foreach (var childGroup in group.ChildGroups)
-        {
-            criteriaResults.Add(EvaluateScopingCriteriaGroup(mvo, childGroup));
-        }
-
-        if (criteriaResults.Count == 0)
-            return true; // Empty group is always true
-
-        // Apply AND/OR logic based on group type
-        return group.Type switch
-        {
-            SearchGroupType.All => criteriaResults.All(r => r),
-            SearchGroupType.Any => criteriaResults.Any(r => r),
-            _ => false
-        };
-    }
-
-    /// <summary>
-    /// Evaluates a single scoping criterion against an MVO attribute.
-    /// </summary>
-    private bool EvaluateScopingCriterion(MetaverseObject mvo, SyncRuleScopingCriteria criterion)
-    {
-        if (criterion.MetaverseAttribute == null)
-            return false;
-
-        // Get the MVO attribute value
-        var mvoAttributeValue = mvo.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == criterion.MetaverseAttribute.Id);
-
-        // Handle null/missing attribute values
-        if (mvoAttributeValue == null)
-        {
-            // Only Equals with null value should match
-            return criterion.ComparisonType == SearchComparisonType.Equals &&
-                   criterion.StringValue == null &&
-                   criterion.IntValue == null &&
-                   criterion.DateTimeValue == null &&
-                   criterion.BoolValue == null &&
-                   criterion.GuidValue == null;
-        }
-
-        // Evaluate based on attribute type
-        return criterion.MetaverseAttribute.Type switch
-        {
-            AttributeDataType.Text => EvaluateStringComparison(mvoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType),
-            AttributeDataType.Number => EvaluateNumberComparison(mvoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
-            AttributeDataType.DateTime => EvaluateDateTimeComparison(mvoAttributeValue.DateTimeValue, criterion.DateTimeValue, criterion.ComparisonType),
-            AttributeDataType.Boolean => EvaluateBooleanComparison(mvoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
-            AttributeDataType.Guid => EvaluateGuidComparison(mvoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
-            _ => false
-        };
-    }
-
-    private bool EvaluateStringComparison(string? actual, string? expected, SearchComparisonType comparisonType)
-    {
-        return comparisonType switch
-        {
-            SearchComparisonType.Equals => string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase),
-            SearchComparisonType.NotEquals => !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase),
-            SearchComparisonType.StartsWith => actual?.StartsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false,
-            SearchComparisonType.NotStartsWith => !(actual?.StartsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false),
-            SearchComparisonType.EndsWith => actual?.EndsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false,
-            SearchComparisonType.NotEndsWith => !(actual?.EndsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false),
-            SearchComparisonType.Contains => actual?.Contains(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false,
-            SearchComparisonType.NotContains => !(actual?.Contains(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false),
-            _ => false
-        };
-    }
-
-    private bool EvaluateNumberComparison(int? actual, int? expected, SearchComparisonType comparisonType)
-    {
-        if (!actual.HasValue || !expected.HasValue)
-            return comparisonType == SearchComparisonType.Equals && actual == expected;
-
-        return comparisonType switch
-        {
-            SearchComparisonType.Equals => actual.Value == expected.Value,
-            SearchComparisonType.NotEquals => actual.Value != expected.Value,
-            SearchComparisonType.LessThan => actual.Value < expected.Value,
-            SearchComparisonType.LessThanOrEquals => actual.Value <= expected.Value,
-            SearchComparisonType.GreaterThan => actual.Value > expected.Value,
-            SearchComparisonType.GreaterThanOrEquals => actual.Value >= expected.Value,
-            _ => false
-        };
-    }
-
-    private bool EvaluateDateTimeComparison(DateTime? actual, DateTime? expected, SearchComparisonType comparisonType)
-    {
-        if (!actual.HasValue || !expected.HasValue)
-            return comparisonType == SearchComparisonType.Equals && actual == expected;
-
-        return comparisonType switch
-        {
-            SearchComparisonType.Equals => actual.Value == expected.Value,
-            SearchComparisonType.NotEquals => actual.Value != expected.Value,
-            SearchComparisonType.LessThan => actual.Value < expected.Value,
-            SearchComparisonType.LessThanOrEquals => actual.Value <= expected.Value,
-            SearchComparisonType.GreaterThan => actual.Value > expected.Value,
-            SearchComparisonType.GreaterThanOrEquals => actual.Value >= expected.Value,
-            _ => false
-        };
-    }
-
-    private bool EvaluateBooleanComparison(bool? actual, bool? expected, SearchComparisonType comparisonType)
-    {
-        return comparisonType switch
-        {
-            SearchComparisonType.Equals => actual == expected,
-            SearchComparisonType.NotEquals => actual != expected,
-            _ => false
-        };
-    }
-
-    private bool EvaluateGuidComparison(Guid? actual, Guid? expected, SearchComparisonType comparisonType)
-    {
-        return comparisonType switch
-        {
-            SearchComparisonType.Equals => actual == expected,
-            SearchComparisonType.NotEquals => actual != expected,
-            _ => false
-        };
+        return ScopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule);
     }
 
     /// <summary>

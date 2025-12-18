@@ -14,6 +14,7 @@ public class JimApplication
     public DataGenerationServer DataGeneration { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
+    public ScopingEvaluationServer ScopingEvaluation { get; }
     public FileSystemServer FileSystem { get; }
     public MetaverseServer Metaverse { get; }
     public ObjectMatchingServer ObjectMatching { get; }
@@ -30,6 +31,7 @@ public class JimApplication
         DataGeneration = new DataGenerationServer(this);
         ExportEvaluation = new ExportEvaluationServer(this);
         ExportExecution = new ExportExecutionServer(this);
+        ScopingEvaluation = new ScopingEvaluationServer();
         FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);
         ObjectMatching = new ObjectMatchingServer(this);

@@ -96,8 +96,10 @@ public class SyncRule: IValidated
     public List<Activity> Activities { get; set; } = null!;
 
     /// <summary>
-    /// Contains all the logic that determines which Metaverse objects should be exported to the Connected System.
-    /// No rules mean that all objects of the Metaverse Object Type will be in scope of an outbound sync rule.
+    /// Contains the scoping criteria that determines which objects are in scope for this sync rule.
+    /// For Export rules: evaluates Metaverse Object attributes to determine which MVOs should be exported.
+    /// For Import rules: evaluates Connected System Object attributes to determine which CSOs should be projected/joined.
+    /// No rules mean all objects of the applicable type are in scope.
     /// </summary>
     public List<SyncRuleScopingCriteriaGroup> ObjectScopingCriteriaGroups { get; set; } = new();
 

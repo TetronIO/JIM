@@ -36,11 +36,20 @@
         <div class="mt-5">
             <MudChip T="string">
                 <AvatarContent>
-                    <MudTooltip Text="Metaverse Attribute">
-                        <MudAvatar>MV</MudAvatar>
-                    </MudTooltip>
+                    @if (criteria.MetaverseAttribute != null)
+                    {
+                        <MudTooltip Text="Metaverse Attribute">
+                            <MudAvatar>MV</MudAvatar>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Connected System Attribute">
+                            <MudAvatar>CS</MudAvatar>
+                        </MudTooltip>
+                    }
                 </AvatarContent>
-                <ChildContent>@criteria.MetaverseAttribute.Name</ChildContent>
+                <ChildContent>@criteria.GetAttributeName()</ChildContent>
             </MudChip>
             <MudChip T="string">@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
             <MudChip T="string">@criteria.ToString()</MudChip>

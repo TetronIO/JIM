@@ -423,13 +423,32 @@ public class SyncFullSyncTaskProcessor
         if (activeSyncRules.Count == 0)
             return;
 
+        // Get import sync rules for this CSO type
+        var importSyncRules = activeSyncRules
+            .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
+            .ToList();
+
+        // Check if CSO is in scope for any import sync rule before attempting join/projection
+        var inScopeImportRules = await GetInScopeImportRulesAsync(connectedSystemObject, importSyncRules);
+        if (inScopeImportRules.Count == 0 && importSyncRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
+        {
+            // CSO is out of scope for all import sync rules that have scoping criteria
+            Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import sync rules", connectedSystemObject.Id);
+
+            // Handle out of scope based on InboundOutOfScopeAction
+            await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules, runProfileExecutionItem);
+            return;
+        }
+
         // do we need to join, or project the CSO to the Metaverse?
         if (connectedSystemObject.MetaverseObject == null)
         {
             // CSO is not joined to a Metaverse Object.
             // inspect sync rules to determine if we have any join or projection requirements.
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
-            await AttemptJoinAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+            // Only use in-scope sync rules for join/projection
+            var scopedSyncRules = inScopeImportRules.Count > 0 ? inScopeImportRules : activeSyncRules;
+            await AttemptJoinAsync(scopedSyncRules, connectedSystemObject, runProfileExecutionItem);
 
             // did we encounter an error whilst attempting a join? stop processing the CSO if so.
             if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -440,7 +459,8 @@ public class SyncFullSyncTaskProcessor
             {
                 // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
-                AttemptProjection(activeSyncRules, connectedSystemObject);
+                // Only use in-scope sync rules for projection
+                AttemptProjection(scopedSyncRules, connectedSystemObject);
             }
         }
 
@@ -717,5 +737,122 @@ public class SyncFullSyncTaskProcessor
 
         // TODO: "Is this still needed? We're assigning MVO references from CSO reference values on sync rule processing."
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Gets the list of import sync rules for which the CSO is in scope.
+    /// If a sync rule has no scoping criteria, the CSO is considered in scope.
+    /// </summary>
+    private async Task<List<SyncRule>> GetInScopeImportRulesAsync(ConnectedSystemObject connectedSystemObject, List<SyncRule> importSyncRules)
+    {
+        var inScopeRules = new List<SyncRule>();
+        var csoWithAttributes = connectedSystemObject;
+
+        foreach (var syncRule in importSyncRules)
+        {
+            // No scoping criteria means CSO is in scope
+            if (syncRule.ObjectScopingCriteriaGroups.Count == 0)
+            {
+                inScopeRules.Add(syncRule);
+                continue;
+            }
+
+            // Need to load CSO attributes for scoping evaluation if not already loaded
+            if (csoWithAttributes.AttributeValues.Count == 0)
+            {
+                var fullCso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, connectedSystemObject.Id);
+                if (fullCso != null)
+                {
+                    csoWithAttributes = fullCso;
+                    // Copy attributes to original CSO so we have them for later
+                    connectedSystemObject.AttributeValues = fullCso.AttributeValues;
+                }
+            }
+
+            // Evaluate scoping criteria
+            if (_jim.ScopingEvaluation.IsCsoInScopeForImportRule(csoWithAttributes, syncRule))
+            {
+                inScopeRules.Add(syncRule);
+            }
+        }
+
+        return inScopeRules;
+    }
+
+    /// <summary>
+    /// Handles a CSO that has fallen out of scope for all import sync rules.
+    /// If the CSO is currently joined to an MVO, applies the InboundOutOfScopeAction.
+    /// </summary>
+    private async Task HandleCsoOutOfScopeAsync(
+        ConnectedSystemObject connectedSystemObject,
+        List<SyncRule> importSyncRules,
+        ActivityRunProfileExecutionItem runProfileExecutionItem)
+    {
+        // If not joined, nothing special to do - just skip processing
+        if (connectedSystemObject.MetaverseObject == null)
+        {
+            Log.Verbose("HandleCsoOutOfScopeAsync: CSO {CsoId} is not joined, skipping out-of-scope processing", connectedSystemObject.Id);
+            return;
+        }
+
+        // Find the first sync rule's InboundOutOfScopeAction (or default to Disconnect)
+        var inboundOutOfScopeAction = importSyncRules
+            .Where(sr => sr.ObjectScopingCriteriaGroups.Count > 0)
+            .Select(sr => sr.InboundOutOfScopeAction)
+            .FirstOrDefault();
+
+        switch (inboundOutOfScopeAction)
+        {
+            case InboundOutOfScopeAction.RemainJoined:
+                // Keep the join intact - CSO remains connected to MVO
+                // No attribute flow will occur since CSO is out of scope
+                Log.Information("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of scope but InboundOutOfScopeAction=RemainJoined. " +
+                    "Join preserved, no attribute flow.", connectedSystemObject.Id);
+                break;
+
+            case InboundOutOfScopeAction.Disconnect:
+            default:
+                // Break the join between CSO and MVO
+                Log.Information("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of scope. InboundOutOfScopeAction=Disconnect. Breaking join.",
+                    connectedSystemObject.Id);
+
+                var mvo = connectedSystemObject.MetaverseObject;
+                var mvoId = mvo.Id;
+
+                // Check if we should remove contributed attributes based on the object type setting
+                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
+                {
+                    var contributedAttributes = mvo.AttributeValues
+                        .Where(av => av.ContributedBySystem?.Id == _connectedSystem.Id)
+                        .ToList();
+
+                    foreach (var attributeValue in contributedAttributes)
+                    {
+                        mvo.PendingAttributeValueRemovals.Add(attributeValue);
+                        Log.Verbose("HandleCsoOutOfScopeAsync: Marking attribute '{AttrName}' for removal from MVO {MvoId}",
+                            attributeValue.Attribute?.Name, mvo.Id);
+                    }
+                }
+
+                // Break the CSO-MVO join
+                mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
+                connectedSystemObject.MetaverseObject = null;
+                connectedSystemObject.MetaverseObjectId = null;
+                connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+                connectedSystemObject.DateJoined = null;
+                Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
+
+                // Apply pending attribute changes and update MVO
+                ApplyPendingMetaverseObjectAttributeChanges(mvo);
+                await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+
+                // Check if this was the last connector
+                var remainingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
+                if (remainingCsoCount == 0)
+                {
+                    await ProcessMvoDeletionRuleAsync(mvo, runProfileExecutionItem);
+                }
+                break;
+        }
     }
 }

@@ -1499,8 +1499,8 @@ public class ConnectedSystemServer
         if (syncRule.Direction == SyncRuleDirection.Import)
         {
             // import rule cannot have these properties:
-            syncRule.ObjectScopingCriteriaGroups.Clear();
             syncRule.ProvisionToConnectedSystem = null;
+            // Note: ObjectScopingCriteriaGroups IS valid for import rules - evaluates CSO attributes
         }
         else
         {

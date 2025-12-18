@@ -15,14 +15,24 @@ public class SyncRuleScopingCriteriaDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The Metaverse Attribute ID being evaluated.
+    /// The Metaverse Attribute ID being evaluated (for export sync rules).
     /// </summary>
-    public int MetaverseAttributeId { get; set; }
+    public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The name of the Metaverse Attribute being evaluated.
+    /// The name of the Metaverse Attribute being evaluated (for export sync rules).
     /// </summary>
-    public string MetaverseAttributeName { get; set; } = null!;
+    public string? MetaverseAttributeName { get; set; }
+
+    /// <summary>
+    /// The Connected System Attribute ID being evaluated (for import sync rules).
+    /// </summary>
+    public int? ConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// The name of the Connected System Attribute being evaluated (for import sync rules).
+    /// </summary>
+    public string? ConnectedSystemAttributeName { get; set; }
 
     /// <summary>
     /// The data type of the attribute.
@@ -64,12 +74,9 @@ public class SyncRuleScopingCriteriaDto
     /// </summary>
     public static SyncRuleScopingCriteriaDto FromEntity(SyncRuleScopingCriteria entity)
     {
-        return new SyncRuleScopingCriteriaDto
+        var dto = new SyncRuleScopingCriteriaDto
         {
             Id = entity.Id,
-            MetaverseAttributeId = entity.MetaverseAttribute.Id,
-            MetaverseAttributeName = entity.MetaverseAttribute.Name,
-            AttributeDataType = entity.MetaverseAttribute.Type.ToString(),
             ComparisonType = entity.ComparisonType.ToString(),
             StringValue = entity.StringValue,
             IntValue = entity.IntValue,
@@ -77,6 +84,26 @@ public class SyncRuleScopingCriteriaDto
             BoolValue = entity.BoolValue,
             GuidValue = entity.GuidValue
         };
+
+        // Set attribute info based on which one is set
+        if (entity.MetaverseAttribute != null)
+        {
+            dto.MetaverseAttributeId = entity.MetaverseAttribute.Id;
+            dto.MetaverseAttributeName = entity.MetaverseAttribute.Name;
+            dto.AttributeDataType = entity.MetaverseAttribute.Type.ToString();
+        }
+        else if (entity.ConnectedSystemAttribute != null)
+        {
+            dto.ConnectedSystemAttributeId = entity.ConnectedSystemAttribute.Id;
+            dto.ConnectedSystemAttributeName = entity.ConnectedSystemAttribute.Name;
+            dto.AttributeDataType = entity.ConnectedSystemAttribute.Type.ToString();
+        }
+        else
+        {
+            dto.AttributeDataType = "Unknown";
+        }
+
+        return dto;
     }
 }
 
@@ -161,14 +188,22 @@ public class UpdateScopingCriteriaGroupRequest
 
 /// <summary>
 /// Request DTO for creating a new scoping criterion within a group.
+/// For export sync rules, provide MetaverseAttributeId.
+/// For import sync rules, provide ConnectedSystemAttributeId.
 /// </summary>
 public class CreateScopingCriterionRequest
 {
     /// <summary>
-    /// The Metaverse Attribute ID to evaluate.
+    /// The Metaverse Attribute ID to evaluate (for export sync rules).
+    /// Either MetaverseAttributeId or ConnectedSystemAttributeId must be provided.
     /// </summary>
-    [Required]
-    public int MetaverseAttributeId { get; set; }
+    public int? MetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// The Connected System Attribute ID to evaluate (for import sync rules).
+    /// Either MetaverseAttributeId or ConnectedSystemAttributeId must be provided.
+    /// </summary>
+    public int? ConnectedSystemAttributeId { get; set; }
 
     /// <summary>
     /// The comparison operator: Equals, NotEquals, Contains, StartsWith, EndsWith,
