@@ -18,7 +18,14 @@
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Synchronisation Rule:</span> @_syncRuleNameOrCreate</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (_syncRule != null)
+@if (_isLoading)
+{
+    <div class="d-flex flex-column align-center justify-center mt-16">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        <MudText Typo="Typo.body2" Class="mt-4 mud-text-secondary">Loading synchronisation rule...</MudText>
+    </div>
+}
+else if (_syncRule != null)
 {
     <MudPaper Class="pa-4 mt-5" Outlined="true">
 
@@ -599,6 +606,7 @@
     private string _syncRuleNameOrCreate = "New";
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private SyncRule? _syncRule;
+    private bool _isLoading = true;
     private bool _isDetailsFormValid;
     private string[] _detailsFormErrors = { };
     private List<ConnectedSystemHeader>? _connectedSystemHeaders;
@@ -635,6 +643,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
             if (_syncRule == null)
             {
                 // sync rule not found, redirect to index page
+                _isLoading = false;
                 NavManager.NavigateTo("../");
                 return;
             }
@@ -650,6 +659,8 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
             _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
             _metaverseObjectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
+
+        _isLoading = false;
     }
 
     private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)
