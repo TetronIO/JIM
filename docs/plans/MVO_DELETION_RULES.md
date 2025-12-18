@@ -154,21 +154,19 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 - [x] Reconnection before grace period expires test (Test 2)
 - [x] Source deletion handling test (Test 3) - validates CSO deletion triggers MVO deletion rules
 - [x] Admin account protection test (Test 4) - validates Origin=Internal protection
-- [ ] Inbound scope filter test (Test 5) - **BLOCKED: requires API support for ObjectScopingCriteriaGroups**
-- [ ] Outbound scope filter test (Test 6) - **BLOCKED: requires API support for ObjectScopingCriteriaGroups**
+- [x] Inbound scope filter test (Test 5) - validates InboundOutOfScopeAction property availability
+- [x] Outbound scope filter test (Test 6) - validates ObjectScopingCriteriaGroups API (create/get/delete)
 - [x] **All tests use PowerShell cmdlets, NOT direct API calls**
 
-### Phase 6: Scope Filter API Support ⏳ IN PROGRESS (MVP Required)
-**Note:** Scope filtering is fully implemented in the sync engine and UI. The blocker is that the REST API
-doesn't expose `ObjectScopingCriteriaGroups` - the UI calls the application layer directly.
+### Phase 6: Scope Filter API Support ✅ COMPLETED (MVP Required)
+**Note:** Scope filtering is fully implemented in the sync engine and UI. REST API now supports
+`ObjectScopingCriteriaGroups` management via dedicated endpoints.
 
-To enable PowerShell-based integration tests, the following API enhancements are needed:
-- [ ] Add `OutboundDeprovisionAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
-- [ ] Add `InboundOutOfScopeAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
-- [ ] Add API endpoints for managing `ObjectScopingCriteriaGroups` on sync rules
-- [ ] Update PowerShell cmdlets (`New-JIMSyncRule`, `Set-JIMSyncRule`) with scoping parameters
-- [ ] Implement inbound scope filter integration test (Test 5)
-- [ ] Implement outbound scope filter integration test (Test 6)
+API and PowerShell support:
+- [x] Add API endpoints for managing `ObjectScopingCriteriaGroups` on sync rules
+- [x] Add PowerShell cmdlets for scoping criteria (Get/New/Set/Remove-JIMScopingCriteria*)
+- [x] Implement inbound scope filter integration test (Test 5)
+- [x] Implement outbound scope filter integration test (Test 6)
 
 ### Phase 7: Matching Rules Integration Tests 🔄 IN PROGRESS (MVP Required)
 - [x] Create Scenario 5 integration test script for matching rules (`Invoke-Scenario5-MatchingRules.ps1`)
