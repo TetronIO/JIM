@@ -69,6 +69,61 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Updates a metaverse object type's deletion rules.
+    /// </summary>
+    /// <param name="id">The unique identifier of the object type.</param>
+    /// <param name="request">The update request containing deletion rule settings.</param>
+    /// <returns>The updated object type details.</returns>
+    /// <response code="200">Object type updated successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="404">Object type not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPut("object-types/{id:int}", Name = "UpdateObjectType")]
+    [ProducesResponseType(typeof(MetaverseObjectTypeDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateObjectTypeAsync(int id, [FromBody] UpdateMetaverseObjectTypeRequest request)
+    {
+        _logger.LogInformation("Updating metaverse object type: {Id}", id);
+
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+        // Apply updates
+        if (request.DeletionRule.HasValue)
+            objectType.DeletionRule = request.DeletionRule.Value;
+
+        if (request.DeletionGracePeriodDays.HasValue)
+        {
+            if (request.DeletionGracePeriodDays.Value < 0)
+                return BadRequest(ApiErrorResponse.BadRequest("DeletionGracePeriodDays cannot be negative."));
+            objectType.DeletionGracePeriodDays = request.DeletionGracePeriodDays.Value == 0 ? null : request.DeletionGracePeriodDays.Value;
+        }
+
+        if (request.DeletionTriggerConnectedSystemIds != null)
+        {
+            // Validate that the connected system IDs exist
+            foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
+            {
+                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+                if (connectedSystem == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
+            }
+            objectType.DeletionTriggerConnectedSystemIds = request.DeletionTriggerConnectedSystemIds;
+        }
+
+        await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
+
+        _logger.LogInformation("Updated metaverse object type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
+            objectType.Id, objectType.Name, objectType.DeletionRule, objectType.DeletionGracePeriodDays);
+
+        var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
+        return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
     /// Gets all metaverse attributes with optional pagination, sorting, and filtering.
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>

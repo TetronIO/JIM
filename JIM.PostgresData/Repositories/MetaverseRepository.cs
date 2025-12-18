@@ -74,6 +74,12 @@ public class MetaverseRepository : IMetaverseRepository
 
         return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
     }
+
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
+    {
+        Repository.Database.MetaverseObjectTypes.Update(metaverseObjectType);
+        await Repository.Database.SaveChangesAsync();
+    }
     #endregion
 
     #region metaverse attributes

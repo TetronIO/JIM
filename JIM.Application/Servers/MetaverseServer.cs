@@ -47,6 +47,19 @@ public class MetaverseServer
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, includeChildObjects);
     }
+
+    /// <summary>
+    /// Updates an existing Metaverse Object Type.
+    /// </summary>
+    /// <param name="objectType">The object type to update.</param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType)
+    {
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+
+        Log.Debug("UpdateMetaverseObjectTypeAsync() called for {ObjectType}", objectType.Name);
+        await Application.Repository.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
+    }
     #endregion
 
     #region metaverse attributes

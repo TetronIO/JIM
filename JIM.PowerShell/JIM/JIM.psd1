@@ -78,6 +78,7 @@
         # Metaverse
         'Get-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
+        'Set-JIMMetaverseObjectType',
         'Get-JIMMetaverseAttribute',
         'New-JIMMetaverseAttribute',
         'Set-JIMMetaverseAttribute',
