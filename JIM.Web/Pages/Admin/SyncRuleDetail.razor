@@ -462,15 +462,15 @@
         </DialogActions>
     </MudDialog>
 
-    <MudStack Row="true">
+    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3">
         @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
         {
-            <MudPaper Class="pa-3" Elevation="0" Outlined="true">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" Wrap="Wrap.NoWrap">
+            <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="min-width: 200px;">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
-                        @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText><br />
+                        @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                        aria-label="delete" OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
+                        Style="flex-shrink: 0;" aria-label="delete" OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
                     </MudIconButton>
                 </MudStack>
 
@@ -567,17 +567,16 @@
     @if (_syncRule.Validate().Count > 0)
     {
         <MudAlert Severity="Severity.Normal" Class="mt-5">
-            <MudText>There are issues:</MudText>
-            <MudList T="string">
-                @foreach (var item in _syncRule.Validate())
-                {
-                    <MudListItem T="string"
-                        IconColor="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
-                        Icon="@(item.Level == ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)">
-                        @item.Message
-                    </MudListItem>
-                }
-            </MudList>
+            <MudText Class="mb-3">There are issues:</MudText>
+            @foreach (var item in _syncRule.Validate())
+            {
+                <div class="d-flex align-center mb-2">
+                    <MudIcon Class="mr-2"
+                        Color="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
+                        Icon="@(item.Level == ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)" />
+                    <MudText>@item.Message</MudText>
+                </div>
+            }
         </MudAlert>
     }
 
