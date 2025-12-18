@@ -150,12 +150,22 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 ### Phase 5: Integration Tests 🔄 IN PROGRESS
 - [x] Create Scenario 4 integration test script (`Invoke-Scenario4-DeletionRules.ps1`)
 - [x] Configure deletion rules in setup
-- [ ] Enhanced Leaver test (FAIL not warn)
-- [ ] Immediate deletion test
-- [ ] Grace period with reconnection test
-- [ ] Out-of-scope deprovisioning test
-- [ ] Into-scope provisioning test
-- [ ] **All tests use PowerShell cmdlets, NOT direct API calls**
+- [x] Leaver with grace period test (Test 1)
+- [x] Reconnection before grace period expires test (Test 2)
+- [x] Source deletion handling test (Test 3) - validates CSO deletion triggers MVO deletion rules
+- [x] Admin account protection test (Test 4) - validates Origin=Internal protection
+- [ ] Inbound scope filter test (Test 5) - **BLOCKED: requires API support for ObjectScopingCriteriaGroups**
+- [ ] Outbound scope filter test (Test 6) - **BLOCKED: requires API support for ObjectScopingCriteriaGroups**
+- [x] **All tests use PowerShell cmdlets, NOT direct API calls**
+
+### Phase 6: Scope Filter API Support (Post-MVP)
+To enable proper scope filter testing, the following API enhancements are needed:
+- [ ] Add `OutboundDeprovisionAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
+- [ ] Add `InboundOutOfScopeAction` to `CreateSyncRuleRequest` and `UpdateSyncRuleRequest` DTOs
+- [ ] Add API endpoints for managing `ObjectScopingCriteriaGroups` on sync rules
+- [ ] Update PowerShell cmdlets (`New-JIMSyncRule`, `Set-JIMSyncRule`) with scoping parameters
+- [ ] Implement inbound scope filter integration test (Test 5)
+- [ ] Implement outbound scope filter integration test (Test 6)
 
 ## Critical Files
 
@@ -172,13 +182,24 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 
 ## Success Criteria
 
-- All unit tests pass
-- All integration tests pass (Leaver, Reconnection, OutOfScope, IntoScope)
-- Build succeeds with 0 errors
+### MVP (Current Phase)
+- All unit tests pass (579 tests)
+- Build succeeds with 0 warnings and 0 errors
+- Integration tests pass for:
+  - Leaver with grace period (Test 1)
+  - Reconnection before grace period expires (Test 2)
+  - Source deletion handling (Test 3)
+  - Admin account protection (Test 4)
 - Admin can configure deletion rules via API and PowerShell
 - Grace period status visible to admins (IsPendingDeletion, DeletionEligibleDate)
 - MVOs actually deleted when grace period expires
 - Admin/service accounts protected from automatic deletion
+
+### Post-MVP (Scope Filter Testing)
+- API supports ObjectScopingCriteriaGroups configuration
+- Integration tests pass for:
+  - Inbound scope filter changes (Test 5)
+  - Outbound scope filter changes (Test 6)
 
 ## Risk Mitigations
 

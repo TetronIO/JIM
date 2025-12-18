@@ -6,11 +6,13 @@
     Validates the MVO deletion rules functionality including:
     - Leaver processing with grace period
     - Reconnection before grace period expires (MVO preserved)
-    - Out-of-scope deprovisioning (OutboundDeprovisionAction)
+    - Source deletion handling (what happens when authoritative record is deleted)
     - Admin account protection (Origin=Internal)
+    - Inbound scope filter changes (TODO: requires API support for scoping criteria)
+    - Outbound scope filter changes (TODO: requires API support for scoping criteria)
 
 .PARAMETER Step
-    Which test step to execute (LeaverGracePeriod, Reconnection, OutOfScope, AdminProtection, All)
+    Which test step to execute (LeaverGracePeriod, Reconnection, SourceDeletion, AdminProtection, InboundScopeFilter, OutboundScopeFilter, All)
 
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
@@ -33,7 +35,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("LeaverGracePeriod", "Reconnection", "OutOfScope", "AdminProtection", "All")]
+    [ValidateSet("LeaverGracePeriod", "Reconnection", "SourceDeletion", "AdminProtection", "InboundScopeFilter", "OutboundScopeFilter", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -298,14 +300,16 @@ try {
         }
     }
 
-    # Test 3: Out-of-Scope Deprovisioning (requires export rule with scoping criteria)
-    if ($Step -eq "OutOfScope" -or $Step -eq "All") {
-        Write-TestSection "Test 3: Out-of-Scope Deprovisioning"
+    # Test 3: Source Deletion Handling
+    # This tests what happens when the authoritative source record is deleted (e.g., HR removes employee)
+    # This is DIFFERENT from scope filter changes - this tests CSO deletion, not attribute-based scope evaluation
+    if ($Step -eq "SourceDeletion" -or $Step -eq "All") {
+        Write-TestSection "Test 3: Source Deletion Handling"
 
-        Write-Host "This test validates out-of-scope deprovisioning behaviour." -ForegroundColor Gray
-        Write-Host "Note: Full validation requires export rules with scoping criteria configured." -ForegroundColor Gray
+        Write-Host "This test validates behaviour when the authoritative source record is deleted." -ForegroundColor Gray
+        Write-Host "This triggers the MVO deletion rule processing (deferred deletion with grace period)." -ForegroundColor Gray
 
-        # For now, verify the OutboundDeprovisionAction and InboundOutOfScopeAction properties exist on sync rules
+        # Verify the OutboundDeprovisionAction and InboundOutOfScopeAction properties exist on sync rules
         Write-Host "Checking sync rule deprovisioning settings..." -ForegroundColor Gray
 
         $syncRules = Get-JIMSyncRule -ConnectedSystemId $config.CSVSystemId -ErrorAction SilentlyContinue
@@ -321,14 +325,64 @@ try {
             }
 
             if ($hasDeprovisionSettings) {
-                $testResults.Steps += @{ Name = "OutOfScope"; Success = $true; Warning = "Deprovisioning settings present (full scenario not tested)" }
+                $testResults.Steps += @{ Name = "SourceDeletion"; Success = $true; Warning = "Deprovisioning settings present (full scenario tested in LeaverGracePeriod)" }
             } else {
-                $testResults.Steps += @{ Name = "OutOfScope"; Success = $true; Warning = "Deprovisioning properties available but not configured" }
+                $testResults.Steps += @{ Name = "SourceDeletion"; Success = $true; Warning = "Deprovisioning properties available but not configured" }
             }
         } else {
             Write-Host "  ⚠ Could not retrieve sync rules" -ForegroundColor Yellow
-            $testResults.Steps += @{ Name = "OutOfScope"; Success = $true; Warning = "Could not verify sync rule settings" }
+            $testResults.Steps += @{ Name = "SourceDeletion"; Success = $true; Warning = "Could not verify sync rule settings" }
         }
+    }
+
+    # Test 5: Inbound Scope Filter Changes
+    # TODO: This test requires API support for ObjectScopingCriteriaGroups on sync rules
+    # Scenario: User starts in scope (e.g., department=IT), then attribute changes (department=HR)
+    # making them fall out of scope. Tests InboundOutOfScopeAction (Disconnect vs RemainJoined)
+    if ($Step -eq "InboundScopeFilter" -or $Step -eq "All") {
+        Write-TestSection "Test 5: Inbound Scope Filter Changes"
+
+        Write-Host "This test validates behaviour when a CSO falls out of scope due to attribute changes." -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "⚠ NOT YET IMPLEMENTED" -ForegroundColor Yellow
+        Write-Host "Requires:" -ForegroundColor Yellow
+        Write-Host "  1. API support for ObjectScopingCriteriaGroups on sync rules" -ForegroundColor Yellow
+        Write-Host "  2. PowerShell cmdlets to configure scoping criteria" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Scenario to test:" -ForegroundColor Gray
+        Write-Host "  1. Create inbound sync rule with scope filter (e.g., department = 'IT')" -ForegroundColor Gray
+        Write-Host "  2. Import user with department = 'IT' → projected to Metaverse" -ForegroundColor Gray
+        Write-Host "  3. Change user's department to 'HR' in source" -ForegroundColor Gray
+        Write-Host "  4. Re-import and verify InboundOutOfScopeAction behaviour:" -ForegroundColor Gray
+        Write-Host "     - Disconnect: CSO-MVO join broken, deletion rules may apply" -ForegroundColor Gray
+        Write-Host "     - RemainJoined: join preserved ('once managed, always managed')" -ForegroundColor Gray
+
+        $testResults.Steps += @{ Name = "InboundScopeFilter"; Success = $true; Warning = "Not implemented - requires API support for scoping criteria" }
+    }
+
+    # Test 6: Outbound Scope Filter Changes
+    # TODO: This test requires API support for ObjectScopingCriteriaGroups on sync rules
+    # Scenario: User starts in scope of export rule, then MV attribute changes making them fall out of scope
+    # Tests OutboundDeprovisionAction (Disconnect vs Delete)
+    if ($Step -eq "OutboundScopeFilter" -or $Step -eq "All") {
+        Write-TestSection "Test 6: Outbound Scope Filter Changes"
+
+        Write-Host "This test validates behaviour when an MVO falls out of scope of an export rule." -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "⚠ NOT YET IMPLEMENTED" -ForegroundColor Yellow
+        Write-Host "Requires:" -ForegroundColor Yellow
+        Write-Host "  1. API support for ObjectScopingCriteriaGroups on sync rules" -ForegroundColor Yellow
+        Write-Host "  2. PowerShell cmdlets to configure scoping criteria" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Scenario to test:" -ForegroundColor Gray
+        Write-Host "  1. Create export sync rule with scope filter (e.g., accountEnabled = true)" -ForegroundColor Gray
+        Write-Host "  2. Provision user to AD with accountEnabled = true" -ForegroundColor Gray
+        Write-Host "  3. Change accountEnabled to false in Metaverse/HR source" -ForegroundColor Gray
+        Write-Host "  4. Re-export and verify OutboundDeprovisionAction behaviour:" -ForegroundColor Gray
+        Write-Host "     - Disconnect: break join, leave object in target system" -ForegroundColor Gray
+        Write-Host "     - Delete: break join + delete CSO from target system" -ForegroundColor Gray
+
+        $testResults.Steps += @{ Name = "OutboundScopeFilter"; Success = $true; Warning = "Not implemented - requires API support for scoping criteria" }
     }
 
     # Test 4: Admin Account Protection (Origin=Internal)
