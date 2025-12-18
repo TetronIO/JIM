@@ -708,7 +708,7 @@ public class SyncFullSyncTaskProcessor
     /// As part of updating or creating reference Metaverse Attribute Values from Connected System Object Attribute Values, references would have been staged
     /// as unresolved, pointing to the Connected System Object. This converts those CSO unresolved references to MVO references.
     /// </summary>
-    private async Task ResolveReferencesAsync()
+    private Task ResolveReferencesAsync()
     {
         // find all Metaverse Attribute Values with unresolved reference values
         // get the joined Metaverse Object and add it to the Metaverse Object Attribute Value
@@ -716,5 +716,6 @@ public class SyncFullSyncTaskProcessor
         // update the Metaverse Object Attribute Value.
 
         // TODO: "Is this still needed? We're assigning MVO references from CSO reference values on sync rule processing."
+        return Task.CompletedTask;
     }
 }

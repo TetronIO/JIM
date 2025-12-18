@@ -93,7 +93,7 @@ public class ConnectedSystemServer
         return Application.Repository.ConnectedSystems.GetConnectedSystemCount();
     }
         
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -144,7 +144,7 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy, Activity? parentActivity = null)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, Activity? parentActivity = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -268,7 +268,7 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
     /// <returns>The result of the deletion request.</returns>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject initiatedBy)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}",
             connectedSystemId, initiatedBy?.DisplayName ?? "System");
@@ -452,7 +452,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new schema.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
+    public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -538,7 +538,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject initiatedBy)
+    public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -1268,7 +1268,7 @@ public class ConnectedSystemServer
     #endregion
 
     #region Connected System Run Profiles
-    public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
+    public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -1294,7 +1294,7 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
+    public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
             return;
@@ -1313,7 +1313,7 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject initiatedBy)
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -1484,7 +1484,7 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject initiatedBy, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null)
     {
         // validate the sync rule
         if (syncRule == null)
@@ -1539,7 +1539,7 @@ public class ConnectedSystemServer
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject initiatedBy)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
     {
         // every crud operation must be tracked via an Activity
         var activity = new Activity
@@ -1558,7 +1558,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Creates a new object matching rule for a Connected System Object Type.
     /// </summary>
-    public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject initiatedBy)
+    public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
         var activity = new Activity
         {
@@ -1574,7 +1574,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Updates an existing object matching rule.
     /// </summary>
-    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject initiatedBy)
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
         var activity = new Activity
         {
@@ -1590,7 +1590,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Deletes an object matching rule and its sources.
     /// </summary>
-    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject initiatedBy)
+    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
         var activity = new Activity
         {

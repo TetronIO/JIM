@@ -18,7 +18,7 @@ public class SyncImportTaskProcessor
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
-    private readonly MetaverseObject _initiatedBy;
+    private readonly MetaverseObject? _initiatedBy;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly CancellationTokenSource _cancellationTokenSource;
@@ -28,7 +28,7 @@ public class SyncImportTaskProcessor
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
-        MetaverseObject initiatedBy,
+        MetaverseObject? initiatedBy,
         JIM.Models.Activities.Activity activity,
         CancellationTokenSource cancellationTokenSource)
     {

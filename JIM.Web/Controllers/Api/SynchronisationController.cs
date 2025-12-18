@@ -1551,7 +1551,7 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
-        var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == objectTypeId);
+        var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == objectTypeId);
         if (objectType == null)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in connected system {connectedSystemId}."));
 
@@ -1623,13 +1623,13 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
-        var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == request.ConnectedSystemObjectTypeId);
+        var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == request.ConnectedSystemObjectTypeId);
         if (objectType == null)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {request.ConnectedSystemObjectTypeId} not found in connected system {connectedSystemId}."));
 
         // Validate target MV attribute exists
         var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
-        var targetMvAttr = mvAttributes.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId);
+        var targetMvAttr = mvAttributes?.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId);
         if (targetMvAttr == null)
             return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.TargetMetaverseAttributeId} not found."));
 
@@ -1665,7 +1665,7 @@ public class SynchronisationController(
             }
             else if (sourceRequest.MetaverseAttributeId.HasValue)
             {
-                var mvAttr = mvAttributes.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
+                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
                 if (mvAttr == null)
                     return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
                 source.MetaverseAttributeId = mvAttr.Id;
@@ -1743,7 +1743,7 @@ public class SynchronisationController(
         if (request.TargetMetaverseAttributeId.HasValue)
         {
             var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
-            var targetMvAttr = mvAttributes.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId.Value);
+            var targetMvAttr = mvAttributes?.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId.Value);
             if (targetMvAttr == null)
                 return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.TargetMetaverseAttributeId} not found."));
 
@@ -1754,7 +1754,7 @@ public class SynchronisationController(
         // Update sources if specified
         if (request.Sources != null)
         {
-            var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == rule.ConnectedSystemObjectTypeId);
+            var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == rule.ConnectedSystemObjectTypeId);
             var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
 
             // Clear existing sources and add new ones
@@ -1770,7 +1770,7 @@ public class SynchronisationController(
 
                 if (sourceRequest.ConnectedSystemAttributeId.HasValue)
                 {
-                    var csAttr = objectType?.Attributes.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
+                    var csAttr = objectType?.Attributes?.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
                     if (csAttr == null)
                         return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
                     source.ConnectedSystemAttributeId = csAttr.Id;
@@ -1778,7 +1778,7 @@ public class SynchronisationController(
                 }
                 else if (sourceRequest.MetaverseAttributeId.HasValue)
                 {
-                    var mvAttr = mvAttributes.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
+                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
                     if (mvAttr == null)
                         return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
                     source.MetaverseAttributeId = mvAttr.Id;

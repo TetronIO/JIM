@@ -100,9 +100,10 @@ public class SynchronisationControllerRunProfileTests
         var dtos = result?.Value as IEnumerable<RunProfileDto>;
 
         Assert.That(dtos, Is.Not.Null);
-        Assert.That(dtos!.Count(), Is.EqualTo(2));
-        Assert.That(dtos.First().Name, Is.EqualTo("Full Import"));
-        Assert.That(dtos.First().RunType, Is.EqualTo(ConnectedSystemRunType.FullImport));
+        var dtosList = dtos!.ToList();
+        Assert.That(dtosList.Count, Is.EqualTo(2));
+        Assert.That(dtosList.First().Name, Is.EqualTo("Full Import"));
+        Assert.That(dtosList.First().RunType, Is.EqualTo(ConnectedSystemRunType.FullImport));
     }
 
     [Test]
