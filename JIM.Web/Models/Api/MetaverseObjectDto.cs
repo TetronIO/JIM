@@ -12,7 +12,10 @@ public class MetaverseObjectDto
     public DateTime? LastUpdated { get; set; }
     public string? DisplayName { get; set; }
     public MetaverseObjectStatus Status { get; set; }
-    public DateTime? ScheduledDeletionDate { get; set; }
+    public MetaverseObjectOrigin Origin { get; set; }
+    public DateTime? LastConnectorDisconnectedDate { get; set; }
+    public bool IsPendingDeletion { get; set; }
+    public DateTime? DeletionEligibleDate { get; set; }
     public MetaverseObjectTypeDto Type { get; set; } = null!;
     public List<MetaverseObjectAttributeValueDto> AttributeValues { get; set; } = new();
     public List<ConnectedSystemObjectReferenceDto> ConnectedSystemObjects { get; set; } = new();
@@ -29,7 +32,10 @@ public class MetaverseObjectDto
             LastUpdated = entity.LastUpdated,
             DisplayName = entity.DisplayName,
             Status = entity.Status,
-            ScheduledDeletionDate = entity.ScheduledDeletionDate,
+            Origin = entity.Origin,
+            LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate,
+            IsPendingDeletion = entity.IsPendingDeletion,
+            DeletionEligibleDate = entity.DeletionEligibleDate,
             Type = MetaverseObjectTypeDto.FromEntity(entity.Type),
             AttributeValues = entity.AttributeValues
                 .Select(MetaverseObjectAttributeValueDto.FromEntity)

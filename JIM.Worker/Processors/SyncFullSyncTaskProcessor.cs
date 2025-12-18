@@ -336,12 +336,19 @@ public class SyncFullSyncTaskProcessor
                 break;
 
             case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                // Only apply to Projected MVOs (Internal MVOs like admin accounts are protected)
+                if (mvo.Origin == MetaverseObjectOrigin.Internal)
+                {
+                    Log.Debug($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has Origin=Internal. Protected from automatic deletion.");
+                    break;
+                }
+
                 // Check if there's a grace period configured
                 if (mvo.Type.DeletionGracePeriodDays.HasValue && mvo.Type.DeletionGracePeriodDays.Value > 0)
                 {
-                    // Schedule deletion for the future
-                    mvo.ScheduledDeletionDate = DateTime.UtcNow.AddDays(mvo.Type.DeletionGracePeriodDays.Value);
-                    Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} scheduled for deletion on {mvo.ScheduledDeletionDate}.");
+                    // Record when the last connector was disconnected (for grace period calculation)
+                    mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+                    Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion (disconnected at {mvo.LastConnectorDisconnectedDate}). Eligible after {mvo.Type.DeletionGracePeriodDays.Value} days.");
                 }
                 else
                 {
@@ -501,11 +508,11 @@ public class SyncFullSyncTaskProcessor
                 connectedSystemObject.DateJoined = DateTime.UtcNow;
                 mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
-                // If the MVO was scheduled for deletion (reconnection scenario), clear the scheduled deletion
-                if (mvo.ScheduledDeletionDate.HasValue)
+                // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
+                if (mvo.LastConnectorDisconnectedDate.HasValue)
                 {
-                    Log.Information($"AttemptJoinAsync: Clearing ScheduledDeletionDate for MVO {mvo.Id} as connector has reconnected.");
-                    mvo.ScheduledDeletionDate = null;
+                    Log.Information($"AttemptJoinAsync: Clearing LastConnectorDisconnectedDate for MVO {mvo.Id} as connector has reconnected.");
+                    mvo.LastConnectorDisconnectedDate = null;
                 }
                 return;
             }

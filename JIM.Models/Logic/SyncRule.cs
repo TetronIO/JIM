@@ -66,6 +66,18 @@ public class SyncRule: IValidated
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// For Export rules: Action to take when an MVO falls out of scope.
+    /// Only applies when Direction = Export.
+    /// </summary>
+    public OutboundDeprovisionAction OutboundDeprovisionAction { get; set; } = OutboundDeprovisionAction.Disconnect;
+
+    /// <summary>
+    /// For Import rules: Action to take when a CSO falls out of scope.
+    /// Only applies when Direction = Import.
+    /// </summary>
+    public InboundOutOfScopeAction InboundOutOfScopeAction { get; set; } = InboundOutOfScopeAction.Disconnect;
+
+    /// <summary>
     /// Contains all the logic that controls what attributes on a metaverse object should flow to what connected system object attribute,
     /// or visa-versa, depending on the sync rule direction.
     /// </summary>
@@ -77,14 +89,11 @@ public class SyncRule: IValidated
     /// When ObjectMatchingRuleMode is ConnectedSystem (default), rules are defined on the ConnectedSystemObjectType instead.
     /// </summary>
     public List<ObjectMatchingRule> ObjectMatchingRules { get; set; } = new();
-    
+
     /// <summary>
     /// Backlink for Entity Framework purposes to all Activities for this SyncRule.
     /// </summary>
     public List<Activity> Activities { get; set; } = null!;
-
-    // TODO: what happens when an object is in scope, then falls out of scope?
-    // should/can we provide an option to cause deprovisioning/disconnection?
 
     /// <summary>
     /// Contains all the logic that determines which Metaverse objects should be exported to the Connected System.

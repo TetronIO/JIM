@@ -22,11 +22,18 @@ public class MetaverseObject
     public MetaverseObjectStatus Status { get; set; } = MetaverseObjectStatus.Normal;
 
     /// <summary>
-    /// When set, indicates the date on which this object is scheduled to be deleted.
-    /// Used in conjunction with MetaverseObjectType.DeletionRule and DeletionGracePeriodDays.
-    /// If null, the object is not scheduled for deletion.
+    /// When the last connector was disconnected from this MVO.
+    /// Used with MetaverseObjectType.DeletionGracePeriodDays to calculate deletion eligibility.
+    /// Null = MVO has active connectors or was never connected.
     /// </summary>
-    public DateTime? ScheduledDeletionDate { get; set; }
+    public DateTime? LastConnectorDisconnectedDate { get; set; }
+
+    /// <summary>
+    /// How this MVO was created - determines deletion rule applicability.
+    /// Projected MVOs are subject to automatic deletion rules.
+    /// Internal MVOs (admin, service accounts) are protected from automatic deletion.
+    /// </summary>
+    public MetaverseObjectOrigin Origin { get; set; } = MetaverseObjectOrigin.Projected;
 
     /// <summary>
     /// Concurrency token using PostgreSQL's xmin system column.
@@ -53,8 +60,8 @@ public class MetaverseObject
     public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = new ();
 
     [NotMapped]
-    public string? DisplayName 
-    { 
+    public string? DisplayName
+    {
         get
         {
             if (AttributeValues.Count == 0)
@@ -66,8 +73,25 @@ public class MetaverseObject
                 return av.StringValue;
 
             return null;
-        } 
+        }
     }
+
+    /// <summary>
+    /// Indicates if this MVO is pending deletion (has disconnection date and awaiting grace period expiry).
+    /// </summary>
+    [NotMapped]
+    public bool IsPendingDeletion => LastConnectorDisconnectedDate.HasValue &&
+        Origin == MetaverseObjectOrigin.Projected &&
+        Type?.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+
+    /// <summary>
+    /// The date when this MVO becomes eligible for deletion (after grace period expires).
+    /// Null if not pending deletion or no grace period configured.
+    /// </summary>
+    [NotMapped]
+    public DateTime? DeletionEligibleDate => IsPendingDeletion && Type?.DeletionGracePeriodDays > 0
+        ? LastConnectorDisconnectedDate!.Value.AddDays(Type.DeletionGracePeriodDays.Value)
+        : null;
     #endregion
 
     #region public methods

@@ -1856,7 +1856,7 @@ public class FullSyncTests
 
         // verify MVO was NOT deleted
         Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when DeletionRule is Manual.");
-        Assert.That(mvo.ScheduledDeletionDate, Is.Null, "Expected no scheduled deletion date when DeletionRule is Manual.");
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "Expected no scheduled deletion date when DeletionRule is Manual.");
     }
 
     /// <summary>
@@ -1913,7 +1913,7 @@ public class FullSyncTests
 
     /// <summary>
     /// Tests that when the DeletionRule is WhenLastConnectorDisconnected with a grace period,
-    /// the MVO is NOT deleted immediately but has its ScheduledDeletionDate set.
+    /// the MVO is NOT deleted immediately but has its LastConnectorDisconnectedDate set.
     /// </summary>
     [Test]
     public async Task MvoScheduledForDeletionWithGracePeriodTestAsync()
@@ -1932,7 +1932,7 @@ public class FullSyncTests
         cso.DateJoined = DateTime.UtcNow;
         mvo.ConnectedSystemObjects.Add(cso);
         mvo.Type = mvoType;
-        mvo.ScheduledDeletionDate = null;
+        mvo.LastConnectorDisconnectedDate = null;
 
         // mark CSO as obsolete to trigger disconnection
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
@@ -1962,11 +1962,17 @@ public class FullSyncTests
         // verify MVO was NOT deleted (grace period)
         Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during grace period.");
 
-        // verify ScheduledDeletionDate was set approximately 30 days from now
-        Assert.That(mvo.ScheduledDeletionDate, Is.Not.Null, "Expected ScheduledDeletionDate to be set.");
+        // verify LastConnectorDisconnectedDate was set to approximately now (not 30 days in future)
+        // The grace period is calculated by adding DeletionGracePeriodDays to LastConnectorDisconnectedDate
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null, "Expected LastConnectorDisconnectedDate to be set.");
+        Assert.That(mvo.LastConnectorDisconnectedDate!.Value, Is.EqualTo(beforeSync).Within(TimeSpan.FromMinutes(1)),
+            "Expected LastConnectorDisconnectedDate to be approximately now (when disconnection occurred).");
+
+        // verify DeletionEligibleDate is calculated correctly (30 days from disconnection)
+        Assert.That(mvo.DeletionEligibleDate, Is.Not.Null, "Expected DeletionEligibleDate to be calculated.");
         var expectedDeletionDate = beforeSync.AddDays(30);
-        Assert.That(mvo.ScheduledDeletionDate!.Value, Is.EqualTo(expectedDeletionDate).Within(TimeSpan.FromMinutes(1)),
-            "Expected ScheduledDeletionDate to be approximately 30 days in the future.");
+        Assert.That(mvo.DeletionEligibleDate!.Value, Is.EqualTo(expectedDeletionDate).Within(TimeSpan.FromMinutes(1)),
+            "Expected DeletionEligibleDate to be approximately 30 days in the future.");
     }
 
     /// <summary>
@@ -2027,7 +2033,7 @@ public class FullSyncTests
 
         // verify MVO was NOT deleted (still has cso2 connected)
         Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when other connectors exist.");
-        Assert.That(mvo.ScheduledDeletionDate, Is.Null, "Expected no scheduled deletion date when connectors remain.");
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "Expected no scheduled deletion date when connectors remain.");
         Assert.That(mvo.ConnectedSystemObjects.Count, Is.EqualTo(1), "Expected MVO to have one remaining CSO.");
     }
 
@@ -2037,20 +2043,20 @@ public class FullSyncTests
     // would require a separate background job or additional sync phase - tracked as future work.
 
     /// <summary>
-    /// Tests that when a connector reconnects to an MVO that was scheduled for deletion,
-    /// the ScheduledDeletionDate is cleared.
+    /// Tests that when a connector reconnects to an MVO that was marked for deletion,
+    /// the LastConnectorDisconnectedDate is cleared.
     /// </summary>
     [Test]
     public async Task ScheduledDeletionClearedWhenConnectorReconnectsTestAsync()
     {
-        // set up: MVO with scheduled deletion date (simulating previous disconnection)
+        // set up: MVO with disconnection date set (simulating previous disconnection within grace period)
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
         mvoType.DeletionGracePeriodDays = 30;
 
         var mvo = MetaverseObjectsData[0];
         mvo.Type = mvoType;
-        mvo.ScheduledDeletionDate = DateTime.UtcNow.AddDays(29); // scheduled deletion in future
+        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1); // disconnected 1 day ago (within grace period)
         mvo.ConnectedSystemObjects.Clear();
 
         // CSO that will join to the MVO (not yet joined)
@@ -2111,8 +2117,8 @@ public class FullSyncTests
         // verify CSO joined to MVO
         Assert.That(cso.MetaverseObject, Is.EqualTo(mvo), "Expected CSO to join to MVO.");
 
-        // verify ScheduledDeletionDate was cleared
-        Assert.That(mvo.ScheduledDeletionDate, Is.Null, "Expected ScheduledDeletionDate to be cleared when connector reconnected.");
+        // verify LastConnectorDisconnectedDate was cleared
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "Expected LastConnectorDisconnectedDate to be cleared when connector reconnected.");
     }
 
     #endregion

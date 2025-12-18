@@ -137,7 +137,12 @@ public class JimApplication
         else
         {
             // no matching user found, create them in stub form; just enough to sign in
-            user = new MetaverseObject { Type = objectType };
+            // Set Origin to Internal to protect admin from automatic deletion rules
+            user = new MetaverseObject
+            {
+                Type = objectType,
+                Origin = MetaverseObjectOrigin.Internal
+            };
             user.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
                 MetaverseObject = user,
