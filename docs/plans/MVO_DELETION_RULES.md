@@ -4,9 +4,9 @@
 
 Implement comprehensive deletion rule and deprovisioning functionality for JIM's identity lifecycle management. This addresses critical gaps preventing proper user deprovisioning when employees leave organisations or fall out of sync rule scope.
 
-**Status**: Planned
+**Status**: In Progress
 **Milestone**: MVP
-**Related Issues**: #120 (scheduled deletion cleanup), #173 (integration testing)
+**Related Issues**: #120 (scheduled deletion cleanup), #173 (integration testing), #203 (main tracking issue)
 
 ## Business Value
 
@@ -17,14 +17,18 @@ Implement comprehensive deletion rule and deprovisioning functionality for JIM's
 
 ## Current State
 
-- `MetaverseObjectType` has `DeletionRule` and `DeletionGracePeriodDays` properties
-- `MetaverseObject` has `ScheduledDeletionDate` property (to be replaced)
-- Sync engine sets/clears scheduled dates during full sync
-- Unit tests validate deletion rule processing
-- **Gap**: MVOs are never actually deleted after grace period expires
-- **Gap**: No API/PowerShell to configure deletion rules
-- **Gap**: Out-of-scope deprovisioning not implemented (TODO at `SyncRule.cs:86-87`)
-- **Gap**: Integration tests gloss over Leaver scenarios
+**Completed**:
+- `MetaverseObjectType` has `DeletionRule`, `DeletionGracePeriodDays`, and `DeletionTriggerConnectedSystemIds` properties
+- `MetaverseObject` has `LastConnectorDisconnectedDate`, `Origin`, `IsPendingDeletion`, and `DeletionEligibleDate` properties
+- `SyncRule` has `OutboundDeprovisionAction` and `InboundOutOfScopeAction` properties
+- Sync engine correctly sets `LastConnectorDisconnectedDate` when last connector disconnects (deferred deletion)
+- Housekeeping deletes orphaned MVOs after grace period expires
+- API endpoint and PowerShell cmdlet for configuring deletion rules
+- Out-of-scope deprovisioning implemented for both inbound and outbound sync rules
+- Unit tests validate all deletion rule processing (579 tests passing)
+
+**Remaining**:
+- Integration tests need to be run end-to-end to validate full JML lifecycle
 
 ## Design Decisions
 
@@ -116,40 +120,42 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 
 ## Implementation Phases
 
-### Phase 1: Data Model
-1. Add new enums to `CoreEnums.cs`
-2. Update `MetaverseObject` with new properties
-3. Update `MetaverseObjectType` with trigger list
-4. Update `SyncRule` with deprovisioning actions
-5. Set admin MVO Origin to Internal in `JimApplication.InitialiseSsoAsync`
-6. Create database migration
+### Phase 1: Data Model ✅ COMPLETE
+- [x] Add new enums to `CoreEnums.cs` (`MetaverseObjectOrigin`, `OutboundDeprovisionAction`, `InboundOutOfScopeAction`)
+- [x] Update `MetaverseObject` with new properties (`LastConnectorDisconnectedDate`, `Origin`, `IsPendingDeletion`, `DeletionEligibleDate`)
+- [x] Update `MetaverseObjectType` with trigger list (`DeletionTriggerConnectedSystemIds`)
+- [x] Update `SyncRule` with deprovisioning actions (`OutboundDeprovisionAction`, `InboundOutOfScopeAction`)
+- [x] Set admin MVO Origin to Internal in `JimApplication.InitialiseSsoAsync`
+- [x] Create database migration
 
-### Phase 2: API and PowerShell
-1. Add PUT endpoint for `MetaverseObjectType` deletion rules
-2. Create `Set-JIMMetaverseObjectType` PowerShell cmdlet
-3. Unit tests for API endpoint
+### Phase 2: API and PowerShell ✅ COMPLETE
+- [x] Add PUT endpoint for `MetaverseObjectType` deletion rules
+- [x] Create `Set-JIMMetaverseObjectType` PowerShell cmdlet
+- [x] Unit tests for API endpoint
 
-### Phase 3: Out-of-Scope Deprovisioning
-1. Implement outbound scope evaluation in `ExportEvaluationServer`
-2. Implement inbound scope evaluation in `SyncFullSyncTaskProcessor`
-3. Remove TODO comment at `SyncRule.cs:86-87`
-4. Unit tests for scope evaluation
+### Phase 3: Out-of-Scope Deprovisioning ✅ COMPLETE
+- [x] Implement outbound scope evaluation in `ExportEvaluationServer`
+- [x] Implement inbound scope evaluation in `SyncFullSyncTaskProcessor`
+- [x] Remove TODO comment at `SyncRule.cs:86-87`
+- [x] Unit tests for scope evaluation
 
-### Phase 4: Scheduled Cleanup
-1. Update `ProcessMvoDeletionRuleAsync` to use new fields
-2. Add reconnection logic to clear disconnection date
-3. Add cleanup loop in Worker idle time
-4. Repository method `GetMvosEligibleForDeletionAsync`
-5. Unit tests for cleanup logic
+### Phase 4: Scheduled Cleanup ✅ COMPLETE
+- [x] Update `ProcessMvoDeletionRuleAsync` to use new fields (deferred deletion - sets `LastConnectorDisconnectedDate` only)
+- [x] Add reconnection logic to clear disconnection date
+- [x] Add cleanup loop in Worker idle time (`PerformHousekeepingAsync`)
+- [x] Repository method `GetMvosEligibleForDeletionAsync`
+- [x] Add `GetConnectedSystemObjectCountByMetaverseObjectIdAsync` for FK-safe deletion checks
+- [x] Unit tests for cleanup logic
 
-### Phase 5: Integration Tests
-1. Configure deletion rules in `Setup-Scenario1.ps1`
-2. Enhanced Leaver test (FAIL not warn)
-3. Immediate deletion test
-4. Grace period with reconnection test
-5. Out-of-scope deprovisioning test
-6. Into-scope provisioning test
-7. **All tests use PowerShell cmdlets, NOT direct API calls**
+### Phase 5: Integration Tests 🔄 IN PROGRESS
+- [x] Create Scenario 4 integration test script (`Invoke-Scenario4-DeletionRules.ps1`)
+- [x] Configure deletion rules in setup
+- [ ] Enhanced Leaver test (FAIL not warn)
+- [ ] Immediate deletion test
+- [ ] Grace period with reconnection test
+- [ ] Out-of-scope deprovisioning test
+- [ ] Into-scope provisioning test
+- [ ] **All tests use PowerShell cmdlets, NOT direct API calls**
 
 ## Critical Files
 
