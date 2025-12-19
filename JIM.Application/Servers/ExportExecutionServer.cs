@@ -777,7 +777,9 @@ public class ExportExecutionServer
         }
         else
         {
-            export.Status = PendingExportStatus.ExportNotImported;
+            // Keep as Pending while we're still retrying
+            // ExportNotImported is for when export succeeded but some values didn't persist
+            export.Status = PendingExportStatus.Pending;
             Log.Warning("MarkExportFailedAsync: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
                 export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, errorMessage);
         }
