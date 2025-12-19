@@ -22,12 +22,14 @@ jim-stack  # or: docker compose -f docker-compose.yml -f docker-compose.override
 
 # 2. Start test infrastructure (Samba AD)
 docker compose -f docker-compose.integration-tests.yml up -d
-# Wait ~2 minutes for Samba AD to initialise
 
-# 3. Create Infrastructure API Key (one-time setup per JIM database)
+# 3. Wait for Samba AD to be ready (automated check with progress bar)
+./test/integration/Wait-SambaReady.ps1
+
+# 4. Create Infrastructure API Key (one-time setup per JIM database)
 ./test/integration/Setup-InfrastructureApiKey.ps1
 
-# 4. Run Scenario 1 with Nano template (3 users)
+# 5. Run Scenario 1 with Nano template (3 users)
 ./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
 ```
 
@@ -35,13 +37,18 @@ docker compose -f docker-compose.integration-tests.yml up -d
 - Working directory must be repository root (`/workspaces/JIM`)
 - JIM stack running (`jim-stack` from repo root)
 - Samba AD running (`docker compose -f docker-compose.integration-tests.yml up -d` from repo root)
-- API key created (step 3 creates one automatically)
+- API key created (step 4 creates one automatically)
+
+**Helper Scripts:**
+- `Wait-SambaReady.ps1` - Automatically checks if Samba AD is ready (eliminates guesswork)
+- `Setup-InfrastructureApiKey.ps1` - Creates API key for testing (one-time setup)
 
 **Current Limitations:**
-- ⚠️ Samba AD takes ~2 minutes to initialise on first start
+- ⚠️ Samba AD takes ~2 minutes to initialise on first start (use `Wait-SambaReady.ps1` to monitor)
 - ⚠️ Progress bars not yet implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
 - ✅ Unit tests all passing (553 tests)
 - ✅ Expression evaluation support implemented
+- ✅ Automated Samba AD readiness check
 
 ---
 
