@@ -14,8 +14,11 @@
 **First time running integration tests?** Follow these steps:
 
 ```powershell
+# IMPORTANT: Run all commands from the repository root (/workspaces/JIM)
+cd /workspaces/JIM  # or wherever your JIM repository is cloned
+
 # 1. Start JIM stack (if not already running)
-jim-stack  # or: docker compose up -d
+jim-stack  # or: docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d
 
 # 2. Start test infrastructure (Samba AD)
 docker compose -f docker-compose.integration-tests.yml up -d
@@ -29,8 +32,9 @@ docker compose -f docker-compose.integration-tests.yml up -d
 ```
 
 **Prerequisites:**
-- JIM stack running (`jim-stack` or `docker compose up -d`)
-- Samba AD running (`docker compose -f docker-compose.integration-tests.yml up -d`)
+- Working directory must be repository root (`/workspaces/JIM`)
+- JIM stack running (`jim-stack` from repo root)
+- Samba AD running (`docker compose -f docker-compose.integration-tests.yml up -d` from repo root)
 - API key created (step 3 creates one automatically)
 
 **Current Limitations:**
