@@ -176,14 +176,14 @@ Write-Host "Key Details:" -ForegroundColor Cyan
 Write-Host "  Prefix:      $($KeyValue.Substring(0, [Math]::Min(12, $KeyValue.Length)))" -ForegroundColor White
 Write-Host "  Expiry:      24 hours from JIM.Web startup" -ForegroundColor White
 Write-Host "  Roles:       Administrator" -ForegroundColor White
-Write-Host "  Environment: JIM_API_KEY=$($KeyValue.Substring(0, [Math]::Min(12, $KeyValue.Length)))..." -ForegroundColor White
+Write-Host "  Saved to:    test/integration/.api-key" -ForegroundColor White
 Write-Host ""
 Write-Host "You can now run integration tests:" -ForegroundColor Cyan
 Write-Host "  cd test/integration" -ForegroundColor Gray
 Write-Host "  ./Invoke-IntegrationTests.ps1 -Template Small -Phase 1" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Or run specific scenarios:" -ForegroundColor Cyan
-Write-Host "  ./scenarios/Invoke-Scenario1-HRToDirectory.ps1 -ApiKey `$env:JIM_API_KEY" -ForegroundColor Gray
+Write-Host "  pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)" -ForegroundColor Gray
 Write-Host ""
 
 exit 0

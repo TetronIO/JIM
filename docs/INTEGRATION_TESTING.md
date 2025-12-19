@@ -21,10 +21,12 @@ cd /workspaces/JIM  # or wherever your JIM repository is cloned
 pwsh test/integration/Start-IntegrationTestEnvironment.ps1
 
 # 2. Create Infrastructure API Key (one-time setup per JIM database)
+#    This saves the key to test/integration/.api-key for use across sessions
 pwsh test/integration/Setup-InfrastructureApiKey.ps1
 
 # 3. Run Scenario 1 with Nano template (3 users)
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
+#    The API key is read from the .api-key file created in step 2
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
 ```
 
 **Alternative: Manual startup (if you prefer more control)**
