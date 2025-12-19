@@ -101,12 +101,12 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Change Type">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Size="Size.Small">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Size="Size.Small" Style="font-size: 1rem;">
                     @context.ChangeType
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="Status">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Size="Size.Small">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Size="Size.Small" Style="font-size: 1rem;">
                     @context.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </MudTd>
