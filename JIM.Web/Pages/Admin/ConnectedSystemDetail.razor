@@ -817,24 +817,30 @@
                         Class="mt-3"
                         HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
 
-                    <MudSelect 
-                        T="ConnectedSystemRunType" 
-                        @bind-Value="_newRunProfile.RunType" 
-                        Label="Run Type" 
-                        Variant="Variant.Outlined" 
-                        AnchorOrigin="Origin.BottomCenter" 
-                        Class="mt-5" 
-                        Required="true" 
-                        RequiredError="A run profile type is required">
+                    <MudSelect
+                        T="ConnectedSystemRunType"
+                        @bind-Value="_newRunProfile.RunType"
+                        Label="Run Type"
+                        Variant="Variant.Outlined"
+                        AnchorOrigin="Origin.BottomCenter"
+                        Class="mt-5"
+                        Required="true"
+                        RequiredError="A run profile type is required"
+                        Validation="@(new Func<ConnectedSystemRunType, string?>(ValidateRunType))"
+                        Immediate="true">
+                        <MudSelectItem Value="ConnectedSystemRunType.NotSet" Disabled="true">Select run type</MudSelectItem>
                         @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
                         {
+                            // Skip NotSet as we've already added it as the placeholder above
+                            if (runType == ConnectedSystemRunType.NotSet)
+                                continue;
+
                             var runTypeSupported = true;
                             switch (runType)
                             {
                                 case ConnectedSystemRunType.Export when !_connectedSystem.ConnectorDefinition.SupportsExport:
                                 case ConnectedSystemRunType.DeltaImport when !_connectedSystem.ConnectorDefinition.SupportsDeltaImport:
                                 case ConnectedSystemRunType.FullImport when !_connectedSystem.ConnectorDefinition.SupportsFullImport:
-                                case ConnectedSystemRunType.NotSet:
                                     runTypeSupported = false;
                                     break;
                                 case ConnectedSystemRunType.FullSynchronisation:
@@ -870,7 +876,7 @@
                         </MudSelect>
                     }
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DropShadow="false">Create Run Profile</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsNewRunProfileFormValid || _newRunProfile.RunType == ConnectedSystemRunType.NotSet)" OnClick="HandleNewRunProfileFormSubmitAsync" Class="mt-5" DropShadow="false">Create Run Profile</MudButton>
                 </MudForm>
             </MudPaper>
 
@@ -893,7 +899,16 @@
                     <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
                     <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
                     <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
-                    <MudTd DataLabel="File Path">@(context.FilePath ?? "-")</MudTd>
+                    <MudTd DataLabel="File Path">
+                        @if (!string.IsNullOrEmpty(context.FilePath))
+                        {
+                            <span class="jim-code-inline">@context.FilePath</span>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
                     There are no run profiles. Create your first.
@@ -1083,7 +1098,7 @@
     private bool _selectedObjectTypeHasDescriptions;
     private bool _hierarchyBeingRetrieved;
     private string _schemaSearchString = "";
-    private ConnectedSystemRunProfile _newRunProfile = new() { PageSize = 500 };
+    private ConnectedSystemRunProfile _newRunProfile = new() { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
     private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
@@ -1732,6 +1747,14 @@
         return _connectedSystem.ConnectorDefinition.SupportsPartitions && (_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0);
     }
 
+    private string? ValidateRunType(ConnectedSystemRunType runType)
+    {
+        if (runType == ConnectedSystemRunType.NotSet)
+            return "Please select a run type";
+
+        return null;
+    }
+
     private async Task HandleNewRunProfileFormSubmitAsync()
     {
         if (_connectedSystem?.RunProfiles == null)
@@ -1754,7 +1777,7 @@
         Snackbar.Add("New run profile added.", Severity.Success);
 
         // reset the object we've bound to the form so a new run profile can be created if the user chooses
-        _newRunProfile = new ConnectedSystemRunProfile();
+        _newRunProfile = new ConnectedSystemRunProfile { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
     }
 
     private async Task HandleRunProfileDeleteAsync(ConnectedSystemRunProfile connectedSystemRunProfile)

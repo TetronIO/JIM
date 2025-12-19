@@ -62,6 +62,22 @@ html, body {
     font-family: "Lucida Console", "Courier New", monospace;
 }
 
+/* Inline code styling - similar to GitHub/markdown code blocks */
+.jim-code-inline {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.9em;
+    padding: 4px 6px;
+    border-radius: 3px;
+    background-color: rgba(175, 184, 193, 0.2);
+}
+
+/* Dark mode support for inline code */
+@media (prefers-color-scheme: dark) {
+    .jim-code-inline {
+        background-color: rgba(110, 118, 129, 0.4);
+    }
+}
+
 .jim-drawer {
     border-right: 1px solid var(--mud-palette-lines-default);
     position: fixed !important;
