@@ -410,7 +410,8 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 > **Note**: The setup script automatically creates a `.env` file with development defaults. You can also set a `DOTENV_BASE64` GitHub Codespaces secret to restore your own `.env` file automatically.
 
 **Available Shell Aliases**:
-- `jim-build` - Build entire solution
+- `jim` - List all available jim aliases
+- `jim-compile` - Build entire solution (dotnet build)
 - `jim-test` - Run all tests
 - `jim-db` - Start PostgreSQL (local debugging workflow)
 - `jim-db-stop` - Stop PostgreSQL
@@ -419,17 +420,11 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
 
-**Development Builds** (fast - skips publish stage, ~10-15s faster per service):
-- `jim-dev` - Build all services in dev mode + start
-- `jim-dev-web` - Build jim.web in dev mode + start
-- `jim-dev-worker` - Build jim.worker in dev mode + start
-- `jim-dev-scheduler` - Build jim.scheduler in dev mode + start
-
-**Release Builds** (production-ready, includes publish stage):
-- `jim-release` - Build all services for release + start
-- `jim-release-web` - Build jim.web for release + start
-- `jim-release-worker` - Build jim.worker for release + start
-- `jim-release-scheduler` - Build jim.scheduler for release + start
+**Docker Builds** (rebuild and start services):
+- `jim-build` - Build all services + start
+- `jim-build-web` - Build jim.web + start
+- `jim-build-worker` - Build jim.worker + start
+- `jim-build-scheduler` - Build jim.scheduler + start
 
 **Reset**:
 - `jim-reset` - Reset JIM (delete database and logs volumes)
@@ -778,7 +773,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 ## Common Development Tasks
 
-> **Note**: All `dotnet` commands below work out of the box in Codespaces. Use shell aliases like `jim-build`, `jim-test`, and `jim-migrate` for convenience.
+> **Note**: All `dotnet` commands below work out of the box in Codespaces. Use shell aliases like `jim-compile`, `jim-test`, and `jim-migrate` for convenience. Run `jim` to see all available aliases.
 
 ### Adding a New Connector
 1. Create class implementing `IConnector` (and capability interfaces)
@@ -814,7 +809,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 **Build Errors**:
 - Ensure .NET 9.0 SDK installed: `dotnet --version` (should show 9.0.x)
-- Restore NuGet packages: `dotnet restore JIM.sln` or use `jim-build` alias
+- Restore NuGet packages: `dotnet restore JIM.sln` or use `jim-compile` alias
 - Clean build: `dotnet clean && dotnet build JIM.sln`
 
 **Database Connection**:
