@@ -11,26 +11,35 @@
 
 ## ⚡ Quick Start
 
-**First time running integration tests?** Follow these steps:
+**First time running integration tests?** Follow these simple steps:
 
 ```powershell
 # IMPORTANT: Run all commands from the repository root (/workspaces/JIM)
 cd /workspaces/JIM  # or wherever your JIM repository is cloned
 
-# 1. Start JIM stack (if not already running)
-jim-stack  # or: docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d
+# 1. Start complete test environment (JIM stack + Samba AD + readiness check)
+pwsh test/integration/Start-IntegrationTestEnvironment.ps1
 
-# 2. Start test infrastructure (Samba AD)
-docker compose -f docker-compose.integration-tests.yml up -d
-
-# 3. Wait for Samba AD to be ready (automated check with progress bar)
-pwsh test/integration/Wait-SambaReady.ps1
-
-# 4. Create Infrastructure API Key (one-time setup per JIM database)
+# 2. Create Infrastructure API Key (one-time setup per JIM database)
 pwsh test/integration/Setup-InfrastructureApiKey.ps1
 
-# 5. Run Scenario 1 with Nano template (3 users)
+# 3. Run Scenario 1 with Nano template (3 users)
 pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
+```
+
+**Alternative: Manual startup (if you prefer more control)**
+
+```powershell
+# 1a. Start JIM stack
+jim-stack  # or: docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d
+
+# 1b. Start test infrastructure (Samba AD)
+docker compose -f docker-compose.integration-tests.yml up -d
+
+# 1c. Wait for Samba AD to be ready
+pwsh test/integration/Wait-SambaReady.ps1
+
+# 2-3. Continue with API key creation and test execution (same as above)
 ```
 
 **Prerequisites:**
@@ -40,7 +49,8 @@ pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nan
 - API key created (step 4 creates one automatically)
 
 **Helper Scripts:**
-- `Wait-SambaReady.ps1` - Automatically checks if Samba AD is ready (eliminates guesswork)
+- `Start-IntegrationTestEnvironment.ps1` - One-command startup for JIM + Samba AD (recommended!)
+- `Wait-SambaReady.ps1` - Checks if Samba AD is ready (used automatically by startup script)
 - `Setup-InfrastructureApiKey.ps1` - Creates API key for testing (one-time setup)
 
 **Current Limitations:**
