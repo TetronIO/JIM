@@ -306,6 +306,22 @@ public class Worker : BackgroundService
                                     }
                                     catch (Exception ex)
                                     {
+                                        // Reset Connected System status so deletion can be retried
+                                        try
+                                        {
+                                            var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(deleteConnectedSystemTask.ConnectedSystemId);
+                                            if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
+                                            {
+                                                connectedSystem.Status = ConnectedSystemStatus.Active;
+                                                await taskJim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, null);
+                                                Log.Warning("ExecuteAsync: Reset Connected System {Id} status to Active after deletion failure", deleteConnectedSystemTask.ConnectedSystemId);
+                                            }
+                                        }
+                                        catch (Exception resetEx)
+                                        {
+                                            Log.Error(resetEx, "ExecuteAsync: Failed to reset Connected System {Id} status after deletion failure", deleteConnectedSystemTask.ConnectedSystemId);
+                                        }
+
                                         await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
                                         Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing delete connected system task.");
                                     }
