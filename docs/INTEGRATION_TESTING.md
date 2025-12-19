@@ -24,13 +24,13 @@ jim-stack  # or: docker compose -f docker-compose.yml -f docker-compose.override
 docker compose -f docker-compose.integration-tests.yml up -d
 
 # 3. Wait for Samba AD to be ready (automated check with progress bar)
-./test/integration/Wait-SambaReady.ps1
+pwsh test/integration/Wait-SambaReady.ps1
 
 # 4. Create Infrastructure API Key (one-time setup per JIM database)
-./test/integration/Setup-InfrastructureApiKey.ps1
+pwsh test/integration/Setup-InfrastructureApiKey.ps1
 
 # 5. Run Scenario 1 with Nano template (3 users)
-./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey $env:JIM_API_KEY
 ```
 
 **Prerequisites:**
