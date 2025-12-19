@@ -479,7 +479,8 @@ try {
                         $importMappingsCreated++
                     }
                     catch {
-                        Write-Host "    ⚠ Could not create mapping $($mapping.CsAttr) → $($mapping.MvAttr): $_" -ForegroundColor Yellow
+                        Write-Host "    ✗ Failed to create mapping $($mapping.CsAttr) → $($mapping.MvAttr): $_" -ForegroundColor Red
+                        throw "Critical import mapping failed. Setup cannot continue."
                     }
                 }
             }
@@ -509,7 +510,8 @@ try {
                         $exportMappingsCreated++
                     }
                     catch {
-                        Write-Host "    ⚠ Could not create mapping $($mapping.MvAttr) → $($mapping.LdapAttr): $_" -ForegroundColor Yellow
+                        Write-Host "    ✗ Failed to create mapping $($mapping.MvAttr) → $($mapping.LdapAttr): $_" -ForegroundColor Red
+                        throw "Critical export mapping failed. Setup cannot continue."
                     }
                 }
             }
@@ -536,12 +538,14 @@ try {
                         Write-Host "    ✓ Created expression mapping for $($mapping.LdapAttr)" -ForegroundColor Green
                     }
                     catch {
-                        Write-Host "    ⚠ Could not create expression mapping for $($mapping.LdapAttr): $_" -ForegroundColor Yellow
+                        Write-Host "    ✗ Failed to create expression mapping for $($mapping.LdapAttr): $_" -ForegroundColor Red
+                        throw "Critical expression mapping failed (DN is required for AD provisioning). Setup cannot continue."
                     }
                 }
             }
             else {
-                Write-Host "    ⚠ LDAP attribute '$($mapping.LdapAttr)' not found in schema" -ForegroundColor Yellow
+                Write-Host "    ✗ LDAP attribute '$($mapping.LdapAttr)' not found in schema" -ForegroundColor Red
+                throw "Required LDAP attribute '$($mapping.LdapAttr)' not found. Cannot configure provisioning."
             }
         }
         if ($expressionMappingsCreated -gt 0) {
@@ -564,23 +568,19 @@ try {
             }
 
             if (-not $matchingRuleExists) {
-                try {
-                    New-JIMMatchingRule -ConnectedSystemId $csvSystem.id `
-                        -ObjectTypeId $csvUserType.id `
-                        -TargetMetaverseAttributeName 'Employee ID' `
-                        -SourceConnectedSystemAttributeName 'employeeId' | Out-Null
-                    Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
-                }
-                catch {
-                    Write-Host "  ⚠ Could not configure object matching rule: $_" -ForegroundColor Yellow
-                }
+                New-JIMMatchingRule -ConnectedSystemId $csvSystem.id `
+                    -ObjectTypeId $csvUserType.id `
+                    -SourceAttributeId $csvEmployeeIdAttr.id `
+                    -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
+                Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
             }
             else {
                 Write-Host "  Object matching rule already exists" -ForegroundColor Gray
             }
         }
         else {
-            Write-Host "  ⚠ Could not find required attributes for CSV matching rule" -ForegroundColor Yellow
+            Write-Host "  ✗ Could not find required attributes for CSV matching rule" -ForegroundColor Red
+            throw "Missing required attributes: employeeId (CSV) or Employee ID (Metaverse)"
         }
 
         # Add object matching rule for LDAP object type (how to match CSOs to existing MVOs during export)
@@ -599,16 +599,11 @@ try {
             }
 
             if (-not $ldapMatchingRuleExists) {
-                try {
-                    New-JIMMatchingRule -ConnectedSystemId $ldapSystem.id `
-                        -ObjectTypeId $ldapUserType.id `
-                        -TargetMetaverseAttributeName 'Employee ID' `
-                        -SourceConnectedSystemAttributeName 'employeeID' | Out-Null
-                    Write-Host "  ✓ LDAP object matching rule configured (employeeID → Employee ID)" -ForegroundColor Green
-                }
-                catch {
-                    Write-Host "  ⚠ Could not configure LDAP object matching rule: $_" -ForegroundColor Yellow
-                }
+                New-JIMMatchingRule -ConnectedSystemId $ldapSystem.id `
+                    -ObjectTypeId $ldapUserType.id `
+                    -SourceAttributeId $ldapEmployeeIdAttr.id `
+                    -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
+                Write-Host "  ✓ LDAP object matching rule configured (employeeID → Employee ID)" -ForegroundColor Green
             }
             else {
                 Write-Host "  LDAP object matching rule already exists" -ForegroundColor Gray
@@ -616,6 +611,8 @@ try {
         }
         else {
             Write-Host "  ⚠ Could not find required attributes for LDAP matching rule (employeeID attribute may not exist in AD schema)" -ForegroundColor Yellow
+            Write-Host "    This is expected - standard AD schemas don't include employeeID by default" -ForegroundColor DarkGray
+            Write-Host "    Objects will be provisioned without matching to existing AD accounts" -ForegroundColor DarkGray
         }
 
         # Restart jim.worker to pick up schema changes (API modifications may require reload)
