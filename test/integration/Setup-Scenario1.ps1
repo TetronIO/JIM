@@ -419,7 +419,7 @@ Write-TestStep "Step 6c" "Configuring Attribute Flow Mappings"
 
 try {
     if ($importRule -and $exportRule) {
-        Write-Host "  Configuring attribute mappings via API..." -ForegroundColor Gray
+        Write-Host "  Configuring attribute mappings..." -ForegroundColor Gray
 
         # Define mappings
         $importMappings = @(

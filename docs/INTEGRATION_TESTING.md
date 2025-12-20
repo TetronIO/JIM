@@ -14,19 +14,23 @@
 **First time running integration tests?** Follow these simple steps:
 
 ```powershell
-# IMPORTANT: Run all commands from the repository root (/workspaces/JIM)
+# IMPORTANT: Run these commands inside PowerShell, not bash/zsh!
+# Start PowerShell first:
+pwsh
+
+# Then run all commands from the repository root (/workspaces/JIM)
 cd /workspaces/JIM  # or wherever your JIM repository is cloned
 
 # 1. Start complete test environment (JIM stack + Samba AD + readiness check)
-pwsh test/integration/Start-IntegrationTestEnvironment.ps1
+./test/integration/Start-IntegrationTestEnvironment.ps1
 
 # 2. Create Infrastructure API Key (one-time setup per JIM database)
 #    This saves the key to test/integration/.api-key for use across sessions
-pwsh test/integration/Setup-InfrastructureApiKey.ps1
+./test/integration/Setup-InfrastructureApiKey.ps1
 
 # 3. Run Scenario 1 with Nano template (3 users)
 #    The API key is read from the .api-key file created in step 2
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
+./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
 ```
 
 **Alternative: Manual startup (if you prefer more control)**

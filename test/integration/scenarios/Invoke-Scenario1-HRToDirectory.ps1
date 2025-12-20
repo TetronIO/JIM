@@ -76,6 +76,11 @@ try {
         throw "API key required for authentication"
     }
 
+    # IMPORTANT: For fully repeatable tests, JIM's database should be reset between runs.
+    # Run 'jim-reset' before running tests, or use:
+    #   docker compose -f docker-compose.yml down -v && jim-stack
+    # This cleans up MVOs, CSOs, and pending exports from previous test runs.
+
     # Reset CSV to baseline state before running tests
     # This ensures test data is in a known state regardless of previous test runs
     Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
