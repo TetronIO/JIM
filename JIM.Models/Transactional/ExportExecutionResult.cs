@@ -46,8 +46,8 @@ public class ExportExecutionResult
     public int DeferredCount { get; set; }
 
     /// <summary>
-    /// Preview information for each pending export.
-    /// Always populated regardless of run mode.
+    /// IDs of the pending exports that were processed.
+    /// Use these IDs to fetch the actual PendingExport records for detailed information.
     /// </summary>
-    public List<ExportPreviewResult> Previews { get; set; } = new();
+    public List<Guid> ProcessedPendingExportIds { get; set; } = [];
 }

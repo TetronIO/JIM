@@ -94,15 +94,16 @@ public class ExportExecutionServer
             Message = "Preparing exports"
         });
 
-        // Generate preview for all exports
+        // Track the IDs of pending exports being processed
         foreach (var pendingExport in pendingExports)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var preview = CreateExportPreview(pendingExport);
-            result.Previews.Add(preview);
+            result.ProcessedPendingExportIds.Add(pendingExport.Id);
         }
 
         // If preview only mode, stop here (Q5 decision)
+        // Note: In preview mode, callers can use ProcessedPendingExportIds to fetch
+        // the actual PendingExport records for detailed preview information
         if (runMode == SyncRunMode.PreviewOnly)
         {
             Log.Information("ExecuteExportsAsync: Preview mode - not executing exports for system {SystemName}",
@@ -188,51 +189,6 @@ public class ExportExecutionServer
         }
 
         return true;
-    }
-
-    /// <summary>
-    /// Creates a preview of what an export will do.
-    /// </summary>
-    private static ExportPreviewResult CreateExportPreview(PendingExport pendingExport)
-    {
-        var preview = new ExportPreviewResult
-        {
-            PendingExportId = pendingExport.Id,
-            ChangeType = pendingExport.ChangeType,
-            ConnectedSystemObjectId = pendingExport.ConnectedSystemObject?.Id,
-            SourceMetaverseObjectId = pendingExport.SourceMetaverseObjectId
-        };
-
-        foreach (var attrChange in pendingExport.AttributeValueChanges)
-        {
-            preview.AttributeChanges.Add(new ExportPreviewAttributeChange
-            {
-                AttributeId = attrChange.AttributeId,
-                AttributeName = attrChange.Attribute?.Name ?? $"Attribute {attrChange.AttributeId}",
-                ChangeType = attrChange.ChangeType,
-                NewValue = GetPreviewValue(attrChange)
-            });
-        }
-
-        return preview;
-    }
-
-    /// <summary>
-    /// Gets a string representation of the attribute value for preview purposes.
-    /// </summary>
-    private static string? GetPreviewValue(PendingExportAttributeValueChange attrChange)
-    {
-        if (attrChange.StringValue != null)
-            return attrChange.StringValue;
-        if (attrChange.IntValue.HasValue)
-            return attrChange.IntValue.Value.ToString();
-        if (attrChange.DateTimeValue.HasValue)
-            return attrChange.DateTimeValue.Value.ToString("O");
-        if (attrChange.UnresolvedReferenceValue != null)
-            return $"[Reference: {attrChange.UnresolvedReferenceValue}]";
-        if (attrChange.ByteValue != null)
-            return $"[Binary: {attrChange.ByteValue.Length} bytes]";
-        return null;
     }
 
     /// <summary>
