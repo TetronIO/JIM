@@ -663,138 +663,30 @@
             }
             else
             {
-                <MudSelect T="ConnectedSystemObjectType"
-                           @bind-Value="_selectedMatchingRuleObjectType"
-                           Label="Select Object Type"
-                           Variant="Variant.Outlined"
-                           Class="mb-4">
-                    @foreach (var objectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
-                    {
-                        <MudSelectItem Value="@objectType">@objectType.Name</MudSelectItem>
-                    }
-                </MudSelect>
+                var selectedObjectTypes = _connectedSystem.ObjectTypes.Where(ot => ot.Selected).ToList();
 
-                @if (_selectedMatchingRuleObjectType != null)
+                @if (selectedObjectTypes.Count == 0)
                 {
-                    <MudPaper Outlined="true" Class="pa-4 mb-4">
-                        <MudText Typo="Typo.h6" Class="mb-3">Matching Rules for @_selectedMatchingRuleObjectType.Name</MudText>
-
-                        @if (_selectedMatchingRuleObjectType.ObjectMatchingRules.Count == 0)
+                    <MudAlert Severity="Severity.Warning">
+                        No object types have been selected. Select object types in the Schema tab first.
+                    </MudAlert>
+                }
+                else if (selectedObjectTypes.Count == 1)
+                {
+                    @* Single object type - show directly without selection UI *@
+                    @RenderMatchingRulesForObjectType(selectedObjectTypes[0])
+                }
+                else
+                {
+                    @* Multiple object types - use tabs for navigation *@
+                    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4" Outlined="true" @bind-ActivePanelIndex="_selectedMatchingRuleTabIndex">
+                        @foreach (var objectType in selectedObjectTypes)
                         {
-                            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-                                No matching rules configured. Objects will only match if explicitly joined.
-                            </MudAlert>
+                            <MudTabPanel Text="@objectType.Name" Tag="@objectType">
+                                @RenderMatchingRulesForObjectType(objectType)
+                            </MudTabPanel>
                         }
-                        else
-                        {
-                            <MudTable Items="@_selectedMatchingRuleObjectType.ObjectMatchingRules.OrderBy(r => r.Order)"
-                                      Hover="true"
-                                      Dense="true"
-                                      Outlined="true"
-                                      Elevation="0"
-                                      Class="mb-4">
-                                <HeaderContent>
-                                    <MudTh>Order</MudTh>
-                                    <MudTh>Source Attribute</MudTh>
-                                    <MudTh>Target MV Attribute</MudTh>
-                                    <MudTh>Actions</MudTh>
-                                </HeaderContent>
-                                <RowTemplate>
-                                    <MudTd DataLabel="Order">@context.Order</MudTd>
-                                    <MudTd DataLabel="Source">
-                                        @if (context.Sources.Count > 0)
-                                        {
-                                            var source = context.Sources.First();
-                                            @if (source.ConnectedSystemAttribute != null)
-                                            {
-                                                <text>@source.ConnectedSystemAttribute.Name</text>
-                                            }
-                                            else if (source.MetaverseAttribute != null)
-                                            {
-                                                <text>@source.MetaverseAttribute.Name (MV)</text>
-                                            }
-                                            else
-                                            {
-                                                <text>-</text>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            <text>-</text>
-                                        }
-                                    </MudTd>
-                                    <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
-                                    <MudTd>
-                                        <MudTooltip Text="Move up">
-                                            <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
-                                                           Size="Size.Small"
-                                                           Color="Color.Default"
-                                                           Disabled="@(context.Order == 0)"
-                                                           OnClick="() => HandleMoveMatchingRuleUpAsync(context)" />
-                                        </MudTooltip>
-                                        <MudTooltip Text="Move down">
-                                            <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
-                                                           Size="Size.Small"
-                                                           Color="Color.Default"
-                                                           Disabled="@(context.Order == _selectedMatchingRuleObjectType!.ObjectMatchingRules.Max(r => r.Order))"
-                                                           OnClick="() => HandleMoveMatchingRuleDownAsync(context)" />
-                                        </MudTooltip>
-                                        <MudTooltip Text="Delete">
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                           Size="Size.Small"
-                                                           Color="Color.Error"
-                                                           OnClick="() => HandleDeleteMatchingRuleAsync(context)" />
-                                        </MudTooltip>
-                                    </MudTd>
-                                </RowTemplate>
-                            </MudTable>
-                        }
-
-                        <MudDivider Class="my-4" />
-                        <MudText Typo="Typo.subtitle1" Class="mb-3">Add New Matching Rule</MudText>
-
-                        <MudGrid>
-                            <MudItem xs="12" md="5">
-                                <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                                           @bind-Value="_newMatchingRuleSourceAttribute"
-                                           Label="Source CS Attribute"
-                                           Variant="Variant.Outlined"
-                                           HelperText="The Connected System attribute to match from">
-                                    @foreach (var attr in _selectedMatchingRuleObjectType.Attributes.Where(a => a.Selected).OrderBy(a => a.Name))
-                                    {
-                                        <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            </MudItem>
-                            <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
-                                <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
-                            </MudItem>
-                            <MudItem xs="12" md="5">
-                                <MudSelect T="MetaverseAttribute"
-                                           @bind-Value="_newMatchingRuleTargetAttribute"
-                                           Label="Target MV Attribute"
-                                           Variant="Variant.Outlined"
-                                           HelperText="The Metaverse attribute to match against">
-                                    @if (_metaverseAttributes != null)
-                                    {
-                                        @foreach (var attr in _metaverseAttributes.OrderBy(a => a.Name))
-                                        {
-                                            <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
-                                        }
-                                    }
-                                </MudSelect>
-                            </MudItem>
-                        </MudGrid>
-
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   Class="mt-4"
-                                   DropShadow="false"
-                                   Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
-                                   OnClick="HandleAddMatchingRuleAsync">
-                            Add Matching Rule
-                        </MudButton>
-                    </MudPaper>
+                    </MudTabs>
                 }
             }
         </MudTabPanel>
@@ -1119,10 +1011,12 @@
     private string? _deleteConfirmationText;
 
     // Object Matching Rules
-    private ConnectedSystemObjectType? _selectedMatchingRuleObjectType;
+    private int _selectedMatchingRuleTabIndex;
     private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
     private MetaverseAttribute? _newMatchingRuleTargetAttribute;
     private IList<MetaverseAttribute>? _metaverseAttributes;
+    // Track the currently active object type for the matching rules form state
+    private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
 
     protected override async Task OnInitializedAsync()
     {
@@ -1423,24 +1317,23 @@
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
     }
 
-    private async Task HandleAddMatchingRuleAsync()
+    private async Task HandleAddMatchingRuleAsync(ConnectedSystemObjectType objectType)
     {
-        if (_connectedSystem == null || _selectedMatchingRuleObjectType == null ||
-            _newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)
+        if (_connectedSystem == null || _newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)
             return;
 
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
 
         // Calculate the next order value
-        var nextOrder = _selectedMatchingRuleObjectType.ObjectMatchingRules.Count > 0
-            ? _selectedMatchingRuleObjectType.ObjectMatchingRules.Max(r => r.Order) + 1
+        var nextOrder = objectType.ObjectMatchingRules.Count > 0
+            ? objectType.ObjectMatchingRules.Max(r => r.Order) + 1
             : 0;
 
         var rule = new ObjectMatchingRule
         {
             Order = nextOrder,
-            ConnectedSystemObjectTypeId = _selectedMatchingRuleObjectType.Id,
-            ConnectedSystemObjectType = _selectedMatchingRuleObjectType,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
             TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute.Id,
             TargetMetaverseAttribute = _newMatchingRuleTargetAttribute,
             Sources = new List<ObjectMatchingRuleSource>
@@ -1470,14 +1363,14 @@
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to create matching rule for object type {ObjectTypeId}", _selectedMatchingRuleObjectType.Id);
+            Log.Error(ex, "Failed to create matching rule for object type {ObjectTypeId}", objectType.Id);
             Snackbar.Add($"Failed to create matching rule: {ex.Message}", Severity.Error);
         }
     }
 
-    private async Task HandleDeleteMatchingRuleAsync(ObjectMatchingRule rule)
+    private async Task HandleDeleteMatchingRuleAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
     {
-        if (_connectedSystem == null || _selectedMatchingRuleObjectType == null)
+        if (_connectedSystem == null)
             return;
 
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
@@ -1487,7 +1380,7 @@
             await Jim.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, user);
 
             // Remove from the local list for immediate UI update
-            _selectedMatchingRuleObjectType.ObjectMatchingRules.Remove(rule);
+            objectType.ObjectMatchingRules.Remove(rule);
 
             Snackbar.Add("Matching rule has been deleted.", Severity.Success);
             StateHasChanged();
@@ -1499,22 +1392,22 @@
         }
     }
 
-    private async Task HandleMoveMatchingRuleUpAsync(ObjectMatchingRule rule)
+    private async Task HandleMoveMatchingRuleUpAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
     {
-        await SwapMatchingRuleOrderAsync(rule, -1);
+        await SwapMatchingRuleOrderAsync(rule, -1, objectType);
     }
 
-    private async Task HandleMoveMatchingRuleDownAsync(ObjectMatchingRule rule)
+    private async Task HandleMoveMatchingRuleDownAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
     {
-        await SwapMatchingRuleOrderAsync(rule, 1);
+        await SwapMatchingRuleOrderAsync(rule, 1, objectType);
     }
 
-    private async Task SwapMatchingRuleOrderAsync(ObjectMatchingRule rule, int direction)
+    private async Task SwapMatchingRuleOrderAsync(ObjectMatchingRule rule, int direction, ConnectedSystemObjectType objectType)
     {
-        if (_connectedSystem == null || _selectedMatchingRuleObjectType == null)
+        if (_connectedSystem == null)
             return;
 
-        var rules = _selectedMatchingRuleObjectType.ObjectMatchingRules.OrderBy(r => r.Order).ToList();
+        var rules = objectType.ObjectMatchingRules.OrderBy(r => r.Order).ToList();
         var currentIndex = rules.IndexOf(rule);
         var targetIndex = currentIndex + direction;
 
@@ -2025,5 +1918,133 @@
 
         StateHasChanged();
     }
+    #endregion
+
+    #region Object Matching Rules Render Fragment
+    private RenderFragment RenderMatchingRulesForObjectType(ConnectedSystemObjectType objectType) => __builder =>
+    {
+        // Track the current object type for form operations
+        _currentMatchingRuleObjectType = objectType;
+
+        <MudPaper Outlined="true" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-3">Matching Rules for @objectType.Name</MudText>
+
+            @if (objectType.ObjectMatchingRules.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    No matching rules configured. Objects will only match if explicitly joined.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="@objectType.ObjectMatchingRules.OrderBy(r => r.Order)"
+                          Hover="true"
+                          Dense="true"
+                          Outlined="true"
+                          Elevation="0"
+                          Class="mb-4">
+                    <HeaderContent>
+                        <MudTh>Order</MudTh>
+                        <MudTh>Source Attribute</MudTh>
+                        <MudTh>Target MV Attribute</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Order">@context.Order</MudTd>
+                        <MudTd DataLabel="Source">
+                            @if (context.Sources.Count > 0)
+                            {
+                                var source = context.Sources.First();
+                                @if (source.ConnectedSystemAttribute != null)
+                                {
+                                    <text>@source.ConnectedSystemAttribute.Name</text>
+                                }
+                                else if (source.MetaverseAttribute != null)
+                                {
+                                    <text>@source.MetaverseAttribute.Name (MV)</text>
+                                }
+                                else
+                                {
+                                    <text>-</text>
+                                }
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
+                        <MudTd>
+                            <MudTooltip Text="Move up">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                               Size="Size.Small"
+                                               Color="Color.Default"
+                                               Disabled="@(context.Order == 0)"
+                                               OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
+                            </MudTooltip>
+                            <MudTooltip Text="Move down">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                               Size="Size.Small"
+                                               Color="Color.Default"
+                                               Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
+                                               OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
+                            </MudTooltip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Add New Matching Rule</MudText>
+
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                               @bind-Value="_newMatchingRuleSourceAttribute"
+                               Label="Source CS Attribute"
+                               Variant="Variant.Outlined"
+                               HelperText="The Connected System attribute to match from">
+                        @foreach (var attr in objectType.Attributes.Where(a => a.Selected).OrderBy(a => a.Name))
+                        {
+                            <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudSelect T="MetaverseAttribute"
+                               @bind-Value="_newMatchingRuleTargetAttribute"
+                               Label="Target MV Attribute"
+                               Variant="Variant.Outlined"
+                               HelperText="The Metaverse attribute to match against">
+                        @if (_metaverseAttributes != null)
+                        {
+                            @foreach (var attr in _metaverseAttributes.OrderBy(a => a.Name))
+                            {
+                                <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="mt-4"
+                       DropShadow="false"
+                       Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
+                       OnClick="() => HandleAddMatchingRuleAsync(objectType)">
+                Add Matching Rule
+            </MudButton>
+        </MudPaper>
+    };
     #endregion
 }
