@@ -75,3 +75,29 @@ public enum SyncRunMode
     /// </summary>
     PreviewAndSync = 1
 }
+
+/// <summary>
+/// Phases of export execution.
+/// </summary>
+public enum ExportPhase
+{
+    /// <summary>
+    /// Preparing exports (loading, generating previews).
+    /// </summary>
+    Preparing,
+
+    /// <summary>
+    /// Executing exports via connector.
+    /// </summary>
+    Executing,
+
+    /// <summary>
+    /// Resolving deferred references.
+    /// </summary>
+    ResolvingReferences,
+
+    /// <summary>
+    /// Export execution completed.
+    /// </summary>
+    Completed
+}
