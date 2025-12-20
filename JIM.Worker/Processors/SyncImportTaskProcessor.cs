@@ -375,7 +375,10 @@ public class SyncImportTaskProcessor
 
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
                     if (connectedSystemObject != null)
+                    {
+                        activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+                    }
                 }
                 else
                 {
