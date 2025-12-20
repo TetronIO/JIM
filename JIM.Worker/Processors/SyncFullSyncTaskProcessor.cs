@@ -549,57 +549,67 @@ public class SyncFullSyncTaskProcessor
     /// <exception cref="InvalidDataException">Will be thrown if an unsupported join state is found preventing processing.</exception>
     private async Task AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
-        // enumerate all sync rules that have matching rules. first to match wins.
-        // for more deterministic results, admins should make sure an object only matches to a single sync rule
-        // at any given moment to ensure the single sync rule matching rule priority order is law.
-        foreach (var matchingSyncRule in activeSyncRules.Where(sr => sr.ObjectMatchingRules.Count > 0 && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+        // Enumerate import sync rules for this CSO type to attempt matching.
+        // Uses ObjectMatchingServer which handles both ConnectedSystem mode (rules on object type)
+        // and SyncRule mode (rules on sync rule).
+        foreach (var importSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
         {
-            // object matching rules are ordered. respect the ordering.
-            foreach (var matchingRule in matchingSyncRule.ObjectMatchingRules.OrderBy(q => q.Order))
+            // Use ObjectMatchingServer to find a matching MVO - this properly handles both matching modes
+            MetaverseObject? mvo;
+            try
             {
-                // use this rule to see if we have a matching MVO to join with.
-                var mvo = await _jim.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, matchingSyncRule.MetaverseObjectType, matchingRule);
-                if (mvo == null)
-                    continue;
-
-                // mvo must not already be joined to a connected system object in this connected system. joins are 1:1.
-                var existingCsoJoins = mvo.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
-
-                if (existingCsoJoins.Count > 1)
-                    throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
-
-                if (existingCsoJoins.Count == 1)
-                {
-                    runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
-                    runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
-                                                           $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check  your " +
-                                                           $"Object Matching Rules for uniqueness.";
-                    _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
-                    return;
-                }
-
-                // establish join! then return as first rule to match, wins.
-                connectedSystemObject.MetaverseObject = mvo;
-                connectedSystemObject.MetaverseObjectId = mvo.Id;
-                connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
-                connectedSystemObject.DateJoined = DateTime.UtcNow;
-                mvo.ConnectedSystemObjects.Add(connectedSystemObject);
-
-                // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
-                if (mvo.LastConnectorDisconnectedDate.HasValue)
-                {
-                    Log.Information($"AttemptJoinAsync: Clearing LastConnectorDisconnectedDate for MVO {mvo.Id} as connector has reconnected.");
-                    mvo.LastConnectorDisconnectedDate = null;
-                }
+                mvo = await _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(
+                    connectedSystemObject,
+                    _connectedSystem,
+                    importSyncRule);
+            }
+            catch (JIM.Models.Exceptions.MultipleMatchesException ex)
+            {
+                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+                runProfileExecutionItem.ErrorMessage = $"Multiple Metaverse Objects match this Connected System Object. " +
+                    $"Check your Object Matching Rules to ensure unique matches. Details: {ex.Message}";
+                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                 return;
             }
 
-            // have we joined yet? stop enumerating if so.
-            if (connectedSystemObject.MetaverseObject != null)
+            if (mvo == null)
+                continue;
+
+            // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
+            var existingCsoJoins = mvo.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
+
+            if (existingCsoJoins.Count > 1)
+                throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
+
+            if (existingCsoJoins.Count == 1)
+            {
+                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
+                runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
+                                                       $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check your " +
+                                                       $"Object Matching Rules for uniqueness.";
+                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                 return;
+            }
+
+            // Establish join! First rule to match, wins.
+            connectedSystemObject.MetaverseObject = mvo;
+            connectedSystemObject.MetaverseObjectId = mvo.Id;
+            connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
+            connectedSystemObject.DateJoined = DateTime.UtcNow;
+            mvo.ConnectedSystemObjects.Add(connectedSystemObject);
+
+            // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
+            if (mvo.LastConnectorDisconnectedDate.HasValue)
+            {
+                Log.Information($"AttemptJoinAsync: Clearing LastConnectorDisconnectedDate for MVO {mvo.Id} as connector has reconnected.");
+                mvo.LastConnectorDisconnectedDate = null;
+            }
+
+            Log.Information("AttemptJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
+            return;
         }
 
-        // no join could be established.
+        // No join could be established.
     }
 
     /// <summary>

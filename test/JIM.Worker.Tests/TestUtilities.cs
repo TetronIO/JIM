@@ -113,12 +113,16 @@ public static class TestUtilities
             new()
             {
                 Id = 1,
-                Name = "Dummy Source System"
+                Name = "Dummy Source System",
+                // Use SyncRule mode since tests add matching rules to SyncRules
+                ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule
             },
             new()
             {
                 Id = 2,
-                Name = "Dummy Target System"
+                Name = "Dummy Target System",
+                // Use SyncRule mode since tests add matching rules to SyncRules
+                ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule
             }
         };
     }
