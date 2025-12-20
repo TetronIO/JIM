@@ -171,8 +171,8 @@ function Start-JIMRunProfile {
 
                         Write-Progress @progressParams
 
-                        # Check if completed
-                        if ($status -in @('Completed', 'CompletedWithWarnings', 'Failed', 'Cancelled')) {
+                        # Check if completed (matches ActivityStatus enum names)
+                        if ($status -in @('Complete', 'CompleteWithWarning', 'CompleteWithError', 'FailedWithError', 'Cancelled')) {
                             $completed = $true
                         }
                     }

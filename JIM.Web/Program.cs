@@ -172,8 +172,12 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddServerSideBlazor();
 
-    // Add API controller support
-    builder.Services.AddControllers();
+    // Add API controller support with JSON serialization configured to use string enums
+    builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
 

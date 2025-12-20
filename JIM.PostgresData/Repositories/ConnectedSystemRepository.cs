@@ -870,15 +870,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
     public async Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
     {
-        // does not include PendingExport.AttributeValueChanges.Attributes.
-        // it's expected that the schema is retrieved separately by the caller.
-        // this is to keep the latency as low as possible for this method.
+        // Includes AttributeValueChanges and their Attribute definitions so connectors
+        // can access attribute names when processing exports.
         //
-        // Note: We DO include CSO.AttributeValues because connectors need access to
+        // Note: We also include CSO.AttributeValues because connectors need access to
         // the current attribute values (e.g., current DN for LDAP rename operations).
 
         return await Repository.Database.PendingExports
             .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();

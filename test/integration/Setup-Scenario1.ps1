@@ -46,6 +46,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive execution
 
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
