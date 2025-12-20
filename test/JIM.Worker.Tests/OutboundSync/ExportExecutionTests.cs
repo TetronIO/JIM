@@ -164,10 +164,13 @@ public class ExportExecutionTests
         // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result.RunMode, Is.EqualTo(SyncRunMode.PreviewOnly));
-        Assert.That(result.Previews.Count, Is.GreaterThan(0), "Expected preview information");
-        Assert.That(result.Previews[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
-        Assert.That(result.Previews[0].AttributeChanges.Count, Is.EqualTo(1));
-        Assert.That(result.Previews[0].AttributeChanges[0].NewValue, Is.EqualTo("New Display Name"));
+        Assert.That(result.ProcessedPendingExportIds.Count, Is.GreaterThan(0), "Expected processed exports");
+        Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
+
+        // Verify export details via the original pending export
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+        Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1));
+        Assert.That(pendingExport.AttributeValueChanges[0].StringValue, Is.EqualTo("New Display Name"));
     }
 
     /// <summary>
@@ -193,7 +196,7 @@ public class ExportExecutionTests
         // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result.TotalPendingExports, Is.EqualTo(0));
-        Assert.That(result.Previews.Count, Is.EqualTo(0));
+        Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(0));
         Assert.That(result.CompletedAt, Is.Not.Null);
     }
 
@@ -469,24 +472,23 @@ public class ExportExecutionTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Previews.Count, Is.EqualTo(1));
+        Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
+        Assert.That(result.ProcessedPendingExportIds[0], Is.EqualTo(pendingExport.Id));
 
-        var preview = result.Previews[0];
-        Assert.That(preview.PendingExportId, Is.EqualTo(pendingExport.Id));
-        Assert.That(preview.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
-        Assert.That(preview.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
-        Assert.That(preview.SourceMetaverseObjectId, Is.EqualTo(pendingExport.SourceMetaverseObjectId));
-        Assert.That(preview.AttributeChanges.Count, Is.EqualTo(2));
+        // Verify export details via the original pending export
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+        Assert.That(pendingExport.ConnectedSystemObject?.Id, Is.EqualTo(cso.Id));
+        Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(2));
 
-        var displayNameChange = preview.AttributeChanges.Single(ac => ac.AttributeId == displayNameAttr.Id);
-        Assert.That(displayNameChange.AttributeName, Is.EqualTo(MockTargetSystemAttributeNames.DisplayName.ToString()));
+        var displayNameChange = pendingExport.AttributeValueChanges.Single(ac => ac.AttributeId == displayNameAttr.Id);
+        Assert.That(displayNameChange.Attribute?.Name, Is.EqualTo(MockTargetSystemAttributeNames.DisplayName.ToString()));
         Assert.That(displayNameChange.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
-        Assert.That(displayNameChange.NewValue, Is.EqualTo("John Doe"));
+        Assert.That(displayNameChange.StringValue, Is.EqualTo("John Doe"));
 
-        var mailChange = preview.AttributeChanges.Single(ac => ac.AttributeId == mailAttr.Id);
-        Assert.That(mailChange.AttributeName, Is.EqualTo(MockTargetSystemAttributeNames.Mail.ToString()));
+        var mailChange = pendingExport.AttributeValueChanges.Single(ac => ac.AttributeId == mailAttr.Id);
+        Assert.That(mailChange.Attribute?.Name, Is.EqualTo(MockTargetSystemAttributeNames.Mail.ToString()));
         Assert.That(mailChange.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Add));
-        Assert.That(mailChange.NewValue, Is.EqualTo("john.doe@example.com"));
+        Assert.That(mailChange.StringValue, Is.EqualTo("john.doe@example.com"));
     }
 
     /// <summary>
@@ -542,10 +544,12 @@ public class ExportExecutionTests
             SyncRunMode.PreviewOnly);
 
         // Assert
-        Assert.That(result.Previews.Count, Is.EqualTo(1));
-        var preview = result.Previews[0];
-        Assert.That(preview.AttributeChanges.Count, Is.EqualTo(1));
-        Assert.That(preview.AttributeChanges[0].NewValue, Is.EqualTo("512"));
+        Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
+        Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
+
+        // Verify the integer value is stored correctly in the pending export
+        Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1));
+        Assert.That(pendingExport.AttributeValueChanges[0].IntValue, Is.EqualTo(512));
     }
 
     /// <summary>
@@ -582,10 +586,13 @@ public class ExportExecutionTests
             SyncRunMode.PreviewOnly);
 
         // Assert
-        Assert.That(result.Previews.Count, Is.EqualTo(1));
-        Assert.That(result.Previews[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create));
-        Assert.That(result.Previews[0].ConnectedSystemObjectId, Is.Null);
-        Assert.That(result.Previews[0].SourceMetaverseObjectId, Is.EqualTo(mvo.Id));
+        Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
+        Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
+
+        // Verify Create change type via the original pending export
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+        Assert.That(pendingExport.ConnectedSystemObject, Is.Null);
+        Assert.That(pendingExport.SourceMetaverseObjectId, Is.EqualTo(mvo.Id));
     }
 
     /// <summary>
@@ -630,9 +637,12 @@ public class ExportExecutionTests
             SyncRunMode.PreviewOnly);
 
         // Assert
-        Assert.That(result.Previews.Count, Is.EqualTo(1));
-        Assert.That(result.Previews[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
-        Assert.That(result.Previews[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+        Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
+        Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
+
+        // Verify Delete change type via the original pending export
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+        Assert.That(pendingExport.ConnectedSystemObject?.Id, Is.EqualTo(cso.Id));
     }
 
     #region Provisioning Flow End-to-End Tests

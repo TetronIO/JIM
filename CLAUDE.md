@@ -136,6 +136,11 @@ Blazor pages, API controllers, and other compiled code require container rebuild
   - Date/Time: Always use UTC for storage and internal operations; display in user's local time zone where appropriate
   - Exceptions: Technical terms, proper nouns, third-party library names, URLs
 
+**File Organisation:**
+- One class per file - each class should have its own `.cs` file named after the class
+- Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
+- File names must match the class/interface name exactly (e.g., `MetaverseObject.cs` for `class MetaverseObject`)
+
 **Naming Patterns:**
 - Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`
 - Classes: Full descriptive names (avoid abbreviations)

@@ -7,15 +7,15 @@ public class PendingExport
     // this object will get created/updated when:
     // - a synchronisation is performed on a Connected System Object not in the Connected System this Pending Export
     //   is for, and where that sync results in changes to this Connected System.
-    // - a Metaverse Object change is commited to an object along the same lines. If the change would result in this
+    // - a Metaverse Object change is committed to an object along the same lines. If the change would result in this
     //   Connected System being updated, then a Pending Export object is needed (essentially, an MVO change results
     //   in the same outcome, a change to this Connected System).
-    
+
     // the pending export is processed on an export sync run, with the change being attempted against
     // the connected system. Changes would be made and then when a confirming import and sync is performed, the sync
     // would work out if the Pending Export was fully applied. If only partially applied, then the Pending Export
     // will have the relevant committed changes removed and any error count necessary, increased.
-    
+
     // this allows the admin to see what exports are failing, whether it's just once, or multiple times.
 
     // expected results for export operations:
