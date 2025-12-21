@@ -667,6 +667,32 @@ catch {
     # Continue - mappings can be configured manually if needed
 }
 
+# Step 6d: Configure Deletion Rules
+Write-TestStep "Step 6d" "Configuring Deletion Rules"
+
+try {
+    # Get the Metaverse User object type
+    $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+
+    if ($mvUserType) {
+        # Configure deletion rules with a grace period
+        # This allows the Reconnection test to work - when a user is removed from HR
+        # and re-added within the grace period, their MVO is preserved
+        Set-JIMMetaverseObjectType -Id $mvUserType.id `
+            -DeletionRule WhenLastConnectorDisconnected `
+            -DeletionGracePeriodDays 7 | Out-Null
+
+        Write-Host "  ✓ Deletion rule configured: WhenLastConnectorDisconnected with 7-day grace period" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  ⚠ Could not find User object type in Metaverse" -ForegroundColor Yellow
+    }
+}
+catch {
+    Write-Host "  ⚠ Could not configure deletion rules: $_" -ForegroundColor Yellow
+    Write-Host "    Reconnection test may fail without grace period configured" -ForegroundColor DarkYellow
+}
+
 # Step 7: Create Run Profiles
 Write-TestStep "Step 7" "Creating Run Profiles"
 
