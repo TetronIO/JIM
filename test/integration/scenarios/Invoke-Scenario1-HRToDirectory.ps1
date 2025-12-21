@@ -424,19 +424,27 @@ try {
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
-        # Validate user removed/disabled in AD
-        Write-Host "Validating deprovisioning in AD..." -ForegroundColor Gray
+        # Validate user state in AD
+        # With a 7-day grace period configured, the MVO won't be deleted immediately,
+        # so the user should still exist in AD but the CSO should be disconnected
+        Write-Host "Validating leaver state in AD..." -ForegroundColor Gray
 
         $adUserCheck = docker exec samba-ad-primary samba-tool user show $userToRemove 2>&1
 
-        # User should either be deleted or disabled depending on deletion rules
-        if ($LASTEXITCODE -ne 0 -or $adUserCheck -match "disabled") {
-            Write-Host "  ✓ User $userToRemove deprovisioned in AD" -ForegroundColor Green
+        if ($LASTEXITCODE -eq 0) {
+            # User still exists in AD - expected with grace period
+            Write-Host "  ✓ User $userToRemove still exists in AD (within grace period)" -ForegroundColor Green
+            Write-Host "    Note: User will be deleted after 7-day grace period expires" -ForegroundColor DarkGray
+            $testResults.Steps += @{ Name = "Leaver"; Success = $true }
+        }
+        elseif ($adUserCheck -match "Unable to find user") {
+            # User was deleted - unexpected with grace period, but not a failure
+            Write-Host "  ✓ User $userToRemove deleted from AD" -ForegroundColor Green
             $testResults.Steps += @{ Name = "Leaver"; Success = $true }
         }
         else {
-            Write-Host "  ⚠ User $userToRemove still active in AD (check deletion rules)" -ForegroundColor Yellow
-            $testResults.Steps += @{ Name = "Leaver"; Success = $true; Warning = "User not deleted (may be expected based on rules)" }
+            Write-Host "  ✗ Unexpected state for $userToRemove in AD" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "Leaver"; Success = $false; Error = "Unexpected AD state: $adUserCheck" }
         }
         $stepTimings["3. Leaver"] = (Get-Date) - $step3Start
     }
@@ -468,38 +476,58 @@ try {
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
-        # Remove user (simulating quit)
-        Write-Host "  Removing user (simulating quit)..." -ForegroundColor Gray
-        $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.reconnect" }
-        $csvContent | Set-Content $csvPath
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
-
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
-
-        # Restore user (simulating rehire before grace period)
-        Write-Host "  Restoring user (simulating rehire)..." -ForegroundColor Gray
-        Add-Content -Path $csvPath -Value $csvLine
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
-
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
-
-        # Verify user still exists (reconnection should preserve AD account)
-        $adUserCheck = docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1
-
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ Reconnection successful - user preserved in AD" -ForegroundColor Green
-            $testResults.Steps += @{ Name = "Reconnection"; Success = $true }
+        # Verify user was created in AD
+        $initialCheck = docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  ✗ User was not created in AD during initial sync" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User not provisioned during initial sync" }
+            $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
         }
         else {
-            Write-Host "  ✗ Reconnection failed - user lost in AD" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User deleted instead of preserved" }
+            Write-Host "  ✓ User exists in AD after initial sync" -ForegroundColor Green
+
+            # Remove user (simulating quit)
+            Write-Host "  Removing user (simulating quit)..." -ForegroundColor Gray
+            $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.reconnect" }
+            $csvContent | Set-Content $csvPath
+            docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+            Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
+
+            # Verify user still exists in AD (grace period should prevent deletion)
+            $afterRemovalCheck = docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ User still in AD after removal (grace period active)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  ⚠ User missing from AD after removal sync" -ForegroundColor Yellow
+            }
+
+            # Restore user (simulating rehire before grace period)
+            Write-Host "  Restoring user (simulating rehire)..." -ForegroundColor Gray
+            Add-Content -Path $csvPath -Value $csvLine
+            docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+            Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
+
+            # Verify user still exists (reconnection should preserve AD account)
+            $adUserCheck = docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ Reconnection successful - user preserved in AD" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "Reconnection"; Success = $true }
+            }
+            else {
+                Write-Host "  ✗ Reconnection failed - user lost in AD" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User deleted instead of preserved" }
+            }
+            $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
         }
-        $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
     }
 
     # Summary
