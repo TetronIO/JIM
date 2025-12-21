@@ -379,7 +379,7 @@ All templates generate realistic enterprise data following normal distribution p
 | 1 | **Joiner** | User added to HR CSV → provisioned to AD with correct attributes and group memberships |
 | 2a | **Mover** | User title changed in CSV → attribute updated in AD (no DN impact) |
 | 2b | **Mover-Rename** | User name changed in CSV → DN renamed in AD (same container) |
-| 2c | **Mover-Move** | User department changed in CSV → DN recalculated with new OU, LDAP move operation executed |
+| 2c | **Mover-Move** | User department changed in CSV (Admin→Finance) → DN recalculated with new OU, LDAP move operation executed |
 | 3 | **Leaver** | User removed from CSV → deprovisioned from AD (respecting deletion rules) |
 | 4 | **Reconnection** | User re-added to CSV within grace period → scheduled deletion cancelled |
 
@@ -419,7 +419,7 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 | `-Step Joiner` | Creates test user(s) in HR CSV | User exists in AD with correct attributes |
 | `-Step Mover` | Modifies title in CSV | Title attribute updated in AD (no DN change) |
 | `-Step Mover-Rename` | Changes user name in CSV | DN renamed in AD (CN component changed) |
-| `-Step Mover-Move` | Changes department (IT→Finance) | User moved from OU=IT to OU=Finance via LDAP move operation |
+| `-Step Mover-Move` | Changes department (Admin→Finance) | User moved from OU=Admin to OU=Finance via LDAP move operation |
 | `-Step Leaver` | Removes user from HR CSV | User disabled/deleted in AD per deletion rules |
 | `-Step Reconnection` | Re-adds user to CSV | Scheduled deletion cancelled, user remains active |
 | `-Step All` | Runs all steps sequentially | Full lifecycle validated |

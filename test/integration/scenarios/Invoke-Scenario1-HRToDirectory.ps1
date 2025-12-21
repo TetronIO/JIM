@@ -331,8 +331,9 @@ try {
         Write-Host "Updating user department to trigger OU move..." -ForegroundColor Gray
 
         # The DN is computed from Department: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=testdomain,DC=local"
-        # Change test.joiner's department from "IT" to "Finance"
-        # This should trigger an LDAP move from OU=IT to OU=Finance
+        # Change test.joiner's department from "Admin" to "Finance"
+        # (test.joiner was created with index 9999, which gives department index 9999 % 10 = 9 = Admin)
+        # This should trigger an LDAP move from OU=Admin to OU=Finance
         #
         # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName,dn
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
@@ -341,14 +342,14 @@ try {
         # Get the current user info to determine current department
         $currentLine = $csvContent | Where-Object { $_ -match "test\.joiner" } | Select-Object -First 1
 
-        # Change department from IT to Finance
+        # Change department from Admin to Finance
         $updatedContent = $csvContent | ForEach-Object {
             if ($_ -match "test\.joiner") {
                 # Update department column (index 4, 0-based)
-                # Pattern: "...","IT","..." → "...","Finance","..."
-                $line = $_ -replace ',"IT",', ',"Finance",'
+                # Pattern: "...","Admin","..." → "...","Finance","..."
+                $line = $_ -replace ',"Admin",', ',"Finance",'
                 # Update DN to reflect new OU
-                $line = $line -replace ',OU=IT,', ',OU=Finance,'
+                $line = $line -replace ',OU=Admin,', ',OU=Finance,'
                 $line
             }
             else {
@@ -357,7 +358,7 @@ try {
         }
 
         $updatedContent | Set-Content $csvPath
-        Write-Host "  ✓ Changed department from IT to Finance (triggers OU move)" -ForegroundColor Green
+        Write-Host "  ✓ Changed department from Admin to Finance (triggers OU move)" -ForegroundColor Green
 
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
