@@ -359,7 +359,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             Status = cso.Status,
             TypeId = cso.Type.Id,
             TypeName = cso.Type.Name,
-            DisplayName = cso.AttributeValues.Any(av => av.Attribute.Name.ToLower() == "displayname") ? cso.AttributeValues.Single(av => av.Attribute.Name.ToLower() == "displayname").StringValue : null,
+            DisplayName = cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname")) ? cso.AttributeValues.Single(av => EF.Functions.ILike(av.Attribute.Name, "displayname")).StringValue : null,
             ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
             SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId)
         });
@@ -512,9 +512,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
+        // External ID matching is case-sensitive to respect connected system identity
         return await Repository.Database.ConnectedSystemObjects.Where(cso =>
             cso.ConnectedSystem.Id == connectedSystemId &&
-            cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == attributeValue.ToLower())).Select(cso => cso.Id).SingleOrDefaultAsync();
+            cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue == attributeValue)).Select(cso => cso.Id).SingleOrDefaultAsync();
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
@@ -539,9 +540,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
+            // External ID matching is case-sensitive to respect connected system identity
             .SingleOrDefaultAsync(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
-                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == attributeValue.ToLower()));
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue == attributeValue));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
@@ -575,8 +577,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
-        // Use EF.Functions.ILike for case-insensitive comparison in PostgreSQL
-        var lowerValue = secondaryExternalIdValue.ToLowerInvariant();
+        // External ID matching is case-sensitive to respect connected system identity
         return await Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
@@ -588,7 +589,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.AttributeValues.Any(av =>
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
-                    av.StringValue.ToLower() == lowerValue));
+                    av.StringValue == secondaryExternalIdValue));
     }
 
     public async Task<int> GetConnectedSystemObjectCountAsync()
@@ -948,17 +949,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             query = query.Where(pe => statusList.Contains(pe.Status));
 
         // Apply search filter - search on target identifier, source MVO display name, or error message
+        // Search is case-insensitive for user convenience
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchLower = searchQuery.ToLower();
+            var searchPattern = $"%{searchQuery}%";
             query = query.Where(pe =>
-                (pe.LastErrorMessage != null && pe.LastErrorMessage.ToLower().Contains(searchLower)) ||
+                (pe.LastErrorMessage != null && EF.Functions.ILike(pe.LastErrorMessage, searchPattern)) ||
                 (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
                     .Any(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId &&
-                         av.StringValue != null && av.StringValue.ToLower().Contains(searchLower))) ||
+                         av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern))) ||
                 (pe.SourceMetaverseObject != null && pe.SourceMetaverseObject.AttributeValues
-                    .Any(av => av.Attribute != null && av.Attribute.Name.ToLower() == "displayname" &&
-                         av.StringValue != null && av.StringValue.ToLower().Contains(searchLower))));
+                    .Any(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname") &&
+                         av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern))));
         }
 
         // Apply sorting
@@ -986,13 +988,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             "sourcemvo" => sortDescending
                 ? query.OrderByDescending(pe => pe.SourceMetaverseObject != null
                     ? pe.SourceMetaverseObject.AttributeValues
-                        .Where(av => av.Attribute != null && av.Attribute.Name.ToLower() == "displayname")
+                        .Where(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname"))
                         .Select(av => av.StringValue)
                         .FirstOrDefault()
                     : null)
                 : query.OrderBy(pe => pe.SourceMetaverseObject != null
                     ? pe.SourceMetaverseObject.AttributeValues
-                        .Where(av => av.Attribute != null && av.Attribute.Name.ToLower() == "displayname")
+                        .Where(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname"))
                         .Select(av => av.StringValue)
                         .FirstOrDefault()
                     : null),
@@ -1032,7 +1034,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (pe.SourceMetaverseObject != null)
             {
                 sourceMvoDisplayName = pe.SourceMetaverseObject.AttributeValues?
-                    .FirstOrDefault(av => av.Attribute?.Name?.ToLower() == "displayname")?.StringValue;
+                    .FirstOrDefault(av => av.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)?.StringValue;
             }
 
             return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);

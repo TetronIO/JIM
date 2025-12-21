@@ -232,6 +232,16 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - No cloud service dependencies (no Azure Key Vault, AWS KMS, etc.)
 - All features must work with on-premises infrastructure only
 
+**No Third-Party Product References:**
+- NEVER mention competing or third-party identity management products in code, comments, or documentation
+- This includes products like MIM, FIM, Entra ID, Okta, SailPoint, etc.
+- JIM documentation should stand on its own without comparisons to other products
+- Use generic/abstract terms to preserve context without naming products:
+  - "other identity management systems" or "traditional ILM solutions"
+  - "SQL Server-based ILM systems" instead of naming specific products
+  - "enterprise identity platforms" for general comparisons
+- Exception: Generic industry terms and standards (SCIM, LDAP, OIDC, etc.) are acceptable
+
 ## Feature Planning
 
 **IMPORTANT: When creating plans for new features or significant changes:**

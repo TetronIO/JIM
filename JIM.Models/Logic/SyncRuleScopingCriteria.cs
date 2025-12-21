@@ -29,7 +29,14 @@ public class SyncRuleScopingCriteria
 
     public bool? BoolValue { get; set; }
 
-    public Guid? GuidValue {  get; set; }
+    public Guid? GuidValue { get; set; }
+
+    /// <summary>
+    /// When true (default), value comparisons are case-sensitive.
+    /// When false, comparisons ignore case differences.
+    /// Only applies to text/string comparisons.
+    /// </summary>
+    public bool CaseSensitive { get; set; } = true;
 
     /// <summary>
     /// Gets the data type of the attribute being evaluated (from either MV or CS attribute).

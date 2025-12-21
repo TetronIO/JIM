@@ -101,7 +101,7 @@ public class ScopingEvaluationServer
         // Evaluate based on attribute type
         return criterion.MetaverseAttribute.Type switch
         {
-            AttributeDataType.Text => EvaluateStringComparison(mvoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType),
+            AttributeDataType.Text => EvaluateStringComparison(mvoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(mvoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.DateTime => EvaluateDateTimeComparison(mvoAttributeValue.DateTimeValue, criterion.DateTimeValue, criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(mvoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
@@ -198,7 +198,7 @@ public class ScopingEvaluationServer
         // Evaluate based on attribute type
         return criterion.ConnectedSystemAttribute.Type switch
         {
-            AttributeDataType.Text => EvaluateStringComparison(csoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType),
+            AttributeDataType.Text => EvaluateStringComparison(csoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(csoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.DateTime => EvaluateDateTimeComparison(csoAttributeValue.DateTimeValue, criterion.DateTimeValue, criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(csoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
@@ -211,18 +211,20 @@ public class ScopingEvaluationServer
 
     #region Comparison Helpers
 
-    private bool EvaluateStringComparison(string? actual, string? expected, SearchComparisonType comparisonType)
+    private bool EvaluateStringComparison(string? actual, string? expected, SearchComparisonType comparisonType, bool caseSensitive = true)
     {
+        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
         return comparisonType switch
         {
-            SearchComparisonType.Equals => string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase),
-            SearchComparisonType.NotEquals => !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase),
-            SearchComparisonType.StartsWith => actual?.StartsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false,
-            SearchComparisonType.NotStartsWith => !(actual?.StartsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false),
-            SearchComparisonType.EndsWith => actual?.EndsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false,
-            SearchComparisonType.NotEndsWith => !(actual?.EndsWith(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false),
-            SearchComparisonType.Contains => actual?.Contains(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false,
-            SearchComparisonType.NotContains => !(actual?.Contains(expected ?? "", StringComparison.OrdinalIgnoreCase) ?? false),
+            SearchComparisonType.Equals => string.Equals(actual, expected, comparison),
+            SearchComparisonType.NotEquals => !string.Equals(actual, expected, comparison),
+            SearchComparisonType.StartsWith => actual?.StartsWith(expected ?? "", comparison) ?? false,
+            SearchComparisonType.NotStartsWith => !(actual?.StartsWith(expected ?? "", comparison) ?? false),
+            SearchComparisonType.EndsWith => actual?.EndsWith(expected ?? "", comparison) ?? false,
+            SearchComparisonType.NotEndsWith => !(actual?.EndsWith(expected ?? "", comparison) ?? false),
+            SearchComparisonType.Contains => actual?.Contains(expected ?? "", comparison) ?? false,
+            SearchComparisonType.NotContains => !(actual?.Contains(expected ?? "", comparison) ?? false),
             _ => false
         };
     }

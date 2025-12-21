@@ -1839,7 +1839,8 @@ public class SynchronisationController(
             IntValue = request.IntValue,
             DateTimeValue = request.DateTimeValue,
             BoolValue = request.BoolValue,
-            GuidValue = request.GuidValue
+            GuidValue = request.GuidValue,
+            CaseSensitive = request.CaseSensitive
         };
 
         // Set the appropriate attribute based on sync rule direction
@@ -2066,7 +2067,8 @@ public class SynchronisationController(
             ConnectedSystemObjectTypeId = objectType.Id,
             ConnectedSystemObjectType = objectType,
             TargetMetaverseAttributeId = targetMvAttr.Id,
-            TargetMetaverseAttribute = targetMvAttr
+            TargetMetaverseAttribute = targetMvAttr,
+            CaseSensitive = request.CaseSensitive
         };
 
         // Add sources
@@ -2214,6 +2216,10 @@ public class SynchronisationController(
                 rule.Sources.Add(source);
             }
         }
+
+        // Update case sensitivity if specified
+        if (request.CaseSensitive.HasValue)
+            rule.CaseSensitive = request.CaseSensitive.Value;
 
         try
         {

@@ -361,11 +361,12 @@ public class MetaverseRepository : IMetaverseRepository
         }
 
         // Apply search filter - searches across all attribute values
+        // Search is case-insensitive for user convenience
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchLower = searchQuery.ToLower();
+            var searchPattern = $"%{searchQuery}%";
             objects = objects.Where(o => o.AttributeValues.Any(av =>
-                av.StringValue != null && av.StringValue.ToLower().Contains(searchLower)));
+                av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern)));
         }
 
         // Apply sorting - sort by attribute value if specified, otherwise by Created date

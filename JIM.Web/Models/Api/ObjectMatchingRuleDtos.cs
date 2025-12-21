@@ -95,6 +95,12 @@ public class ObjectMatchingRuleDto
     public List<ObjectMatchingRuleSourceDto> Sources { get; set; } = new();
 
     /// <summary>
+    /// When true (default), attribute value comparisons are case-sensitive.
+    /// When false, comparisons ignore case differences.
+    /// </summary>
+    public bool CaseSensitive { get; set; } = true;
+
+    /// <summary>
     /// When the rule was created.
     /// </summary>
     public DateTime Created { get; set; }
@@ -113,6 +119,7 @@ public class ObjectMatchingRuleDto
             TargetMetaverseAttributeId = rule.TargetMetaverseAttributeId,
             TargetMetaverseAttributeName = rule.TargetMetaverseAttribute?.Name,
             Sources = rule.Sources.Select(ObjectMatchingRuleSourceDto.FromEntity).ToList(),
+            CaseSensitive = rule.CaseSensitive,
             Created = rule.Created
         };
     }
