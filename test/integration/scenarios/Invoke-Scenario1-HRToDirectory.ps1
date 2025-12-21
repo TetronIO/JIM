@@ -152,12 +152,12 @@ try {
         $testUser.Email = "test.joiner@testdomain.local"
         $testUser.DisplayName = "Test Joiner"
 
-        # Add user to CSV file (with new columns: userPrincipalName and dn)
+        # Add user to CSV file
         # Note: Using test/test-data path as that's what's mounted to JIM containers via docker-compose.override.codespaces.yml
+        # DN is calculated dynamically by the export sync rule expression, not stored in the CSV
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
-        $dn = "CN=$($testUser.DisplayName),CN=Users,DC=testdomain,DC=local"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`",`"$dn`""
+        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         Write-Host "  ✓ Added test.joiner to CSV" -ForegroundColor Green
@@ -453,11 +453,10 @@ try {
         $reconnectUser.EmployeeId = "EMP888888"
         $reconnectUser.SamAccountName = "test.reconnect"
 
-        # Add to CSV (with new columns: userPrincipalName and dn)
+        # Add to CSV (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($reconnectUser.SamAccountName)@testdomain.local"
-        $dn = "CN=Test Reconnect,CN=Users,DC=testdomain,DC=local"
-        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"Test Reconnect`",`"Active`",`"$upn`",`"$dn`""
+        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"Test Reconnect`",`"Active`",`"$upn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv

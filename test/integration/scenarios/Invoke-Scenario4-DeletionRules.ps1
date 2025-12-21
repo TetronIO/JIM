@@ -147,11 +147,10 @@ try {
         $testUser.Email = "test.leaver@testdomain.local"
         $testUser.DisplayName = "Test Leaver"
 
-        # Add user to CSV
+        # Add user to CSV (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
-        $dn = "CN=$($testUser.DisplayName),CN=Users,DC=testdomain,DC=local"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`",`"$dn`""
+        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         Write-Host "  ✓ Added test.leaver to CSV" -ForegroundColor Green
@@ -224,11 +223,10 @@ try {
         $reconnectUser.Email = "test.reconnect2@testdomain.local"
         $reconnectUser.DisplayName = "Test Reconnect Two"
 
-        # Add user to CSV
+        # Add user to CSV (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($reconnectUser.SamAccountName)@testdomain.local"
-        $dn = "CN=$($reconnectUser.DisplayName),CN=Users,DC=testdomain,DC=local"
-        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"$($reconnectUser.DisplayName)`",`"Active`",`"$upn`",`"$dn`""
+        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"$($reconnectUser.DisplayName)`",`"Active`",`"$upn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv

@@ -130,11 +130,10 @@ try {
         $testUser.Email = "test.projection@testdomain.local"
         $testUser.DisplayName = "Test Projection User"
 
-        # Add user to CSV
+        # Add user to CSV (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
-        $dn = "CN=$($testUser.DisplayName),CN=Users,DC=testdomain,DC=local"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`",`"$dn`""
+        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         Write-Host "  Added test.projection to CSV with EmployeeId=$($testUser.EmployeeId)" -ForegroundColor Gray
@@ -180,10 +179,10 @@ try {
         $testUser.Email = "test.join@testdomain.local"
         $testUser.DisplayName = "Test Join User"
 
+        # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
-        $dn = "CN=$($testUser.DisplayName),CN=Users,DC=testdomain,DC=local"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`",`"$dn`""
+        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`""
 
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
@@ -255,10 +254,10 @@ try {
         $testUser1.Email = "test.duplicate1@testdomain.local"
         $testUser1.DisplayName = "Test Duplicate User One"
 
+        # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn1 = "$($testUser1.SamAccountName)@testdomain.local"
-        $dn1 = "CN=$($testUser1.DisplayName),CN=Users,DC=testdomain,DC=local"
-        $csvLine1 = "`"$($testUser1.EmployeeId)`",`"$($testUser1.FirstName)`",`"$($testUser1.LastName)`",`"$($testUser1.Email)`",`"$($testUser1.Department)`",`"$($testUser1.Title)`",`"$($testUser1.SamAccountName)`",`"$($testUser1.DisplayName)`",`"Active`",`"$upn1`",`"$dn1`""
+        $csvLine1 = "`"$($testUser1.EmployeeId)`",`"$($testUser1.FirstName)`",`"$($testUser1.LastName)`",`"$($testUser1.Email)`",`"$($testUser1.Department)`",`"$($testUser1.Title)`",`"$($testUser1.SamAccountName)`",`"$($testUser1.DisplayName)`",`"Active`",`"$upn1`""
 
         Add-Content -Path $csvPath -Value $csvLine1
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
@@ -277,9 +276,9 @@ try {
         $testUser2.Email = "test.duplicate2@testdomain.local"
         $testUser2.DisplayName = "Test Duplicate User Two"
 
+        # DN is calculated dynamically by the export sync rule expression
         $upn2 = "$($testUser2.SamAccountName)@testdomain.local"
-        $dn2 = "CN=$($testUser2.DisplayName),CN=Users,DC=testdomain,DC=local"
-        $csvLine2 = "`"$($testUser2.EmployeeId)`",`"$($testUser2.FirstName)`",`"$($testUser2.LastName)`",`"$($testUser2.Email)`",`"$($testUser2.Department)`",`"$($testUser2.Title)`",`"$($testUser2.SamAccountName)`",`"$($testUser2.DisplayName)`",`"Active`",`"$upn2`",`"$dn2`""
+        $csvLine2 = "`"$($testUser2.EmployeeId)`",`"$($testUser2.FirstName)`",`"$($testUser2.LastName)`",`"$($testUser2.Email)`",`"$($testUser2.Department)`",`"$($testUser2.Title)`",`"$($testUser2.SamAccountName)`",`"$($testUser2.DisplayName)`",`"Active`",`"$upn2`""
 
         Add-Content -Path $csvPath -Value $csvLine2
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
@@ -381,10 +380,10 @@ try {
                 $testUser1.Email = "test.multirule@testdomain.local"  # This email will be shared
                 $testUser1.DisplayName = "Test MultiRule First"
 
+                # DN is calculated dynamically by the export sync rule expression
                 $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
                 $upn1 = "$($testUser1.SamAccountName)@testdomain.local"
-                $dn1 = "CN=$($testUser1.DisplayName),CN=Users,DC=testdomain,DC=local"
-                $csvLine1 = "`"$($testUser1.EmployeeId)`",`"$($testUser1.FirstName)`",`"$($testUser1.LastName)`",`"$($testUser1.Email)`",`"$($testUser1.Department)`",`"$($testUser1.Title)`",`"$($testUser1.SamAccountName)`",`"$($testUser1.DisplayName)`",`"Active`",`"$upn1`",`"$dn1`""
+                $csvLine1 = "`"$($testUser1.EmployeeId)`",`"$($testUser1.FirstName)`",`"$($testUser1.LastName)`",`"$($testUser1.Email)`",`"$($testUser1.Department)`",`"$($testUser1.Title)`",`"$($testUser1.SamAccountName)`",`"$($testUser1.DisplayName)`",`"Active`",`"$upn1`""
 
                 Add-Content -Path $csvPath -Value $csvLine1
                 docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
@@ -427,9 +426,9 @@ try {
                     $testUser2.Email = "test.multirule@testdomain.local"  # SAME email (rule 2 should match)
                     $testUser2.DisplayName = "Test MultiRule Second"
 
+                    # DN is calculated dynamically by the export sync rule expression
                     $upn2 = "$($testUser2.SamAccountName)@testdomain.local"
-                    $dn2 = "CN=$($testUser2.DisplayName),CN=Users,DC=testdomain,DC=local"
-                    $csvLine2 = "`"$($testUser2.EmployeeId)`",`"$($testUser2.FirstName)`",`"$($testUser2.LastName)`",`"$($testUser2.Email)`",`"$($testUser2.Department)`",`"$($testUser2.Title)`",`"$($testUser2.SamAccountName)`",`"$($testUser2.DisplayName)`",`"Active`",`"$upn2`",`"$dn2`""
+                    $csvLine2 = "`"$($testUser2.EmployeeId)`",`"$($testUser2.FirstName)`",`"$($testUser2.LastName)`",`"$($testUser2.Email)`",`"$($testUser2.Department)`",`"$($testUser2.Title)`",`"$($testUser2.SamAccountName)`",`"$($testUser2.DisplayName)`",`"Active`",`"$upn2`""
 
                     Add-Content -Path $csvPath -Value $csvLine2
                     docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
