@@ -1,8 +1,9 @@
 # Case Sensitivity Strategy
 
-> **Status**: Planned
+> **Status**: Complete
 > **Milestone**: MVP
 > **Related Issue**: #203 (Phase 8)
+> **Branch**: `feature/case-sensitivity-strategy`
 
 ## Overview
 
@@ -256,15 +257,32 @@ New-JIMScopingCriteria -SyncRuleId $ruleId `
 
 ## Success Criteria
 
-- [ ] All `CurrentCultureIgnoreCase` and `InvariantCultureIgnoreCase` replaced with appropriate `Ordinal`/`OrdinalIgnoreCase`
-- [ ] All `.ToLower()/.ToUpper()` patterns replaced with `StringComparison` parameters
-- [ ] External ID matching is case-sensitive
-- [ ] Attribute value change detection is case-sensitive
-- [ ] Matching rules support configurable case sensitivity
-- [ ] Scoping criteria support configurable case sensitivity
-- [ ] Unit tests cover case sensitivity scenarios
-- [ ] Integration tests verify end-to-end behaviour
-- [ ] Documentation updated
+- [x] All `CurrentCultureIgnoreCase` and `InvariantCultureIgnoreCase` replaced with appropriate `Ordinal`/`OrdinalIgnoreCase`
+- [x] All `.ToLower()/.ToUpper()` patterns replaced with `StringComparison` parameters
+- [x] External ID matching is case-sensitive
+- [x] Attribute value change detection is case-sensitive
+- [x] Matching rules support configurable case sensitivity
+- [x] Scoping criteria support configurable case sensitivity
+- [x] Unit tests cover case sensitivity scenarios
+- [x] Integration tests verify end-to-end behaviour
+- [x] Documentation updated
+
+## Implementation Summary
+
+### Completed Changes
+
+| Task | Files Modified | Description |
+|------|----------------|-------------|
+| Standardise StringComparison | `SyncImportTaskProcessor.cs`, `ServiceSettingsRepository.cs`, `ConnectedSystemObject.cs` | Changed `CurrentCultureIgnoreCase` → `OrdinalIgnoreCase`, `InvariantCultureIgnoreCase` → `Ordinal` |
+| External ID case-sensitive | `ConnectedSystemRepository.cs` | Removed `.ToLower()` patterns from external ID lookups |
+| ObjectMatchingRule.CaseSensitive | `ObjectMatchingRule.cs` | Added property with `true` default |
+| SyncRuleScopingCriteria.CaseSensitive | `SyncRuleScopingCriteria.cs` | Added property with `true` default |
+| ScopingEvaluationServer | `ScopingEvaluationServer.cs` | Updated `EvaluateStringComparison` to use `caseSensitive` parameter |
+| Matching rule evaluation | `MetaverseRepository.cs`, `ConnectedSystemRepository.cs` | Updated `FindMetaverseObjectUsingMatchingRuleAsync` and `FindConnectedSystemObjectUsingMatchingRuleAsync` to respect `CaseSensitive` |
+| Database migration | `20251221185120_AddCaseSensitiveToMatchingAndScopingRules.cs` | Added columns with `defaultValue: true` |
+| API DTOs | `ObjectMatchingRuleDtos.cs`, `ObjectMatchingRuleRequestDtos.cs`, `SyncRuleScopingCriteriaDtos.cs` | Added `CaseSensitive` property |
+| Controller updates | `SynchronisationController.cs` | Updated create/update endpoints |
+| Unit tests | `ScopingEvaluationTests.cs` | Tests for scoping with case-sensitive and case-insensitive modes |
 
 ## Benefits
 
