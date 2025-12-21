@@ -142,6 +142,7 @@ function Write-Warning {
 
 # Record start time
 $startTime = Get-Date
+$timings = @{}
 
 Write-Banner "JIM Integration Test Runner"
 
@@ -159,6 +160,7 @@ Write-Host ""
 Set-Location $repoRoot
 
 # Step 1: Reset (unless skipped)
+$step1Start = Get-Date
 if (-not $SkipReset) {
     Write-Section "Step 1: Resetting JIM Environment"
 
@@ -175,8 +177,10 @@ else {
     Write-Section "Step 1: Reset Skipped"
     Write-Warning "Using existing environment (SkipReset specified)"
 }
+$timings["1. Reset"] = (Get-Date) - $step1Start
 
 # Step 2: Build (unless skipped)
+$step2Start = Get-Date
 if (-not $SkipBuild -and -not $SkipReset) {
     Write-Section "Step 2: Building Docker Images"
 
@@ -197,8 +201,10 @@ else {
     Write-Section "Step 2: Build Skipped"
     Write-Warning "Using existing images (SkipReset implies existing environment)"
 }
+$timings["2. Build"] = (Get-Date) - $step2Start
 
 # Step 3: Start services
+$step3Start = Get-Date
 Write-Section "Step 3: Starting Services"
 
 Write-Step "Starting JIM stack..."
@@ -220,8 +226,10 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Success "Samba AD started"
+$timings["3. Start Services"] = (Get-Date) - $step3Start
 
 # Step 4: Wait for services
+$step4Start = Get-Date
 Write-Section "Step 4: Waiting for Services"
 
 # Wait for Samba AD
@@ -239,8 +247,10 @@ else {
     Write-Warning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
     Start-Sleep -Seconds 60
 }
+$timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
 # Step 5: Setup API Key
+$step5Start = Get-Date
 Write-Section "Step 5: Setting Up API Key"
 
 # Generate API key
@@ -311,8 +321,10 @@ if (-not $jimReady) {
     exit 1
 }
 Write-Success "JIM.Web is ready"
+$timings["5. Setup API Key"] = (Get-Date) - $step5Start
 
 # Step 6: Run test scenario
+$step6Start = Get-Date
 Write-Section "Step 6: Running Test Scenario"
 
 $scenarioScript = Join-Path $scriptRoot "scenarios" "Invoke-$Scenario.ps1"
@@ -330,6 +342,7 @@ Write-Host ""
 
 & $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey -RunProfileTimeout $RunProfileTimeout
 $scenarioExitCode = $LASTEXITCODE
+$timings["6. Run Tests"] = (Get-Date) - $step6Start
 
 # Summary
 $endTime = Get-Date
@@ -337,14 +350,31 @@ $duration = $endTime - $startTime
 
 Write-Banner "Test Run Complete"
 
-Write-Host "${GRAY}Duration: $($duration.ToString('hh\:mm\:ss'))${NC}"
+# Performance Summary
+Write-Section "Performance Summary"
+Write-Host ""
+Write-Host "${CYAN}Stage Timings:${NC}"
+
+# Sort timings by key (which has stage number prefix)
+$sortedTimings = $timings.GetEnumerator() | Sort-Object Name
+
+$totalSeconds = 0
+foreach ($timing in $sortedTimings) {
+    $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
+    $totalSeconds += $seconds
+    $bar = "█" * [math]::Min(50, [math]::Floor($seconds / 2))
+    Write-Host ("  {0,-25} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Green" })
+}
+
+Write-Host ""
+Write-Host "${CYAN}Total Duration: ${NC}$($duration.ToString('hh\:mm\:ss')) (${totalSeconds}s)"
 Write-Host ""
 
 if ($scenarioExitCode -eq 0) {
-    Write-Host "${GREEN}All tests passed!${NC}"
+    Write-Host "${GREEN}✓ All tests passed!${NC}"
 }
 else {
-    Write-Host "${RED}Some tests failed. Exit code: $scenarioExitCode${NC}"
+    Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"
 }
 
 Write-Host ""

@@ -74,8 +74,13 @@ $testResults = @{
     Success = $false
 }
 
+# Performance tracking
+$scenarioStartTime = Get-Date
+$stepTimings = @{}
+
 try {
     # Step 0: Setup JIM configuration
+    $step0Start = Get-Date
     Write-TestSection "Step 0: Setup JIM Configuration"
 
     if (-not $ApiKey) {
@@ -131,9 +136,11 @@ try {
     Import-Module $modulePath -Force -ErrorAction Stop
 
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+    $stepTimings["0. Setup"] = (Get-Date) - $step0Start
 
     # Test 1: Joiner (New Hire)
     if ($Step -eq "Joiner" -or $Step -eq "All") {
+        $step1Start = Get-Date
         Write-TestSection "Test 1: Joiner (New Hire)"
 
         Write-Host "Creating new test user in CSV..." -ForegroundColor Gray
@@ -189,10 +196,12 @@ try {
             Write-Host "  ✗ User 'test.joiner' NOT found in AD" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Joiner"; Success = $false; Error = "User not found in AD" }
         }
+        $stepTimings["1. Joiner"] = (Get-Date) - $step1Start
     }
 
     # Test 2a: Mover (Attribute Change - No DN Impact)
     if ($Step -eq "Mover" -or $Step -eq "All") {
+        $step2aStart = Get-Date
         Write-TestSection "Test 2a: Mover (Attribute Change)"
 
         Write-Host "Updating user title in CSV..." -ForegroundColor Gray
@@ -246,10 +255,12 @@ try {
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover"; Success = $false; Error = "Attribute not updated" }
         }
+        $stepTimings["2a. Mover"] = (Get-Date) - $step2aStart
     }
 
     # Test 2b: Mover - Rename (DN Change)
     if ($Step -eq "Mover" -or $Step -eq "All") {
+        $step2bStart = Get-Date
         Write-TestSection "Test 2b: Mover - Rename (DN Change)"
 
         Write-Host "Updating user display name in CSV (triggers AD rename)..." -ForegroundColor Gray
@@ -309,10 +320,12 @@ try {
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover-Rename"; Success = $false; Error = "DN not renamed" }
         }
+        $stepTimings["2b. Mover-Rename"] = (Get-Date) - $step2bStart
     }
 
     # Test 2c: Mover - Move (OU Change via Department)
     if ($Step -eq "Mover-Move" -or $Step -eq "All") {
+        $step2cStart = Get-Date
         Write-TestSection "Test 2c: Mover - Move (OU Change)"
 
         Write-Host "Updating user department to trigger OU move..." -ForegroundColor Gray
@@ -379,10 +392,12 @@ try {
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "OU move did not occur" }
         }
+        $stepTimings["2c. Mover-Move"] = (Get-Date) - $step2cStart
     }
 
     # Test 3: Leaver (Deprovisioning)
     if ($Step -eq "Leaver" -or $Step -eq "All") {
+        $step3Start = Get-Date
         Write-TestSection "Test 3: Leaver (Deprovisioning)"
 
         Write-Host "Removing user from CSV..." -ForegroundColor Gray
@@ -422,10 +437,12 @@ try {
             Write-Host "  ⚠ User $userToRemove still active in AD (check deletion rules)" -ForegroundColor Yellow
             $testResults.Steps += @{ Name = "Leaver"; Success = $true; Warning = "User not deleted (may be expected based on rules)" }
         }
+        $stepTimings["3. Leaver"] = (Get-Date) - $step3Start
     }
 
     # Test 4: Reconnection (Delete and Restore)
     if ($Step -eq "Reconnection" -or $Step -eq "All") {
+        $step4Start = Get-Date
         Write-TestSection "Test 4: Reconnection (Delete and Restore)"
 
         Write-Host "Testing delete and restore before grace period..." -ForegroundColor Gray
@@ -482,6 +499,7 @@ try {
             Write-Host "  ✗ Reconnection failed - user lost in AD" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User deleted instead of preserved" }
         }
+        $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
     }
 
     # Summary
@@ -505,6 +523,20 @@ try {
         if ($stepResult.ContainsKey('Warning') -and $stepResult.Warning) {
             Write-Host "  Warning: $($stepResult.Warning)" -ForegroundColor Yellow
         }
+    }
+
+    # Performance Summary
+    if ($stepTimings.Count -gt 0) {
+        Write-Host ""
+        Write-Host "Performance Breakdown:" -ForegroundColor Cyan
+        $totalTestTime = 0
+        foreach ($timing in $stepTimings.GetEnumerator() | Sort-Object Name) {
+            $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
+            $totalTestTime += $seconds
+            Write-Host ("  {0,-20} {1,6}s" -f $timing.Name, $seconds) -ForegroundColor Gray
+        }
+        $scenarioDuration = (Get-Date) - $scenarioStartTime
+        Write-Host ("  {0,-20} {1,6}s" -f "Total", [math]::Round($scenarioDuration.TotalSeconds, 1)) -ForegroundColor Cyan
     }
 
     $testResults.Success = ($successCount -eq $totalCount)
