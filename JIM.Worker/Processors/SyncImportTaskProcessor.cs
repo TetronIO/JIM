@@ -542,7 +542,7 @@ public class SyncImportTaskProcessor
         foreach (var importObjectAttribute in connectedSystemImportObject.Attributes)
         {
             // find the connected system schema attribute that has the same name
-            var csAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(importObjectAttribute.Name, StringComparison.CurrentCultureIgnoreCase));
+            var csAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(importObjectAttribute.Name, StringComparison.OrdinalIgnoreCase));
             if (csAttribute == null)
             {
                 // unexpected import attribute!
@@ -663,8 +663,8 @@ public class SyncImportTaskProcessor
             if (importedAttribute != null)
             {
                 // work out what data type this attribute is and get the matching imported object attribute
-                var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase));
-                var importedObjectAttributeList = connectedSystemImportObject.Attributes.Where(a => a.Name.Equals(csoAttributeName, StringComparison.CurrentCultureIgnoreCase)).ToList();
+                var csoAttribute = connectedSystemObject.Type.Attributes.Single(a => a.Name.Equals(csoAttributeName, StringComparison.OrdinalIgnoreCase));
+                var importedObjectAttributeList = connectedSystemImportObject.Attributes.Where(a => a.Name.Equals(csoAttributeName, StringComparison.OrdinalIgnoreCase)).ToList();
                 var importedObjectAttribute = importedObjectAttributeList[0];
 
                 // process attribute additions and removals...
@@ -721,11 +721,12 @@ public class SyncImportTaskProcessor
 
                     case AttributeDataType.Reference:
                         // find unresolved reference values on the cso that aren't on the imported object and remove them first
-                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)));
+                        // Note: Reference values are compared case-sensitively to preserve data fidelity from source systems
+                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.Ordinal)));
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingUnresolvedReferenceValues.Any(msav => msav.Id == av.Id)));
 
                         // find imported unresolved reference values that aren't on the cso and add them
-                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.InvariantCultureIgnoreCase)));
+                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.Ordinal)));
                         foreach (var newUnresolvedReferenceValue in newUnresolvedReferenceValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, UnresolvedReferenceValue = newUnresolvedReferenceValue });
                         break;

@@ -55,6 +55,12 @@ public class CreateObjectMatchingRuleRequest
     [Required]
     [MinLength(1, ErrorMessage = "At least one source must be specified.")]
     public List<CreateObjectMatchingRuleSourceRequest> Sources { get; set; } = new();
+
+    /// <summary>
+    /// When true (default), attribute value comparisons are case-sensitive.
+    /// When false, comparisons ignore case differences.
+    /// </summary>
+    public bool CaseSensitive { get; set; } = true;
 }
 
 /// <summary>
@@ -76,4 +82,10 @@ public class UpdateObjectMatchingRuleRequest
     /// If specified, replaces all sources with these new sources.
     /// </summary>
     public List<CreateObjectMatchingRuleSourceRequest>? Sources { get; set; }
+
+    /// <summary>
+    /// When true, attribute value comparisons are case-sensitive.
+    /// When false, comparisons ignore case differences.
+    /// </summary>
+    public bool? CaseSensitive { get; set; }
 }

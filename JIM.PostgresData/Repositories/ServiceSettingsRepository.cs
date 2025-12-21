@@ -22,7 +22,7 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
         }
         catch (PostgresException ex)
         {
-            if (!ex.Message.StartsWith("42P01: relation \"ServiceSettings\" does not exist", StringComparison.CurrentCultureIgnoreCase)) 
+            if (!ex.Message.StartsWith("42P01: relation \"ServiceSettings\" does not exist", StringComparison.OrdinalIgnoreCase)) 
                 throw;
                 
             Log.Verbose("JIM.PostgresData: GetServiceSettingsAsync() - Service Settings does not exist. We expect this in a new-db scenario where the app isn't ready yet.");

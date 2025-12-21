@@ -119,7 +119,8 @@ public class ScopingEvaluationTests
         {
             MetaverseAttribute = departmentAttr,
             ComparisonType = SearchComparisonType.Equals,
-            StringValue = "IT" // uppercase
+            StringValue = "IT", // uppercase
+            CaseSensitive = false // Explicitly set to case-insensitive
         });
         exportRule.ObjectScopingCriteriaGroups.Add(group);
 
@@ -127,7 +128,37 @@ public class ScopingEvaluationTests
         var result = _scopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule);
 
         // Assert
-        Assert.That(result, Is.True, "String comparison should be case-insensitive");
+        Assert.That(result, Is.True, "String comparison should be case-insensitive when CaseSensitive=false");
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_StringEqualsCaseSensitive_ReturnsFalse()
+    {
+        // Arrange - test that default case-sensitive behavior works
+        var departmentAttr = new MetaverseAttribute { Id = 1, Name = "Department", Type = AttributeDataType.Text };
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            AttributeId = 1,
+            Attribute = departmentAttr,
+            StringValue = "it" // lowercase
+        });
+
+        var exportRule = CreateExportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = departmentAttr,
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "IT" // uppercase - default CaseSensitive=true
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(group);
+
+        // Act
+        var result = _scopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule);
+
+        // Assert
+        Assert.That(result, Is.False, "String comparison should be case-sensitive by default");
     }
 
     [Test]

@@ -1042,6 +1042,7 @@
     private int _selectedMatchingRuleTabIndex;
     private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
     private MetaverseAttribute? _newMatchingRuleTargetAttribute;
+    private bool _newMatchingRuleCaseSensitive = true;
     private IList<MetaverseAttribute>? _metaverseAttributes;
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
@@ -1364,6 +1365,7 @@
             ConnectedSystemObjectType = objectType,
             TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute.Id,
             TargetMetaverseAttribute = _newMatchingRuleTargetAttribute,
+            CaseSensitive = _newMatchingRuleCaseSensitive,
             Sources = new List<ObjectMatchingRuleSource>
             {
                 new()
@@ -1385,6 +1387,7 @@
             // Reset the form
             _newMatchingRuleSourceAttribute = null;
             _newMatchingRuleTargetAttribute = null;
+            _newMatchingRuleCaseSensitive = true;
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
             StateHasChanged();
@@ -1417,6 +1420,30 @@
         {
             Log.Error(ex, "Failed to delete matching rule {RuleId}", rule.Id);
             Snackbar.Add($"Failed to delete matching rule: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleToggleMatchingRuleCaseSensitiveAsync(ObjectMatchingRule rule, bool caseSensitive)
+    {
+        if (_connectedSystem == null)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        try
+        {
+            rule.CaseSensitive = caseSensitive;
+            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
+
+            Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}.", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            // Revert the change on failure
+            rule.CaseSensitive = !caseSensitive;
+            Log.Error(ex, "Failed to update matching rule {RuleId}", rule.Id);
+            Snackbar.Add($"Failed to update matching rule: {ex.Message}", Severity.Error);
         }
     }
 
@@ -1981,13 +2008,13 @@
                           Elevation="0"
                           Class="mb-4">
                     <HeaderContent>
-                        <MudTh>Order</MudTh>
-                        <MudTh>Source Attribute</MudTh>
-                        <MudTh>Target MV Attribute</MudTh>
+                        <MudTh>Connected System Attribute</MudTh>
+                        <MudTh>Operator</MudTh>
+                        <MudTh>Metaverse Attribute</MudTh>
+                        <MudTh>Case Sensitive</MudTh>
                         <MudTh>Actions</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Order">@context.Order</MudTd>
                         <MudTd DataLabel="Source">
                             @if (context.Sources.Count > 0)
                             {
@@ -2010,7 +2037,14 @@
                                 <text>-</text>
                             }
                         </MudTd>
+                        <MudTd DataLabel="Operator">=</MudTd>
                         <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
+                        <MudTd DataLabel="Case Sensitive">
+                            <MudSwitch T="bool" Value="@context.CaseSensitive"
+                                       ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitiveAsync(context, value))"
+                                       Color="Color.Primary"
+                                       Size="Size.Small" />
+                        </MudTd>
                         <MudTd>
                             <MudTooltip Text="Move up">
                                 <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
@@ -2044,7 +2078,7 @@
                 <MudItem xs="12" md="5">
                     <MudSelect T="ConnectedSystemObjectTypeAttribute"
                                @bind-Value="_newMatchingRuleSourceAttribute"
-                               Label="Source CS Attribute"
+                               Label="Connected System Attribute"
                                Variant="Variant.Outlined"
                                HelperText="The Connected System attribute to match from">
                         @foreach (var attr in objectType.Attributes.Where(a => a.Selected).OrderBy(a => a.Name))
@@ -2059,7 +2093,7 @@
                 <MudItem xs="12" md="5">
                     <MudSelect T="MetaverseAttribute"
                                @bind-Value="_newMatchingRuleTargetAttribute"
-                               Label="Target MV Attribute"
+                               Label="Metaverse Attribute"
                                Variant="Variant.Outlined"
                                HelperText="The Metaverse attribute to match against">
                         @if (_metaverseAttributes != null)
@@ -2070,6 +2104,14 @@
                             }
                         }
                     </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudCheckBox T="bool" @bind-Value="_newMatchingRuleCaseSensitive"
+                                 Label="Case sensitive"
+                                 Color="Color.Primary" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        When enabled (default), attribute values must match exactly including case. When disabled, "John" matches "JOHN".
+                    </MudText>
                 </MudItem>
             </MudGrid>
 

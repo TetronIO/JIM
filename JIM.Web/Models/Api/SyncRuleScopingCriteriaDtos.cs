@@ -70,6 +70,13 @@ public class SyncRuleScopingCriteriaDto
     public Guid? GuidValue { get; set; }
 
     /// <summary>
+    /// When true (default), value comparisons are case-sensitive.
+    /// When false, comparisons ignore case differences.
+    /// Only applies to text/string comparisons.
+    /// </summary>
+    public bool CaseSensitive { get; set; } = true;
+
+    /// <summary>
     /// Creates a DTO from an entity.
     /// </summary>
     public static SyncRuleScopingCriteriaDto FromEntity(SyncRuleScopingCriteria entity)
@@ -82,7 +89,8 @@ public class SyncRuleScopingCriteriaDto
             IntValue = entity.IntValue,
             DateTimeValue = entity.DateTimeValue,
             BoolValue = entity.BoolValue,
-            GuidValue = entity.GuidValue
+            GuidValue = entity.GuidValue,
+            CaseSensitive = entity.CaseSensitive
         };
 
         // Set attribute info based on which one is set
@@ -236,4 +244,11 @@ public class CreateScopingCriterionRequest
     /// The GUID value to compare against (for GUID attributes).
     /// </summary>
     public Guid? GuidValue { get; set; }
+
+    /// <summary>
+    /// When true (default), value comparisons are case-sensitive.
+    /// When false, comparisons ignore case differences.
+    /// Only applies to text/string comparisons.
+    /// </summary>
+    public bool CaseSensitive { get; set; } = true;
 }

@@ -232,13 +232,13 @@ public class ConnectedSystemObject
 
     public ConnectedSystemObjectAttributeValue? GetAttributeValue(string attributeName)
     {
-        var attributeValue = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase));
+        var attributeValue = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
         return attributeValue ?? null;
     }
-    
+
     public List<ConnectedSystemObjectAttributeValue> GetAttributeValues(string attributeName)
     {
-        return AttributeValues.Where(q => q.Attribute.Name.Equals(attributeName, StringComparison.InvariantCultureIgnoreCase)).ToList();
+        return AttributeValues.Where(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase)).ToList();
     }
     
     public override string ToString()

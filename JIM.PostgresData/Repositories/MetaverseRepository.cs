@@ -361,11 +361,12 @@ public class MetaverseRepository : IMetaverseRepository
         }
 
         // Apply search filter - searches across all attribute values
+        // Search is case-insensitive for user convenience
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            var searchLower = searchQuery.ToLower();
+            var searchPattern = $"%{searchQuery}%";
             objects = objects.Where(o => o.AttributeValues.Any(av =>
-                av.StringValue != null && av.StringValue.ToLower().Contains(searchLower)));
+                av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern)));
         }
 
         // Apply sorting - sort by attribute value if specified, otherwise by Created date
@@ -579,11 +580,27 @@ public class MetaverseRepository : IMetaverseRepository
             switch (source.ConnectedSystemAttribute.Type)
             {
                 case AttributeDataType.Text:
-                    metaVerseObjects = metaVerseObjects.Where(mvo =>
-                        mvo.AttributeValues.Any(av =>
-                            objectMatchingRule.TargetMetaverseAttribute != null &&
-                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
-                            av.StringValue == csoAttributeValue.StringValue));
+                    // Check case sensitivity setting on the matching rule
+                    if (objectMatchingRule.CaseSensitive)
+                    {
+                        // Case-sensitive comparison (default)
+                        metaVerseObjects = metaVerseObjects.Where(mvo =>
+                            mvo.AttributeValues.Any(av =>
+                                objectMatchingRule.TargetMetaverseAttribute != null &&
+                                av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                                av.StringValue == csoAttributeValue.StringValue));
+                    }
+                    else
+                    {
+                        // Case-insensitive comparison using PostgreSQL ILike
+                        metaVerseObjects = metaVerseObjects.Where(mvo =>
+                            mvo.AttributeValues.Any(av =>
+                                objectMatchingRule.TargetMetaverseAttribute != null &&
+                                av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                                av.StringValue != null &&
+                                csoAttributeValue.StringValue != null &&
+                                EF.Functions.ILike(av.StringValue, csoAttributeValue.StringValue)));
+                    }
                     break;
                 case AttributeDataType.Number:
                     metaVerseObjects = metaVerseObjects.Where(mvo =>

@@ -195,18 +195,7 @@ else if (_syncRule != null)
                                 <MudItem xs="6" Class="d-flex align-center justify-end">
                                     <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
                                 </MudItem>
-                                <MudItem xs="6">
-                                    <MudChip T="string">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Metaverse Attribute">
-                                                <MudAvatar>MV</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
-                                    </MudChip>
-                                    <MudChip T="string">
-                                        <MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
-                                    </MudChip>
+                                <MudItem xs="12" Class="d-flex align-center">
                                     <MudChip T="string">
                                         <AvatarContent>
                                             <MudTooltip Text="Connected System Attribute">
@@ -215,8 +204,24 @@ else if (_syncRule != null)
                                         </AvatarContent>
                                         <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
                                     </MudChip>
-                                </MudItem>
-                                <MudItem xs="6" Class="d-flex align-center justify-end">
+                                    <MudChip T="string">
+                                        <MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
+                                    </MudChip>
+                                    <MudChip T="string">
+                                        <AvatarContent>
+                                            <MudTooltip Text="Metaverse Attribute">
+                                                <MudAvatar>MV</MudAvatar>
+                                            </MudTooltip>
+                                        </AvatarContent>
+                                        <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
+                                    </MudChip>
+                                    <MudSwitch T="bool" Value="@objectMatchingRule.CaseSensitive"
+                                               ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
+                                               Label="Case Sensitive"
+                                               Color="Color.Primary"
+                                               Size="Size.Small"
+                                               Class="ms-4" />
+                                    <MudSpacer />
                                     <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small"
                                         Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
                                         Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
@@ -245,7 +250,6 @@ else if (_syncRule != null)
                 <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this matching rule"
                     Required="true" ValueChanged="HandleAddMatchingRuleMappingTypeValueChange" Variant="Variant.Outlined">
                     <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
-                    <MudSelectItem Value="@("Function")">Function</MudSelectItem>
                     <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
                 </MudSelect>
 
@@ -285,12 +289,11 @@ else if (_syncRule != null)
                                             </MudSelectItem>
                                         }
                                     </MudSelect>
+
+                                    <MudCheckBox T="bool" @bind-Value="_matchingRuleMapping.CaseSensitive" Label="Case Sensitive" Class="mt-5" />
                                 }
                                 break;
                             }
-                        case "Function":
-                            <MudText Class="mt-5">Sorry, functions are not yet supported.</MudText>
-                            break;
                         case "Expression":
                             <MudText Class="mt-5">Sorry, expressions are not yet supported.</MudText>
                             break;
@@ -787,6 +790,17 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
             for (var i = 0; i < orderedItems.Count; i++)
                 orderedItems[i].Order = i;
         }
+    }
+
+    private void HandleToggleMatchingRuleCaseSensitive(ObjectMatchingRule rule, bool caseSensitive)
+    {
+        if (_syncRule == null)
+            return;
+
+        // Update the local value - changes will be saved when user saves the sync rule
+        rule.CaseSensitive = caseSensitive;
+        Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}. Remember to save the sync rule.", Severity.Info);
+        StateHasChanged();
     }
 
     private void HandleObjectMatchingRuleChangeOrder(ObjectMatchingRule objectMatchingRule, string direction)

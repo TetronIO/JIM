@@ -588,4 +588,116 @@ public class ObjectMatchingServerTests
     }
 
     #endregion
+
+    #region CaseSensitive Property Tests
+
+    [Test]
+    public void ObjectMatchingRule_CaseSensitive_DefaultsToTrue()
+    {
+        // Arrange & Act
+        var rule = new ObjectMatchingRule();
+
+        // Assert - verify default is case-sensitive
+        Assert.That(rule.CaseSensitive, Is.True, "ObjectMatchingRule.CaseSensitive should default to true");
+    }
+
+    [Test]
+    public void ObjectMatchingRule_CaseSensitive_CanBeSetToFalse()
+    {
+        // Arrange
+        var rule = new ObjectMatchingRule { CaseSensitive = false };
+
+        // Assert
+        Assert.That(rule.CaseSensitive, Is.False, "ObjectMatchingRule.CaseSensitive should be settable to false");
+    }
+
+    [Test]
+    public void ObjectMatchingRule_IsValid_WithCaseSensitiveFalse_StillReturnsTrue()
+    {
+        // Arrange - verify CaseSensitive doesn't affect validation
+        var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
+        var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
+        var objectType = ConnectedSystemObjectTypesData[0];
+
+        var rule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttribute = mvAttr,
+            TargetMetaverseAttributeId = mvAttr.Id,
+            CaseSensitive = false,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    ConnectedSystemAttribute = csAttr,
+                    ConnectedSystemAttributeId = csAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var isValid = rule.IsValid();
+
+        // Assert
+        Assert.That(isValid, Is.True, "CaseSensitive=false should not affect rule validity");
+    }
+
+    /// <summary>
+    /// Note: Full integration testing of case-insensitive matching at the database level
+    /// is covered by the integration tests (Scenario 5 - MatchingRules).
+    /// Unit testing the EF Core ILike function requires a real database connection.
+    /// </summary>
+    [Test]
+    public void ComputeMatchingValueFromMvo_CaseSensitiveFalse_StillReturnsOriginalValue()
+    {
+        // Arrange - verify ComputeMatchingValueFromMvo doesn't transform values
+        // (case sensitivity is applied at query time, not at value computation time)
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "E12345" // Mixed case
+        });
+
+        var objectType = ConnectedSystemObjectTypesData[0];
+        var matchingRule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttribute = employeeIdAttr,
+            TargetMetaverseAttributeId = employeeIdAttr.Id,
+            CaseSensitive = false, // Case-insensitive matching
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    MetaverseAttribute = employeeIdAttr,
+                    MetaverseAttributeId = employeeIdAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
+
+        // Assert - value should be returned as-is (not lowercased)
+        Assert.That(result, Is.EqualTo("E12345"), "ComputeMatchingValueFromMvo should return original value regardless of CaseSensitive setting");
+    }
+
+    #endregion
 }

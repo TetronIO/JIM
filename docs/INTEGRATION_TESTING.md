@@ -1181,19 +1181,32 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2025-12-16) - ✅ COMPLETE
+### Phase 1 Status (as of 2025-12-21) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
 | API Endpoints | ✅ Complete | Schema management, sync rules, mappings, run profiles |
 | PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
-| Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration working |
-| Invoke-Scenario1 | ✅ Complete | All 4 tests passing (Joiner, Mover, Leaver, Reconnection) |
+| Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration with deletion rules |
+| Invoke-Scenario1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
 | Scenario 2 & 3 | ⏳ Pending | Placeholder scripts exist |
+| Scenario 4 & 5 | ✅ Complete | Deletion rules and matching rules scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
-### Completed Fixes (This Session)
+### Completed Fixes (2025-12-21)
+
+1. **DN column removal from CSV** - Removed hardcoded DN column from CSV test data generation across all scenario files. DN is now calculated dynamically by export sync rule expressions (`"CN=" + SamAccountName + ",OU=" + Department + ",..."`).
+
+2. **Deletion rules configuration** - Added Step 6d to `Setup-Scenario1.ps1` to configure deletion rules on the User metaverse object type with `WhenLastConnectorDisconnected` rule and 7-day grace period.
+
+3. **Reconnection test fix** - Fixed test user property overrides. `New-TestUser -Index 8888` generates deterministic values (Ian, Jones, etc.), but test was only overriding EmployeeId and SamAccountName. Added complete property overrides for Email, FirstName, LastName, Department, and Title.
+
+4. **Leaver test expectations** - Updated Leaver test to expect user to still exist in AD during grace period with clear messaging about 7-day grace period behaviour.
+
+5. **Test isolation** - Documented that full environment reset (`docker compose down -v`) is required between test runs to avoid orphaned Metaverse Objects from previous runs causing matching failures.
+
+### Previously Fixed (2025-12-16)
 
 1. **API routing fix** - `CreatedAtAction` failed with API versioning. Changed to explicit `Created()` with URL path.
 
@@ -1343,6 +1356,7 @@ var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 2.0     | 2025-12-21 | All 6 Scenario 1 tests passing. Fixed DN column removal (now expression-calculated), deletion rules configuration, Reconnection test property overrides, and Leaver test expectations for grace period. |
 | 1.9     | 2025-12-16 | Resolved partition API blocking issue. Added partition/container management API and PowerShell cmdlets. Discovered LDAP connector object type matching bug (new blocker). |
 | 1.8     | 2025-12-16 | Added Scenario 2 scripts (Setup-Scenario2.ps1, Invoke-Scenario2-DirectorySync.ps1). Documented blocking issue - LDAP partition management API needed. |
 | 1.7     | 2025-12-16 | **Phase 1 Complete!** All Scenario 1 tests passing. Fixed file connector change detection (missing .Include() calls). Added test data reset and AD cleanup for repeatable tests. |
