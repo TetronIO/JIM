@@ -191,21 +191,28 @@ try {
         }
     }
 
-    # Test 2: Mover (Attribute Change)
+    # Test 2a: Mover (Attribute Change - No DN Impact)
     if ($Step -eq "Mover" -or $Step -eq "All") {
-        Write-TestSection "Test 2: Mover (Attribute Change)"
+        Write-TestSection "Test 2a: Mover (Attribute Change)"
 
-        Write-Host "Updating user department in CSV..." -ForegroundColor Gray
+        Write-Host "Updating user title in CSV..." -ForegroundColor Gray
 
-        # Update CSV - change test.joiner's department (user provisioned in Joiner test)
+        # Update CSV - change test.joiner's title (user provisioned in Joiner test)
         # We use test.joiner because they were provisioned via JIM and have proper CSO linkage
         # Using a user created by Populate-SambaAD wouldn't work as JIM doesn't know about them
+        #
+        # NOTE: We change Title (not Department) because Department now affects DN/OU placement.
+        # This test validates simple attribute updates that don't trigger DN changes.
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $csvContent = Get-Content $csvPath
 
+        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName,dn
+        # Change title from whatever it is to "Senior Developer"
         $updatedContent = $csvContent | ForEach-Object {
             if ($_ -match "test\.joiner") {
-                $_ -replace '"Admin"', '"IT"'  # Change department from Admin to IT (index 9999 % 10 = 9 = Admin)
+                # Replace the title field (between department and samAccountName)
+                # Pattern: "...",Department,"OldTitle","samAccountName",...
+                $_ -replace ',"[^"]*","test\.joiner"', ',"Senior Developer","test.joiner"'
             }
             else {
                 $_
@@ -213,7 +220,7 @@ try {
         }
 
         $updatedContent | Set-Content $csvPath
-        Write-Host "  ✓ Changed test.joiner department to IT" -ForegroundColor Green
+        Write-Host "  ✓ Changed test.joiner title to 'Senior Developer'" -ForegroundColor Green
 
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
@@ -225,17 +232,17 @@ try {
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
-        # Validate department change
+        # Validate title change
         Write-Host "Validating attribute update in AD..." -ForegroundColor Gray
 
         $adUserInfo = docker exec samba-ad-primary samba-tool user show test.joiner 2>&1
 
-        if ($adUserInfo -match "department:.*IT") {
-            Write-Host "  ✓ Department updated to IT in AD" -ForegroundColor Green
+        if ($adUserInfo -match "title:.*Senior Developer") {
+            Write-Host "  ✓ Title updated to 'Senior Developer' in AD" -ForegroundColor Green
             $testResults.Steps += @{ Name = "Mover"; Success = $true }
         }
         else {
-            Write-Host "  ✗ Department not updated in AD" -ForegroundColor Red
+            Write-Host "  ✗ Title not updated in AD" -ForegroundColor Red
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover"; Success = $false; Error = "Attribute not updated" }
         }
