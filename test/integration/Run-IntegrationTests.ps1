@@ -164,14 +164,10 @@ $step1Start = Get-Date
 if (-not $SkipReset) {
     Write-Section "Step 1: Resetting JIM Environment"
 
-    Write-Step "Stopping all containers..."
-    docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down 2>&1 | Out-Null
-    docker compose -f docker-compose.integration-tests.yml down 2>&1 | Out-Null
-    Write-Success "Containers stopped"
-
-    Write-Step "Removing volumes..."
-    docker volume rm -f jim-db-volume jim-logs-volume 2>&1 | Out-Null
-    Write-Success "Volumes removed"
+    Write-Step "Stopping all containers and removing volumes..."
+    docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down -v 2>&1 | Out-Null
+    docker compose -f docker-compose.integration-tests.yml down -v 2>&1 | Out-Null
+    Write-Success "Containers stopped and volumes removed"
 }
 else {
     Write-Section "Step 1: Reset Skipped"
