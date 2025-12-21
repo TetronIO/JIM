@@ -14,6 +14,27 @@ namespace JIM.PostgresData.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
+                name: "ApiKeys",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    KeyHash = table.Column<string>(type: "text", nullable: false),
+                    KeyPrefix = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    LastUsedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    LastUsedFromIp = table.Column<string>(type: "text", nullable: true),
+                    IsEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    IsInfrastructureKey = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ApiKeys", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "ConnectorDefinitions",
                 columns: table => new
                 {
@@ -32,7 +53,8 @@ namespace JIM.PostgresData.Migrations
                     SupportsPartitionContainers = table.Column<bool>(type: "boolean", nullable: false),
                     SupportsSecondaryExternalId = table.Column<bool>(type: "boolean", nullable: false),
                     SupportsUserSelectedExternalId = table.Column<bool>(type: "boolean", nullable: false),
-                    SupportsUserSelectedAttributeTypes = table.Column<bool>(type: "boolean", nullable: false)
+                    SupportsUserSelectedAttributeTypes = table.Column<bool>(type: "boolean", nullable: false),
+                    SupportsAutoConfirmExport = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -84,22 +106,6 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "FunctionLibrary",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Filename = table.Column<string>(type: "text", nullable: false),
-                    Version = table.Column<string>(type: "text", nullable: false),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_FunctionLibrary", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "MetaverseAttributes",
                 columns: table => new
                 {
@@ -123,8 +129,12 @@ namespace JIM.PostgresData.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
+                    PluralName = table.Column<string>(type: "text", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    BuiltIn = table.Column<bool>(type: "boolean", nullable: false)
+                    BuiltIn = table.Column<bool>(type: "boolean", nullable: false),
+                    DeletionRule = table.Column<int>(type: "integer", nullable: false),
+                    DeletionGracePeriodDays = table.Column<int>(type: "integer", nullable: true),
+                    DeletionTriggerConnectedSystemIds = table.Column<List<int>>(type: "integer[]", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -147,6 +157,31 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "TrustedCertificates",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Thumbprint = table.Column<string>(type: "text", nullable: false),
+                    Subject = table.Column<string>(type: "text", nullable: false),
+                    Issuer = table.Column<string>(type: "text", nullable: false),
+                    SerialNumber = table.Column<string>(type: "text", nullable: false),
+                    ValidFrom = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ValidTo = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    SourceType = table.Column<int>(type: "integer", nullable: false),
+                    CertificateData = table.Column<byte[]>(type: "bytea", nullable: true),
+                    FilePath = table.Column<string>(type: "text", nullable: true),
+                    IsEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedBy = table.Column<string>(type: "text", nullable: true),
+                    Notes = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TrustedCertificates", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "ConnectedSystems",
                 columns: table => new
                 {
@@ -156,9 +191,11 @@ namespace JIM.PostgresData.Migrations
                     Description = table.Column<string>(type: "text", nullable: true),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false),
                     ConnectorDefinitionId = table.Column<int>(type: "integer", nullable: false),
                     SettingValuesValid = table.Column<bool>(type: "boolean", nullable: false),
-                    PersistedConnectorData = table.Column<string>(type: "text", nullable: true)
+                    PersistedConnectorData = table.Column<string>(type: "text", nullable: true),
+                    ObjectMatchingRuleMode = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -276,28 +313,6 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Function",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    FunctionLibraryId = table.Column<int>(type: "integer", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Description = table.Column<string>(type: "text", nullable: true),
-                    OutputType = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Function", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Function_FunctionLibrary_FunctionLibraryId",
-                        column: x => x.FunctionLibraryId,
-                        principalTable: "FunctionLibrary",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "DataGenerationTemplateAttributeDependencies",
                 columns: table => new
                 {
@@ -403,6 +418,8 @@ namespace JIM.PostgresData.Migrations
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     TypeId = table.Column<int>(type: "integer", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
+                    LastConnectorDisconnectedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Origin = table.Column<int>(type: "integer", nullable: false),
                     xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
                 },
                 constraints: table =>
@@ -441,6 +458,30 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ApiKeyRole",
+                columns: table => new
+                {
+                    ApiKeyId = table.Column<Guid>(type: "uuid", nullable: false),
+                    RolesId = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ApiKeyRole", x => new { x.ApiKeyId, x.RolesId });
+                    table.ForeignKey(
+                        name: "FK_ApiKeyRole_ApiKeys_ApiKeyId",
+                        column: x => x.ApiKeyId,
+                        principalTable: "ApiKeys",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ApiKeyRole_Roles_RolesId",
+                        column: x => x.RolesId,
+                        principalTable: "Roles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "ConnectedSystemObjectTypes",
                 columns: table => new
                 {
@@ -449,7 +490,8 @@ namespace JIM.PostgresData.Migrations
                     Name = table.Column<string>(type: "text", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     ConnectedSystemId = table.Column<int>(type: "integer", nullable: false),
-                    Selected = table.Column<bool>(type: "boolean", nullable: false)
+                    Selected = table.Column<bool>(type: "boolean", nullable: false),
+                    RemoveContributedAttributesOnObsoletion = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -510,27 +552,6 @@ namespace JIM.PostgresData.Migrations
                         name: "FK_ConnectedSystemSettingValues_ConnectorDefinitionSettings_Se~",
                         column: x => x.SettingId,
                         principalTable: "ConnectorDefinitionSettings",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "FunctionParameter",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    FunctionId = table.Column<int>(type: "integer", nullable: false),
-                    Position = table.Column<int>(type: "integer", nullable: false),
-                    Type = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_FunctionParameter", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_FunctionParameter_Function_FunctionId",
-                        column: x => x.FunctionId,
-                        principalTable: "Function",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -719,7 +740,9 @@ namespace JIM.PostgresData.Migrations
                     Direction = table.Column<int>(type: "integer", nullable: false),
                     ProvisionToConnectedSystem = table.Column<bool>(type: "boolean", nullable: true),
                     ProjectToMetaverse = table.Column<bool>(type: "boolean", nullable: true),
-                    Enabled = table.Column<bool>(type: "boolean", nullable: false)
+                    Enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    OutboundDeprovisionAction = table.Column<int>(type: "integer", nullable: false),
+                    InboundOutOfScopeAction = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -915,6 +938,36 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "SyncRuleMappingSourceParamValues",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    MetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    ConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    StringValue = table.Column<string>(type: "text", nullable: true),
+                    DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    DoubleValue = table.Column<double>(type: "double precision", nullable: false),
+                    IntValue = table.Column<int>(type: "integer", nullable: false),
+                    BoolValue = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SyncRuleMappingSourceParamValues", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SyncRuleMappingSourceParamValues_ConnectedSystemAttributes_~",
+                        column: x => x.ConnectedSystemAttributeId,
+                        principalTable: "ConnectedSystemAttributes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_SyncRuleMappingSourceParamValues_MetaverseAttributes_Metave~",
+                        column: x => x.MetaverseAttributeId,
+                        principalTable: "MetaverseAttributes",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
                 name: "ConnectedSystemObjectAttributeValues",
                 columns: table => new
                 {
@@ -950,6 +1003,42 @@ namespace JIM.PostgresData.Migrations
                         column: x => x.ReferenceValueId,
                         principalTable: "ConnectedSystemObjects",
                         principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "DeferredReferences",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SourceCsoId = table.Column<Guid>(type: "uuid", nullable: false),
+                    AttributeName = table.Column<string>(type: "text", nullable: false),
+                    TargetMvoId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TargetSystemId = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ResolvedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    RetryCount = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_DeferredReferences", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_DeferredReferences_ConnectedSystemObjects_SourceCsoId",
+                        column: x => x.SourceCsoId,
+                        principalTable: "ConnectedSystemObjects",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_DeferredReferences_ConnectedSystems_TargetSystemId",
+                        column: x => x.TargetSystemId,
+                        principalTable: "ConnectedSystems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_DeferredReferences_MetaverseObjects_TargetMvoId",
+                        column: x => x.TargetMvoId,
+                        principalTable: "MetaverseObjects",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -1010,7 +1099,14 @@ namespace JIM.PostgresData.Migrations
                     ConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: true),
                     ChangeType = table.Column<int>(type: "integer", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
-                    ErrorCount = table.Column<int>(type: "integer", nullable: true)
+                    ErrorCount = table.Column<int>(type: "integer", nullable: false),
+                    MaxRetries = table.Column<int>(type: "integer", nullable: false),
+                    LastAttemptedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    NextRetryAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    LastErrorMessage = table.Column<string>(type: "text", nullable: true),
+                    SourceMetaverseObjectId = table.Column<Guid>(type: "uuid", nullable: true),
+                    HasUnresolvedReferences = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1026,6 +1122,45 @@ namespace JIM.PostgresData.Migrations
                         principalTable: "ConnectedSystems",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_PendingExports_MetaverseObjects_SourceMetaverseObjectId",
+                        column: x => x.SourceMetaverseObjectId,
+                        principalTable: "MetaverseObjects",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ObjectMatchingRules",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    SyncRuleId = table.Column<int>(type: "integer", nullable: true),
+                    ConnectedSystemObjectTypeId = table.Column<int>(type: "integer", nullable: true),
+                    TargetMetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    CaseSensitive = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ObjectMatchingRules", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ObjectMatchingRules_ConnectedSystemObjectTypes_ConnectedSys~",
+                        column: x => x.ConnectedSystemObjectTypeId,
+                        principalTable: "ConnectedSystemObjectTypes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_ObjectMatchingRules_MetaverseAttributes_TargetMetaverseAttr~",
+                        column: x => x.TargetMetaverseAttributeId,
+                        principalTable: "MetaverseAttributes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_ObjectMatchingRules_SyncRules_SyncRuleId",
+                        column: x => x.SyncRuleId,
+                        principalTable: "SyncRules",
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1036,10 +1171,7 @@ namespace JIM.PostgresData.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedById = table.Column<Guid>(type: "uuid", nullable: true),
-                    Order = table.Column<int>(type: "integer", nullable: true),
-                    AttributeFlowSynchronisationRuleId = table.Column<int>(type: "integer", nullable: true),
-                    ObjectMatchingSynchronisationRuleId = table.Column<int>(type: "integer", nullable: true),
-                    Type = table.Column<int>(type: "integer", nullable: false),
+                    SyncRuleId = table.Column<int>(type: "integer", nullable: true),
                     TargetMetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
                     TargetConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true)
                 },
@@ -1062,13 +1194,8 @@ namespace JIM.PostgresData.Migrations
                         principalTable: "MetaverseObjects",
                         principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_SyncRuleMappings_SyncRules_AttributeFlowSynchronisationRule~",
-                        column: x => x.AttributeFlowSynchronisationRuleId,
-                        principalTable: "SyncRules",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_SyncRuleMappings_SyncRules_ObjectMatchingSynchronisationRul~",
-                        column: x => x.ObjectMatchingSynchronisationRuleId,
+                        name: "FK_SyncRuleMappings_SyncRules_SyncRuleId",
+                        column: x => x.SyncRuleId,
                         principalTable: "SyncRules",
                         principalColumn: "Id");
                 });
@@ -1284,6 +1411,39 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ObjectMatchingRuleSources",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    ObjectMatchingRuleId = table.Column<int>(type: "integer", nullable: false),
+                    ConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    MetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    Expression = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ObjectMatchingRuleSources", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ObjectMatchingRuleSources_ConnectedSystemAttributes_Connect~",
+                        column: x => x.ConnectedSystemAttributeId,
+                        principalTable: "ConnectedSystemAttributes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_ObjectMatchingRuleSources_MetaverseAttributes_MetaverseAttr~",
+                        column: x => x.MetaverseAttributeId,
+                        principalTable: "MetaverseAttributes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_ObjectMatchingRuleSources_ObjectMatchingRules_ObjectMatchin~",
+                        column: x => x.ObjectMatchingRuleId,
+                        principalTable: "ObjectMatchingRules",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "SyncRuleMappingSources",
                 columns: table => new
                 {
@@ -1292,7 +1452,7 @@ namespace JIM.PostgresData.Migrations
                     Order = table.Column<int>(type: "integer", nullable: false),
                     MetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
                     ConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true),
-                    FunctionId = table.Column<int>(type: "integer", nullable: true),
+                    Expression = table.Column<string>(type: "text", nullable: true),
                     SyncRuleMappingId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
@@ -1302,11 +1462,6 @@ namespace JIM.PostgresData.Migrations
                         name: "FK_SyncRuleMappingSources_ConnectedSystemAttributes_ConnectedS~",
                         column: x => x.ConnectedSystemAttributeId,
                         principalTable: "ConnectedSystemAttributes",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_SyncRuleMappingSources_Function_FunctionId",
-                        column: x => x.FunctionId,
-                        principalTable: "Function",
                         principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_SyncRuleMappingSources_MetaverseAttributes_MetaverseAttribu~",
@@ -1326,24 +1481,30 @@ namespace JIM.PostgresData.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    MetaverseAttributeId = table.Column<int>(type: "integer", nullable: false),
+                    MetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
+                    ConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true),
                     ComparisonType = table.Column<int>(type: "integer", nullable: false),
                     StringValue = table.Column<string>(type: "text", nullable: true),
                     IntValue = table.Column<int>(type: "integer", nullable: true),
                     DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     BoolValue = table.Column<bool>(type: "boolean", nullable: true),
                     GuidValue = table.Column<Guid>(type: "uuid", nullable: true),
+                    CaseSensitive = table.Column<bool>(type: "boolean", nullable: false),
                     SyncRuleScopingCriteriaGroupId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SyncRuleScopingCriteria", x => x.Id);
                     table.ForeignKey(
+                        name: "FK_SyncRuleScopingCriteria_ConnectedSystemAttributes_Connected~",
+                        column: x => x.ConnectedSystemAttributeId,
+                        principalTable: "ConnectedSystemAttributes",
+                        principalColumn: "Id");
+                    table.ForeignKey(
                         name: "FK_SyncRuleScopingCriteria_MetaverseAttributes_MetaverseAttrib~",
                         column: x => x.MetaverseAttributeId,
                         principalTable: "MetaverseAttributes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_SyncRuleScopingCriteria_SyncRuleScopingCriteriaGroups_SyncR~",
                         column: x => x.SyncRuleScopingCriteriaGroupId,
@@ -1401,6 +1562,8 @@ namespace JIM.PostgresData.Migrations
                     Discriminator = table.Column<string>(type: "character varying(55)", maxLength: 55, nullable: false),
                     ClearConnectedSystemObjectsWorkerTask_ConnectedSystemId = table.Column<int>(type: "integer", nullable: true),
                     TemplateId = table.Column<int>(type: "integer", nullable: true),
+                    DeleteConnectedSystemWorkerTask_ConnectedSystemId = table.Column<int>(type: "integer", nullable: true),
+                    EvaluateMvoDeletionRules = table.Column<bool>(type: "boolean", nullable: true),
                     ConnectedSystemId = table.Column<int>(type: "integer", nullable: true),
                     ConnectedSystemRunProfileId = table.Column<int>(type: "integer", nullable: true)
                 },
@@ -1421,45 +1584,40 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "SyncRuleMappingSourceParamValues",
+                name: "ObjectMatchingRuleSourceParamValues",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
-                    FunctionParameterId = table.Column<int>(type: "integer", nullable: true),
+                    ObjectMatchingRuleSourceId = table.Column<int>(type: "integer", nullable: false),
                     MetaverseAttributeId = table.Column<int>(type: "integer", nullable: true),
                     ConnectedSystemAttributeId = table.Column<int>(type: "integer", nullable: true),
                     StringValue = table.Column<string>(type: "text", nullable: true),
                     DateTimeValue = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     DoubleValue = table.Column<double>(type: "double precision", nullable: false),
                     IntValue = table.Column<int>(type: "integer", nullable: false),
-                    BoolValue = table.Column<bool>(type: "boolean", nullable: false),
-                    SyncRuleMappingSourceId = table.Column<int>(type: "integer", nullable: true)
+                    BoolValue = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_SyncRuleMappingSourceParamValues", x => x.Id);
+                    table.PrimaryKey("PK_ObjectMatchingRuleSourceParamValues", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_SyncRuleMappingSourceParamValues_ConnectedSystemAttributes_~",
+                        name: "FK_ObjectMatchingRuleSourceParamValues_ConnectedSystemAttribut~",
                         column: x => x.ConnectedSystemAttributeId,
                         principalTable: "ConnectedSystemAttributes",
                         principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_SyncRuleMappingSourceParamValues_FunctionParameter_Function~",
-                        column: x => x.FunctionParameterId,
-                        principalTable: "FunctionParameter",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_SyncRuleMappingSourceParamValues_MetaverseAttributes_Metave~",
+                        name: "FK_ObjectMatchingRuleSourceParamValues_MetaverseAttributes_Met~",
                         column: x => x.MetaverseAttributeId,
                         principalTable: "MetaverseAttributes",
                         principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_SyncRuleMappingSourceParamValues_SyncRuleMappingSources_Syn~",
-                        column: x => x.SyncRuleMappingSourceId,
-                        principalTable: "SyncRuleMappingSources",
-                        principalColumn: "Id");
+                        name: "FK_ObjectMatchingRuleSourceParamValues_ObjectMatchingRuleSourc~",
+                        column: x => x.ObjectMatchingRuleSourceId,
+                        principalTable: "ObjectMatchingRuleSources",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -1593,6 +1751,21 @@ namespace JIM.PostgresData.Migrations
                 column: "MetaverseObjectChangeId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ApiKeyRole_RolesId",
+                table: "ApiKeyRole",
+                column: "RolesId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ApiKeys_KeyHash",
+                table: "ApiKeys",
+                column: "KeyHash");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ApiKeys_KeyPrefix",
+                table: "ApiKeys",
+                column: "KeyPrefix");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ConnectedSystemAttributes_ConnectedSystemObjectTypeId",
                 table: "ConnectedSystemAttributes",
                 column: "ConnectedSystemObjectTypeId");
@@ -1618,9 +1791,9 @@ namespace JIM.PostgresData.Migrations
                 column: "AttributeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ConnectedSystemObjectAttributeValues_ConnectedSystemObjectId",
+                name: "IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId",
                 table: "ConnectedSystemObjectAttributeValues",
-                column: "ConnectedSystemObjectId");
+                columns: new[] { "ConnectedSystemObjectId", "AttributeId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ConnectedSystemObjectAttributeValues_ReferenceValueId",
@@ -1669,9 +1842,9 @@ namespace JIM.PostgresData.Migrations
                 column: "DeletedObjectTypeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ConnectedSystemObjects_ConnectedSystemId",
+                name: "IX_ConnectedSystemObjects_ConnectedSystemId_TypeId",
                 table: "ConnectedSystemObjects",
-                column: "ConnectedSystemId");
+                columns: new[] { "ConnectedSystemId", "TypeId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ConnectedSystemObjects_MetaverseObjectId",
@@ -1789,6 +1962,21 @@ namespace JIM.PostgresData.Migrations
                 column: "Name");
 
             migrationBuilder.CreateIndex(
+                name: "IX_DeferredReferences_SourceCsoId",
+                table: "DeferredReferences",
+                column: "SourceCsoId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DeferredReferences_TargetMvoId_TargetSystemId",
+                table: "DeferredReferences",
+                columns: new[] { "TargetMvoId", "TargetSystemId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DeferredReferences_TargetSystemId",
+                table: "DeferredReferences",
+                column: "TargetSystemId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ExampleDataSetInstances_DataGenerationTemplateAttributeId",
                 table: "ExampleDataSetInstances",
                 column: "DataGenerationTemplateAttributeId");
@@ -1804,16 +1992,6 @@ namespace JIM.PostgresData.Migrations
                 column: "ExampleDataSetId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Function_FunctionLibraryId",
-                table: "Function",
-                column: "FunctionLibraryId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_FunctionParameter_FunctionId",
-                table: "FunctionParameter",
-                column: "FunctionId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_MetaverseAttributeMetaverseObjectType_MetaverseObjectTypesId",
                 table: "MetaverseAttributeMetaverseObjectType",
                 column: "MetaverseObjectTypesId");
@@ -1824,9 +2002,9 @@ namespace JIM.PostgresData.Migrations
                 column: "Name");
 
             migrationBuilder.CreateIndex(
-                name: "IX_MetaverseObjectAttributeValues_AttributeId",
+                name: "IX_MetaverseObjectAttributeValues_AttributeId_StringValue",
                 table: "MetaverseObjectAttributeValues",
-                column: "AttributeId");
+                columns: new[] { "AttributeId", "StringValue" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_MetaverseObjectAttributeValues_ContributedBySystemId",
@@ -1914,6 +2092,51 @@ namespace JIM.PostgresData.Migrations
                 column: "Name");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRules_ConnectedSystemObjectTypeId",
+                table: "ObjectMatchingRules",
+                column: "ConnectedSystemObjectTypeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRules_SyncRuleId",
+                table: "ObjectMatchingRules",
+                column: "SyncRuleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRules_TargetMetaverseAttributeId",
+                table: "ObjectMatchingRules",
+                column: "TargetMetaverseAttributeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRuleSourceParamValues_ConnectedSystemAttribut~",
+                table: "ObjectMatchingRuleSourceParamValues",
+                column: "ConnectedSystemAttributeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRuleSourceParamValues_MetaverseAttributeId",
+                table: "ObjectMatchingRuleSourceParamValues",
+                column: "MetaverseAttributeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRuleSourceParamValues_ObjectMatchingRuleSourc~",
+                table: "ObjectMatchingRuleSourceParamValues",
+                column: "ObjectMatchingRuleSourceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRuleSources_ConnectedSystemAttributeId",
+                table: "ObjectMatchingRuleSources",
+                column: "ConnectedSystemAttributeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRuleSources_MetaverseAttributeId",
+                table: "ObjectMatchingRuleSources",
+                column: "MetaverseAttributeId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ObjectMatchingRuleSources_ObjectMatchingRuleId",
+                table: "ObjectMatchingRuleSources",
+                column: "ObjectMatchingRuleId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PendingExportAttributeValueChanges_AttributeId",
                 table: "PendingExportAttributeValueChanges",
                 column: "AttributeId");
@@ -1924,14 +2147,19 @@ namespace JIM.PostgresData.Migrations
                 column: "PendingExportId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_PendingExports_ConnectedSystemId",
+                name: "IX_PendingExports_ConnectedSystemId_Status",
                 table: "PendingExports",
-                column: "ConnectedSystemId");
+                columns: new[] { "ConnectedSystemId", "Status" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_PendingExports_ConnectedSystemObjectId",
                 table: "PendingExports",
                 column: "ConnectedSystemObjectId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingExports_SourceMetaverseObjectId",
+                table: "PendingExports",
+                column: "SourceMetaverseObjectId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PredefinedSearchAttributes_MetaverseAttributeId",
@@ -1984,19 +2212,14 @@ namespace JIM.PostgresData.Migrations
                 column: "SSOUniqueIdentifierMetaverseAttributeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_SyncRuleMappings_AttributeFlowSynchronisationRuleId",
-                table: "SyncRuleMappings",
-                column: "AttributeFlowSynchronisationRuleId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleMappings_CreatedById",
                 table: "SyncRuleMappings",
                 column: "CreatedById");
 
             migrationBuilder.CreateIndex(
-                name: "IX_SyncRuleMappings_ObjectMatchingSynchronisationRuleId",
+                name: "IX_SyncRuleMappings_SyncRuleId",
                 table: "SyncRuleMappings",
-                column: "ObjectMatchingSynchronisationRuleId");
+                column: "SyncRuleId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleMappings_TargetConnectedSystemAttributeId",
@@ -2014,29 +2237,14 @@ namespace JIM.PostgresData.Migrations
                 column: "ConnectedSystemAttributeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_SyncRuleMappingSourceParamValues_FunctionParameterId",
-                table: "SyncRuleMappingSourceParamValues",
-                column: "FunctionParameterId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleMappingSourceParamValues_MetaverseAttributeId",
                 table: "SyncRuleMappingSourceParamValues",
                 column: "MetaverseAttributeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_SyncRuleMappingSourceParamValues_SyncRuleMappingSourceId",
-                table: "SyncRuleMappingSourceParamValues",
-                column: "SyncRuleMappingSourceId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleMappingSources_ConnectedSystemAttributeId",
                 table: "SyncRuleMappingSources",
                 column: "ConnectedSystemAttributeId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_SyncRuleMappingSources_FunctionId",
-                table: "SyncRuleMappingSources",
-                column: "FunctionId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleMappingSources_MetaverseAttributeId",
@@ -2069,6 +2277,11 @@ namespace JIM.PostgresData.Migrations
                 column: "MetaverseObjectTypeId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_SyncRuleScopingCriteria_ConnectedSystemAttributeId",
+                table: "SyncRuleScopingCriteria",
+                column: "ConnectedSystemAttributeId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SyncRuleScopingCriteria_MetaverseAttributeId",
                 table: "SyncRuleScopingCriteria",
                 column: "MetaverseAttributeId");
@@ -2089,6 +2302,12 @@ namespace JIM.PostgresData.Migrations
                 column: "SyncRuleId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_TrustedCertificates_Thumbprint",
+                table: "TrustedCertificates",
+                column: "Thumbprint",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_WorkerTasks_ActivityId",
                 table: "WorkerTasks",
                 column: "ActivityId");
@@ -2102,6 +2321,9 @@ namespace JIM.PostgresData.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "ApiKeyRole");
+
             migrationBuilder.DropTable(
                 name: "ConnectedSystemContainers");
 
@@ -2124,6 +2346,9 @@ namespace JIM.PostgresData.Migrations
                 name: "DataGenerationTemplateAttributeWeightedValues");
 
             migrationBuilder.DropTable(
+                name: "DeferredReferences");
+
+            migrationBuilder.DropTable(
                 name: "ExampleDataSetInstances");
 
             migrationBuilder.DropTable(
@@ -2142,6 +2367,9 @@ namespace JIM.PostgresData.Migrations
                 name: "MetaverseObjectRole");
 
             migrationBuilder.DropTable(
+                name: "ObjectMatchingRuleSourceParamValues");
+
+            migrationBuilder.DropTable(
                 name: "PendingExportAttributeValueChanges");
 
             migrationBuilder.DropTable(
@@ -2157,10 +2385,19 @@ namespace JIM.PostgresData.Migrations
                 name: "SyncRuleMappingSourceParamValues");
 
             migrationBuilder.DropTable(
+                name: "SyncRuleMappingSources");
+
+            migrationBuilder.DropTable(
                 name: "SyncRuleScopingCriteria");
 
             migrationBuilder.DropTable(
+                name: "TrustedCertificates");
+
+            migrationBuilder.DropTable(
                 name: "WorkerTasks");
+
+            migrationBuilder.DropTable(
+                name: "ApiKeys");
 
             migrationBuilder.DropTable(
                 name: "ConnectedSystemObjectChangeAttributes");
@@ -2184,16 +2421,16 @@ namespace JIM.PostgresData.Migrations
                 name: "Roles");
 
             migrationBuilder.DropTable(
+                name: "ObjectMatchingRuleSources");
+
+            migrationBuilder.DropTable(
                 name: "PendingExports");
 
             migrationBuilder.DropTable(
                 name: "PredefinedSearchCriteriaGroups");
 
             migrationBuilder.DropTable(
-                name: "FunctionParameter");
-
-            migrationBuilder.DropTable(
-                name: "SyncRuleMappingSources");
+                name: "SyncRuleMappings");
 
             migrationBuilder.DropTable(
                 name: "SyncRuleScopingCriteriaGroups");
@@ -2208,13 +2445,10 @@ namespace JIM.PostgresData.Migrations
                 name: "DataGenerationTemplateAttributeDependencies");
 
             migrationBuilder.DropTable(
+                name: "ObjectMatchingRules");
+
+            migrationBuilder.DropTable(
                 name: "PredefinedSearches");
-
-            migrationBuilder.DropTable(
-                name: "Function");
-
-            migrationBuilder.DropTable(
-                name: "SyncRuleMappings");
 
             migrationBuilder.DropTable(
                 name: "ActivityRunProfileExecutionItems");
@@ -2224,9 +2458,6 @@ namespace JIM.PostgresData.Migrations
 
             migrationBuilder.DropTable(
                 name: "DataGenerationTemplates");
-
-            migrationBuilder.DropTable(
-                name: "FunctionLibrary");
 
             migrationBuilder.DropTable(
                 name: "MetaverseAttributes");
