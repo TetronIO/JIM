@@ -1423,6 +1423,30 @@
         }
     }
 
+    private async Task HandleToggleMatchingRuleCaseSensitiveAsync(ObjectMatchingRule rule, bool caseSensitive)
+    {
+        if (_connectedSystem == null)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        try
+        {
+            rule.CaseSensitive = caseSensitive;
+            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
+
+            Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}.", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            // Revert the change on failure
+            rule.CaseSensitive = !caseSensitive;
+            Log.Error(ex, "Failed to update matching rule {RuleId}", rule.Id);
+            Snackbar.Add($"Failed to update matching rule: {ex.Message}", Severity.Error);
+        }
+    }
+
     private async Task HandleMoveMatchingRuleUpAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
     {
         await SwapMatchingRuleOrderAsync(rule, -1, objectType);
@@ -2016,9 +2040,10 @@
                         </MudTd>
                         <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
                         <MudTd DataLabel="Case Sensitive">
-                            <MudChip T="string" Size="Size.Small" Color="@(context.CaseSensitive ? Color.Success : Color.Warning)">
-                                @(context.CaseSensitive ? "Yes" : "No")
-                            </MudChip>
+                            <MudSwitch T="bool" Value="@context.CaseSensitive"
+                                       ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitiveAsync(context, value))"
+                                       Color="Color.Primary"
+                                       Size="Size.Small" />
                         </MudTd>
                         <MudTd>
                             <MudTooltip Text="Move up">
