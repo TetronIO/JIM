@@ -529,15 +529,21 @@ try {
     # Performance Summary
     if ($stepTimings.Count -gt 0) {
         Write-Host ""
-        Write-Host "Performance Breakdown:" -ForegroundColor Cyan
+        Write-Host "$("=" * 65)" -ForegroundColor Cyan
+        Write-Host "  Performance Breakdown (Test Steps)" -ForegroundColor Cyan
+        Write-Host "$("=" * 65)" -ForegroundColor Cyan
+        Write-Host ""
         $totalTestTime = 0
         foreach ($timing in $stepTimings.GetEnumerator() | Sort-Object Name) {
             $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
             $totalTestTime += $seconds
-            Write-Host ("  {0,-20} {1,6}s" -f $timing.Name, $seconds) -ForegroundColor Gray
+            $bar = "█" * [math]::Min(40, [math]::Floor($seconds / 3))
+            Write-Host ("  {0,-20} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Gray" })
         }
         $scenarioDuration = (Get-Date) - $scenarioStartTime
-        Write-Host ("  {0,-20} {1,6}s" -f "Total", [math]::Round($scenarioDuration.TotalSeconds, 1)) -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host ("  {0,-20} {1,6}s" -f "Scenario Total", [math]::Round($scenarioDuration.TotalSeconds, 1)) -ForegroundColor Cyan
+        Write-Host ""
     }
 
     $testResults.Success = ($successCount -eq $totalCount)

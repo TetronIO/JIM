@@ -367,6 +367,8 @@ foreach ($timing in $sortedTimings) {
 }
 
 Write-Host ""
+Write-Host "${GRAY}Note: '6. Run Tests' breakdown shown in 'Performance Breakdown (Test Steps)' section above${NC}"
+Write-Host ""
 Write-Host "${CYAN}Total Duration: ${NC}$($duration.ToString('hh\:mm\:ss')) (${totalSeconds}s)"
 Write-Host ""
 
