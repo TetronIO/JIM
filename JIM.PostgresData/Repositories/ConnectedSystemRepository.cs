@@ -1145,10 +1145,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         switch (source.MetaverseAttribute.Type)
         {
             case AttributeDataType.Text:
-                query = query.Where(cso => cso.AttributeValues.Any(av =>
-                    av.Attribute != null &&
-                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
-                    av.StringValue == mvoAttributeValue.StringValue));
+                // Check case sensitivity setting on the matching rule
+                if (objectMatchingRule.CaseSensitive)
+                {
+                    // Case-sensitive comparison (default)
+                    query = query.Where(cso => cso.AttributeValues.Any(av =>
+                        av.Attribute != null &&
+                        av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                        av.StringValue == mvoAttributeValue.StringValue));
+                }
+                else
+                {
+                    // Case-insensitive comparison using PostgreSQL ILike
+                    query = query.Where(cso => cso.AttributeValues.Any(av =>
+                        av.Attribute != null &&
+                        av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                        av.StringValue != null &&
+                        mvoAttributeValue.StringValue != null &&
+                        EF.Functions.ILike(av.StringValue, mvoAttributeValue.StringValue)));
+                }
                 break;
             case AttributeDataType.Number:
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
