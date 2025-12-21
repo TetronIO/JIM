@@ -8,7 +8,6 @@
       "commandVersion": "1.0",
       "serviceActions": {
         "adminer": "StartWithoutDebugging",
-        "jim.api": "StartDebugging",
         "jim.database": "StartWithoutDebugging",
         "jim.scheduler": "StartDebugging",
         "jim.worker": "StartDebugging",
