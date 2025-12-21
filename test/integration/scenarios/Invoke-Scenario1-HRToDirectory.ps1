@@ -304,36 +304,31 @@ try {
         }
     }
 
-    # Test 2c: Mover - Move (OU Change via Display Name)
+    # Test 2c: Mover - Move (OU Change via Department)
     if ($Step -eq "Mover-Move" -or $Step -eq "All") {
         Write-TestSection "Test 2c: Mover - Move (OU Change)"
 
-        Write-Host "Updating user display name to trigger OU move..." -ForegroundColor Gray
+        Write-Host "Updating user department to trigger OU move..." -ForegroundColor Gray
 
-        # The DN is computed from displayName: "CN=" + EscapeDN(mv["Display Name"]) + ",CN=Users,DC=testdomain,DC=local"
-        # We'll change the DN expression result by modifying Display Name
-        # This simulates a scenario where the DN expression includes OU logic based on attributes
+        # The DN is computed from Department: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=testdomain,DC=local"
+        # Change test.joiner's department from "IT" to "Finance"
+        # This should trigger an LDAP move from OU=IT to OU=Finance
         #
-        # For this test, we'll change displayName to include a department prefix
-        # In a real scenario, the DN expression might be:
-        # "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=testdomain,DC=local"
-        #
-        # Since our current expression uses CN=Users, we'll simulate by changing the display name
-        # to trigger a DN change, then validate the move operation works
+        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName,dn
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $csvContent = Get-Content $csvPath
 
-        # Change test.joiner's display name from "Renamed Joiner" to "Joiner, Renamed"
-        # This will change DN from "CN=Renamed Joiner,..." to "CN=Joiner\, Renamed,..."
-        # The comma in the CN requires escaping in LDAP DNs
-        #
-        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName,dn
+        # Get the current user info to determine current department
+        $currentLine = $csvContent | Where-Object { $_ -match "test\.joiner" } | Select-Object -First 1
+
+        # Change department from IT to Finance
         $updatedContent = $csvContent | ForEach-Object {
             if ($_ -match "test\.joiner") {
-                # Update displayName from "Renamed Joiner" to "Joiner, Renamed" (surname first format)
-                $line = $_ -replace '"Renamed Joiner"', '"Joiner, Renamed"'
-                # Update dn - the comma will be escaped by JIM's EscapeDN function
-                $line = $line -replace 'CN=Renamed Joiner,', 'CN=Joiner\, Renamed,'
+                # Update department column (index 4, 0-based)
+                # Pattern: "...","IT","..." → "...","Finance","..."
+                $line = $_ -replace ',"IT",', ',"Finance",'
+                # Update DN to reflect new OU
+                $line = $line -replace ',OU=IT,', ',OU=Finance,'
                 $line
             }
             else {
@@ -342,7 +337,7 @@ try {
         }
 
         $updatedContent | Set-Content $csvPath
-        Write-Host "  ✓ Changed display name to 'Joiner, Renamed' (triggers DN move)" -ForegroundColor Green
+        Write-Host "  ✓ Changed department from IT to Finance (triggers OU move)" -ForegroundColor Green
 
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
@@ -355,21 +350,27 @@ try {
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate move in AD
-        # The user should now have DN "CN=Joiner\, Renamed,CN=Users,DC=testdomain,DC=local"
-        Write-Host "Validating move in AD..." -ForegroundColor Gray
+        # The user should now have DN "CN=Renamed Joiner,OU=Finance,DC=testdomain,DC=local"
+        Write-Host "Validating OU move in AD..." -ForegroundColor Gray
 
         # Query AD to find the user and check DN
-        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn displayName 2>&1"
+        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn department 2>&1"
 
-        # The DN will be returned with the escaped comma
-        if ($adUserInfo -match "CN=Joiner.* Renamed") {
-            Write-Host "  ✓ User moved to new DN in AD" -ForegroundColor Green
+        # Check if user is now in OU=Finance
+        if ($adUserInfo -match "OU=Finance") {
+            Write-Host "  ✓ User moved to OU=Finance in AD" -ForegroundColor Green
+
+            # Also verify department attribute was updated
+            if ($adUserInfo -match "department: Finance") {
+                Write-Host "  ✓ Department attribute updated to Finance" -ForegroundColor Green
+            }
+
             $testResults.Steps += @{ Name = "Mover-Move"; Success = $true }
         }
         else {
-            Write-Host "  ✗ User NOT moved in AD" -ForegroundColor Red
+            Write-Host "  ✗ User NOT moved to OU=Finance in AD" -ForegroundColor Red
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
-            $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "DN not moved" }
+            $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "OU move did not occur" }
         }
     }
 

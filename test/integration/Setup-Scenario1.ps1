@@ -313,6 +313,34 @@ else {
     }
 }
 
+# Step 6a: Create Department OUs in Samba AD
+Write-TestStep "Step 6a" "Creating Department OUs in Samba AD"
+
+# Create OUs for each department that will be used in tests
+$departments = @("IT", "HR", "Finance", "Sales", "Admin")
+
+foreach ($dept in $departments) {
+    $ouDn = "OU=$dept,DC=testdomain,DC=local"
+
+    # Check if OU already exists
+    $ouExists = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(distinguishedName=$ouDn)' dn 2>&1" 2>$null
+
+    if ($ouExists -match $ouDn) {
+        Write-Host "  OU already exists: $dept" -ForegroundColor Gray
+    }
+    else {
+        # Create the OU using samba-tool
+        $createResult = docker exec samba-ad-primary samba-tool ou create $ouDn 2>&1
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ Created OU: $dept" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Failed to create OU $dept : $createResult" -ForegroundColor Yellow
+        }
+    }
+}
+
 # Step 6b: Create Sync Rules
 Write-TestStep "Step 6b" "Creating Sync Rules"
 
@@ -447,10 +475,11 @@ try {
         )
 
         # Expression-based mappings for computed values
+        # DN now uses Department to place users in department OUs
         $expressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",CN=Users,DC=testdomain,DC=local"'
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=testdomain,DC=local"'
             }
         )
 
