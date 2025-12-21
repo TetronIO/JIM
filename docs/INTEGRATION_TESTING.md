@@ -11,58 +11,68 @@
 
 ## ⚡ Quick Start
 
-**First time running integration tests?** Follow these simple steps:
+**First time running integration tests?** Use the single-command runner:
 
 ```powershell
 # IMPORTANT: Run these commands inside PowerShell, not bash/zsh!
-# Start PowerShell first:
 pwsh
 
-# Then run all commands from the repository root (/workspaces/JIM)
-cd /workspaces/JIM  # or wherever your JIM repository is cloned
+# From the repository root (/workspaces/JIM)
+cd /workspaces/JIM
 
+# Run the complete test suite with a single command
+./test/integration/Run-IntegrationTests.ps1
+```
+
+This single script handles everything:
+1. ✅ Resets the environment (stops containers, removes volumes)
+2. ✅ Rebuilds and starts JIM stack + Samba AD
+3. ✅ Waits for all services to be ready
+4. ✅ Creates an infrastructure API key
+5. ✅ Runs the test scenario
+
+**Common Options:**
+
+```powershell
+# Run with default settings (Scenario1, Nano template, all steps)
+./test/integration/Run-IntegrationTests.ps1
+
+# Run with a specific template size
+./test/integration/Run-IntegrationTests.ps1 -Template Small
+
+# Run only a specific test step
+./test/integration/Run-IntegrationTests.ps1 -Step Joiner
+
+# Skip reset for faster re-runs (keeps existing environment)
+./test/integration/Run-IntegrationTests.ps1 -SkipReset
+
+# Skip rebuild (use existing Docker images)
+./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
+```
+
+**Alternative: Manual step-by-step (for debugging or more control)**
+
+```powershell
 # 1. Start complete test environment (JIM stack + Samba AD + readiness check)
 ./test/integration/Start-IntegrationTestEnvironment.ps1
 
-# 2. Create Infrastructure API Key (one-time setup per JIM database)
-#    This saves the key to test/integration/.api-key for use across sessions
+# 2. Create Infrastructure API Key
 ./test/integration/Setup-InfrastructureApiKey.ps1
 
-# 3. Run Scenario 1 with Nano template (3 users)
-#    The API key is read from the .api-key file created in step 2
+# 3. Run Scenario 1
 ./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
 ```
 
-**Alternative: Manual startup (if you prefer more control)**
-
-```powershell
-# 1a. Start JIM stack
-jim-stack  # or: docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d
-
-# 1b. Start test infrastructure (Samba AD)
-docker compose -f docker-compose.integration-tests.yml up -d
-
-# 1c. Wait for Samba AD to be ready
-pwsh test/integration/Wait-SambaReady.ps1
-
-# 2-3. Continue with API key creation and test execution (same as above)
-```
-
-**Prerequisites:**
-- Working directory must be repository root (`/workspaces/JIM`)
-- JIM stack running (`jim-stack` from repo root)
-- Samba AD running (`docker compose -f docker-compose.integration-tests.yml up -d` from repo root)
-- API key created (step 4 creates one automatically)
-
 **Helper Scripts:**
-- `Start-IntegrationTestEnvironment.ps1` - One-command startup for JIM + Samba AD (recommended!)
-- `Wait-SambaReady.ps1` - Checks if Samba AD is ready (used automatically by startup script)
-- `Setup-InfrastructureApiKey.ps1` - Creates API key for testing (one-time setup)
+- `Run-IntegrationTests.ps1` - **Single-command test runner (recommended!)**
+- `Start-IntegrationTestEnvironment.ps1` - Starts JIM + Samba AD (used by runner)
+- `Wait-SambaReady.ps1` - Checks if Samba AD is ready
+- `Setup-InfrastructureApiKey.ps1` - Creates API key for testing
 
 **Current Limitations:**
-- ⚠️ Samba AD takes ~2 minutes to initialise on first start (use `Wait-SambaReady.ps1` to monitor)
 - ⚠️ Progress bars not yet implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
-- ✅ Unit tests all passing (553 tests)
+- ✅ Samba AD optimised with pre-built images (~30 seconds startup, down from ~5 minutes)
+- ✅ Unit tests all passing (617 tests)
 - ✅ Expression evaluation support implemented
 - ✅ Automated Samba AD readiness check
 
