@@ -2009,6 +2009,7 @@
                           Class="mb-4">
                     <HeaderContent>
                         <MudTh>Connected System Attribute</MudTh>
+                        <MudTh>Operator</MudTh>
                         <MudTh>Metaverse Attribute</MudTh>
                         <MudTh>Case Sensitive</MudTh>
                         <MudTh>Actions</MudTh>
@@ -2036,6 +2037,7 @@
                                 <text>-</text>
                             }
                         </MudTd>
+                        <MudTd DataLabel="Operator">=</MudTd>
                         <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
                         <MudTd DataLabel="Case Sensitive">
                             <MudSwitch T="bool" Value="@context.CaseSensitive"
