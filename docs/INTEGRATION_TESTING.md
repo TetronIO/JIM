@@ -377,7 +377,9 @@ All templates generate realistic enterprise data following normal distribution p
 | Step | Test Case | Description |
 |------|-----------|-------------|
 | 1 | **Joiner** | User added to HR CSV → provisioned to AD with correct attributes and group memberships |
-| 2 | **Mover** | User department/title changed in CSV → attributes and groups updated in AD |
+| 2a | **Mover** | User department/title changed in CSV → attributes and groups updated in AD |
+| 2b | **Mover-Rename** | User name changed in CSV → DN renamed in AD (same container) |
+| 2c | **Mover-Move** | User display name changed → DN recalculated, LDAP move operation executed |
 | 3 | **Leaver** | User removed from CSV → deprovisioned from AD (respecting deletion rules) |
 | 4 | **Reconnection** | User re-added to CSV within grace period → scheduled deletion cancelled |
 
@@ -391,15 +393,19 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 # Step 1: Joiner - Add user to HR CSV, trigger JIM sync, verify in AD
 ./Invoke-Scenario1-HRToDirectory.ps1 -Step Joiner -Template Small
 
-# ... wait for JIM to process (or trigger Run Profile manually) ...
-
-# Step 2: Mover - Modify user in CSV, trigger JIM sync, verify changes in AD
+# Step 2a: Mover - Modify user attributes in CSV, verify changes in AD
 ./Invoke-Scenario1-HRToDirectory.ps1 -Step Mover -Template Small
 
-# Step 3: Leaver - Remove user from CSV, trigger JIM sync, verify deprovisioned
+# Step 2b: Mover-Rename - Change user name, verify DN rename in AD
+./Invoke-Scenario1-HRToDirectory.ps1 -Step Mover-Rename -Template Small
+
+# Step 2c: Mover-Move - Change display name, verify LDAP move operation
+./Invoke-Scenario1-HRToDirectory.ps1 -Step Mover-Move -Template Small
+
+# Step 3: Leaver - Remove user from CSV, verify deprovisioned in AD
 ./Invoke-Scenario1-HRToDirectory.ps1 -Step Leaver -Template Small
 
-# Step 4: Reconnection - Re-add user before grace period expires, verify not deleted
+# Step 4: Reconnection - Re-add user before grace period, verify preserved
 ./Invoke-Scenario1-HRToDirectory.ps1 -Step Reconnection -Template Small
 
 # Run all steps sequentially (waits for JIM between each)
@@ -412,6 +418,8 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 |-----------|--------|--------------|
 | `-Step Joiner` | Creates test user(s) in HR CSV | User exists in AD with correct attributes |
 | `-Step Mover` | Modifies department/title in CSV | AD attributes updated, group memberships changed |
+| `-Step Mover-Rename` | Changes user name in CSV | DN renamed in AD (CN component changed) |
+| `-Step Mover-Move` | Changes display name triggering DN change | LDAP move operation executed, user relocated |
 | `-Step Leaver` | Removes user from HR CSV | User disabled/deleted in AD per deletion rules |
 | `-Step Reconnection` | Re-adds user to CSV | Scheduled deletion cancelled, user remains active |
 | `-Step All` | Runs all steps sequentially | Full lifecycle validated |

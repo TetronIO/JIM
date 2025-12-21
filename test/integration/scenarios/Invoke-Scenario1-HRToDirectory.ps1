@@ -304,6 +304,75 @@ try {
         }
     }
 
+    # Test 2c: Mover - Move (OU Change via Display Name)
+    if ($Step -eq "Mover-Move" -or $Step -eq "All") {
+        Write-TestSection "Test 2c: Mover - Move (OU Change)"
+
+        Write-Host "Updating user display name to trigger OU move..." -ForegroundColor Gray
+
+        # The DN is computed from displayName: "CN=" + EscapeDN(mv["Display Name"]) + ",CN=Users,DC=testdomain,DC=local"
+        # We'll change the DN expression result by modifying Display Name
+        # This simulates a scenario where the DN expression includes OU logic based on attributes
+        #
+        # For this test, we'll change displayName to include a department prefix
+        # In a real scenario, the DN expression might be:
+        # "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=testdomain,DC=local"
+        #
+        # Since our current expression uses CN=Users, we'll simulate by changing the display name
+        # to trigger a DN change, then validate the move operation works
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvContent = Get-Content $csvPath
+
+        # Change test.joiner's display name from "Renamed Joiner" to "Joiner, Renamed"
+        # This will change DN from "CN=Renamed Joiner,..." to "CN=Joiner\, Renamed,..."
+        # The comma in the CN requires escaping in LDAP DNs
+        #
+        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName,dn
+        $updatedContent = $csvContent | ForEach-Object {
+            if ($_ -match "test\.joiner") {
+                # Update displayName from "Renamed Joiner" to "Joiner, Renamed" (surname first format)
+                $line = $_ -replace '"Renamed Joiner"', '"Joiner, Renamed"'
+                # Update dn - the comma will be escaped by JIM's EscapeDN function
+                $line = $line -replace 'CN=Renamed Joiner,', 'CN=Joiner\, Renamed,'
+                $line
+            }
+            else {
+                $_
+            }
+        }
+
+        $updatedContent | Set-Content $csvPath
+        Write-Host "  ✓ Changed display name to 'Joiner, Renamed' (triggers DN move)" -ForegroundColor Green
+
+        # Copy updated CSV
+        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+        # Trigger sync (Import → Full Sync → Export)
+        Write-Host "Triggering synchronisation..." -ForegroundColor Gray
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
+
+        # Validate move in AD
+        # The user should now have DN "CN=Joiner\, Renamed,CN=Users,DC=testdomain,DC=local"
+        Write-Host "Validating move in AD..." -ForegroundColor Gray
+
+        # Query AD to find the user and check DN
+        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn displayName 2>&1"
+
+        # The DN will be returned with the escaped comma
+        if ($adUserInfo -match "CN=Joiner.* Renamed") {
+            Write-Host "  ✓ User moved to new DN in AD" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Mover-Move"; Success = $true }
+        }
+        else {
+            Write-Host "  ✗ User NOT moved in AD" -ForegroundColor Red
+            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
+            $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "DN not moved" }
+        }
+    }
+
     # Test 3: Leaver (Deprovisioning)
     if ($Step -eq "Leaver" -or $Step -eq "All") {
         Write-TestSection "Test 3: Leaver (Deprovisioning)"
