@@ -52,7 +52,6 @@ alias jim-compile='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 alias jim-web='dotnet run --project JIM.Web'
-alias jim-api='dotnet run --project JIM.Api'
 alias jim-worker='dotnet run --project JIM.Worker'
 
 # Database management

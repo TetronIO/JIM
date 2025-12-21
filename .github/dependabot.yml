@@ -52,22 +52,6 @@ updates:
 
   # Docker base images
   - package-ecosystem: "docker"
-    directory: "/JIM.Api"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Europe/London"
-    reviewers:
-      - "TetronIO/jim-maintainers"
-    commit-message:
-      prefix: "chore"
-    ignore:
-      # Ignore all major version updates
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: "docker"
     directory: "/JIM.Web"
     schedule:
       interval: "weekly"

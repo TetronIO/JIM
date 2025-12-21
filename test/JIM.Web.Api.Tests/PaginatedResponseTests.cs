@@ -2,7 +2,7 @@ using System;
 using JIM.Web.Models.Api;
 using NUnit.Framework;
 
-namespace JIM.Api.Tests;
+namespace JIM.Web.Api.Tests;
 
 [TestFixture]
 public class PaginatedResponseTests

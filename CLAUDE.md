@@ -36,7 +36,7 @@
 3. Don't ask "Would you like me to commit?" - if the context is clear, just do it
 
 **Test project locations:**
-- API tests: `test/JIM.Api.Tests/`
+- API tests: `test/JIM.Web.Api.Tests/`
 - Model tests: `test/JIM.Models.Tests/`
 - Worker/business logic tests: `JIM.Worker.Tests/`
 
@@ -119,7 +119,7 @@ Blazor pages, API controllers, and other compiled code require container rebuild
 - Domain models: `JIM.Models/Core/` or `JIM.Models/Staging/`
 - Database repositories: `JIM.PostgresData/`
 - Connectors: `JIM.Connectors/` or new connector project
-- Tests: `test/JIM.Api.Tests/`, `test/JIM.Models.Tests/`, `JIM.Worker.Tests/`
+- Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `JIM.Worker.Tests/`
 
 ## Code Style & Conventions
 

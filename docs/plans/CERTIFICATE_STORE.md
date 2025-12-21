@@ -416,7 +416,7 @@ When a user enables LDAPS (or other secure connections) and no certificates are 
 - [ ] Add to `JimApplication` facade
 
 ### Phase 3: API Layer
-- [ ] Create DTOs in `JIM.Api/Models/`
+- [ ] Create DTOs in `JIM.Web/Models/Api/`
 - [ ] Create `CertificatesController`
 - [ ] Implement all CRUD endpoints
 - [ ] Add file upload handling

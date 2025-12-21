@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
 
-namespace JIM.Api.Tests;
+namespace JIM.Web.Api.Tests;
 
 /// <summary>
 /// Tests for Metaverse Attribute CRUD endpoints (Create, Update, Delete).

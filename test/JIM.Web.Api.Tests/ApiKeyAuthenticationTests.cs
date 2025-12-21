@@ -1,7 +1,7 @@
 using JIM.Web.Middleware.Api;
 using NUnit.Framework;
 
-namespace JIM.Api.Tests;
+namespace JIM.Web.Api.Tests;
 
 [TestFixture]
 public class ApiKeyAuthenticationTests

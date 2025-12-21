@@ -8,7 +8,7 @@ using NUnit.Framework;
 using System;
 using System.Threading.Tasks;
 
-namespace JIM.Api.Tests;
+namespace JIM.Web.Api.Tests;
 
 [TestFixture]
 public class HealthControllerTests

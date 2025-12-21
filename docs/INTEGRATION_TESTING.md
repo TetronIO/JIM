@@ -1123,7 +1123,7 @@ Get-ChildItem /connector-files/test-data/
 JIM/
 ├── docker-compose.integration-tests.yml                    # Container definitions
 ├── test/
-│   ├── JIM.Api.Tests/                                      # API unit tests
+│   ├── JIM.Web.Api.Tests/                                  # API unit tests
 │   ├── JIM.Models.Tests/                                   # Model unit tests
 │   └── integration/
 │       ├── Invoke-IntegrationTests.ps1                     # Master test runner
@@ -1246,9 +1246,9 @@ docker logs jim.web --tail 100
 ### Files Modified in This Branch
 
 **New Files:**
-- `test/JIM.Api.Tests/SynchronisationControllerSchemaTests.cs` - 14 tests
-- `test/JIM.Api.Tests/MetaverseControllerAttributeTests.cs` - 18 tests
-- `test/JIM.Api.Tests/SynchronisationControllerMappingTests.cs` - 11 tests
+- `test/JIM.Web.Api.Tests/SynchronisationControllerSchemaTests.cs` - 14 tests
+- `test/JIM.Web.Api.Tests/MetaverseControllerAttributeTests.cs` - 18 tests
+- `test/JIM.Web.Api.Tests/SynchronisationControllerMappingTests.cs` - 11 tests
 
 **Bug Fixes:**
 - `JIM.Application/Servers/ConnectedSystemServer.cs` - Activity.ConnectedSystemId for UPDATE operations

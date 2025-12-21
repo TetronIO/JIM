@@ -29,7 +29,7 @@
 ## Phase 2: Error Handling & Response Consistency
 
 ### 2.1 Create Standardised Error Response
-- [x] Create `ApiErrorResponse` DTO in `JIM.Api/Models/`:
+- [x] Create `ApiErrorResponse` DTO in `JIM.Web/Models/Api/`:
   ```csharp
   public class ApiErrorResponse
   {
