@@ -460,6 +460,11 @@ try {
         $reconnectUser = New-TestUser -Index 8888
         $reconnectUser.EmployeeId = "EMP888888"
         $reconnectUser.SamAccountName = "test.reconnect"
+        $reconnectUser.Email = "test.reconnect@testdomain.local"
+        $reconnectUser.FirstName = "Test"
+        $reconnectUser.LastName = "Reconnect"
+        $reconnectUser.Department = "IT"
+        $reconnectUser.Title = "Developer"
 
         # Add to CSV (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
