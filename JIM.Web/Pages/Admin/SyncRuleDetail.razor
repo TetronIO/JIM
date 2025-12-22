@@ -161,81 +161,113 @@ else if (_syncRule != null)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
             <MudText Typo="Typo.h5">Matching Rules</MudText>
-            <MudText Class="mt-5">
-                At lest one matching rule is needed to ensure JIM can associate a Connected System Object from this sync rule
-                with a matching Metaverse object.
-                It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for
-                the life of the object.
-                You can define multiple rules, and order them. The first to match will be used. Common examples might include:
-                employeeID = employeeID, or ActiveDirectoryObjectGuid = objectGUID.
-                A Connected System Object is considered Joined when a matching Metaverse object is found, and Disconnected when
-                not.
-            </MudText>
 
-            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
-                OnClick="HandleOpenAddMatchingRuleMappingDialog" Color="Color.Default" Class="mt-5" DropShadow="false"
-                Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)">Add Matching
-                Rule</MudButton>
-
-            @foreach (var objectMatchingRule in _syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
+            @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
-                var sourceType = objectMatchingRule.GetSourceType();
-                <MudPaper Class="pa-4 mt-5" Outlined="true">
-                    @if (sourceType == SyncRuleMappingSourcesType.AttributeMapping && objectMatchingRule.TargetMetaverseAttribute !=
-                            null)
-                    {
-                        var source = objectMatchingRule.Sources[0];
-                        if (source.ConnectedSystemAttribute != null)
+                @* Simple Mode - matching rules are managed on the Connected System *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4 mb-2">
+                    <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled">Simple Mode</MudChip>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Matching rules are managed on the Connected System.
+                    </MudText>
+                </MudStack>
+
+                <MudAlert Severity="Severity.Info" Class="mt-3" Icon="@Icons.Material.Filled.Info">
+                    This Connected System uses <strong>Simple Mode</strong> for object matching. Matching rules are configured
+                    at the Connected System level and shared across all sync rules for each object type.
+                </MudAlert>
+
+                <MudButton StartIcon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Filled"
+                    Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Color="Color.Primary" Class="mt-4" DropShadow="false">
+                    Manage Matching Rules on Connected System
+                </MudButton>
+            }
+            else
+            {
+                @* Advanced Mode - matching rules are managed per sync rule *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4 mb-2">
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">Advanced Mode</MudChip>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Matching rules are specific to this sync rule.
+                    </MudText>
+                </MudStack>
+
+                <MudText Class="mt-3">
+                    At least one matching rule is needed to ensure JIM can associate a Connected System Object from this sync rule
+                    with a matching Metaverse object.
+                    It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for
+                    the life of the object.
+                    You can define multiple rules, and order them. The first to match will be used. Common examples might include:
+                    employeeID = employeeID, or ActiveDirectoryObjectGuid = objectGUID.
+                    A Connected System Object is considered Joined when a matching Metaverse object is found, and Disconnected when
+                    not.
+                </MudText>
+
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
+                    OnClick="HandleOpenAddMatchingRuleMappingDialog" Color="Color.Default" Class="mt-5" DropShadow="false"
+                    Disabled="@(_syncRule.MetaverseObjectType == null || _syncRule.ConnectedSystemObjectType == null)">Add Matching
+                    Rule</MudButton>
+
+                @foreach (var objectMatchingRule in _syncRule.ObjectMatchingRules.OrderBy(omr => omr.Order))
+                {
+                    var sourceType = objectMatchingRule.GetSourceType();
+                    <MudPaper Class="pa-4 mt-5" Outlined="true">
+                        @if (sourceType == SyncRuleMappingSourcesType.AttributeMapping && objectMatchingRule.TargetMetaverseAttribute !=
+                                null)
                         {
-                            <MudGrid Spacing="0">
-                                <MudItem xs="6">
-                                    <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
-                                        @objectMatchingRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                                </MudItem>
-                                <MudItem xs="6" Class="d-flex align-center justify-end">
-                                    <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
-                                </MudItem>
-                                <MudItem xs="12" Class="d-flex align-center">
-                                    <MudChip T="string">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Connected System Attribute">
-                                                <MudAvatar>CS</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                                    </MudChip>
-                                    <MudChip T="string">
-                                        <MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
-                                    </MudChip>
-                                    <MudChip T="string">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Metaverse Attribute">
-                                                <MudAvatar>MV</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
-                                    </MudChip>
-                                    <MudSwitch T="bool" Value="@objectMatchingRule.CaseSensitive"
-                                               ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
-                                               Label="Case Sensitive"
-                                               Color="Color.Primary"
-                                               Size="Size.Small"
-                                               Class="ms-4" />
-                                    <MudSpacer />
-                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small"
-                                        Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
-                                        Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small"
-                                        Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
-                                        Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                        aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
-                                    </MudIconButton>
-                                </MudItem>
-                            </MudGrid>
+                            var source = objectMatchingRule.Sources[0];
+                            if (source.ConnectedSystemAttribute != null)
+                            {
+                                <MudGrid Spacing="0">
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
+                                            @objectMatchingRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+                                    </MudItem>
+                                    <MudItem xs="6" Class="d-flex align-center justify-end">
+                                        <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
+                                    </MudItem>
+                                    <MudItem xs="12" Class="d-flex align-center">
+                                        <MudChip T="string">
+                                            <AvatarContent>
+                                                <MudTooltip Text="Connected System Attribute">
+                                                    <MudAvatar>CS</MudAvatar>
+                                                </MudTooltip>
+                                            </AvatarContent>
+                                            <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
+                                        </MudChip>
+                                        <MudChip T="string">
+                                            <MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
+                                        </MudChip>
+                                        <MudChip T="string">
+                                            <AvatarContent>
+                                                <MudTooltip Text="Metaverse Attribute">
+                                                    <MudAvatar>MV</MudAvatar>
+                                                </MudTooltip>
+                                            </AvatarContent>
+                                            <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
+                                        </MudChip>
+                                        <MudSwitch T="bool" Value="@objectMatchingRule.CaseSensitive"
+                                                   ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
+                                                   Label="Case Sensitive"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   Class="ms-4" />
+                                        <MudSpacer />
+                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small"
+                                            Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
+                                            Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small"
+                                            Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
+                                            Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                            aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
+                                        </MudIconButton>
+                                    </MudItem>
+                                </MudGrid>
+                            }
                         }
-                    }
-                </MudPaper>
+                    </MudPaper>
+                }
             }
         </MudPaper>
 

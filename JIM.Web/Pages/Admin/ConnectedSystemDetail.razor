@@ -650,9 +650,17 @@
         }
 
         <MudTabPanel Text="Object Matching" Disabled="@AreSettingDependentTabsDisabled()">
-            <MudAlert Severity="Severity.Info" Class="mb-4">
-                Object matching rules define how objects from this Connected System are correlated with Metaverse Objects during import (join)
-                and how existing objects are found during export (provisioning). Configure rules per object type.
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled">Simple Mode</MudChip>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Matching rules are defined here per object type and shared across all sync rules.
+                </MudText>
+            </MudStack>
+
+            <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.Info">
+                <strong>Simple Mode</strong> is ideal for most deployments. Matching rules configured here apply to all sync rules
+                that use the same object type. For advanced scenarios requiring different matching logic per sync rule,
+                switch to <strong>Advanced Mode</strong> via Settings.
             </MudAlert>
 
             @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
@@ -2003,7 +2011,6 @@
             {
                 <MudTable Items="@objectType.ObjectMatchingRules.OrderBy(r => r.Order)"
                           Hover="true"
-                          Dense="true"
                           Outlined="true"
                           Elevation="0"
                           Class="mb-4">
@@ -2088,7 +2095,7 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
-                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
+                    <MudText Typo="Typo.h6">=</MudText>
                 </MudItem>
                 <MudItem xs="12" md="5">
                     <MudSelect T="MetaverseAttribute"
