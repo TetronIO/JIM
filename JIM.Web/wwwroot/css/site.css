@@ -120,14 +120,14 @@ html, body {
 }
 
 /* Navigation menu styling - top-level items */
-.jim-nav-menu > .jim-nav-top-level > .mud-nav-link-text,
+.jim-nav-menu > .jim-nav-top-level .mud-nav-link-text,
 .jim-nav-menu > .jim-nav-top-level > button > .mud-nav-link-text {
     font-weight: 600;
     color: var(--mud-palette-primary);
 }
 
 /* Ensure icon colour matches for top-level items */
-.jim-nav-menu > .jim-nav-top-level > .mud-nav-link-icon,
+.jim-nav-menu > .jim-nav-top-level .mud-nav-link-icon,
 .jim-nav-menu > .jim-nav-top-level > button > .mud-icon-root {
     color: var(--mud-palette-primary);
 }
