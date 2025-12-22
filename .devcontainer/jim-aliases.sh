@@ -65,7 +65,7 @@ alias jim-adminer='echo "Adminer running at http://localhost:8080"'
 # Docker stack management
 alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
-alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down'
+alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml down 2>/dev/null || true'
 
 # Docker builds (rebuild and start services)
 alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
