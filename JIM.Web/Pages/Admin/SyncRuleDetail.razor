@@ -613,13 +613,21 @@ else if (_syncRule != null)
         </MudAlert>
     }
 
-    <MudStack Row="true" Justify="Justify.SpaceBetween">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-5" OnClick="HandleCreateOrUpdateSyncRuleAsync"
-            Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule
-        </MudButton>
-        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
-            Class="mt-5" DropShadow="false" Disabled="@(_syncRule.Id == 0)" Color="Color.Error">Delete Sync Rule</MudButton>
-    </MudStack>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-5" OnClick="HandleCreateOrUpdateSyncRuleAsync"
+        Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule
+    </MudButton>
+
+    @if (_syncRule.Id > 0)
+    {
+        <MudPaper Class="pa-4 mt-5" Outlined="true">
+            <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
+            <MudText Class="mud-text-secondary mb-4">
+                Deleting this synchronisation rule is permanent and cannot be undone. All configuration and attribute flow mappings will be lost.
+            </MudText>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
+                DropShadow="false" Color="Color.Error">Delete Sync Rule</MudButton>
+        </MudPaper>
+    }
 }
 
 @code {
