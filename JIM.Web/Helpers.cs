@@ -42,11 +42,10 @@ public static class Helpers
 
     /// <summary>
     /// Extension method that converts a DateTime into a more human-readable string.
-    /// Uses UK date format (dd/MM/yyyy HH:mm).
     /// </summary>
     public static string ToFriendlyDate(this DateTime dateTime)
     {
-        return dateTime.ToString("dd/MM/yyyy HH:mm");
+        return $"{dateTime.ToShortDateString()} ({dateTime.ToShortTimeString()})";
     }
 
     /// <summary>
