@@ -157,7 +157,7 @@ else if (_syncRule != null)
             rule from being evaluated.</MudAlert>
     </MudPaper>
 
-    @if (_syncRule.Direction == SyncRuleDirection.Import)
+    @if (_syncRule.Direction != SyncRuleDirection.NotSet)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
             <MudText Typo="Typo.h5">Matching Rules</MudText>
