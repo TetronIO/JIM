@@ -650,20 +650,46 @@
         }
 
         <MudTabPanel Text="Object Matching" Disabled="@AreSettingDependentTabsDisabled()">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-                <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled">Simple Mode</MudChip>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Matching rules are defined here per object type and shared across all sync rules.
-                </MudText>
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+                <div>
+                    <MudText Typo="Typo.body1">
+                        @if (_connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
+                        {
+                            <text>Matching rules are defined here per object type and shared across all sync rules.</text>
+                        }
+                        else
+                        {
+                            <text>Matching rules are configured on each individual sync rule.</text>
+                        }
+                    </MudText>
+                </div>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Class="mud-text-secondary">Simple</MudText>
+                    <MudSwitch T="bool"
+                               Value="@(_connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)"
+                               ValueChanged="HandleObjectMatchingModeToggleAsync"
+                               Color="Color.Primary" />
+                    <MudText Class="mud-text-secondary">Advanced</MudText>
+                </MudStack>
             </MudStack>
 
-            <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.Info">
-                <strong>Simple Mode</strong> is ideal for most deployments. Matching rules configured here apply to all sync rules
-                that use the same object type. For advanced scenarios requiring different matching logic per sync rule,
-                switch to <strong>Advanced Mode</strong> via Settings.
-            </MudAlert>
-
-            @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
+            @if (_connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
+            {
+                @* Advanced Mode - matching rules are on sync rules *@
+                <MudAlert Severity="Severity.Info" Class="mt-4">
+                    In Advanced Mode, matching rules are configured on each individual sync rule. This allows different
+                    matching logic for different scenarios.
+                </MudAlert>
+                <MudButton StartIcon="@Icons.Material.Filled.OpenInNew"
+                           Variant="Variant.Filled"
+                           Href="/admin/connected-systems/sync-rules"
+                           Color="Color.Primary"
+                           Class="mt-4"
+                           DropShadow="false">
+                    Go to Synchronisation Rules
+                </MudButton>
+            }
+            else if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
             {
                 <MudAlert Severity="Severity.Warning">
                     No object types have been configured. Import the schema first to configure object matching rules.
@@ -998,6 +1024,56 @@
     </MudDialog>
 }
 
+@* Mode Switch Dialog *@
+<MudDialog @bind-Visible="_modeSwitchDialogVisible" Options="_deleteDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="mr-3 mb-n1" />
+            Switch to @(_switchingToAdvancedMode ? "Advanced" : "Simple") Mode
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_switchingToAdvancedMode)
+        {
+            <MudText>
+                Switching to <strong>Advanced Mode</strong> will allow you to configure different matching rules for each sync rule.
+            </MudText>
+            <MudAlert Severity="Severity.Info" Class="mt-4">
+                The current matching rules will be copied to all existing import sync rules for this Connected System, giving you a starting point to customise.
+            </MudAlert>
+        }
+        else
+        {
+            <MudText>
+                Switching to <strong>Simple Mode</strong> will configure matching rules here, shared across all sync rules.
+            </MudText>
+            <MudAlert Severity="Severity.Warning" Class="mt-4">
+                <strong>Note:</strong> Any matching rules configured on individual sync rules will remain there but will no longer be used.
+                You should review and configure matching rules here after switching.
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _modeSwitchDialogVisible = false)" DropShadow="false" Disabled="_modeSwitchInProgress">Cancel</MudButton>
+        <MudButton
+            Color="Color.Primary"
+            Variant="Variant.Filled"
+            DropShadow="false"
+            OnClick="HandleModeSwitchConfirmedAsync"
+            Disabled="_modeSwitchInProgress">
+            @if (_modeSwitchInProgress)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Switching...</MudText>
+            }
+            else
+            {
+                <text>Switch Mode</text>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     [Parameter]
     public int Id { get; set; }
@@ -1054,6 +1130,10 @@
     private IList<MetaverseAttribute>? _metaverseAttributes;
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
+    // Mode switch dialog
+    private bool _modeSwitchDialogVisible;
+    private bool _switchingToAdvancedMode;
+    private bool _modeSwitchInProgress;
 
     protected override async Task OnInitializedAsync()
     {
@@ -1498,6 +1578,52 @@
         {
             Log.Error(ex, "Failed to reorder matching rules");
             Snackbar.Add($"Failed to reorder matching rules: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Task HandleObjectMatchingModeToggleAsync(bool advancedMode)
+    {
+        _switchingToAdvancedMode = advancedMode;
+        _modeSwitchDialogVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleModeSwitchConfirmedAsync()
+    {
+        if (_connectedSystem == null)
+            return;
+
+        _modeSwitchInProgress = true;
+        StateHasChanged();
+
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            var newMode = _switchingToAdvancedMode ? ObjectMatchingRuleMode.SyncRule : ObjectMatchingRuleMode.ConnectedSystem;
+
+            var syncRulesUpdated = await Jim.ConnectedSystems.SwitchObjectMatchingModeAsync(_connectedSystem, newMode, user);
+
+            if (_switchingToAdvancedMode)
+            {
+                Snackbar.Add($"Switched to Advanced Mode. Matching rules copied to {syncRulesUpdated} sync rule(s).", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Switched to Simple Mode. Configure matching rules here for all sync rules.", Severity.Success);
+            }
+
+            _modeSwitchDialogVisible = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to switch object matching mode");
+            Snackbar.Add($"Failed to switch mode: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _modeSwitchInProgress = false;
+            StateHasChanged();
         }
     }
 

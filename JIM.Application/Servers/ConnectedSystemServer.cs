@@ -190,6 +190,98 @@ public class ConnectedSystemServer
             if (!string.IsNullOrEmpty(settingValue.StringValue))
                 settingValue.StringValue = settingValue.StringValue.Trim();
     }
+
+    /// <summary>
+    /// Switches the object matching rule mode for a Connected System.
+    /// When switching to Advanced Mode (SyncRule), copies matching rules from
+    /// Connected System object types to all import sync rules.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to update</param>
+    /// <param name="newMode">The new object matching rule mode</param>
+    /// <param name="initiatedBy">The user initiating the change</param>
+    /// <returns>The number of sync rules that had matching rules copied to them</returns>
+    public async Task<int> SwitchObjectMatchingModeAsync(
+        ConnectedSystem connectedSystem,
+        ObjectMatchingRuleMode newMode,
+        MetaverseObject? initiatedBy)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+
+        if (connectedSystem.ObjectMatchingRuleMode == newMode)
+        {
+            Log.Debug("SwitchObjectMatchingModeAsync: Connected System {Id} is already in {Mode} mode",
+                connectedSystem.Id, newMode);
+            return 0;
+        }
+
+        Log.Information("SwitchObjectMatchingModeAsync: Switching Connected System {Id} from {OldMode} to {NewMode}",
+            connectedSystem.Id, connectedSystem.ObjectMatchingRuleMode, newMode);
+
+        var syncRulesUpdated = 0;
+
+        if (newMode == ObjectMatchingRuleMode.SyncRule)
+        {
+            // Switching to Advanced Mode - copy matching rules to import sync rules
+            var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+            var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
+
+            foreach (var syncRule in importSyncRules)
+            {
+                // Find matching rules for the sync rule's object type
+                var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == syncRule.ConnectedSystemObjectTypeId);
+                if (objectType == null || objectType.ObjectMatchingRules.Count == 0)
+                    continue;
+
+                // Only copy if sync rule doesn't already have matching rules
+                if (syncRule.ObjectMatchingRules.Count > 0)
+                    continue;
+
+                foreach (var sourceRule in objectType.ObjectMatchingRules)
+                {
+                    var newRule = new ObjectMatchingRule
+                    {
+                        Order = sourceRule.Order,
+                        TargetMetaverseAttributeId = sourceRule.TargetMetaverseAttributeId,
+                        CaseSensitive = sourceRule.CaseSensitive,
+                        Sources = sourceRule.Sources.Select(s => new ObjectMatchingRuleSource
+                        {
+                            Order = s.Order,
+                            ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
+                            MetaverseAttributeId = s.MetaverseAttributeId,
+                            Expression = s.Expression
+                        }).ToList()
+                    };
+                    syncRule.ObjectMatchingRules.Add(newRule);
+                }
+
+                await CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+                syncRulesUpdated++;
+            }
+
+            Log.Information("SwitchObjectMatchingModeAsync: Copied matching rules to {Count} sync rule(s)", syncRulesUpdated);
+        }
+
+        // Update the Connected System mode
+        connectedSystem.ObjectMatchingRuleMode = newMode;
+        connectedSystem.LastUpdated = DateTime.UtcNow;
+
+        // Create activity for tracking
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+
+        return syncRulesUpdated;
+    }
     #endregion
 
     #region Connected System Deletion
