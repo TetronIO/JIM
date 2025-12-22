@@ -1606,6 +1606,25 @@ public class ConnectedSystemServer
             // import rule cannot have these properties:
             syncRule.ProvisionToConnectedSystem = null;
             // Note: ObjectScopingCriteriaGroups IS valid for import rules - evaluates CSO attributes
+
+            // In Simple Mode, matching rules are defined on the Connected System, not sync rules
+            // Clear any matching rules that may have been provided
+            if (syncRule.ConnectedSystemId > 0)
+            {
+                var connectedSystem = syncRule.ConnectedSystem ??
+                    await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId);
+
+                if (connectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
+                {
+                    if (syncRule.ObjectMatchingRules.Count > 0)
+                    {
+                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from sync rule {Id} " +
+                            "because Connected System {CsId} is in Simple Mode",
+                            syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
+                        syncRule.ObjectMatchingRules.Clear();
+                    }
+                }
+            }
         }
         else
         {

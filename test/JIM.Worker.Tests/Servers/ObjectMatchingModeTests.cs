@@ -346,4 +346,149 @@ public class ObjectMatchingModeTests
     }
 
     #endregion
+
+    #region CreateOrUpdateSyncRuleAsync Simple Mode Validation Tests
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_SimpleMode_ClearsMatchingRulesFromSyncRuleAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            ObjectMatchingRuleMode = ObjectMatchingRuleMode.ConnectedSystem // Simple Mode
+        };
+
+        var syncRule = new SyncRule
+        {
+            Id = 0, // New sync rule
+            Name = "Import Users",
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = 1,
+            ConnectedSystem = connectedSystem,
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+            ObjectMatchingRules = new List<ObjectMatchingRule>
+            {
+                new()
+                {
+                    Id = 0,
+                    Order = 0,
+                    TargetMetaverseAttributeId = 100,
+                    Sources = new List<ObjectMatchingRuleSource>
+                    {
+                        new() { Order = 0, ConnectedSystemAttributeId = 10 }
+                    }
+                }
+            }
+        };
+
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy);
+
+        // Assert
+        Assert.That(result, Is.True);
+        Assert.That(syncRule.ObjectMatchingRules.Count, Is.EqualTo(0),
+            "Matching rules should be cleared when Connected System is in Simple Mode");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_AdvancedMode_PreservesMatchingRulesOnSyncRuleAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule // Advanced Mode
+        };
+
+        var syncRule = new SyncRule
+        {
+            Id = 0, // New sync rule
+            Name = "Import Users",
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = 1,
+            ConnectedSystem = connectedSystem,
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+            ObjectMatchingRules = new List<ObjectMatchingRule>
+            {
+                new()
+                {
+                    Id = 0,
+                    Order = 0,
+                    TargetMetaverseAttributeId = 100,
+                    Sources = new List<ObjectMatchingRuleSource>
+                    {
+                        new() { Order = 0, ConnectedSystemAttributeId = 10 }
+                    }
+                }
+            }
+        };
+
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy);
+
+        // Assert
+        Assert.That(result, Is.True);
+        Assert.That(syncRule.ObjectMatchingRules.Count, Is.EqualTo(1),
+            "Matching rules should be preserved when Connected System is in Advanced Mode");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ExportRule_AlwaysClearsMatchingRulesAsync()
+    {
+        // Arrange - Export rules should never have matching rules regardless of mode
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule // Even in Advanced Mode
+        };
+
+        var syncRule = new SyncRule
+        {
+            Id = 0,
+            Name = "Export Users",
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = 1,
+            ConnectedSystem = connectedSystem,
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+            ObjectMatchingRules = new List<ObjectMatchingRule>
+            {
+                new()
+                {
+                    Id = 0,
+                    Order = 0,
+                    TargetMetaverseAttributeId = 100,
+                    Sources = new List<ObjectMatchingRuleSource>
+                    {
+                        new() { Order = 0, ConnectedSystemAttributeId = 10 }
+                    }
+                }
+            }
+        };
+
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy);
+
+        // Assert
+        Assert.That(result, Is.True);
+        Assert.That(syncRule.ObjectMatchingRules.Count, Is.EqualTo(0),
+            "Matching rules should always be cleared for export rules");
+    }
+
+    #endregion
 }
