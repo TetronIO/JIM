@@ -1048,8 +1048,12 @@
                 Switching to <strong>Simple Mode</strong> will configure matching rules here, shared across all sync rules.
             </MudText>
             <MudAlert Severity="Severity.Warning" Class="mt-4">
-                <strong>Note:</strong> Any matching rules configured on individual sync rules will remain there but will no longer be used.
-                You should review and configure matching rules here after switching.
+                <strong>Migration:</strong> Matching rules from sync rules will be analysed and migrated to the object type level:
+                <ul class="mt-2 mb-0">
+                    <li>If all sync rules have the same matching rules, they will be used directly.</li>
+                    <li>If sync rules have different matching rules, the most common configuration will be selected.</li>
+                    <li>Matching rules will be cleared from all sync rules after migration.</li>
+                </ul>
             </MudAlert>
         }
     </DialogContent>
@@ -1601,15 +1605,29 @@
             var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
             var newMode = _switchingToAdvancedMode ? ObjectMatchingRuleMode.SyncRule : ObjectMatchingRuleMode.ConnectedSystem;
 
-            var syncRulesUpdated = await Jim.ConnectedSystems.SwitchObjectMatchingModeAsync(_connectedSystem, newMode, user);
+            var result = await Jim.ConnectedSystems.SwitchObjectMatchingModeAsync(_connectedSystem, newMode, user);
+
+            if (!result.Success)
+            {
+                Snackbar.Add($"Failed to switch mode: {result.ErrorMessage}", Severity.Error);
+                return;
+            }
 
             if (_switchingToAdvancedMode)
             {
-                Snackbar.Add($"Switched to Advanced Mode. Matching rules copied to {syncRulesUpdated} sync rule(s).", Severity.Success);
+                Snackbar.Add($"Switched to Advanced Mode. Matching rules copied to {result.SyncRulesUpdated} sync rule(s).", Severity.Success);
             }
             else
             {
-                Snackbar.Add("Switched to Simple Mode. Configure matching rules here for all sync rules.", Severity.Success);
+                // Show success message
+                var message = $"Switched to Simple Mode. Matching rules set on {result.ObjectTypesUpdated} object type(s).";
+                Snackbar.Add(message, Severity.Success);
+
+                // Show any warnings about diverging rules
+                foreach (var warning in result.Warnings)
+                {
+                    Snackbar.Add(warning, Severity.Warning);
+                }
             }
 
             _modeSwitchDialogVisible = false;

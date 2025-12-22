@@ -195,12 +195,14 @@ public class ConnectedSystemServer
     /// Switches the object matching rule mode for a Connected System.
     /// When switching to Advanced Mode (SyncRule), copies matching rules from
     /// Connected System object types to all import sync rules.
+    /// When switching to Simple Mode (ConnectedSystem), analyses sync rule matching rules,
+    /// selects the most common configuration per object type, and clears sync rule rules.
     /// </summary>
     /// <param name="connectedSystem">The Connected System to update</param>
     /// <param name="newMode">The new object matching rule mode</param>
     /// <param name="initiatedBy">The user initiating the change</param>
-    /// <returns>The number of sync rules that had matching rules copied to them</returns>
-    public async Task<int> SwitchObjectMatchingModeAsync(
+    /// <returns>Result containing details about the switch operation</returns>
+    public async Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
         ConnectedSystem connectedSystem,
         ObjectMatchingRuleMode newMode,
         MetaverseObject? initiatedBy)
@@ -212,55 +214,27 @@ public class ConnectedSystemServer
         {
             Log.Debug("SwitchObjectMatchingModeAsync: Connected System {Id} is already in {Mode} mode",
                 connectedSystem.Id, newMode);
-            return 0;
+            return ObjectMatchingModeSwitchResult.NoChange(newMode);
         }
 
         Log.Information("SwitchObjectMatchingModeAsync: Switching Connected System {Id} from {OldMode} to {NewMode}",
             connectedSystem.Id, connectedSystem.ObjectMatchingRuleMode, newMode);
 
-        var syncRulesUpdated = 0;
+        ObjectMatchingModeSwitchResult result;
 
         if (newMode == ObjectMatchingRuleMode.SyncRule)
         {
             // Switching to Advanced Mode - copy matching rules to import sync rules
-            var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
-            var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
-
-            foreach (var syncRule in importSyncRules)
-            {
-                // Find matching rules for the sync rule's object type
-                var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == syncRule.ConnectedSystemObjectTypeId);
-                if (objectType == null || objectType.ObjectMatchingRules.Count == 0)
-                    continue;
-
-                // Only copy if sync rule doesn't already have matching rules
-                if (syncRule.ObjectMatchingRules.Count > 0)
-                    continue;
-
-                foreach (var sourceRule in objectType.ObjectMatchingRules)
-                {
-                    var newRule = new ObjectMatchingRule
-                    {
-                        Order = sourceRule.Order,
-                        TargetMetaverseAttributeId = sourceRule.TargetMetaverseAttributeId,
-                        CaseSensitive = sourceRule.CaseSensitive,
-                        Sources = sourceRule.Sources.Select(s => new ObjectMatchingRuleSource
-                        {
-                            Order = s.Order,
-                            ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
-                            MetaverseAttributeId = s.MetaverseAttributeId,
-                            Expression = s.Expression
-                        }).ToList()
-                    };
-                    syncRule.ObjectMatchingRules.Add(newRule);
-                }
-
-                await CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
-                syncRulesUpdated++;
-            }
-
-            Log.Information("SwitchObjectMatchingModeAsync: Copied matching rules to {Count} sync rule(s)", syncRulesUpdated);
+            result = await SwitchToAdvancedModeAsync(connectedSystem, initiatedBy);
         }
+        else
+        {
+            // Switching to Simple Mode - migrate rules from sync rules to object types
+            result = await SwitchToSimpleModeAsync(connectedSystem, initiatedBy);
+        }
+
+        if (!result.Success)
+            return result;
 
         // Update the Connected System mode
         connectedSystem.ObjectMatchingRuleMode = newMode;
@@ -280,7 +254,180 @@ public class ConnectedSystemServer
 
         await Application.Activities.CompleteActivityAsync(activity);
 
-        return syncRulesUpdated;
+        return result;
+    }
+
+    private async Task<ObjectMatchingModeSwitchResult> SwitchToAdvancedModeAsync(
+        ConnectedSystem connectedSystem,
+        MetaverseObject? initiatedBy)
+    {
+        var syncRulesUpdated = 0;
+        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
+
+        foreach (var syncRule in importSyncRules)
+        {
+            // Find matching rules for the sync rule's object type
+            var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == syncRule.ConnectedSystemObjectTypeId);
+            if (objectType == null || objectType.ObjectMatchingRules.Count == 0)
+                continue;
+
+            // Only copy if sync rule doesn't already have matching rules
+            if (syncRule.ObjectMatchingRules.Count > 0)
+                continue;
+
+            foreach (var sourceRule in objectType.ObjectMatchingRules)
+            {
+                var newRule = new ObjectMatchingRule
+                {
+                    Order = sourceRule.Order,
+                    TargetMetaverseAttributeId = sourceRule.TargetMetaverseAttributeId,
+                    CaseSensitive = sourceRule.CaseSensitive,
+                    Sources = sourceRule.Sources.Select(s => new ObjectMatchingRuleSource
+                    {
+                        Order = s.Order,
+                        ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
+                        MetaverseAttributeId = s.MetaverseAttributeId,
+                        Expression = s.Expression
+                    }).ToList()
+                };
+                syncRule.ObjectMatchingRules.Add(newRule);
+            }
+
+            await CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            syncRulesUpdated++;
+        }
+
+        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} sync rule(s)", syncRulesUpdated);
+        return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated);
+    }
+
+    private async Task<ObjectMatchingModeSwitchResult> SwitchToSimpleModeAsync(
+        ConnectedSystem connectedSystem,
+        MetaverseObject? initiatedBy)
+    {
+        var migrations = new List<ObjectTypeMatchingRuleMigration>();
+        var objectTypesUpdated = 0;
+
+        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
+
+        // Group sync rules by object type
+        var syncRulesByObjectType = importSyncRules
+            .GroupBy(sr => sr.ConnectedSystemObjectTypeId)
+            .ToList();
+
+        foreach (var objectTypeGroup in syncRulesByObjectType)
+        {
+            var objectTypeId = objectTypeGroup.Key;
+            var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == objectTypeId);
+
+            if (objectType == null)
+                continue;
+
+            var migration = new ObjectTypeMatchingRuleMigration
+            {
+                ObjectTypeId = objectTypeId,
+                ObjectTypeName = objectType.Name,
+                SyncRuleCount = objectTypeGroup.Count(),
+                SyncRulesWithMatchingRules = objectTypeGroup.Count(sr => sr.ObjectMatchingRules.Count > 0)
+            };
+
+            // Get sync rules that have matching rules defined
+            var syncRulesWithRules = objectTypeGroup
+                .Where(sr => sr.ObjectMatchingRules.Count > 0)
+                .ToList();
+
+            if (syncRulesWithRules.Count > 0)
+            {
+                // Create a signature for each sync rule's matching rules configuration
+                var ruleConfigurations = syncRulesWithRules
+                    .Select(sr => GetMatchingRulesSignature(sr.ObjectMatchingRules))
+                    .ToList();
+
+                migration.UniqueSyncRuleConfigurations = ruleConfigurations.Distinct().Count();
+
+                // Find the most common configuration
+                var mostCommonSignature = ruleConfigurations
+                    .GroupBy(sig => sig)
+                    .OrderByDescending(g => g.Count())
+                    .First()
+                    .Key;
+
+                // Get the sync rule with the most common configuration
+                var sourceSyncRule = syncRulesWithRules
+                    .First(sr => GetMatchingRulesSignature(sr.ObjectMatchingRules) == mostCommonSignature);
+
+                // Copy matching rules to the object type (if it doesn't already have rules)
+                if (objectType.ObjectMatchingRules.Count == 0)
+                {
+                    foreach (var sourceRule in sourceSyncRule.ObjectMatchingRules)
+                    {
+                        var newRule = new ObjectMatchingRule
+                        {
+                            Order = sourceRule.Order,
+                            ConnectedSystemObjectTypeId = objectTypeId,
+                            TargetMetaverseAttributeId = sourceRule.TargetMetaverseAttributeId,
+                            CaseSensitive = sourceRule.CaseSensitive,
+                            Sources = sourceRule.Sources.Select(s => new ObjectMatchingRuleSource
+                            {
+                                Order = s.Order,
+                                ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
+                                MetaverseAttributeId = s.MetaverseAttributeId,
+                                Expression = s.Expression
+                            }).ToList()
+                        };
+                        objectType.ObjectMatchingRules.Add(newRule);
+                    }
+
+                    migration.MatchingRulesSet = sourceSyncRule.ObjectMatchingRules.Count;
+                    objectTypesUpdated++;
+
+                    Log.Information("SwitchToSimpleModeAsync: Set {Count} matching rule(s) on object type {ObjectType} " +
+                        "(selected from {SyncRuleCount} sync rules with {UniqueConfigs} unique configuration(s))",
+                        migration.MatchingRulesSet, objectType.Name, migration.SyncRulesWithMatchingRules,
+                        migration.UniqueSyncRuleConfigurations);
+                }
+            }
+
+            // Clear matching rules from all sync rules for this object type
+            // (will be done automatically by CreateOrUpdateSyncRuleAsync due to Simple Mode validation)
+            foreach (var syncRule in objectTypeGroup.Where(sr => sr.ObjectMatchingRules.Count > 0))
+            {
+                syncRule.ObjectMatchingRules.Clear();
+                await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+                migration.SyncRulesCleared++;
+            }
+
+            migrations.Add(migration);
+        }
+
+        Log.Information("SwitchToSimpleModeAsync: Updated {Count} object type(s) with matching rules", objectTypesUpdated);
+        return ObjectMatchingModeSwitchResult.ToSimpleMode(objectTypesUpdated, migrations);
+    }
+
+    /// <summary>
+    /// Creates a signature string representing a set of matching rules for comparison.
+    /// </summary>
+    private static string GetMatchingRulesSignature(ICollection<ObjectMatchingRule> rules)
+    {
+        if (rules.Count == 0)
+            return string.Empty;
+
+        var ruleSignatures = rules
+            .OrderBy(r => r.Order)
+            .Select(r =>
+            {
+                var sourceSignatures = r.Sources
+                    .OrderBy(s => s.Order)
+                    .Select(s => $"{s.ConnectedSystemAttributeId}:{s.MetaverseAttributeId}:{s.Expression}")
+                    .ToList();
+
+                return $"{r.TargetMetaverseAttributeId}|{r.CaseSensitive}|{string.Join(",", sourceSignatures)}";
+            })
+            .ToList();
+
+        return string.Join(";", ruleSignatures);
     }
     #endregion
 
