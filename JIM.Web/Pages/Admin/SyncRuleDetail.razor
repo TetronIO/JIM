@@ -33,17 +33,16 @@ else if (_syncRule != null)
             <MudText Typo="Typo.h5" Class="mb-5">Details</MudText>
             @if (_syncRule.Id > 0)
             {
-                <MudText Class="mud-text-secondary mud-text-small" Typo="Typo.body2">
-                    Created: @_syncRule.Created.ToShortDateString() (@_syncRule.Created.ToShortTimeString())
+                <MudText Class="mud-text-secondary">
+                    Created: <span title="@_syncRule.Created.ToLocalTime().ToFriendlyDate()">@_syncRule.Created.ToLocalTime().ToRelativeTime()</span>
                     @if (_syncRule.CreatedBy != null)
                     {
-                        <span> - By: <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">
+                        <span> by <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">
                                 @_syncRule.CreatedBy.DisplayName</MudLink></span>
                     }
                     @if (_syncRule.LastUpdated.HasValue)
                     {
-                        <span> - Last Updated: @_syncRule.LastUpdated.Value.ToShortDateString()
-                            (@_syncRule.LastUpdated.Value.ToShortTimeString())</span>
+                        <span> · Updated: <span title="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()">@_syncRule.LastUpdated.Value.ToLocalTime().ToRelativeTime()</span></span>
                     }
                 </MudText>
             }
