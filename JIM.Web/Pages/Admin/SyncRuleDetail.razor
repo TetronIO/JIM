@@ -159,7 +159,15 @@ else if (_syncRule != null)
     @if (_syncRule.Direction != SyncRuleDirection.NotSet)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
-            <MudText Typo="Typo.h5">Matching Rules</MudText>
+            <div class="d-flex justify-space-between align-center">
+                <MudText Typo="Typo.h5">Matching Rules</MudText>
+                @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
+                {
+                    <MudTooltip Text="Matching rules are specific to this sync rule." Placement="Placement.Top">
+                        <MudText Class="mud-text-secondary">Advanced Mode</MudText>
+                    </MudTooltip>
+                }
+            </div>
 
             @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
@@ -175,10 +183,6 @@ else if (_syncRule != null)
             else
             {
                 @* Advanced Mode - matching rules are managed per sync rule *@
-                <MudText Class="mt-3 mud-text-secondary">
-                    <strong>Advanced Mode</strong> — Matching rules are specific to this sync rule.
-                </MudText>
-
                 <MudText Class="mt-3">
                     At least one matching rule is needed to ensure JIM can associate a Connected System Object from this sync rule
                     with a matching Metaverse object.
