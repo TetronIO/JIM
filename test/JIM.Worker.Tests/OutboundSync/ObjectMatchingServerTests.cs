@@ -700,4 +700,198 @@ public class ObjectMatchingServerTests
     }
 
     #endregion
+
+    #region Null Value Handling Tests (8.11)
+
+    [Test]
+    public void ComputeMatchingValueFromMvo_WithNullStringAttribute_ReturnsNull()
+    {
+        // Arrange - MVO has attribute with null string value
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = null // Explicitly null
+        });
+
+        var objectType = ConnectedSystemObjectTypesData[0];
+        var matchingRule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttribute = employeeIdAttr,
+            TargetMetaverseAttributeId = employeeIdAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    MetaverseAttribute = employeeIdAttr,
+                    MetaverseAttributeId = employeeIdAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
+
+        // Assert
+        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for null string value");
+    }
+
+    [Test]
+    public void ComputeMatchingValueFromMvo_WithNullIntAttribute_ReturnsNull()
+    {
+        // Arrange - MVO has attribute with null int value
+        var mvo = MetaverseObjectsData[0];
+
+        var intAttr = new MetaverseAttribute
+        {
+            Id = 998,
+            Name = "NumericId",
+            Type = AttributeDataType.Number
+        };
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = intAttr,
+            AttributeId = intAttr.Id,
+            IntValue = null // Explicitly null
+        });
+
+        var objectType = ConnectedSystemObjectTypesData[0];
+        var matchingRule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttribute = intAttr,
+            TargetMetaverseAttributeId = intAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    MetaverseAttribute = intAttr,
+                    MetaverseAttributeId = intAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
+
+        // Assert
+        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for null int value");
+    }
+
+    [Test]
+    public void ComputeMatchingValueFromMvo_WithNullGuidAttribute_ReturnsNull()
+    {
+        // Arrange - MVO has attribute with null GUID value
+        var mvo = MetaverseObjectsData[0];
+
+        var guidAttr = new MetaverseAttribute
+        {
+            Id = 999,
+            Name = "UniqueId",
+            Type = AttributeDataType.Guid
+        };
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = guidAttr,
+            AttributeId = guidAttr.Id,
+            GuidValue = null // Explicitly null
+        });
+
+        var objectType = ConnectedSystemObjectTypesData[0];
+        var matchingRule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttribute = guidAttr,
+            TargetMetaverseAttributeId = guidAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    MetaverseAttribute = guidAttr,
+                    MetaverseAttributeId = guidAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
+
+        // Assert
+        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for null GUID value");
+    }
+
+    [Test]
+    public void ComputeMatchingValueFromMvo_WithEmptyStringAttribute_ReturnsNull()
+    {
+        // Arrange - MVO has attribute with empty string value
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "" // Empty string
+        });
+
+        var objectType = ConnectedSystemObjectTypesData[0];
+        var matchingRule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttribute = employeeIdAttr,
+            TargetMetaverseAttributeId = employeeIdAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    MetaverseAttribute = employeeIdAttr,
+                    MetaverseAttributeId = employeeIdAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
+
+        // Assert
+        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for empty string value");
+    }
+
+    #endregion
 }
