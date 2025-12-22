@@ -619,7 +619,7 @@ else if (_syncRule != null)
 
     @if (_syncRule.Id > 0)
     {
-        <MudPaper Class="pa-4 mt-5" Outlined="true">
+        <MudPaper Class="pa-4 mt-5" Style="@($"border: 2px solid {Colors.Red.Default}; background-color: {Colors.Red.Darken4}15;")" Outlined="false">
             <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
             <MudText Class="mud-text-secondary mb-4">
                 Deleting this synchronisation rule is permanent and cannot be undone. All configuration and attribute flow mappings will be lost.
