@@ -13,8 +13,8 @@ public class SyncRule: IValidated
     public int Id { get; set; }
         
     public string Name { get; set; } = null!;
-        
-    public DateTime Created { get; } = DateTime.UtcNow;
+
+    public DateTime Created { get; set; } = DateTime.UtcNow;
 
     public MetaverseObject? CreatedBy { get; set; }
         

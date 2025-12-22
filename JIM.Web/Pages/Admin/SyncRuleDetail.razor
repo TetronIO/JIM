@@ -29,22 +29,26 @@ else if (_syncRule != null)
 {
     <MudPaper Class="pa-4 mt-5" Outlined="true">
 
-        <div class="d-flex justify-space-between">
+        <div class="d-flex justify-space-between align-center">
             <MudText Typo="Typo.h5" Class="mb-5">Details</MudText>
             @if (_syncRule.Id > 0)
             {
-                <MudText Class="mud-text-secondary">
-                    Created: <span title="@_syncRule.Created.ToLocalTime().ToFriendlyDate()">@_syncRule.Created.ToLocalTime().ToRelativeTime()</span>
-                    @if (_syncRule.CreatedBy != null)
-                    {
-                        <span> by <MudLink Href="@Utilities.GetMetaverseObjectHref(_syncRule.CreatedBy)">
-                                @_syncRule.CreatedBy.DisplayName</MudLink></span>
-                    }
+                <div class="d-flex gap-2">
+                    <MudTooltip Text="@_syncRule.Created.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
+                            Created @_syncRule.Created.ToLocalTime().ToRelativeTime()@if (_syncRule.CreatedBy != null)
+                            {<text> by @_syncRule.CreatedBy.DisplayName</text>}
+                        </MudChip>
+                    </MudTooltip>
                     @if (_syncRule.LastUpdated.HasValue)
                     {
-                        <span> · Updated: <span title="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()">@_syncRule.LastUpdated.Value.ToLocalTime().ToRelativeTime()</span></span>
+                        <MudTooltip Text="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
+                                Updated @_syncRule.LastUpdated.Value.ToLocalTime().ToRelativeTime()
+                            </MudChip>
+                        </MudTooltip>
                     }
-                </MudText>
+                </div>
             }
         </div>
 
@@ -164,7 +168,7 @@ else if (_syncRule != null)
                 @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
                 {
                     <MudTooltip Text="Matching rules are specific to this sync rule." Placement="Placement.Top">
-                        <MudText Class="mud-text-secondary">Advanced Mode</MudText>
+                        <MudChip T="string" Variant="Variant.Text" Text="Advanced Mode" Color="Color.Info" />
                     </MudTooltip>
                 }
             </div>
@@ -175,7 +179,8 @@ else if (_syncRule != null)
                     This Connected System uses <strong>Simple Mode</strong> for object matching. Matching Rules are configured
                     at the Connected System level for each object type.<br />
                     <MudButton StartIcon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Outlined"
-                        Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Color="Color.Primary" Class="mt-4" DropShadow="false">
+                        Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Color="Color.Primary" Class="mt-4"
+                        DropShadow="false">
                         Manage Matching Rules on Connected System
                     </MudButton>
                 </MudAlert>
@@ -183,16 +188,20 @@ else if (_syncRule != null)
             else
             {
                 @* Advanced Mode - matching rules are managed per sync rule *@
-                <MudText Class="mt-3">
-                    At least one matching rule is needed to ensure JIM can associate a Connected System Object from this sync rule
-                    with a matching Metaverse object.
-                    It's strongly recommended that you choose an immutable attribute on both sides, i.e. one that won't change for
-                    the life of the object.
-                    You can define multiple rules, and order them. The first to match will be used. Common examples might include:
-                    employeeID = employeeID, or ActiveDirectoryObjectGuid = objectGUID.
-                    A Connected System Object is considered Joined when a matching Metaverse object is found, and Disconnected when
-                    not.
-                </MudText>
+                @if (_syncRule.Direction == SyncRuleDirection.Import)
+                {
+                    <MudText Class="mt-3">
+                        Define rules to match Connected System Objects to Metaverse objects. Use immutable attributes (e.g., employeeID, objectGUID).
+                        Multiple rules can be ordered; the first match wins. Objects are Joined when matched, Disconnected when not.
+                    </MudText>
+                }
+                else if (_syncRule.Direction == SyncRuleDirection.Export)
+                {
+                    <MudText Class="mt-3">
+                        Define rules to match Metaverse objects to Connected System Objects. Use immutable attributes (e.g., employeeID, objectGUID).
+                        Multiple rules can be ordered; the first match wins.
+                    </MudText>
+                }
 
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
                     OnClick="HandleOpenAddMatchingRuleMappingDialog" Color="Color.Default" Class="mt-5" DropShadow="false"
@@ -238,11 +247,8 @@ else if (_syncRule != null)
                                             <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
                                         </MudChip>
                                         <MudSwitch T="bool" Value="@objectMatchingRule.CaseSensitive"
-                                                   ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
-                                                   Label="Case Sensitive"
-                                                   Color="Color.Primary"
-                                                   Size="Size.Small"
-                                                   Class="ms-4" />
+                                            ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
+                                            Label="Case Sensitive" Color="Color.Primary" Size="Size.Small" Class="ms-4" />
                                         <MudSpacer />
                                         <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
@@ -503,7 +509,8 @@ else if (_syncRule != null)
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
                         @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                        Style="flex-shrink: 0;" aria-label="delete" OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
+                        Style="flex-shrink: 0;" aria-label="delete"
+                        OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
                     </MudIconButton>
                 </MudStack>
 
@@ -604,8 +611,7 @@ else if (_syncRule != null)
             @foreach (var item in _syncRule.Validate())
             {
                 <div class="d-flex align-center mb-2">
-                    <MudIcon Class="mr-2"
-                        Color="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
+                    <MudIcon Class="mr-2" Color="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
                         Icon="@(item.Level == ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)" />
                     <MudText>@item.Message</MudText>
                 </div>
@@ -619,10 +625,11 @@ else if (_syncRule != null)
 
     @if (_syncRule.Id > 0)
     {
-        <MudPaper Class="pa-4 mt-5" Style="@($"border: 2px solid {Colors.Red.Default}; background-color: {Colors.Red.Darken4}15;")" Outlined="false">
+        <MudPaper Class="pa-4 mt-20 jim-paper-danger-zone" Outlined="false">
             <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
             <MudText Class="mud-text-secondary mb-4">
-                Deleting this synchronisation rule is permanent and cannot be undone. All configuration and attribute flow mappings will be lost.
+                Deleting this synchronisation rule is permanent and cannot be undone. All configuration and attribute flow
+                mappings will be lost.
             </MudText>
             <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
                 DropShadow="false" Color="Color.Error">Delete Sync Rule</MudButton>
@@ -781,7 +788,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
         // the rest depends on what type of source has been chosen by the user
         // Must have either a connected system attribute or an expression
         if (_matchingRuleMappingSource.ConnectedSystemAttribute == null &&
-            string.IsNullOrWhiteSpace(_matchingRuleMappingSource.Expression))
+        string.IsNullOrWhiteSpace(_matchingRuleMappingSource.Expression))
         {
             Console.WriteLine("DisableAddMappingButton: attrib/expression missing");
             return true;

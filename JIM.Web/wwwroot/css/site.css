@@ -1,19 +1,24 @@
 /* reference: https://github.com/MudBlazor/MudBlazor/blob/ff672a8b988fdfb1f5ab9f556813823d885118d4/src/MudBlazor.UnitTests/Components/ThemeProviderTests.cs#L92 */
 
 /* MUDBLAZOR CUSTOMISATIONS */
-html, body {
+html,
+body {
     --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
 }
-.mud-simple-table table * tr > th{
+
+.mud-simple-table table * tr>th {
     font-weight: 700;
 }
+
 .mud-table-root .mud-table-head .mud-table-cell {
     font-weight: 700;
     font-size: 1rem;
 }
+
 .mud-link-underline-hover:hover {
     text-decoration: none !important;
-    color: #ff4081ff !important; /* secondary text colour */
+    color: #ff4081ff !important;
+    /* secondary text colour */
     transition: color 0.3s !important;
 }
 
@@ -54,6 +59,11 @@ html, body {
     font-size: 1rem;
 }
 
+.mud-paper,
+.mud-paper-outlined {
+    border-radius: 8px !important;
+}
+
 /* JIM CUSTOM */
 .jim-header-title {
     font-weight: 300;
@@ -91,6 +101,7 @@ html, body {
 .jim-drawer-logo img {
     vertical-align: middle;
 }
+
 .jim-drawer-logo p {
     margin: 4px 0 0 10px;
     font-weight: 700;
@@ -120,15 +131,15 @@ html, body {
 }
 
 /* Navigation menu styling - top-level items */
-.jim-nav-menu > .jim-nav-top-level .mud-nav-link-text,
-.jim-nav-menu > .jim-nav-top-level > button > .mud-nav-link-text {
+.jim-nav-menu>.jim-nav-top-level .mud-nav-link-text,
+.jim-nav-menu>.jim-nav-top-level>button>.mud-nav-link-text {
     font-weight: 600;
     color: var(--mud-palette-primary);
 }
 
 /* Ensure icon colour matches for top-level items */
-.jim-nav-menu > .jim-nav-top-level .mud-nav-link-icon,
-.jim-nav-menu > .jim-nav-top-level > button > .mud-icon-root {
+.jim-nav-menu>.jim-nav-top-level .mud-nav-link-icon,
+.jim-nav-menu>.jim-nav-top-level>button>.mud-icon-root {
     color: var(--mud-palette-primary);
 }
 
@@ -136,6 +147,15 @@ html, body {
 .jim-nav-menu .mud-navmenu-list .mud-nav-link-text {
     font-weight: 400;
 }
+
+/* Danger zone styling for high-risk actions */
+.jim-paper-danger-zone {
+    border: 2px solid #f44336;
+    /* Matches MudBlazor red/default */
+    background-color: rgba(183, 28, 28, 0.09);
+    /* Approx of Colors.Red.Darken4 with low opacity */
+}
+
 
 /* Improve contrast for form labels and helper text (WCAG AA compliance) */
 
