@@ -176,12 +176,9 @@ else if (_syncRule != null)
             else
             {
                 @* Advanced Mode - matching rules are managed per sync rule *@
-                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4 mb-2">
-                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">Advanced Mode</MudChip>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Matching rules are specific to this sync rule.
-                    </MudText>
-                </MudStack>
+                <MudText Class="mt-3 mud-text-secondary">
+                    <strong>Advanced Mode</strong> — Matching rules are specific to this sync rule.
+                </MudText>
 
                 <MudText Class="mt-3">
                     At least one matching rule is needed to ensure JIM can associate a Connected System Object from this sync rule
