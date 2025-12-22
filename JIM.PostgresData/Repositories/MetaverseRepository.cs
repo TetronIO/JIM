@@ -8,6 +8,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 namespace JIM.PostgresData.Repositories;
 
 public class MetaverseRepository : IMetaverseRepository
@@ -569,6 +570,22 @@ public class MetaverseRepository : IMetaverseRepository
         // this enables an MVA such as 'CN' to be used as a matching attribute.
         foreach (var csoAttributeValue in csoAttributeValues)
         {
+            // Skip null values - null is always a non-match
+            var hasValue = source.ConnectedSystemAttribute.Type switch
+            {
+                AttributeDataType.Text => !string.IsNullOrEmpty(csoAttributeValue.StringValue),
+                AttributeDataType.Number => csoAttributeValue.IntValue.HasValue,
+                AttributeDataType.Guid => csoAttributeValue.GuidValue.HasValue,
+                _ => false
+            };
+
+            if (!hasValue)
+            {
+                Log.Debug("FindMetaverseObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
+                    source.ConnectedSystemAttribute.Name);
+                continue;
+            }
+
             // construct the base query. This much is true, regardless of the matching rule properties.
             var metaVerseObjects = from o in Repository.Database.MetaverseObjects.
                     Include(mvo => mvo.AttributeValues).
@@ -583,11 +600,12 @@ public class MetaverseRepository : IMetaverseRepository
                     // Check case sensitivity setting on the matching rule
                     if (objectMatchingRule.CaseSensitive)
                     {
-                        // Case-sensitive comparison (default)
+                        // Case-sensitive comparison (default) - null check already done above
                         metaVerseObjects = metaVerseObjects.Where(mvo =>
                             mvo.AttributeValues.Any(av =>
                                 objectMatchingRule.TargetMetaverseAttribute != null &&
                                 av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                                av.StringValue != null &&
                                 av.StringValue == csoAttributeValue.StringValue));
                     }
                     else
@@ -598,15 +616,16 @@ public class MetaverseRepository : IMetaverseRepository
                                 objectMatchingRule.TargetMetaverseAttribute != null &&
                                 av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
                                 av.StringValue != null &&
-                                csoAttributeValue.StringValue != null &&
-                                EF.Functions.ILike(av.StringValue, csoAttributeValue.StringValue)));
+                                EF.Functions.ILike(av.StringValue, csoAttributeValue.StringValue!)));
                     }
                     break;
                 case AttributeDataType.Number:
+                    // Null check already done above
                     metaVerseObjects = metaVerseObjects.Where(mvo =>
                         mvo.AttributeValues.Any(av =>
                             objectMatchingRule.TargetMetaverseAttribute != null &&
                             av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.IntValue != null &&
                             av.IntValue == csoAttributeValue.IntValue));
                     break;
                 case AttributeDataType.DateTime:
@@ -616,10 +635,12 @@ public class MetaverseRepository : IMetaverseRepository
                 case AttributeDataType.Reference:
                     throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
                 case AttributeDataType.Guid:
+                    // Null check already done above
                     metaVerseObjects = metaVerseObjects.Where(mvo =>
                         mvo.AttributeValues.Any(av =>
                             objectMatchingRule.TargetMetaverseAttribute != null &&
                             av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.GuidValue != null &&
                             av.GuidValue == csoAttributeValue.GuidValue));
                     break;
                 case AttributeDataType.Boolean:

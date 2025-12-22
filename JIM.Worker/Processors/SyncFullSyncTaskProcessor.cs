@@ -565,9 +565,10 @@ public class SyncFullSyncTaskProcessor
             }
             catch (JIM.Models.Exceptions.MultipleMatchesException ex)
             {
-                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-                runProfileExecutionItem.ErrorMessage = $"Multiple Metaverse Objects match this Connected System Object. " +
-                    $"Check your Object Matching Rules to ensure unique matches. Details: {ex.Message}";
+                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.AmbiguousMatch;
+                runProfileExecutionItem.ErrorMessage = $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object. " +
+                    $"An MVO can only be joined to a single CSO per Connected System. " +
+                    $"Check your Object Matching Rules to ensure unique matches. Matching MVO IDs: {string.Join(", ", ex.Matches)}";
                 _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                 return;
             }

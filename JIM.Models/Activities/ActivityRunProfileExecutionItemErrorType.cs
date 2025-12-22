@@ -3,6 +3,7 @@
 public enum ActivityRunProfileExecutionItemErrorType
 {
     NotSet,
+    AmbiguousMatch,
     CouldNotMatchObjectType,
     CouldNotJoinDueToExistingJoin,
     DuplicateImportedAttributes,

@@ -1123,6 +1123,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return null;
         }
 
+        // Skip null values - null is always a non-match
+        var hasValue = source.MetaverseAttribute.Type switch
+        {
+            AttributeDataType.Text => !string.IsNullOrEmpty(mvoAttributeValue.StringValue),
+            AttributeDataType.Number => mvoAttributeValue.IntValue.HasValue,
+            AttributeDataType.Guid => mvoAttributeValue.GuidValue.HasValue,
+            _ => false
+        };
+
+        if (!hasValue)
+        {
+            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
+                source.MetaverseAttribute.Name);
+            return null;
+        }
+
         // The target is a CS attribute (what we're looking for on the CSO)
         var targetCsAttribute = objectMatchingRule.TargetMetaverseAttribute;
         if (targetCsAttribute == null)
@@ -1148,10 +1164,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // Check case sensitivity setting on the matching rule
                 if (objectMatchingRule.CaseSensitive)
                 {
-                    // Case-sensitive comparison (default)
+                    // Case-sensitive comparison (default) - null check already done above
                     query = query.Where(cso => cso.AttributeValues.Any(av =>
                         av.Attribute != null &&
                         av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                        av.StringValue != null &&
                         av.StringValue == mvoAttributeValue.StringValue));
                 }
                 else
@@ -1161,20 +1178,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.Attribute != null &&
                         av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
                         av.StringValue != null &&
-                        mvoAttributeValue.StringValue != null &&
-                        EF.Functions.ILike(av.StringValue, mvoAttributeValue.StringValue)));
+                        EF.Functions.ILike(av.StringValue, mvoAttributeValue.StringValue!)));
                 }
                 break;
             case AttributeDataType.Number:
+                // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
                     av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.IntValue != null &&
                     av.IntValue == mvoAttributeValue.IntValue));
                 break;
             case AttributeDataType.Guid:
+                // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
                     av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.GuidValue != null &&
                     av.GuidValue == mvoAttributeValue.GuidValue));
                 break;
             default:
