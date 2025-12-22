@@ -44,10 +44,17 @@
                         case ActivityTargetType.SyncRule:
                             <MudLink Href="@($"/admin/connected-systems/sync-rules/{_activity.SyncRuleId}")">@_activity.TargetName</MudLink>
                             break;
-                        case ActivityTargetType.NotSet:
+                        case ActivityTargetType.TrustedCertificate:
+                            <MudLink Href="/admin/certificates">@_activity.TargetName</MudLink>
                             break;
+                        case ActivityTargetType.MetaverseAttribute:
+                            <MudLink Href="/admin/schema/metaverse">@_activity.TargetName</MudLink>
+                            break;
+                        case ActivityTargetType.ObjectMatchingRule:
+                        case ActivityTargetType.NotSet:
                         default:
-                            throw new ArgumentOutOfRangeException();
+                            @(_activity.TargetName ?? "-")
+                            break;
                     }
                 </MudText>
             </MudItem>
