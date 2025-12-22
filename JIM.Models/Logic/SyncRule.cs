@@ -132,7 +132,11 @@ public class SyncRule: IValidated
         if (Direction == SyncRuleDirection.NotSet)
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Direction must be set."));
 
-        if (Direction == SyncRuleDirection.Import && ObjectMatchingRules.Count == 0)
+        // Only warn about missing matching rules if this sync rule manages its own matching rules (Advanced Mode)
+        // In Simple Mode (ObjectMatchingRuleMode.ConnectedSystem), matching rules are defined on the Connected System
+        if (Direction == SyncRuleDirection.Import &&
+            ObjectMatchingRules.Count == 0 &&
+            ConnectedSystem?.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No object matching rules have been defined. Whilst valid, this is not recommended. Object Matching rules help minimise synchronisation errors in uncommon, but important scenarios."));
 
         if (AttributeFlowRules.Count == 0)

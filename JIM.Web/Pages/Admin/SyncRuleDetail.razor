@@ -164,23 +164,14 @@ else if (_syncRule != null)
 
             @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
-                @* Simple Mode - matching rules are managed on the Connected System *@
-                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4 mb-2">
-                    <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled">Simple Mode</MudChip>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Matching rules are managed on the Connected System.
-                    </MudText>
-                </MudStack>
-
-                <MudAlert Severity="Severity.Info" Class="mt-3" Icon="@Icons.Material.Filled.Info">
-                    This Connected System uses <strong>Simple Mode</strong> for object matching. Matching rules are configured
-                    at the Connected System level and shared across all sync rules for each object type.
+                <MudAlert Severity="Severity.Info" Class="mt-3" Icon="@Icons.Material.Outlined.Info">
+                    This Connected System uses <strong>Simple Mode</strong> for object matching. Matching Rules are configured
+                    at the Connected System level for each object type.<br />
+                    <MudButton StartIcon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Outlined"
+                        Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Color="Color.Primary" Class="mt-4" DropShadow="false">
+                        Manage Matching Rules on Connected System
+                    </MudButton>
                 </MudAlert>
-
-                <MudButton StartIcon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Filled"
-                    Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Color="Color.Primary" Class="mt-4" DropShadow="false">
-                    Manage Matching Rules on Connected System
-                </MudButton>
             }
             else
             {
