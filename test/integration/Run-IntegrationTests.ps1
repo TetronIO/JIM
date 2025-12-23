@@ -340,6 +340,130 @@ Write-Host ""
 $scenarioExitCode = $LASTEXITCODE
 $timings["6. Run Tests"] = (Get-Date) - $step6Start
 
+# Step 7: Capture Performance Metrics
+$step7Start = Get-Date
+Write-Section "Step 7: Capturing Performance Metrics"
+
+Write-Step "Extracting diagnostic timing from worker logs..."
+
+# Capture worker logs with diagnostic output
+$workerLogs = docker logs jim.worker 2>&1 | Where-Object { $_ -match "DiagnosticListener:" }
+
+# Parse metrics into structured data
+$metrics = @{
+    Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    Scenario = $Scenario
+    Template = $Template
+    Step = $Step
+    Operations = @()
+}
+
+foreach ($logLine in $workerLogs) {
+    # Example: DiagnosticListener: FullImport completed in 1234.56ms [connectedSystemId=1, objectCount=100]
+    if ($logLine -match 'DiagnosticListener:\s+(.+?)\s+completed in\s+([\d.]+)ms(?:\s+\[(.*)\])?') {
+        $operationName = $Matches[1]
+        $durationMs = [double]$Matches[2]
+        $tags = $Matches[3]
+
+        $operation = @{
+            Name = $operationName
+            DurationMs = $durationMs
+            Tags = @{}
+        }
+
+        # Parse tags if present (e.g., "connectedSystemId=1, objectCount=100")
+        if ($tags) {
+            $tagPairs = $tags -split ',\s*'
+            foreach ($tagPair in $tagPairs) {
+                if ($tagPair -match '(.+?)=(.+)') {
+                    $operation.Tags[$Matches[1]] = $Matches[2]
+                }
+            }
+        }
+
+        $metrics.Operations += $operation
+    }
+}
+
+if ($metrics.Operations.Count -eq 0) {
+    Write-Warning "No performance metrics found in worker logs"
+}
+else {
+    Write-Success "Captured $($metrics.Operations.Count) operation timings"
+
+    # Create performance results directory (per hostname)
+    $hostname = [System.Net.Dns]::GetHostName()
+    $perfDir = Join-Path $scriptRoot "results" "performance" $hostname
+    if (-not (Test-Path $perfDir)) {
+        New-Item -ItemType Directory -Path $perfDir -Force | Out-Null
+    }
+
+    # Save current metrics
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $metrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
+    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+
+    # Find most recent previous baseline (excluding current run)
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($previousFiles) {
+        Write-Host ""
+        Write-Host "${CYAN}Performance Comparison:${NC}"
+        Write-Host ""
+
+        $baseline = Get-Content $previousFiles.FullName | ConvertFrom-Json
+
+        # Compare key operations
+        $currentOps = @{}
+        foreach ($op in $metrics.Operations) {
+            if (-not $currentOps.ContainsKey($op.Name)) {
+                $currentOps[$op.Name] = @()
+            }
+            $currentOps[$op.Name] += $op.DurationMs
+        }
+
+        $baselineOps = @{}
+        foreach ($op in $baseline.Operations) {
+            if (-not $baselineOps.ContainsKey($op.Name)) {
+                $baselineOps[$op.Name] = @()
+            }
+            $baselineOps[$op.Name] += $op.DurationMs
+        }
+
+        # Display comparison for key operations
+        $keyOperations = @("FullImport", "FullSync", "Export", "ProcessConnectedSystemObjects")
+
+        foreach ($opName in $keyOperations) {
+            if ($currentOps.ContainsKey($opName) -and $baselineOps.ContainsKey($opName)) {
+                $currentAvg = ($currentOps[$opName] | Measure-Object -Average).Average
+                $baselineAvg = ($baselineOps[$opName] | Measure-Object -Average).Average
+                $delta = $currentAvg - $baselineAvg
+                $percentChange = if ($baselineAvg -gt 0) { ($delta / $baselineAvg) * 100 } else { 0 }
+
+                $symbol = if ($delta -lt 0) { "↓" } elseif ($delta -gt 0) { "↑" } else { "=" }
+                $colour = if ($delta -lt 0) { $GREEN } elseif ($delta -gt ($baselineAvg * 0.1)) { $RED } else { $YELLOW }
+
+                Write-Host ("  {0,-35} {1,8:F1}ms  {2}{3} {4,6:F1}ms ({5:+0.0;-0.0;0}%)${NC}" -f `
+                    $opName, $currentAvg, $colour, $symbol, $delta, $percentChange)
+            }
+        }
+
+        Write-Host ""
+        Write-Host "${GRAY}Baseline: $($previousFiles.Name) ($($baseline.Timestamp))${NC}"
+    }
+    else {
+        Write-Host ""
+        Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+    }
+}
+
+$timings["7. Capture Metrics"] = (Get-Date) - $step7Start
+
 # Summary
 $endTime = Get-Date
 $duration = $endTime - $startTime
