@@ -26,7 +26,7 @@ services:
       jim.worker:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "printf 'GET /api/v1/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' | nc localhost 80 | grep -q '200 OK'"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/v1/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3

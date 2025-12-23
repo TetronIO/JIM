@@ -20,7 +20,7 @@ RUN apt-get update \
     && apt-get install -y libldap-2.5-0 \
     && apt-get install -y cifs-utils \
     && apt-get install -y --no-install-recommends iputils-ping \
-    && apt-get install -y --no-install-recommends netcat-traditional \
+    && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
