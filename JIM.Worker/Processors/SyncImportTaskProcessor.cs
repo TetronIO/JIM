@@ -1,4 +1,6 @@
-﻿using JIM.Application;
+using System.Diagnostics;
+using JIM.Application;
+using JIM.Application.Diagnostics;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -7,7 +9,6 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
-using System.Diagnostics;
 using JIM.Worker.Models;
 
 namespace JIM.Worker.Processors;
@@ -48,6 +49,11 @@ public class SyncImportTaskProcessor
 
     public async Task PerformFullImportAsync()
     {
+        using var importSpan = Diagnostics.Sync.StartSpan("FullImport");
+        importSpan.SetTag("connectedSystemId", _connectedSystem.Id);
+        importSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+        importSpan.SetTag("connectorType", _connector.GetType().Name);
+
         Log.Verbose("PerformFullImportAsync: Starting");
 
         if (_connectedSystem.ObjectTypes == null)
@@ -66,6 +72,8 @@ public class SyncImportTaskProcessor
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
             {
+                using var connectorSpan = Diagnostics.Connector.StartSpan("CallBasedImport");
+
                 // Inject certificate provider for connectors that support it
                 if (callBasedImportConnector is IConnectorCertificateAware certificateAwareConnector)
                 {
@@ -77,10 +85,16 @@ public class SyncImportTaskProcessor
 
                 var initialPage = true;
                 var paginationTokens = new List<ConnectedSystemPaginationToken>();
+                var pageNumber = 0;
                 while (initialPage || paginationTokens.Count > 0)
                 {
                     // perform the import for this page
-                    var result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
+                    ConnectedSystemImportResult result;
+                    using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
+                    {
+                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
+                    }
+                    pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
                     
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
@@ -109,15 +123,25 @@ public class SyncImportTaskProcessor
             }
             case IConnectorImportUsingFiles fileBasedImportConnector:
             {
+                using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
+
                 // file based connectors return all the results from the connected system in one go. no paging.
-                var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+                ConnectedSystemImportResult result;
+                using (Diagnostics.Connector.StartSpan("ReadFile"))
+                {
+                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+                }
                 totalObjectsImported = result.ImportObjects.Count;
-                
+                connectorSpan.SetTag("objectCount", totalObjectsImported);
+
                 // todo: simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
-                
-                await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
+                using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", totalObjectsImported))
+                {
+                    await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                }
                 break;
             }
             default:
@@ -131,23 +155,40 @@ public class SyncImportTaskProcessor
         {
             // TODO: find out why this caused CSOs to be persisted early, and why this conflicts with later create CSOs statement
             await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
-            await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
+            using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
+            {
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
+            }
         }
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
-        await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+        using (Diagnostics.Sync.StartSpan("ResolveReferences"))
+        {
+            await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+        }
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
-        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
-        await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
-        
+        using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
+        {
+            persistSpan.SetTag("createCount", connectedSystemObjectsToBeCreated.Count);
+            persistSpan.SetTag("updateCount", connectedSystemObjectsToBeUpdated.Count);
+
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+            await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+        }
+
         // now persist the activity run profile execution items with the activity
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
         _activity.AddRunProfileExecutionItems(_activityRunProfileExecutionItems);
         await _jim.Activities.UpdateActivityAsync(_activity);
+
+        importSpan.SetTag("totalObjectsImported", totalObjectsImported);
+        importSpan.SetTag("objectsCreated", connectedSystemObjectsToBeCreated.Count);
+        importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
+        importSpan.SetSuccess();
     }
 
     private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)

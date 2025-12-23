@@ -1032,6 +1032,103 @@ The scenario is now blocked by a different issue (LDAP connector object type mat
 
 ---
 
+## Performance Diagnostics
+
+JIM includes built-in performance diagnostics that automatically measure and log operation timings during sync operations. This is invaluable for identifying performance bottlenecks during integration testing.
+
+### Automatic Enablement
+
+Performance diagnostics are automatically enabled in:
+- **Worker Service**: 100ms slow operation threshold (logs warnings for operations exceeding this)
+- **Unit Tests**: 50ms slow operation threshold (via `GlobalTestSetup.cs` in test projects)
+
+### Viewing Performance Metrics
+
+**During Docker Stack Testing:**
+
+```bash
+# View worker logs with timing information
+docker logs jim.worker 2>&1 | grep -i "DiagnosticListener"
+
+# Follow logs in real-time during sync operations
+docker logs -f jim.worker 2>&1 | grep -i "DiagnosticListener"
+
+# View all worker logs (includes timing in context)
+docker logs jim.worker --tail 200
+```
+
+**During Unit/Integration Tests:**
+
+```powershell
+# Run tests with verbose output to see timing info
+dotnet test JIM.Worker.Tests --verbosity normal
+
+# Run specific test with detailed output
+dotnet test JIM.Worker.Tests --filter "FullyQualifiedName~SyncImport" --verbosity detailed
+```
+
+### Understanding Diagnostic Output
+
+Diagnostic output appears in logs like:
+
+```
+DiagnosticListener: FullImport completed in 1234.56ms
+DiagnosticListener: ImportPage completed in 45.23ms [pageNumber=1]
+DiagnosticListener: ProcessImportObjects completed in 892.10ms [objectCount=100]
+```
+
+Operations exceeding the slow threshold are logged at **Warning** level for easy identification.
+
+### Instrumented Operations
+
+The following sync operations are instrumented:
+
+| Operation | Description |
+|-----------|-------------|
+| `FullImport` | Complete import from a connected system |
+| `CallBasedImport` | Import using connector API calls |
+| `FileBasedImport` | Import from file-based connectors |
+| `ImportPage` | Single page of paginated import |
+| `ReadFile` | File connector file read |
+| `ProcessImportObjects` | Processing imported objects |
+| `ProcessDeletions` | Processing object deletions |
+| `ResolveReferences` | Resolving object references |
+| `PersistConnectedSystemObjects` | Database persistence |
+| `FullSync` | Full synchronisation cycle |
+| `LoadSyncRules` | Loading sync rules |
+| `LoadObjectTypes` | Loading object types |
+| `ProcessConnectedSystemObjects` | Processing CSOs during sync |
+| `Export` | Export to connected system |
+| `ExecuteExports` | Executing pending exports |
+
+### Adding Custom Instrumentation
+
+When adding new operations that should be timed:
+
+```csharp
+using JIM.Application.Diagnostics;
+
+using var span = Diagnostics.Sync.StartSpan("MyNewOperation");
+span.SetTag("relevantContext", contextValue);
+
+try
+{
+    await PerformOperationAsync();
+    span.SetSuccess();
+}
+catch (Exception ex)
+{
+    span.SetError(ex);
+    throw;
+}
+```
+
+### Path to OpenTelemetry
+
+The diagnostics infrastructure uses `System.Diagnostics.ActivitySource` (the .NET OpenTelemetry API). To export telemetry to external systems like Jaeger, Zipkin, or Azure Monitor, add OpenTelemetry exporters without any instrumentation code changes. See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Aspire evaluation.
+
+---
+
 ## Troubleshooting
 
 ### Container Issues

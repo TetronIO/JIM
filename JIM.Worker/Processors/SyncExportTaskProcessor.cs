@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Diagnostics;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
@@ -45,6 +46,11 @@ public class SyncExportTaskProcessor
     /// </summary>
     public async Task PerformExportAsync()
     {
+        using var exportSpan = Diagnostics.Sync.StartSpan("Export");
+        exportSpan.SetTag("connectedSystemId", _connectedSystem.Id);
+        exportSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+        exportSpan.SetTag("runMode", _runMode.ToString());
+
         Log.Information("PerformExportAsync: Starting export for {SystemName} (RunMode: {RunMode})",
             _connectedSystem.Name, _runMode);
 
@@ -89,22 +95,32 @@ public class SyncExportTaskProcessor
                 MaxParallelism = 4
             };
 
-            var result = await _jim.ExportExecution.ExecuteExportsAsync(
-                _connectedSystem,
-                _connector,
-                _runMode,
-                options,
-                _cancellationTokenSource.Token,
-                async progressInfo =>
-                {
-                    // Update activity with progress
-                    _activity.ObjectsProcessed = progressInfo.ProcessedExports;
-                    await _jim.Activities.UpdateActivityMessageAsync(_activity, progressInfo.Message);
-                    await _jim.Activities.UpdateActivityAsync(_activity);
-                });
+            ExportExecutionResult result;
+            using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
+            {
+                result = await _jim.ExportExecution.ExecuteExportsAsync(
+                    _connectedSystem,
+                    _connector,
+                    _runMode,
+                    options,
+                    _cancellationTokenSource.Token,
+                    async progressInfo =>
+                    {
+                        // Update activity with progress
+                        _activity.ObjectsProcessed = progressInfo.ProcessedExports;
+                        await _jim.Activities.UpdateActivityMessageAsync(_activity, progressInfo.Message);
+                        await _jim.Activities.UpdateActivityAsync(_activity);
+                    });
+            }
+
+            exportSpan.SetTag("successCount", result.SuccessCount);
+            exportSpan.SetTag("failedCount", result.FailedCount);
+            exportSpan.SetTag("deferredCount", result.DeferredCount);
 
             // Update activity with final results
             await ProcessExportResultAsync(result);
+
+            exportSpan.SetSuccess();
         }
         catch (OperationCanceledException)
         {

@@ -1,8 +1,10 @@
 using JIM.Application;
+using JIM.Application.Diagnostics;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -33,6 +35,10 @@ public class SyncFullSyncTaskProcessor
 
     public async Task PerformFullSyncAsync()
     {
+        using var syncSpan = Diagnostics.Sync.StartSpan("FullSync");
+        syncSpan.SetTag("connectedSystemId", _connectedSystem.Id);
+        syncSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+
         Log.Verbose("PerformFullSyncAsync: Starting");
 
         // what needs to happen:
@@ -55,19 +61,37 @@ public class SyncFullSyncTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         // get all the active sync rules for this system
-        var activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+        List<SyncRule> activeSyncRules;
+        using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
+        {
+            activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+        }
 
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
-        _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
+        {
+            _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        }
 
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe.
         // it also enables us to update the Activity with progress info as we go, allowing the UI to be updated and keep users informed.
         const int pageSize = 200;
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
+
+        using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessConnectedSystemObjects");
+        processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
+        processCsosSpan.SetTag("pageSize", pageSize);
+        processCsosSpan.SetTag("totalPages", totalCsoPages);
+
         for (var i = 0; i < totalCsoPages; i++)
         {
-            var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
+            PagedResultSet<ConnectedSystemObject> csoPagedResult;
+            using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
+            {
+                csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
+            }
+
             foreach (var connectedSystemObject in csoPagedResult.Results)
             {
                 // check for cancellation request, and stop work if cancelled.
@@ -101,7 +125,12 @@ public class SyncFullSyncTaskProcessor
         // ensure the activity and any pending db updates are applied.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
 
-        await ResolveReferencesAsync();
+        using (Diagnostics.Sync.StartSpan("ResolveReferences"))
+        {
+            await ResolveReferencesAsync();
+        }
+
+        syncSpan.SetSuccess();
     }
 
     /// <summary>

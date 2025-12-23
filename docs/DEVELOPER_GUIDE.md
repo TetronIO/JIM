@@ -234,6 +234,84 @@ public class MetaverseController : ControllerBase
 
 **Rule**: All long-running operations should be queued as WorkerTasks, not executed synchronously in web requests.
 
+### 8. Performance Diagnostics
+
+JIM includes a built-in performance diagnostics infrastructure for measuring operation timings during sync operations. This uses `System.Diagnostics.ActivitySource` under the hood (the .NET OpenTelemetry-compatible API) but wraps it with JIM-specific terminology to avoid confusion with JIM's `Activity` class (used for audit/task tracking).
+
+**Key Components** (in `JIM.Application/Diagnostics/`):
+
+| Class | Purpose |
+|-------|---------|
+| `OperationSpan` | Wrapper around `System.Diagnostics.Activity` representing a timed operation |
+| `DiagnosticSource` | Wrapper around `ActivitySource` for creating spans |
+| `DiagnosticListener` | Logs span completions to Serilog with timing information |
+| `Diagnostics` | Static entry point with pre-configured sources (Sync, Database, Connector, Expression) |
+
+**Using Diagnostics in Code**:
+
+```csharp
+using JIM.Application.Diagnostics;
+
+// Start a span for an operation
+using var span = Diagnostics.Sync.StartSpan("FullImport");
+span.SetTag("connectedSystemId", connectedSystem.Id);
+
+try
+{
+    // Nested operations create child spans automatically
+    using var pageSpan = Diagnostics.Sync.StartSpan("ImportPage");
+    pageSpan.SetTag("pageNumber", pageNumber);
+
+    await ProcessPageAsync();
+
+    pageSpan.SetSuccess();
+}
+catch (Exception ex)
+{
+    span.SetError(ex);
+    throw;
+}
+
+span.SetSuccess();
+```
+
+**Available Diagnostic Sources**:
+- `Diagnostics.Sync` - Sync operations (import, sync, export)
+- `Diagnostics.Database` - Database operations
+- `Diagnostics.Connector` - Connector operations
+- `Diagnostics.Expression` - Expression evaluation
+
+**Enabling Diagnostics**:
+
+Diagnostics are enabled automatically in:
+- **Worker Service** (`JIM.Worker/Worker.cs`) - 100ms slow operation threshold
+- **Unit Tests** (`GlobalTestSetup.cs` in test projects) - 50ms slow operation threshold
+
+To enable manually:
+```csharp
+using var listener = Diagnostics.EnableLogging(slowOperationThresholdMs: 100);
+// Operations logged to Serilog
+```
+
+**Viewing Diagnostic Output**:
+- In Docker: `docker logs jim.worker` - Look for "DiagnosticListener:" entries
+- In Tests: Run with verbose output to see timing in test results
+- Slow operations (exceeding threshold) are logged at Warning level
+
+**Path to OpenTelemetry**:
+
+The diagnostics infrastructure uses `System.Diagnostics.ActivitySource`, which is the standard .NET API for OpenTelemetry. To export telemetry to external systems (Jaeger, Zipkin, Azure Monitor, etc.), simply add OpenTelemetry exporters - no instrumentation code changes required:
+
+```csharp
+// Future: Add OpenTelemetry SDK and configure exporters
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing
+        .AddSource("JIM.Sync", "JIM.Database", "JIM.Connector", "JIM.Expression")
+        .AddJaegerExporter());
+```
+
+See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Aspire evaluation which includes comprehensive observability features.
+
 ## Security Considerations
 
 ### 1. Authentication
@@ -860,6 +938,6 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 ---
 
-**Last Updated**: 2025-12-11
-**Version**: 1.2
+**Last Updated**: 2025-12-23
+**Version**: 1.3
 **Applies to**: JIM v1.x (NET 9.0)
