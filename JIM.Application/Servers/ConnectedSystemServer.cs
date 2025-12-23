@@ -702,11 +702,13 @@ public class ConnectedSystemServer
     /// Causes the associated Connector to be instantiated and the schema imported from the connected system.
     /// Changes will be persisted, even if they are destructive, i.e. an attribute is removed.
     /// </summary>
-    /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new schema.</returns>
+    /// <returns>A result object containing details about what changed during the schema refresh.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task<SchemaRefreshResult> ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         ValidateConnectedSystemParameter(connectedSystem);
+
+        var result = new SchemaRefreshResult { Success = true };
 
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
@@ -730,56 +732,135 @@ public class ConnectedSystemServer
         else
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
 
-        // this could potentially be a good point to check for data-loss if persisted and return a report object
-        // that the user could use to decide if they need to take corrective steps, i.e. adjust attribute flow on sync rules.
-
-        // super destructive at this point. this is for MVP only. will result in all prior  user object type and attribute selections to be lost!
-        // todo: work out dependent changes required, i.e. sync rules will rely on connected system object type attributes. if they get removed from the schema
-        // then we need to break any sync rule attribute flow relationships. this could be done gracefully to allow the user the opportunity to revise them, 
-        // i.e. instead of just deleting the attribute flow and the user not knowing what they've lost, perhaps disable the attribute flow and leave a copy of the cs attrib name in place, 
-        // so they can see it's not valid anymore and have information that will enable them to work out what to do about it.
+        // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by sync rules
+        // This prevents FK constraint violations when attributes are used in sync rule mappings
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
-        connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>(); 
-        foreach (var objectType in schema.ObjectTypes)
+
+        // Keep track of existing object types for merging and change tracking
+        var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
+        var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
+        var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
+
+        connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
+
+        // Track removed object types
+        foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
         {
-            objectType.Attributes = objectType.Attributes.OrderBy(a => a.Name).ToList();
-            var connectedSystemObjectType = new ConnectedSystemObjectType
+            result.RemovedObjectTypes.Add(removedObjectTypeName);
+        }
+
+        foreach (var schemaObjectType in schema.ObjectTypes)
+        {
+            schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
+
+            // Try to find an existing object type with the same name
+            var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
+
+            ConnectedSystemObjectType connectedSystemObjectType;
+            if (existingObjectType != null)
             {
-                Name = objectType.Name,
-                Attributes = objectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
+                // Update existing object type, preserving its ID and merging attributes
+                result.UpdatedObjectTypes.Add(schemaObjectType.Name);
+                connectedSystemObjectType = existingObjectType;
+                var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
+                var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
+                var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
+
+                connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
+
+                // Track removed attributes for this object type
+                var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
+                if (removedAttributeNames.Count > 0)
                 {
-                    Name = a.Name,
-                    Description = a.Description,
-                    AttributePlurality = a.AttributePlurality,
-                    Type = a.Type,
-                    ClassName = a.ClassName
-                }).ToList()
-            };
+                    result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
+                }
+
+                // Track added attributes for this object type
+                var addedAttributeNames = new List<string>();
+
+                foreach (var schemaAttribute in schemaObjectType.Attributes)
+                {
+                    // Try to find existing attribute by name
+                    var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+
+                    if (existingAttribute != null)
+                    {
+                        // Update existing attribute properties but preserve the ID
+                        existingAttribute.Description = schemaAttribute.Description;
+                        existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
+                        existingAttribute.Type = schemaAttribute.Type;
+                        existingAttribute.ClassName = schemaAttribute.ClassName;
+                        connectedSystemObjectType.Attributes.Add(existingAttribute);
+                    }
+                    else
+                    {
+                        // Add new attribute
+                        addedAttributeNames.Add(schemaAttribute.Name);
+                        connectedSystemObjectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
+                        {
+                            Name = schemaAttribute.Name,
+                            Description = schemaAttribute.Description,
+                            AttributePlurality = schemaAttribute.AttributePlurality,
+                            Type = schemaAttribute.Type,
+                            ClassName = schemaAttribute.ClassName
+                        });
+                    }
+                }
+
+                if (addedAttributeNames.Count > 0)
+                {
+                    result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
+                }
+            }
+            else
+            {
+                // Create new object type
+                result.AddedObjectTypes.Add(schemaObjectType.Name);
+                connectedSystemObjectType = new ConnectedSystemObjectType
+                {
+                    Name = schemaObjectType.Name,
+                    Attributes = schemaObjectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
+                    {
+                        Name = a.Name,
+                        Description = a.Description,
+                        AttributePlurality = a.AttributePlurality,
+                        Type = a.Type,
+                        ClassName = a.ClassName
+                    }).ToList()
+                };
+
+                // All attributes in a new object type are considered "added"
+                result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
+            }
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
-            var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => objectType.RecommendedExternalIdAttribute != null && a.Name == objectType.RecommendedExternalIdAttribute.Name);
+            var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
             if (attribute != null)
                 attribute.IsExternalId = true;
-            //else
-            //   Log.Error($"A recommended External Id attribute '{objectType.RecommendedExternalIdAttribute.Name}' was not found in the objects list of attributes.");
 
             // if the connector supports it (requires it), take the secondary external id from the schema and mark the attribute as such
-            if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && objectType.RecommendedSecondaryExternalIdAttribute != null)
+            if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
             {
-                var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == objectType.RecommendedSecondaryExternalIdAttribute.Name);
+                var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
                 if (secondaryExternalIdAttribute != null)
                     secondaryExternalIdAttribute.IsSecondaryExternalId = true;
                 else
-                    Log.Error($"Recommended Secondary External Id attribute '{objectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
+                    Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
             }
 
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
         }
 
+        // Set totals
+        result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
+        result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
+
         await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
+
+        return result;
     }
     #endregion
 

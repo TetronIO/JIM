@@ -209,3 +209,15 @@ body {
 .mud-button-group-override-styles {
     box-shadow: none !important;
 }
+
+/* Schema refresh results alert - position close icon in top right */
+.jim-alert-schema-refresh {
+    position: relative;
+}
+
+.jim-alert-schema-refresh .mud-alert-close-button {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    margin: 0 !important;
+}
