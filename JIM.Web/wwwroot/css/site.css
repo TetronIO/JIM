@@ -60,7 +60,8 @@ body {
 }
 
 .mud-paper,
-.mud-paper-outlined {
+.mud-paper-outlined,
+.mud-alert {
     border-radius: 8px !important;
 }
 
