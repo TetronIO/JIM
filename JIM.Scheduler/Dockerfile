@@ -17,17 +17,14 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 COPY ["JIM.Scheduler/JIM.Scheduler.csproj", "JIM.Scheduler/"]
 
-# Restore with BuildKit cache mount for NuGet packages
-RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj"
+RUN dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj"
 
 COPY . .
 WORKDIR "/src/JIM.Scheduler"
 
 # Publish stage - optimised for production
 FROM build AS publish
-RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet publish "JIM.Scheduler.csproj" -c Release -o /app/publish
+RUN dotnet publish "JIM.Scheduler.csproj" -c Release -o /app/publish
 
 # Final stage - use published output
 FROM base AS final

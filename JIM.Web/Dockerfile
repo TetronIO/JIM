@@ -33,17 +33,14 @@ COPY ["JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
 COPY ["JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
 COPY ["JIM.Data/JIM.Data.csproj", "JIM.Data/"]
 
-# Restore with BuildKit cache mount for NuGet packages
-RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet restore "./JIM.Web/JIM.Web.csproj"
+RUN dotnet restore "./JIM.Web/JIM.Web.csproj"
 
 COPY . .
 WORKDIR "/src/JIM.Web"
 
 # Publish stage - optimised for production
 FROM build AS publish
-RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Final stage - use published output
 FROM base AS final
