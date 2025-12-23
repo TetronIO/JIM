@@ -1236,6 +1236,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
     {
         var query = Repository.Database.SyncRules
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
             .Include(sr => sr.AttributeFlowRules)
@@ -1284,6 +1285,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         return await Repository.Database.SyncRules
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
             .Include(sr => sr.AttributeFlowRules)
