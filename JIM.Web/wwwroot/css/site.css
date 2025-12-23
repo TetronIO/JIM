@@ -145,8 +145,8 @@ body {
 }
 
 /* Child nav items - keep default styling (lighter weight, secondary colour) */
-.jim-nav-menu .mud-navmenu-list .mud-nav-link-text {
-    font-weight: 400;
+.jim-nav-child .mud-nav-link-text {
+    font-weight: 400 !important;
 }
 
 /* Danger zone styling for high-risk actions */

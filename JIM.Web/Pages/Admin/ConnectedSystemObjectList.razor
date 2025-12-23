@@ -44,18 +44,18 @@
             <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue!)">External Id</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue?.ToString() ?? string.Empty)">External Id</MudTableSortLabel></MudTh>
             @* TODO: change this so a check is done on whether the connector supports secondary external ids or not so we don't have to do two linq queries *@
             @if (_connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
             {
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue!)">Secondary External Id</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue?.ToString() ?? string.Empty)">Secondary External Id</MudTableSortLabel></MudTh>
             }
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName!)">Display Name</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined!)">Date Joined</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.JoinType)">Join Type</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined!)">Date Joined</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="External Id">
@@ -67,10 +67,27 @@
             }
             <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
-            <MudTd DataLabel="Created">@context.Created</MudTd>
-            <MudTd DataLabel="Status">@context.Status</MudTd>
+            <MudTd DataLabel="Created">
+                <MudTooltip Text="@context.Created.ToString("O")">
+                    <MudText Typo="Typo.body2">@GetRelativeDate(context.Created)</MudText>
+                </MudTooltip>
+            </MudTd>
+            <MudTd DataLabel="Date Joined">
+                @if (context.DateJoined != null)
+                {
+                    <MudTooltip Text="@context.DateJoined.Value.ToString("O")">
+                        <MudText Typo="Typo.body2">@GetRelativeDate(context.DateJoined.Value)</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">-</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Text="@context.Status.ToString()" Variant="Variant.Text" />
+            </MudTd>
             <MudTd DataLabel="Join Type">@context.JoinType.ToString().SplitOnCapitalLetters()</MudTd>
-            <MudTd DataLabel="Date Joined">@(context.DateJoined != null ? context.DateJoined : "-")</MudTd>
         </RowTemplate>
         <NoRecordsContent>
             There are no objects for this connected system. Have you performed a full import?
@@ -143,6 +160,32 @@
             return true;
 
         return false;
+    }
+
+    private static string GetRelativeDate(DateTime dateTime)
+    {
+        var now = DateTime.UtcNow;
+        var timeSpan = now - dateTime;
+
+        if (timeSpan.TotalSeconds < 60)
+            return "just now";
+
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+
+        if (timeSpan.TotalDays < 7)
+            return $"{(int)timeSpan.TotalDays}d ago";
+
+        if (timeSpan.TotalDays < 30)
+            return $"{(int)(timeSpan.TotalDays / 7)}w ago";
+
+        if (timeSpan.TotalDays < 365)
+            return $"{(int)(timeSpan.TotalDays / 30)}mo ago";
+
+        return $"{(int)(timeSpan.TotalDays / 365)}y ago";
     }
 
     private async Task HandleDeleteAllObjectsClickAsync()
