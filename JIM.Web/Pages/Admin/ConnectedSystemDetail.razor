@@ -208,13 +208,13 @@
                 else
                 {
                     <MudText>
-                        <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this 
-                        will result in all references to them being removed from within JIM, i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be 
-                        deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right permissions needed to retrieve the schema, and consider 
+                        <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this
+                        will result in all references to them being removed from within JIM, i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be
+                        deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right permissions needed to retrieve the schema, and consider
                         a database backup before proceeding.
                     </MudText>
                 }
-                <MudButton 
+                <MudButton
                     Color="_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
                     Disabled="@(_schemaBeingRetrieved)"
                     Variant="Variant.Filled"
@@ -269,7 +269,7 @@
                             was detected automatically, and might need adjusting if not right.
                         </MudAlert>
                     }
-                    
+
                     <MudSelect
                         T="string"
                         Label="Please choose a data type"
@@ -328,7 +328,7 @@
                             <MudButtonGroup Color="Color.Default" Class="mb-5" DropShadow="false" Variant="Variant.Outlined">
                                 @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
                                 {
-                                    <MudButton 
+                                    <MudButton
                                         OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
                                         Disabled="DisableSelectedSchemaObjectType(objectType)"
                                         DropShadow="false">@objectType.Name</MudButton>
@@ -345,8 +345,8 @@
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
                             <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
-                            <MudSelect 
-                                T="ConnectedSystemObjectTypeAttribute" 
+                            <MudSelect
+                                T="ConnectedSystemObjectTypeAttribute"
                                 Label="External ID Attribute"
                                 Variant="Variant.Outlined"
                                 Class="mt-5"
@@ -383,7 +383,7 @@
 
                         <MudGrid Class="mt-3 mb-3">
                             <MudItem xs="@(_selectedObjectTypeHasClasses ? 6 : 12)">
-                                <MudTextField 
+                                <MudTextField
                                     T="string"
                                     @bind-Value="_schemaSearchString"
                                     Label="Filter by name"
@@ -398,7 +398,7 @@
                             @if (_selectedObjectTypeHasClasses)
                             {
                                 <MudItem xs="6">
-                                    <MudSelect 
+                                    <MudSelect
                                         T="string"
                                         Label="Filter by class"
                                         MultiSelection="true"
@@ -417,7 +417,7 @@
                             }
 
                             <MudItem xs="10">
-                                <MudTextField 
+                                <MudTextField
                                     T="string"
                                     Label="Select attributes via CSV"
                                     @bind-Value="_attributeSelectionCsv"
@@ -429,7 +429,7 @@
                                     Variant="Variant.Outlined" />
                             </MudItem>
                             <MudItem xs="2">
-                                <MudButton 
+                                <MudButton
                                     Variant="Variant.Filled"
                                     DropShadow="false"
                                     Class="mt-4"
@@ -442,8 +442,8 @@
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
-                
-                    <MudTable 
+
+                    <MudTable
                         Items="@_selectedObjectType.Attributes"
                         Virtualize="true"
                         Hover="true"
@@ -502,9 +502,9 @@
                             @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                             {
                                 <MudTd>
-                                    <MudButton 
-                                        DropShadow="false" 
-                                        Size="Size.Small" 
+                                    <MudButton
+                                        DropShadow="false"
+                                        Size="Size.Small"
                                         Variant="Variant.Filled"
                                         OnClick="() => HandleShowEditAttributeDialogAsync(context)"
                                         StartIcon="@Icons.Material.Filled.Edit">
@@ -523,11 +523,11 @@
                     </MudTable>
                 }
 
-                <MudButton 
-                    Color="Color.Primary" 
-                    Variant="Variant.Filled" 
-                    OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync" 
-                    Class="mt-5" 
+                <MudButton
+                    Color="Color.Primary"
+                    Variant="Variant.Filled"
+                    OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync"
+                    Class="mt-5"
                     DropShadow="false"
                     Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
             }
@@ -551,7 +551,7 @@
                             Ensure the Connected System identity has the right permissions needed to retrieve the hierarchy, and consider a database backup before proceeding.
                         </MudText>
                     }
-                    <MudButton 
+                    <MudButton
                             Disabled="@_hierarchyBeingRetrieved"
                             Color="_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
                             Size="Size.Small"
@@ -600,7 +600,7 @@
 
                             <div class="pa-4">
                                 <MudText>Select the containers you want to manage in this partition.</MudText>
-                                
+
                                 @*
                                 TODO:
                                 <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5">
@@ -608,7 +608,7 @@
                                     <MudButton>Clear All</MudButton>
                                 </MudButtonGroup>
                                 *@
-                                
+
                                 @if (partition.Containers != null)
                                 {
                                     <MudTreeView Items="@GetTreeItemData(partition.Containers)" ReadOnly AutoExpand>
@@ -633,7 +633,7 @@
                                                                          ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
                                                                          title="@(item.Value.Selected ? "Selected" : string.Empty)"/>
                                                         }
-                                                        <MudText>@item.Value.Name</MudText>    
+                                                        <MudText>@item.Value.Name</MudText>
                                                     }
                                                 </BodyContent>
                                             </MudTreeViewItem>
@@ -776,11 +776,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error">
-            <MudAlert Severity="Severity.Warning" Class="mb-5">
-                The actions in this section are destructive and cannot be undone. Please proceed with caution.
-            </MudAlert>
-
-            <MudPaper Outlined="true" Class="pa-4">
+            <MudPaper Class="pa-4 jim-paper-danger-zone">
                 <MudText Typo="Typo.h6" Color="Color.Error">Delete Connected System</MudText>
                 <MudText Class="mt-2">
                     Permanently delete this Connected System and all its related data, including:
@@ -1665,11 +1661,11 @@
     {
         return containers.Select(connectedSystemContainer => new TreeItemData<ConnectedSystemContainer>
         {
-            Value = connectedSystemContainer, 
+            Value = connectedSystemContainer,
             Children = GetTreeItemData(connectedSystemContainer.ChildContainers)
         }).ToList();
     }
-    
+
     private static void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
     {
         // if included and clicked, change to not included, not selected
@@ -1732,13 +1728,13 @@
             partition.Selected = true;
             return;
         }
-        
+
         // we need a variable to hold the TLC when we eventually find it
         ConnectedSystemContainer? topLevelContainer = null;
-        
+
         // we need a variable to hold the current container as we navigate up the hierarchy
         var currentContainer = container;
-        
+
         // keep moving up the container hierarchy until we find the TLC
         // ReSharper disable once LoopVariableIsNeverChangedInsideLoop : incorrect
         while (topLevelContainer == null)
@@ -1770,7 +1766,7 @@
                 if (topLevelContainer.Partition.Containers.Any(IsContainerOrAnyChildrenSelected))
                     areAnyContainersSelected = true;
         }
-        
+
         // does the top-level container have a parent partition?
         if (topLevelContainer.Partition != null && areAnyContainersSelected)
             topLevelContainer.Partition.Selected = true;
