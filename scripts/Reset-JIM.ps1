@@ -59,8 +59,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Resolve paths relative to this script's location (repo root)
-$repoRoot = $PSScriptRoot
+# Resolve paths relative to this script's location (script is in scripts/ folder)
+$repoRoot = Split-Path -Parent $PSScriptRoot
 $jimCompose = Join-Path $repoRoot "docker-compose.yml"
 $jimComposeOverride = Join-Path $repoRoot "docker-compose.override.codespaces.yml"
 $integrationCompose = Join-Path $repoRoot "docker-compose.integration-tests.yml"
