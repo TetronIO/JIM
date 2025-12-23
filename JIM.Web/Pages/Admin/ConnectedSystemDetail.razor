@@ -740,19 +740,14 @@
 
             <MudTable Items="@_connectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
                 <HeaderContent>
-                    <MudTh>Actions</MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)">Run Type</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition?.Name!)">Partition</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">Page Size</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath!)">File Path</MudTableSortLabel></MudTh>
+                    <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd>
-                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleRunProfileDeleteAsync(context)">Delete</MudMenuItem>
-                        </MudMenu>
-                    </MudTd>
                     <MudTd DataLabel="Name">@context.Name</MudTd>
                     <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
                     <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
@@ -766,6 +761,18 @@
                         {
                             <span>-</span>
                         }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudTooltip Text="Delete">
+
+
+
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           Variant="Variant.Filled"
+                                           OnClick="_ => HandleRunProfileDeleteAsync(context)" />
+                        </MudTooltip>
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
@@ -819,20 +826,12 @@
     <MudDialog @bind-Visible="_newRunProfileDialogVisible" Options="_newRunProfileDialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-3" /> Create New Run Profile
+                <MudIcon Icon="@Icons.Material.Filled.Add" Class="me-3" /> Create New Run Profile
             </MudText>
         </TitleContent>
         <DialogContent>
             <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
                 <MudTextField T="string" @bind-Value="_newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
-
-                <MudTextField
-                    T="string"
-                    @bind-Value="_newRunProfile.FilePath"
-                    Label="File Path"
-                    Variant="Variant.Outlined"
-                    Class="mt-3"
-                    HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
 
                 <MudSelect
                     T="ConnectedSystemRunType"
@@ -874,6 +873,19 @@
                     }
                 </MudSelect>
 
+                @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
+                     _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
+                     _newRunProfile.RunType == ConnectedSystemRunType.Export)
+                {
+                    <MudTextField
+                        T="string"
+                        @bind-Value="_newRunProfile.FilePath"
+                        Label="File Path"
+                        Variant="Variant.Outlined"
+                        Class="mt-3"
+                        HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
+                }
+
                 @if (_connectedSystem!.ConnectorDefinition.SupportsPartitions && _connectedSystem.Partitions != null)
                 {
                     <MudSelect
@@ -891,7 +903,13 @@
                         }
                     </MudSelect>
                 }
-                <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
+
+                @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
+                     _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
+                     _newRunProfile.RunType == ConnectedSystemRunType.Export)
+                {
+                    <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
+                }
             </MudForm>
         </DialogContent>
         <DialogActions>
@@ -1492,6 +1510,15 @@
         if (_connectedSystem == null)
             return;
 
+        var confirmationResult = await DialogService.ShowMessageBox(
+            "Delete Matching Rule",
+            $"Are you sure you want to delete this matching rule? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmationResult != true)
+            return;
+
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
 
         try
@@ -1890,6 +1917,15 @@
         if (_connectedSystem?.RunProfiles == null)
             return;
 
+        var confirmationResult = await DialogService.ShowMessageBox(
+            "Delete Run Profile",
+            $"Are you sure you want to delete the run profile '{connectedSystemRunProfile.Name}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmationResult != true)
+            return;
+
         _connectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
 
         // attribute the action to the user
@@ -2208,10 +2244,12 @@
                                                OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
                             </MudTooltip>
                             <MudTooltip Text="Delete">
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                               Size="Size.Small"
-                                               Color="Color.Error"
-                                               OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
+                                <MudIconButton
+                                    Icon="@Icons.Material.Filled.Delete"
+                                    Variant="Variant.Filled"
+                                    Size="Size.Small"
+                                    Color="Color.Error"
+                                    OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
                             </MudTooltip>
                         </MudTd>
                     </RowTemplate>
