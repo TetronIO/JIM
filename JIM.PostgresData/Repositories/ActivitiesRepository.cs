@@ -56,6 +56,7 @@ public class ActivityRepository : IActivityRepository
             pageSize = 100;
 
         var query = Repository.Database.Activities
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(a => a.InitiatedBy)
             .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .ThenInclude(av => av.Attribute)
@@ -133,6 +134,7 @@ public class ActivityRepository : IActivityRepository
     public async Task<Activity?> GetActivityAsync(Guid id)
     {
         return await Repository.Database.Activities
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(a => a.InitiatedBy)
             .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .ThenInclude(av => av.Attribute)
@@ -155,6 +157,7 @@ public class ActivityRepository : IActivityRepository
             pageSize = 100;
 
         var objects = from o in Repository.Database.ActivityRunProfileExecutionItems
+                .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
                 .Include(a => a.ConnectedSystemObject)
                     .ThenInclude(cso => cso!.Type)
                 .Include(a => a.ConnectedSystemObject)
@@ -218,6 +221,7 @@ public class ActivityRepository : IActivityRepository
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         return await Repository.Database.ActivityRunProfileExecutionItems
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(q => q.ConnectedSystemObject)
             .ThenInclude(cso => cso!.AttributeValues)
             .ThenInclude(av => av.Attribute)

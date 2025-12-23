@@ -143,6 +143,7 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(mo => mo.Type).
             Include(mo => mo.AttributeValues).
             ThenInclude(av => av.Attribute).

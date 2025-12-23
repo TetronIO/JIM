@@ -47,6 +47,7 @@ public class TaskingRepository : ITaskingRepository
     public async Task<WorkerTask?> GetWorkerTaskAsync(Guid id)
     {
         return await Repository.Database.WorkerTasks.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(st => st.Activity).
             Include(st => st.InitiatedBy).
             ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
@@ -70,6 +71,7 @@ public class TaskingRepository : ITaskingRepository
         // todo: find a way to retrieve a stub user, i.e. just MVO with id and displayname
         var workerTaskHeaders = new List<WorkerTaskHeader>();
         var workerTasks = await Repository.Database.WorkerTasks.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(st => st.InitiatedBy).
             ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
             ThenInclude(av => av.Attribute).
@@ -105,6 +107,7 @@ public class TaskingRepository : ITaskingRepository
     {
         var tasks = new List<WorkerTask>();
         foreach (var task in await Repository.Database.WorkerTasks
+                     .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
                      .Include(st => st.Activity)
                      .Include(st => st.InitiatedBy)
                      .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))

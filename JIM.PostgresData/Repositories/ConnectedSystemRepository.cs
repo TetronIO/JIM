@@ -144,6 +144,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         var types = await Repository.Database.ConnectedSystemObjectTypes
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(ot => ot.Attributes.OrderBy(a => a.Name))
             .Include(ot => ot.ObjectMatchingRules)
                 .ThenInclude(omr => omr.Sources)
@@ -521,6 +522,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
     {
         return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .Include(cso => cso.AttributeValues)
@@ -1055,6 +1057,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<PendingExport?> GetPendingExportAsync(Guid id)
     {
         return await Repository.Database.PendingExports
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(pe => pe.ConnectedSystem)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
