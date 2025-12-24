@@ -110,31 +110,34 @@ public class SyncFullSyncTaskProcessor
                 csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
             }
 
-            foreach (var connectedSystemObject in csoPagedResult.Results)
+            using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
             {
-                // check for cancellation request, and stop work if cancelled.
-                if (_cancellationTokenSource.IsCancellationRequested)
+                foreach (var connectedSystemObject in csoPagedResult.Results)
                 {
-                    Log.Information("PerformFullSyncAsync: Cancellation requested. Stopping CSO enumeration.");
-                    return;
+                    // check for cancellation request, and stop work if cancelled.
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        Log.Information("PerformFullSyncAsync: Cancellation requested. Stopping CSO enumeration.");
+                        return;
+                    }
+
+                    // what kind of result do we want? we want to see:
+                    // - mvo joins (list)
+                    // - mvo projections (list)
+                    // - cso deletions (list)
+                    // - mvo deletions (list)
+                    // - mvo updates (list)
+                    // - mvo objects not updated (count)
+
+                    // todo: record changes to MV objects and other Connected Systems via Pending Export objects on the Activity Run Profile Execution.
+                    // todo: work out how a sync-preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
+                    // I have thought about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
+                    // so the same code stack can be used.
+
+                    await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+
+                    _activity.ObjectsProcessed++;
                 }
-
-                // what kind of result do we want? we want to see:
-                // - mvo joins (list)
-                // - mvo projections (list)
-                // - cso deletions (list)
-                // - mvo deletions (list)
-                // - mvo updates (list)
-                // - mvo objects not updated (count)
-
-                // todo: record changes to MV objects and other Connected Systems via Pending Export objects on the Activity Run Profile Execution.
-                // todo: work out how a sync-preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
-                // I have thought about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
-                // so the same code stack can be used.
-
-                await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
-
-                _activity.ObjectsProcessed++;
             }
 
             // batch persist all MVOs collected during this page
@@ -144,7 +147,10 @@ public class SyncFullSyncTaskProcessor
             await EvaluatePendingExportsAsync();
 
             // update activity progress once per page instead of per object to reduce database round trips
-            await _jim.Activities.UpdateActivityAsync(_activity);
+            using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+            {
+                await _jim.Activities.UpdateActivityAsync(_activity);
+            }
         }
 
         // TODO: work out if CSO changes have been persisted. Is a dedicated db update call needed?
