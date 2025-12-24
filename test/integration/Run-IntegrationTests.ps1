@@ -477,24 +477,24 @@ else {
             [bool]$IsRoot = $false
         )
 
-        # Guard against divide by zero
-        if ($Operation.Count -eq 0) {
+        # Guard against null operation or divide by zero
+        if ($null -eq $Operation -or $Operation["Count"] -eq 0) {
             return
         }
 
-        $avgMs = $Operation.TotalMs / $Operation.Count
-        $totalTime = Format-FriendlyTime -Ms $Operation.TotalMs
+        $avgMs = $Operation["TotalMs"] / $Operation["Count"]
+        $totalTime = Format-FriendlyTime -Ms $Operation["TotalMs"]
         $avgTime = Format-FriendlyTime -Ms $avgMs
-        $countSuffix = if ($Operation.Count -gt 1) { " (${GRAY}$($Operation.Count)x, avg $avgTime${NC})" } else { "" }
+        $countSuffix = if ($Operation["Count"] -gt 1) { " (${GRAY}$($Operation["Count"])x, avg $avgTime${NC})" } else { "" }
 
         # Tree characters for display
         $connector = if ($IsLast) { "└─ " } else { "├─ " }
         $displayPrefix = if ($IsRoot) { "" } else { $Prefix + $connector }
 
-        Write-Host ("$displayPrefix{0,-50} {1,12}$countSuffix" -f $Operation.Name, $totalTime)
+        Write-Host ("$displayPrefix{0,-50} {1,12}$countSuffix" -f $Operation["Name"], $totalTime)
 
         # Sort children by total time descending
-        $sortedChildren = $Operation.Children | Sort-Object -Property TotalMs -Descending
+        $sortedChildren = $Operation["Children"] | Sort-Object -Property TotalMs -Descending
 
         if ($sortedChildren.Count -gt 0) {
             # Calculate prefix for children
