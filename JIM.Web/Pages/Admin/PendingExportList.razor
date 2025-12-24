@@ -135,7 +135,11 @@
                 }
             </MudTd>
             <MudTd DataLabel="Changes">@context.AttributeChangeCount</MudTd>
-            <MudTd DataLabel="Created">@context.CreatedAt.ToFriendlyDate()</MudTd>
+            <MudTd DataLabel="Created">
+                <MudTooltip Text="@context.CreatedAt.ToLocalTime().ToFriendlyDate()" Color="Color.Dark">
+                    <span>@context.CreatedAt.ToLocalTime().ToRelativeTime()</span>
+                </MudTooltip>
+            </MudTd>
             <MudTd DataLabel="Errors">
                 @if (context.ErrorCount > 0)
                 {

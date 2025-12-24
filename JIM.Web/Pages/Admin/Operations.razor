@@ -74,6 +74,11 @@
                 <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
                 <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)</MudLink>
             }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                <span>API Key</span>
+            }
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
