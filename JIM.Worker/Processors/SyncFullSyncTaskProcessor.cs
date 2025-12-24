@@ -20,6 +20,11 @@ public class SyncFullSyncTaskProcessor
     private List<ConnectedSystemObjectType>? _objectTypes;
     private Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
 
+    // Batch collections for deferred MVO persistence and export evaluation
+    private readonly List<MetaverseObject> _pendingMvoCreates = [];
+    private readonly List<MetaverseObject> _pendingMvoUpdates = [];
+    private readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes)> _pendingExportEvaluations = [];
+
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
         ConnectedSystem connectedSystem,
@@ -131,6 +136,12 @@ public class SyncFullSyncTaskProcessor
 
                 _activity.ObjectsProcessed++;
             }
+
+            // batch persist all MVOs collected during this page
+            await PersistPendingMetaverseObjectsAsync();
+
+            // batch evaluate exports for all MVOs that changed during this page
+            await EvaluatePendingExportsAsync();
 
             // update activity progress once per page instead of per object to reduce database round trips
             await _jim.Activities.UpdateActivityAsync(_activity);
@@ -528,25 +539,22 @@ public class SyncFullSyncTaskProcessor
             // Apply pending attribute value changes to the MVO
             ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
 
-            // have we created a new MVO that needs persisting?
+            // Queue MVO for batch persistence at end of page (reduces database round trips)
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
             {
-                await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
-                // After save, EF has assigned an Id to the MVO - update the CSO's FK
-                connectedSystemObject.MetaverseObjectId = connectedSystemObject.MetaverseObject.Id;
+                // New MVO - queue for batch create
+                _pendingMvoCreates.Add(connectedSystemObject.MetaverseObject);
             }
             else
             {
-                // Existing MVO - update it if there were changes
-                await _jim.Metaverse.UpdateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
+                // Existing MVO - queue for batch update
+                _pendingMvoUpdates.Add(connectedSystemObject.MetaverseObject);
             }
 
-            // Q1 Decision: Evaluate export rules immediately when MVO changes
-            // This creates PendingExports for any other connected systems that need to be updated
-            // Note: Must be done AFTER MVO is saved so we have a valid ID for the PendingExport FK
+            // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
             if (changedAttributes.Count > 0)
             {
-                await EvaluateOutboundExportsAsync(connectedSystemObject.MetaverseObject, changedAttributes);
+                _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes));
             }
         }
     }
@@ -583,6 +591,72 @@ public class SyncFullSyncTaskProcessor
             Log.Information("EvaluateOutboundExportsAsync: Created {Count} deprovisioning exports for MVO {MvoId}",
                 deprovisioningExports.Count, mvo.Id);
         }
+    }
+
+    /// <summary>
+    /// Batch persists all pending MVO creates and updates collected during the current page.
+    /// This reduces database round trips from n writes to 2 writes (one for creates, one for updates).
+    /// After creates are persisted, CSO foreign keys are updated with the newly assigned MVO IDs.
+    /// </summary>
+    private async Task PersistPendingMetaverseObjectsAsync()
+    {
+        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("PersistPendingMetaverseObjects");
+        span.SetTag("createCount", _pendingMvoCreates.Count);
+        span.SetTag("updateCount", _pendingMvoUpdates.Count);
+
+        // Batch create new MVOs
+        if (_pendingMvoCreates.Count > 0)
+        {
+            await _jim.Metaverse.CreateMetaverseObjectsAsync(_pendingMvoCreates);
+
+            // After batch save, EF has assigned IDs - update the CSO foreign keys
+            foreach (var mvo in _pendingMvoCreates)
+            {
+                foreach (var cso in mvo.ConnectedSystemObjects)
+                {
+                    cso.MetaverseObjectId = mvo.Id;
+                }
+            }
+
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
+            _pendingMvoCreates.Clear();
+        }
+
+        // Batch update existing MVOs
+        if (_pendingMvoUpdates.Count > 0)
+        {
+            await _jim.Metaverse.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
+            _pendingMvoUpdates.Clear();
+        }
+
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Batch evaluates export rules for all MVOs that changed during the current page.
+    /// Must be called after PersistPendingMetaverseObjectsAsync so MVOs have valid IDs for pending export FKs.
+    /// </summary>
+    private async Task EvaluatePendingExportsAsync()
+    {
+        if (_pendingExportEvaluations.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("EvaluatePendingExports");
+        span.SetTag("count", _pendingExportEvaluations.Count);
+
+        foreach (var (mvo, changedAttributes) in _pendingExportEvaluations)
+        {
+            await EvaluateOutboundExportsAsync(mvo, changedAttributes);
+        }
+
+        Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs", _pendingExportEvaluations.Count);
+        _pendingExportEvaluations.Clear();
+
+        span.SetSuccess();
     }
 
     /// <summary>

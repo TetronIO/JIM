@@ -190,6 +190,26 @@ public class MetaverseServer
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }
 
+    /// <summary>
+    /// Creates multiple Metaverse Objects in a single batch operation.
+    /// This is more efficient than calling CreateMetaverseObjectAsync for each object.
+    /// </summary>
+    /// <param name="metaverseObjects">The list of Metaverse Objects to create.</param>
+    public async Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+    {
+        await Application.Repository.Metaverse.CreateMetaverseObjectsAsync(metaverseObjects);
+    }
+
+    /// <summary>
+    /// Updates multiple Metaverse Objects in a single batch operation.
+    /// This is more efficient than calling UpdateMetaverseObjectAsync for each object.
+    /// </summary>
+    /// <param name="metaverseObjects">The list of Metaverse Objects to update.</param>
+    public async Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+    {
+        await Application.Repository.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
+    }
+
     public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);

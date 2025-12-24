@@ -33,6 +33,20 @@ public interface IMetaverseRepository
 
     public Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
+    /// <summary>
+    /// Creates multiple Metaverse Objects in a single batch operation.
+    /// This is more efficient than calling CreateMetaverseObjectAsync for each object.
+    /// </summary>
+    /// <param name="metaverseObjects">The list of Metaverse Objects to create.</param>
+    public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);
+
+    /// <summary>
+    /// Updates multiple Metaverse Objects in a single batch operation.
+    /// This is more efficient than calling UpdateMetaverseObjectAsync for each object.
+    /// </summary>
+    /// <param name="metaverseObjects">The list of Metaverse Objects to update.</param>
+    public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);
+
     public Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue);
 
     public Task<int> GetMetaverseObjectCountAsync();

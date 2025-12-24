@@ -186,6 +186,36 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Creates multiple Metaverse Objects in a single batch operation.
+    /// This is more efficient than calling CreateMetaverseObjectAsync for each object.
+    /// </summary>
+    /// <param name="metaverseObjects">The list of Metaverse Objects to create.</param>
+    public async Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+    {
+        var objectList = metaverseObjects.ToList();
+        if (objectList.Count == 0)
+            return;
+
+        Repository.Database.MetaverseObjects.AddRange(objectList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Updates multiple Metaverse Objects in a single batch operation.
+    /// This is more efficient than calling UpdateMetaverseObjectAsync for each object.
+    /// </summary>
+    /// <param name="metaverseObjects">The list of Metaverse Objects to update.</param>
+    public async Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+    {
+        var objectList = metaverseObjects.ToList();
+        if (objectList.Count == 0)
+            return;
+
+        Repository.Database.UpdateRange(objectList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
     {
         var av = await Repository.Database.MetaverseObjectAttributeValues
