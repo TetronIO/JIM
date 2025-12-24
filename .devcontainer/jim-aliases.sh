@@ -5,9 +5,6 @@
 # Unset GITHUB_TOKEN to allow gh CLI to use its own authentication with project scopes
 unset GITHUB_TOKEN
 
-# Enable BuildKit for faster Docker builds with better caching
-export DOCKER_BUILDKIT=1
-
 # Compose file variables for cleaner aliases
 JIM_COMPOSE="docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db"
 

@@ -31,9 +31,6 @@
 .PARAMETER TimeoutSeconds
     Maximum time to wait for services to be ready. Default: 180 seconds.
 
-.PARAMETER RunProfileTimeout
-    Maximum time to wait for individual run profile execution. Default: 300 seconds.
-
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
@@ -78,10 +75,7 @@ param(
     [switch]$SkipBuild,
 
     [Parameter(Mandatory=$false)]
-    [int]$TimeoutSeconds = 180,
-
-    [Parameter(Mandatory=$false)]
-    [int]$RunProfileTimeout = 300
+    [int]$TimeoutSeconds = 180
 )
 
 Set-StrictMode -Version Latest
@@ -153,7 +147,6 @@ Write-Host "  Step:               ${CYAN}$Step${NC}"
 Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
 Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
 Write-Host "  Service Timeout:    ${CYAN}${TimeoutSeconds}s${NC}"
-Write-Host "  Run Profile Timeout:${CYAN}${RunProfileTimeout}s${NC}"
 Write-Host ""
 
 # Change to repository root
@@ -336,7 +329,7 @@ if (-not (Test-Path $scenarioScript)) {
 Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step"
 Write-Host ""
 
-& $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey -RunProfileTimeout $RunProfileTimeout
+& $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey
 $scenarioExitCode = $LASTEXITCODE
 $timings["6. Run Tests"] = (Get-Date) - $step6Start
 
