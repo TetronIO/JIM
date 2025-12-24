@@ -18,6 +18,7 @@ public class SyncFullSyncTaskProcessor
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private List<ConnectedSystemObjectType>? _objectTypes;
+    private Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
 
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
@@ -71,6 +72,18 @@ public class SyncFullSyncTaskProcessor
         using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
         {
             _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        }
+
+        // load all pending exports once upfront and index by CSO ID for O(1) lookup
+        // this avoids O(n²) behaviour from loading all pending exports for every CSO
+        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
+        {
+            var allPendingExports = await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id);
+            _pendingExportsByCsoId = allPendingExports
+                .Where(pe => pe.ConnectedSystemObject?.Id != null)
+                .GroupBy(pe => pe.ConnectedSystemObject!.Id)
+                .ToDictionary(g => g.Key, g => g.ToList());
+            Log.Verbose("PerformFullSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
         }
 
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe.
@@ -174,13 +187,12 @@ public class SyncFullSyncTaskProcessor
     {
         Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
 
-        // get all pending exports for this connected system
-        var pendingExports = await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id);
-
-        // find any pending exports that are for this specific CSO (Update or Delete operations)
-        var pendingExportsForThisCso = pendingExports
-            .Where(pe => pe.ConnectedSystemObject?.Id == connectedSystemObject.Id)
-            .ToList();
+        // use pre-loaded pending exports dictionary for O(1) lookup instead of O(n) database query
+        if (_pendingExportsByCsoId == null || !_pendingExportsByCsoId.TryGetValue(connectedSystemObject.Id, out var pendingExportsForThisCso))
+        {
+            Log.Verbose($"ProcessPendingExportAsync: No pending exports found for CSO {connectedSystemObject.Id}.");
+            return;
+        }
 
         if (pendingExportsForThisCso.Count == 0)
         {
@@ -233,6 +245,9 @@ public class SyncFullSyncTaskProcessor
             {
                 Log.Information($"ProcessPendingExportAsync: All changes confirmed for pending export {pendingExport.Id}. Deleting.");
                 await _jim.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+
+                // remove from in-memory cache to keep it consistent
+                pendingExportsForThisCso.Remove(pendingExport);
             }
             else if (successfulChanges.Count > 0)
             {
