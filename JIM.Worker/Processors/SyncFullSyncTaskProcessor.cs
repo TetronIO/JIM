@@ -172,7 +172,7 @@ public class SyncFullSyncTaskProcessor
         try
         {
             await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
-            await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+            await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
 
             // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
             // this requires that we have sync rules defined.
@@ -324,7 +324,7 @@ public class SyncFullSyncTaskProcessor
     /// Respects the InboundOutOfScopeAction setting on import sync rules to determine whether to disconnect.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task ProcessObsoleteConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
             return;
@@ -337,7 +337,7 @@ public class SyncFullSyncTaskProcessor
         }
 
         // CSO is joined to an MVO - check InboundOutOfScopeAction to determine behaviour
-        var inboundOutOfScopeAction = await DetermineInboundOutOfScopeActionAsync(connectedSystemObject);
+        var inboundOutOfScopeAction = DetermineInboundOutOfScopeAction(activeSyncRules, connectedSystemObject);
 
         if (inboundOutOfScopeAction == InboundOutOfScopeAction.RemainJoined)
         {
@@ -395,12 +395,12 @@ public class SyncFullSyncTaskProcessor
     /// <summary>
     /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import sync rule.
     /// If multiple import sync rules exist for this CSO type, the first one's setting is used.
+    /// Uses pre-loaded sync rules to avoid database round trips.
     /// </summary>
-    private async Task<InboundOutOfScopeAction> DetermineInboundOutOfScopeActionAsync(ConnectedSystemObject connectedSystemObject)
+    private static InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
-        // Get import sync rules for this connected system and object type
-        var syncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
-        var importSyncRule = syncRules.FirstOrDefault(sr =>
+        // Find import sync rule for this CSO type from the already-loaded sync rules
+        var importSyncRule = activeSyncRules.FirstOrDefault(sr =>
             sr.Direction == SyncRuleDirection.Import &&
             sr.Enabled &&
             sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId);
