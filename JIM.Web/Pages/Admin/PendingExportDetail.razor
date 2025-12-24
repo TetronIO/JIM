@@ -29,7 +29,7 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudSimpleTable Hover="true" Dense="true" Striped="true">
+                    <MudSimpleTable Hover="true" Dense="true">
                         <tbody>
                             <tr>
                                 <td><strong>ID</strong></td>
@@ -90,7 +90,7 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudSimpleTable Hover="true" Dense="true" Striped="true">
+                    <MudSimpleTable Hover="true" Dense="true">
                         <tbody>
                             <tr>
                                 <td><strong>Target CSO</strong></td>
@@ -142,7 +142,7 @@
                         </CardHeaderContent>
                     </MudCardHeader>
                     <MudCardContent>
-                        <MudSimpleTable Hover="true" Dense="true" Striped="true">
+                        <MudSimpleTable Hover="true" Dense="true">
                             <tbody>
                                 <tr>
                                     <td style="width: 200px;"><strong>Error Count</strong></td>
@@ -188,7 +188,7 @@
                 <MudCardContent>
                     @if (_pendingExport.AttributeValueChanges.Count > 0)
                     {
-                        <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Striped="true" Dense="true" Outlined="true" Elevation="0">
+                        <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0">
                             <HeaderContent>
                                 <MudTh>Attribute</MudTh>
                                 <MudTh>Change Type</MudTh>

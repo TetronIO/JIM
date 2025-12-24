@@ -16,11 +16,6 @@
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Activity" @bind-Expanded="_activityExpanded" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
-        <MudNavLink Href="/activity" Match="NavLinkMatch.All" Class="jim-nav-child">Activity</MudNavLink>
-        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
-    </MudNavGroup>
-
     <AuthorizeView Roles="Administrator">
         <MudNavGroup Title="Dashboard" @bind-Expanded="_dashboardExpanded" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Class="jim-nav-child">Daily</MudNavLink>
@@ -43,6 +38,11 @@
             <MudNavLink Href="/admin/settings" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Settings</MudNavLink>
         </MudNavGroup>
     </AuthorizeView>
+
+    <MudNavGroup Title="Activity" @bind-Expanded="_activityExpanded" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+        <MudNavLink Href="/activity" Match="NavLinkMatch.All" Class="jim-nav-child">Activity</MudNavLink>
+        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
+    </MudNavGroup>
 </MudNavMenu>
 
 @code {
@@ -56,7 +56,7 @@
     // Track expanded state for each nav group
     private bool _usersExpanded;
     private bool _groupsExpanded;
-    private bool _activityExpanded;
+    private bool _activityExpanded = true;
     private bool _dashboardExpanded;
     private bool _adminExpanded;
 

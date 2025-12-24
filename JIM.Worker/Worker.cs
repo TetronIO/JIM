@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Diagnostics;
 using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
@@ -53,6 +54,11 @@ public class Worker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         InitialiseLogging();
+
+        // Enable performance diagnostics - logs span completions with timing info
+        // Threshold of 100ms means operations taking longer will be logged at Warning level
+        using var diagnosticListener = Diagnostics.EnableLogging(slowOperationThresholdMs: 100);
+
         Log.Information("Starting JIM.Worker...");
 
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.

@@ -22,9 +22,6 @@
     Seconds to wait between steps for JIM processing (default: 5)
     Note: Most operations now use -Wait for synchronous execution.
 
-.PARAMETER RunProfileTimeout
-    Timeout in seconds for run profile operations (default: 300)
-
 .EXAMPLE
     ./Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small -ApiKey "jim_..."
 
@@ -34,7 +31,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Reconnection", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Reconnection", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -48,10 +45,7 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [int]$WaitSeconds = 5,
-
-    [Parameter(Mandatory=$false)]
-    [int]$RunProfileTimeout = 300
+    [int]$WaitSeconds = 5
 )
 
 Set-StrictMode -Version Latest
@@ -167,19 +161,19 @@ try {
 
         # Trigger CSV Import
         Write-Host "Triggering CSV import..." -ForegroundColor Gray
-        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout -PassThru
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
 
         Write-Host "  ✓ CSV import completed (Activity: $($importResult.activityId))" -ForegroundColor Green
 
         # Trigger Full Sync (evaluates sync rules, creates MVOs and pending exports)
         Write-Host "Triggering Full Sync..." -ForegroundColor Gray
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout -PassThru
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
 
         Write-Host "  ✓ Full Sync completed (Activity: $($syncResult.activityId))" -ForegroundColor Green
 
         # Trigger LDAP Export
         Write-Host "Triggering LDAP export..." -ForegroundColor Gray
-        $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout -PassThru
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
 
         Write-Host "  ✓ LDAP export completed (Activity: $($exportResult.activityId))" -ForegroundColor Green
 
@@ -236,9 +230,9 @@ try {
 
         # Trigger sync (Import → Full Sync → Export)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate title change
@@ -299,9 +293,9 @@ try {
 
         # Trigger sync (Import → Full Sync → Export)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate rename in AD
@@ -342,14 +336,15 @@ try {
         # Get the current user info to determine current department
         $currentLine = $csvContent | Where-Object { $_ -match "test\.joiner" } | Select-Object -First 1
 
-        # Change department from Admin to Finance
+        # Change department from Sales to Finance
+        # Note: Test user at index 9999 is assigned to Sales department (9999 % 12 = 3)
         $updatedContent = $csvContent | ForEach-Object {
             if ($_ -match "test\.joiner") {
                 # Update department column (index 4, 0-based)
-                # Pattern: "...","Admin","..." → "...","Finance","..."
-                $line = $_ -replace ',"Admin",', ',"Finance",'
-                # Update DN to reflect new OU
-                $line = $line -replace ',OU=Admin,', ',OU=Finance,'
+                # Pattern: "...","Sales","..." → "...","Finance","..."
+                $line = $_ -replace ',"Sales",', ',"Finance",'
+                # Update DN to reflect new OU (if present)
+                $line = $line -replace ',OU=Sales,', ',OU=Finance,'
                 $line
             }
             else {
@@ -358,20 +353,20 @@ try {
         }
 
         $updatedContent | Set-Content $csvPath
-        Write-Host "  ✓ Changed department from Admin to Finance (triggers OU move)" -ForegroundColor Green
+        Write-Host "  ✓ Changed department from Sales to Finance (triggers OU move)" -ForegroundColor Green
 
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
         # Trigger sync (Import → Full Sync → Export)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate move in AD
-        # The user should now have DN "CN=Renamed Joiner,OU=Finance,DC=testdomain,DC=local"
+        # The user should now be in OU=Finance (moved from OU=Sales)
         Write-Host "Validating OU move in AD..." -ForegroundColor Gray
 
         # Query AD to find the user and check DN
@@ -419,9 +414,9 @@ try {
 
         # Trigger sync (Import → Full Sync → Export)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate user state in AD
@@ -476,9 +471,9 @@ try {
 
         # Initial sync (Import → Full Sync → Export)
         Write-Host "  Initial sync..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
         # Verify user was created in AD
@@ -497,8 +492,8 @@ try {
             $csvContent | Set-Content $csvPath
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
             Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
 
             # Verify user still exists in AD (grace period should prevent deletion)
@@ -515,9 +510,9 @@ try {
             Add-Content -Path $csvPath -Value $csvLine
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -Timeout $RunProfileTimeout | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
 
             # Verify user still exists (reconnection should preserve AD account)

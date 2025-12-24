@@ -29,7 +29,7 @@ function Start-JIMRunProfile {
 
     .PARAMETER Timeout
         Maximum time in seconds to wait for completion when using -Wait.
-        Defaults to 300 seconds (5 minutes).
+        If not specified, waits indefinitely until completion.
 
     .PARAMETER PassThru
         If specified, returns the execution result object.
@@ -60,7 +60,8 @@ function Start-JIMRunProfile {
     .EXAMPLE
         Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Wait -Timeout 600
 
-        Executes and waits up to 10 minutes for completion.
+        Executes and waits up to 10 minutes for completion. If the timeout is exceeded,
+        an error is thrown.
 
     .LINK
         Get-JIMRunProfile
@@ -89,8 +90,8 @@ function Start-JIMRunProfile {
 
         [switch]$Wait,
 
-        [ValidateRange(1, 3600)]
-        [int]$Timeout = 300,
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$Timeout,
 
         [switch]$PassThru
     )
@@ -129,14 +130,19 @@ function Start-JIMRunProfile {
             Write-Verbose "Run Profile queued. ActivityId: $($response.activityId), TaskId: $($response.taskId)"
 
             if ($Wait) {
-                Write-Verbose "Waiting for Run Profile execution to complete (timeout: ${Timeout}s)"
+                $hasTimeout = $PSBoundParameters.ContainsKey('Timeout')
+                if ($hasTimeout) {
+                    Write-Verbose "Waiting for Run Profile execution to complete (timeout: ${Timeout}s)"
+                } else {
+                    Write-Verbose "Waiting for Run Profile execution to complete (no timeout)"
+                }
 
                 $startTime = Get-Date
                 $activityId = $response.activityId
                 $completed = $false
                 $lastStatus = ''
 
-                while (-not $completed -and ((Get-Date) - $startTime).TotalSeconds -lt $Timeout) {
+                while (-not $completed -and (-not $hasTimeout -or ((Get-Date) - $startTime).TotalSeconds -lt $Timeout)) {
                     Start-Sleep -Seconds 2
 
                     try {
@@ -183,8 +189,8 @@ function Start-JIMRunProfile {
 
                 Write-Progress -Activity "Executing Run Profile" -Completed
 
-                if (-not $completed) {
-                    Write-Warning "Timeout waiting for Run Profile execution. Activity ID: $activityId"
+                if (-not $completed -and $hasTimeout) {
+                    throw "Timeout waiting for Run Profile execution after $Timeout seconds. Activity ID: $activityId. The operation may still be running in the background."
                 }
             }
 

@@ -79,9 +79,7 @@
                 if (context.InitiatedBy != null)
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                    <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">
-                        @Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)
-                    </MudLink>
+                    <span>@Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)</span>
                 }
                 else if (!string.IsNullOrEmpty(context.InitiatedByName))
                 {
@@ -89,11 +87,11 @@
                     if (apiKeyName != null)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                        <MudLink Href="@Utilities.GetApiKeysHref()">@apiKeyName</MudLink>
+                        <span>@apiKeyName</span>
                     }
                     else
                     {
-                        @context.InitiatedByName
+                        <span>@context.InitiatedByName</span>
                     }
                 }
             }

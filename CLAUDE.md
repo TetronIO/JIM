@@ -116,6 +116,7 @@ Blazor pages, API controllers, and other compiled code require container rebuild
 - UI pages: `JIM.Web/Pages/`
 - Blazor components: `JIM.Web/Shared/`
 - Business logic: `JIM.Application/Servers/`
+- Performance diagnostics: `JIM.Application/Diagnostics/`
 - Domain models: `JIM.Models/Core/` or `JIM.Models/Staging/`
 - Database repositories: `JIM.PostgresData/`
 - Connectors: `JIM.Connectors/` or new connector project

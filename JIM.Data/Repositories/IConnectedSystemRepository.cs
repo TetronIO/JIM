@@ -103,6 +103,14 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
 
     /// <summary>
+    /// Batch loads all Connected System Objects that are joined to Metaverse Objects, grouped by target Connected System.
+    /// Used for pre-loading CSO lookup data to avoid O(N×M) queries during export evaluation.
+    /// </summary>
+    /// <param name="targetConnectedSystemIds">The Connected System IDs to load CSOs for.</param>
+    /// <returns>A dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup.</returns>
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(IEnumerable<int> targetConnectedSystemIds);
+
+    /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
     /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.

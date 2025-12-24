@@ -1,8 +1,11 @@
 using JIM.Application;
+using JIM.Application.Diagnostics;
+using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -16,6 +19,13 @@ public class SyncFullSyncTaskProcessor
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private List<ConnectedSystemObjectType>? _objectTypes;
+    private Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
+    private ExportEvaluationServer.ExportEvaluationCache? _exportEvaluationCache;
+
+    // Batch collections for deferred MVO persistence and export evaluation
+    private readonly List<MetaverseObject> _pendingMvoCreates = [];
+    private readonly List<MetaverseObject> _pendingMvoUpdates = [];
+    private readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes)> _pendingExportEvaluations = [];
 
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
@@ -33,6 +43,10 @@ public class SyncFullSyncTaskProcessor
 
     public async Task PerformFullSyncAsync()
     {
+        using var syncSpan = Diagnostics.Sync.StartSpan("FullSync");
+        syncSpan.SetTag("connectedSystemId", _connectedSystem.Id);
+        syncSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+
         Log.Verbose("PerformFullSyncAsync: Starting");
 
         // what needs to happen:
@@ -55,44 +69,95 @@ public class SyncFullSyncTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         // get all the active sync rules for this system
-        var activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+        List<SyncRule> activeSyncRules;
+        using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
+        {
+            activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+        }
 
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
-        _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
+        {
+            _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+        }
+
+        // load all pending exports once upfront and index by CSO ID for O(1) lookup
+        // this avoids O(n²) behaviour from loading all pending exports for every CSO
+        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
+        {
+            var allPendingExports = await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id);
+            _pendingExportsByCsoId = allPendingExports
+                .Where(pe => pe.ConnectedSystemObject?.Id != null)
+                .GroupBy(pe => pe.ConnectedSystemObject!.Id)
+                .ToDictionary(g => g.Key, g => g.ToList());
+            Log.Verbose("PerformFullSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
+        }
+
+        // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
+        // This eliminates O(N×M) database queries during export evaluation
+        using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
+        {
+            _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
+        }
 
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe.
         // it also enables us to update the Activity with progress info as we go, allowing the UI to be updated and keep users informed.
         const int pageSize = 200;
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
+
+        using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessConnectedSystemObjects");
+        processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
+        processCsosSpan.SetTag("pageSize", pageSize);
+        processCsosSpan.SetTag("totalPages", totalCsoPages);
+
         for (var i = 0; i < totalCsoPages; i++)
         {
-            var csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
-            foreach (var connectedSystemObject in csoPagedResult.Results)
+            PagedResultSet<ConnectedSystemObject> csoPagedResult;
+            using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
             {
-                // check for cancellation request, and stop work if cancelled.
-                if (_cancellationTokenSource.IsCancellationRequested)
+                csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
+            }
+
+            using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
+            {
+                foreach (var connectedSystemObject in csoPagedResult.Results)
                 {
-                    Log.Information("PerformFullSyncAsync: Cancellation requested. Stopping CSO enumeration.");
-                    return;
+                    // check for cancellation request, and stop work if cancelled.
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        Log.Information("PerformFullSyncAsync: Cancellation requested. Stopping CSO enumeration.");
+                        return;
+                    }
+
+                    // what kind of result do we want? we want to see:
+                    // - mvo joins (list)
+                    // - mvo projections (list)
+                    // - cso deletions (list)
+                    // - mvo deletions (list)
+                    // - mvo updates (list)
+                    // - mvo objects not updated (count)
+
+                    // todo: record changes to MV objects and other Connected Systems via Pending Export objects on the Activity Run Profile Execution.
+                    // todo: work out how a sync-preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
+                    // I have thought about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
+                    // so the same code stack can be used.
+
+                    await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+
+                    _activity.ObjectsProcessed++;
                 }
+            }
 
-                // what kind of result do we want? we want to see:
-                // - mvo joins (list)
-                // - mvo projections (list)
-                // - cso deletions (list)
-                // - mvo deletions (list)
-                // - mvo updates (list)
-                // - mvo objects not updated (count)
+            // batch persist all MVOs collected during this page
+            await PersistPendingMetaverseObjectsAsync();
 
-                // todo: record changes to MV objects and other Connected Systems via Pending Export objects on the Activity Run Profile Execution.
-                // todo: work out how a sync-preview would work. we don't want to repeat ourselves unnecessarily (D.R.Y).
-                // I have thought about creating a preview response object and passing it in below, and if present, then the code stack builds the preview,
-                // so the same code stack can be used.
+            // batch evaluate exports for all MVOs that changed during this page
+            await EvaluatePendingExportsAsync();
 
-                await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
-
-                _activity.ObjectsProcessed++;
+            // update activity progress once per page instead of per object to reduce database round trips
+            using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+            {
                 await _jim.Activities.UpdateActivityAsync(_activity);
             }
         }
@@ -101,7 +166,12 @@ public class SyncFullSyncTaskProcessor
         // ensure the activity and any pending db updates are applied.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
 
-        await ResolveReferencesAsync();
+        using (Diagnostics.Sync.StartSpan("ResolveReferences"))
+        {
+            await ResolveReferencesAsync();
+        }
+
+        syncSpan.SetSuccess();
     }
 
     /// <summary>
@@ -116,13 +186,25 @@ public class SyncFullSyncTaskProcessor
 
         try
         {
-            await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
-            await ProcessObsoleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+            using (Diagnostics.Sync.StartSpan("ProcessPendingExport"))
+            {
+                await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
+            }
+
+            using (Diagnostics.Sync.StartSpan("ProcessObsoleteConnectedSystemObject"))
+            {
+                await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+            }
 
             // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
             // this requires that we have sync rules defined.
             if (activeSyncRules.Count > 0 && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-                await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+            {
+                using (Diagnostics.Sync.StartSpan("ProcessMetaverseObjectChanges"))
+                {
+                    await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+                }
+            }
         }
         catch (Exception e)
         {
@@ -145,13 +227,12 @@ public class SyncFullSyncTaskProcessor
     {
         Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
 
-        // get all pending exports for this connected system
-        var pendingExports = await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id);
-
-        // find any pending exports that are for this specific CSO (Update or Delete operations)
-        var pendingExportsForThisCso = pendingExports
-            .Where(pe => pe.ConnectedSystemObject?.Id == connectedSystemObject.Id)
-            .ToList();
+        // use pre-loaded pending exports dictionary for O(1) lookup instead of O(n) database query
+        if (_pendingExportsByCsoId == null || !_pendingExportsByCsoId.TryGetValue(connectedSystemObject.Id, out var pendingExportsForThisCso))
+        {
+            Log.Verbose($"ProcessPendingExportAsync: No pending exports found for CSO {connectedSystemObject.Id}.");
+            return;
+        }
 
         if (pendingExportsForThisCso.Count == 0)
         {
@@ -204,6 +285,9 @@ public class SyncFullSyncTaskProcessor
             {
                 Log.Information($"ProcessPendingExportAsync: All changes confirmed for pending export {pendingExport.Id}. Deleting.");
                 await _jim.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+
+                // remove from in-memory cache to keep it consistent
+                pendingExportsForThisCso.Remove(pendingExport);
             }
             else if (successfulChanges.Count > 0)
             {
@@ -267,7 +351,7 @@ public class SyncFullSyncTaskProcessor
     /// Respects the InboundOutOfScopeAction setting on import sync rules to determine whether to disconnect.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
     /// </summary>
-    private async Task ProcessObsoleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    private async Task ProcessObsoleteConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
     {
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
             return;
@@ -280,7 +364,7 @@ public class SyncFullSyncTaskProcessor
         }
 
         // CSO is joined to an MVO - check InboundOutOfScopeAction to determine behaviour
-        var inboundOutOfScopeAction = await DetermineInboundOutOfScopeActionAsync(connectedSystemObject);
+        var inboundOutOfScopeAction = DetermineInboundOutOfScopeAction(activeSyncRules, connectedSystemObject);
 
         if (inboundOutOfScopeAction == InboundOutOfScopeAction.RemainJoined)
         {
@@ -338,12 +422,12 @@ public class SyncFullSyncTaskProcessor
     /// <summary>
     /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import sync rule.
     /// If multiple import sync rules exist for this CSO type, the first one's setting is used.
+    /// Uses pre-loaded sync rules to avoid database round trips.
     /// </summary>
-    private async Task<InboundOutOfScopeAction> DetermineInboundOutOfScopeActionAsync(ConnectedSystemObject connectedSystemObject)
+    private static InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
-        // Get import sync rules for this connected system and object type
-        var syncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
-        var importSyncRule = syncRules.FirstOrDefault(sr =>
+        // Find import sync rule for this CSO type from the already-loaded sync rules
+        var importSyncRule = activeSyncRules.FirstOrDefault(sr =>
             sr.Direction == SyncRuleDirection.Import &&
             sr.Enabled &&
             sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId);
@@ -429,14 +513,22 @@ public class SyncFullSyncTaskProcessor
             .ToList();
 
         // Check if CSO is in scope for any import sync rule before attempting join/projection
-        var inScopeImportRules = await GetInScopeImportRulesAsync(connectedSystemObject, importSyncRules);
+        List<SyncRule> inScopeImportRules;
+        using (Diagnostics.Sync.StartSpan("GetInScopeImportRules"))
+        {
+            inScopeImportRules = await GetInScopeImportRulesAsync(connectedSystemObject, importSyncRules);
+        }
+
         if (inScopeImportRules.Count == 0 && importSyncRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
             // CSO is out of scope for all import sync rules that have scoping criteria
             Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import sync rules", connectedSystemObject.Id);
 
             // Handle out of scope based on InboundOutOfScopeAction
-            await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules, runProfileExecutionItem);
+            using (Diagnostics.Sync.StartSpan("HandleCsoOutOfScope"))
+            {
+                await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules, runProfileExecutionItem);
+            }
             return;
         }
 
@@ -448,7 +540,11 @@ public class SyncFullSyncTaskProcessor
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
             // Only use in-scope sync rules for join/projection
             var scopedSyncRules = inScopeImportRules.Count > 0 ? inScopeImportRules : activeSyncRules;
-            await AttemptJoinAsync(scopedSyncRules, connectedSystemObject, runProfileExecutionItem);
+
+            using (Diagnostics.Sync.StartSpan("AttemptJoin"))
+            {
+                await AttemptJoinAsync(scopedSyncRules, connectedSystemObject, runProfileExecutionItem);
+            }
 
             // did we encounter an error whilst attempting a join? stop processing the CSO if so.
             if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -460,7 +556,10 @@ public class SyncFullSyncTaskProcessor
                 // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
                 // Only use in-scope sync rules for projection
-                AttemptProjection(scopedSyncRules, connectedSystemObject);
+                using (Diagnostics.Sync.StartSpan("AttemptProjection"))
+                {
+                    AttemptProjection(scopedSyncRules, connectedSystemObject);
+                }
             }
         }
 
@@ -468,10 +567,13 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.MetaverseObject != null)
         {
             // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
-            foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+            using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
-                // evaluate inbound attribute flow rules
-                ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
+                foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+                {
+                    // evaluate inbound attribute flow rules
+                    ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
+                }
             }
 
             // Collect changed attributes BEFORE applying pending changes (we need them for export evaluation)
@@ -482,25 +584,22 @@ public class SyncFullSyncTaskProcessor
             // Apply pending attribute value changes to the MVO
             ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
 
-            // have we created a new MVO that needs persisting?
+            // Queue MVO for batch persistence at end of page (reduces database round trips)
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
             {
-                await _jim.Metaverse.CreateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
-                // After save, EF has assigned an Id to the MVO - update the CSO's FK
-                connectedSystemObject.MetaverseObjectId = connectedSystemObject.MetaverseObject.Id;
+                // New MVO - queue for batch create
+                _pendingMvoCreates.Add(connectedSystemObject.MetaverseObject);
             }
             else
             {
-                // Existing MVO - update it if there were changes
-                await _jim.Metaverse.UpdateMetaverseObjectAsync(connectedSystemObject.MetaverseObject);
+                // Existing MVO - queue for batch update
+                _pendingMvoUpdates.Add(connectedSystemObject.MetaverseObject);
             }
 
-            // Q1 Decision: Evaluate export rules immediately when MVO changes
-            // This creates PendingExports for any other connected systems that need to be updated
-            // Note: Must be done AFTER MVO is saved so we have a valid ID for the PendingExport FK
+            // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
             if (changedAttributes.Count > 0)
             {
-                await EvaluateOutboundExportsAsync(connectedSystemObject.MetaverseObject, changedAttributes);
+                _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes));
             }
         }
     }
@@ -510,16 +609,28 @@ public class SyncFullSyncTaskProcessor
     /// Creates PendingExports for any connected systems that need to be updated.
     /// Also evaluates if MVO has fallen out of scope for any export rules (deprovisioning).
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
+    /// Uses pre-cached export rules and CSO lookups for O(1) access instead of O(N×M) database queries.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
-        // Evaluate export rules for MVOs that are IN scope, passing the current connected system for Q3 circular prevention
-        var pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
-            mvo,
-            changedAttributes,
-            _connectedSystem);
+        if (_exportEvaluationCache == null)
+        {
+            Log.Warning("EvaluateOutboundExportsAsync: Export evaluation cache not initialised, skipping export evaluation for MVO {MvoId}", mvo.Id);
+            return;
+        }
+
+        // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
+        List<JIM.Models.Transactional.PendingExport> pendingExports;
+        using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
+        {
+            pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
+                mvo,
+                changedAttributes,
+                _connectedSystem,
+                _exportEvaluationCache);
+        }
 
         if (pendingExports.Count > 0)
         {
@@ -527,16 +638,87 @@ public class SyncFullSyncTaskProcessor
                 pendingExports.Count, mvo.Id);
         }
 
-        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning)
-        var deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
-            mvo,
-            _connectedSystem);
+        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
+        List<JIM.Models.Transactional.PendingExport> deprovisioningExports;
+        using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
+        {
+            deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
+                mvo,
+                _connectedSystem,
+                _exportEvaluationCache);
+        }
 
         if (deprovisioningExports.Count > 0)
         {
             Log.Information("EvaluateOutboundExportsAsync: Created {Count} deprovisioning exports for MVO {MvoId}",
                 deprovisioningExports.Count, mvo.Id);
         }
+    }
+
+    /// <summary>
+    /// Batch persists all pending MVO creates and updates collected during the current page.
+    /// This reduces database round trips from n writes to 2 writes (one for creates, one for updates).
+    /// After creates are persisted, CSO foreign keys are updated with the newly assigned MVO IDs.
+    /// </summary>
+    private async Task PersistPendingMetaverseObjectsAsync()
+    {
+        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("PersistPendingMetaverseObjects");
+        span.SetTag("createCount", _pendingMvoCreates.Count);
+        span.SetTag("updateCount", _pendingMvoUpdates.Count);
+
+        // Batch create new MVOs
+        if (_pendingMvoCreates.Count > 0)
+        {
+            await _jim.Metaverse.CreateMetaverseObjectsAsync(_pendingMvoCreates);
+
+            // After batch save, EF has assigned IDs - update the CSO foreign keys
+            foreach (var mvo in _pendingMvoCreates)
+            {
+                foreach (var cso in mvo.ConnectedSystemObjects)
+                {
+                    cso.MetaverseObjectId = mvo.Id;
+                }
+            }
+
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
+            _pendingMvoCreates.Clear();
+        }
+
+        // Batch update existing MVOs
+        if (_pendingMvoUpdates.Count > 0)
+        {
+            await _jim.Metaverse.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
+            _pendingMvoUpdates.Clear();
+        }
+
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Batch evaluates export rules for all MVOs that changed during the current page.
+    /// Must be called after PersistPendingMetaverseObjectsAsync so MVOs have valid IDs for pending export FKs.
+    /// </summary>
+    private async Task EvaluatePendingExportsAsync()
+    {
+        if (_pendingExportEvaluations.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("EvaluatePendingExports");
+        span.SetTag("count", _pendingExportEvaluations.Count);
+
+        foreach (var (mvo, changedAttributes) in _pendingExportEvaluations)
+        {
+            await EvaluateOutboundExportsAsync(mvo, changedAttributes);
+        }
+
+        Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs", _pendingExportEvaluations.Count);
+        _pendingExportEvaluations.Clear();
+
+        span.SetSuccess();
     }
 
     /// <summary>

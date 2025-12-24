@@ -1,4 +1,6 @@
-﻿using JIM.Application;
+using System.Diagnostics;
+using JIM.Application;
+using JIM.Application.Diagnostics;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -7,7 +9,6 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
-using System.Diagnostics;
 using JIM.Worker.Models;
 
 namespace JIM.Worker.Processors;
@@ -48,6 +49,11 @@ public class SyncImportTaskProcessor
 
     public async Task PerformFullImportAsync()
     {
+        using var importSpan = Diagnostics.Sync.StartSpan("FullImport");
+        importSpan.SetTag("connectedSystemId", _connectedSystem.Id);
+        importSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+        importSpan.SetTag("connectorType", _connector.GetType().Name);
+
         Log.Verbose("PerformFullImportAsync: Starting");
 
         if (_connectedSystem.ObjectTypes == null)
@@ -66,6 +72,8 @@ public class SyncImportTaskProcessor
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
             {
+                using var connectorSpan = Diagnostics.Connector.StartSpan("CallBasedImport");
+
                 // Inject certificate provider for connectors that support it
                 if (callBasedImportConnector is IConnectorCertificateAware certificateAwareConnector)
                 {
@@ -77,10 +85,16 @@ public class SyncImportTaskProcessor
 
                 var initialPage = true;
                 var paginationTokens = new List<ConnectedSystemPaginationToken>();
+                var pageNumber = 0;
                 while (initialPage || paginationTokens.Count > 0)
                 {
                     // perform the import for this page
-                    var result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
+                    ConnectedSystemImportResult result;
+                    using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
+                    {
+                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
+                    }
+                    pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
                     
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
@@ -109,15 +123,25 @@ public class SyncImportTaskProcessor
             }
             case IConnectorImportUsingFiles fileBasedImportConnector:
             {
+                using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
+
                 // file based connectors return all the results from the connected system in one go. no paging.
-                var result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+                ConnectedSystemImportResult result;
+                using (Diagnostics.Connector.StartSpan("ReadFile"))
+                {
+                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+                }
                 totalObjectsImported = result.ImportObjects.Count;
-                
+                connectorSpan.SetTag("objectCount", totalObjectsImported);
+
                 // todo: simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
-                
-                await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
+                using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", totalObjectsImported))
+                {
+                    await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                }
                 break;
             }
             default:
@@ -131,23 +155,40 @@ public class SyncImportTaskProcessor
         {
             // TODO: find out why this caused CSOs to be persisted early, and why this conflicts with later create CSOs statement
             await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
-            await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
+            using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
+            {
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
+            }
         }
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
-        await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+        using (Diagnostics.Sync.StartSpan("ResolveReferences"))
+        {
+            await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+        }
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
-        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
-        await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
-        
+        using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
+        {
+            persistSpan.SetTag("createCount", connectedSystemObjectsToBeCreated.Count);
+            persistSpan.SetTag("updateCount", connectedSystemObjectsToBeUpdated.Count);
+
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+            await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+        }
+
         // now persist the activity run profile execution items with the activity
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
         _activity.AddRunProfileExecutionItems(_activityRunProfileExecutionItems);
         await _jim.Activities.UpdateActivityAsync(_activity);
+
+        importSpan.SetTag("totalObjectsImported", totalObjectsImported);
+        importSpan.SetTag("objectsCreated", connectedSystemObjectsToBeCreated.Count);
+        importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
+        importSpan.SetSuccess();
     }
 
     private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
@@ -671,30 +712,59 @@ public class SyncImportTaskProcessor
                 switch (csoAttribute.Type)
                 {
                     case AttributeDataType.Text:
+                        // Debug logging for text attribute comparison
+                        var existingValues = connectedSystemObject.AttributeValues
+                            .Where(av => av.Attribute?.Name == csoAttributeName)
+                            .Select(av => av.StringValue)
+                            .ToList();
+                        var importedValues = importedObjectAttribute.StringValues.ToList();
+
+                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Comparing department attribute for CSO {CsoId}. Existing: [{ExistingValues}], Imported: [{ImportedValues}]",
+                                connectedSystemObject.Id,
+                                string.Join(", ", existingValues.Select(v => v ?? "(null)")),
+                                string.Join(", ", importedValues));
+                        }
+
                         // find values on the cso of type string that aren't on the imported object and remove them first
-                        var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingStringAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingStringAttributeValues);
+
+                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && missingStringAttributeValues.Count > 0)
+                        {
+                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to remove: [{Values}]",
+                                missingStringAttributeValues.Count,
+                                string.Join(", ", missingStringAttributeValues.Select(av => av.StringValue)));
+                        }
 
                         // find imported values of type string that aren't on the cso and add them
-                        var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv)));
+                        var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv))).ToList();
                         foreach (var newStringValue in newStringValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
+
+                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && newStringValues.Count > 0)
+                        {
+                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to add: [{Values}]",
+                                newStringValues.Count,
+                                string.Join(", ", newStringValues));
+                        }
                         break;
 
                     case AttributeDataType.Number:
                         // find values on the cso of type int that aren't on the imported object and remove them first
-                        var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && !importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingIntAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.IntValue != null && !importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingIntAttributeValues);
 
                         // find imported values of type int that aren't on the cso and add them
-                        var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv)));
+                        var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv))).ToList();
                         foreach (var newIntValue in newIntValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, IntValue = newIntValue });
                         break;
 
                     case AttributeDataType.DateTime:
                         // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
-                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
+                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute?.Name == csoAttributeName);
                         if (existingCsoDateTimeAttributeValue == null)
                         {
                             // we don't have a CSO value for this attribute. set the initial value
@@ -710,11 +780,11 @@ public class SyncImportTaskProcessor
 
                     case AttributeDataType.Binary:
                         // find values on the cso of type byte array that aren't on the imported object and remove them first
-                        var missingByteArrayAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && !importedObjectAttribute.ByteValues.Any(i => Utilities.Utilities.AreByteArraysTheSame(i, av.ByteValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingByteArrayAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingByteArrayAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.ByteValue != null && !importedObjectAttribute.ByteValues.Any(i => Utilities.Utilities.AreByteArraysTheSame(i, av.ByteValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingByteArrayAttributeValues);
 
                         // find imported values of type byte array that aren't on the cso and add them
-                        var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue)));
+                        var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue))).ToList();
                         foreach (var newByteArrayValue in newByteArrayValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, ByteValue = newByteArrayValue });
                         break;
@@ -722,22 +792,22 @@ public class SyncImportTaskProcessor
                     case AttributeDataType.Reference:
                         // find unresolved reference values on the cso that aren't on the imported object and remove them first
                         // Note: Reference values are compared case-sensitively to preserve data fidelity from source systems
-                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.Ordinal)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingUnresolvedReferenceValues.Any(msav => msav.Id == av.Id)));
+                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.Ordinal))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingUnresolvedReferenceValues);
 
                         // find imported unresolved reference values that aren't on the cso and add them
-                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.Ordinal)));
+                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.Ordinal))).ToList();
                         foreach (var newUnresolvedReferenceValue in newUnresolvedReferenceValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, UnresolvedReferenceValue = newUnresolvedReferenceValue });
                         break;
 
                     case AttributeDataType.Guid:
                         // find values on the cso of type Guid that aren't on the imported object and remove them first
-                        var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingGuidAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingGuidAttributeValues);
 
                         // find imported values of type Guid that aren't on the cso and add them
-                        var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv)));
+                        var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv))).ToList();
                         foreach (var newGuidValue in newGuidValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, GuidValue = newGuidValue });
                         break;
@@ -747,7 +817,7 @@ public class SyncImportTaskProcessor
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                         // todo: consider having the ability to update values instead of replacing.
-                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
+                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute?.Name == csoAttributeName);
                         if (csoBooleanAttributeValue == null)
                         {
                             // set initial value
@@ -769,7 +839,7 @@ public class SyncImportTaskProcessor
             else
             {
                 // no values were imported for this attribute. delete all the cso attribute values for this attribute
-                var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Name == csoAttributeName);
+                var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => q.Attribute?.Name == csoAttributeName).ToList();
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
             }
         }

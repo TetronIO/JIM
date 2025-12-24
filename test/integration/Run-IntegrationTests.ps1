@@ -31,9 +31,6 @@
 .PARAMETER TimeoutSeconds
     Maximum time to wait for services to be ready. Default: 180 seconds.
 
-.PARAMETER RunProfileTimeout
-    Maximum time to wait for individual run profile execution. Default: 300 seconds.
-
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
@@ -65,7 +62,7 @@ param(
     [string]$Scenario = "Scenario1-HRToDirectory",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Small", "Medium", "Large")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -78,10 +75,7 @@ param(
     [switch]$SkipBuild,
 
     [Parameter(Mandatory=$false)]
-    [int]$TimeoutSeconds = 180,
-
-    [Parameter(Mandatory=$false)]
-    [int]$RunProfileTimeout = 300
+    [int]$TimeoutSeconds = 180
 )
 
 Set-StrictMode -Version Latest
@@ -153,7 +147,6 @@ Write-Host "  Step:               ${CYAN}$Step${NC}"
 Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
 Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
 Write-Host "  Service Timeout:    ${CYAN}${TimeoutSeconds}s${NC}"
-Write-Host "  Run Profile Timeout:${CYAN}${RunProfileTimeout}s${NC}"
 Write-Host ""
 
 # Change to repository root
@@ -336,9 +329,270 @@ if (-not (Test-Path $scenarioScript)) {
 Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step"
 Write-Host ""
 
-& $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey -RunProfileTimeout $RunProfileTimeout
+& $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey
 $scenarioExitCode = $LASTEXITCODE
 $timings["6. Run Tests"] = (Get-Date) - $step6Start
+
+# Step 7: Capture Performance Metrics
+$step7Start = Get-Date
+Write-Section "Step 7: Capturing Performance Metrics"
+
+Write-Step "Extracting diagnostic timing from worker logs..."
+
+# Capture worker logs with diagnostic output
+$workerLogs = docker logs jim.worker 2>&1 | Where-Object { $_ -match "DiagnosticListener:" }
+
+# Parse metrics into structured data
+$metrics = @{
+    Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    Scenario = $Scenario
+    Template = $Template
+    Step = $Step
+    Operations = @()
+}
+
+foreach ($logLine in $workerLogs) {
+    # Example: DiagnosticListener: [SLOW] Parent > Child completed in 1234.56ms [connectedSystemId=1, objectCount=100]
+    # Or: DiagnosticListener: OperationName completed in 1234.56ms [tags]
+    if ($logLine -match 'DiagnosticListener:\s+(?:\[SLOW\]\s+)?(?:(.+?)\s+>\s+)?(.+?)\s+completed in\s+([\d.]+)ms(?:\s+\[(.*)\])?') {
+        $parentName = $Matches[1]  # May be empty for root operations
+        $operationName = $Matches[2]
+        $durationMs = [double]$Matches[3]
+        $tags = $Matches[4]
+
+        $operation = @{
+            Parent = if ($parentName) { $parentName } else { $null }
+            Name = $operationName
+            DurationMs = $durationMs
+            Tags = @{}
+        }
+
+        # Parse tags if present (e.g., "connectedSystemId=1, objectCount=100")
+        if ($tags) {
+            $tagPairs = $tags -split ',\s*'
+            foreach ($tagPair in $tagPairs) {
+                if ($tagPair -match '(.+?)=(.+)') {
+                    $operation.Tags[$Matches[1]] = $Matches[2]
+                }
+            }
+        }
+
+        $metrics.Operations += $operation
+    }
+}
+
+if ($metrics.Operations.Count -eq 0) {
+    Write-Warning "No performance metrics found in worker logs"
+}
+else {
+    Write-Success "Captured $($metrics.Operations.Count) operation timings"
+
+    # Display hierarchical tree view of operations
+    Write-Host ""
+    Write-Host "${CYAN}Performance Breakdown (Hierarchical):${NC}"
+    Write-Host ""
+
+    # Build parent-child relationships and calculate totals
+    $operationsByName = @{}
+    foreach ($op in $metrics.Operations) {
+        $key = $op.Name
+        # Skip operations with empty or null names
+        if ([string]::IsNullOrWhiteSpace($key)) {
+            continue
+        }
+
+        if (-not $operationsByName.ContainsKey($key)) {
+            $operationsByName[$key] = @{
+                Name = $key
+                Parent = $op.Parent
+                TotalMs = 0
+                Count = 0
+                Children = @()
+            }
+        }
+        $operationsByName[$key].TotalMs += $op.DurationMs
+        $operationsByName[$key].Count += 1
+    }
+
+    # Link children to parents
+    foreach ($opName in $operationsByName.Keys) {
+        $op = $operationsByName[$opName]
+        if ($op.Parent -and $operationsByName.ContainsKey($op.Parent)) {
+            $operationsByName[$op.Parent].Children += $op
+        }
+    }
+
+    # Helper function to format milliseconds into friendly time values
+    function Format-FriendlyTime {
+        param([double]$Ms)
+
+        if ($Ms -lt 1000) {
+            # Less than 1 second - show milliseconds
+            return "$($Ms.ToString('F1'))ms"
+        }
+        elseif ($Ms -lt 60000) {
+            # Less than 1 minute - show seconds with 1 decimal place
+            $secs = $Ms / 1000
+            return "$($secs.ToString('F1'))s"
+        }
+        elseif ($Ms -lt 3600000) {
+            # Less than 1 hour - show minutes and seconds
+            $totalSecs = [int]($Ms / 1000)
+            $mins = [Math]::Floor($totalSecs / 60)
+            $secs = $totalSecs % 60
+            if ($secs -eq 0) {
+                return "${mins}m"
+            }
+            return "${mins}m ${secs}s"
+        }
+        else {
+            # 1 hour or more - show hours, minutes, seconds
+            $totalSecs = [int]($Ms / 1000)
+            $hours = [Math]::Floor($totalSecs / 3600)
+            $mins = [Math]::Floor(($totalSecs % 3600) / 60)
+            $secs = $totalSecs % 60
+            if ($mins -eq 0 -and $secs -eq 0) {
+                return "${hours}h"
+            }
+            elseif ($secs -eq 0) {
+                return "${hours}h ${mins}m"
+            }
+            return "${hours}h ${mins}m ${secs}s"
+        }
+    }
+
+    # Recursive function to display tree with ASCII art
+    function Show-OperationTree {
+        param(
+            [hashtable]$Operation,
+            [string]$Prefix = "",
+            [bool]$IsLast = $true,
+            [bool]$IsRoot = $false
+        )
+
+        # Guard against null operation or divide by zero
+        if ($null -eq $Operation -or $Operation["Count"] -eq 0) {
+            return
+        }
+
+        $avgMs = $Operation["TotalMs"] / $Operation["Count"]
+        $totalTime = Format-FriendlyTime -Ms $Operation["TotalMs"]
+        $avgTime = Format-FriendlyTime -Ms $avgMs
+        $countSuffix = if ($Operation["Count"] -gt 1) { " (${GRAY}$($Operation["Count"])x, avg $avgTime${NC})" } else { "" }
+
+        # Tree characters for display
+        $connector = if ($IsLast) { "└─ " } else { "├─ " }
+        $displayPrefix = if ($IsRoot) { "" } else { $Prefix + $connector }
+
+        Write-Host ("$displayPrefix{0,-50} {1,12}$countSuffix" -f $Operation["Name"], $totalTime)
+
+        # Sort children by total time descending (handle null/empty)
+        $children = $Operation["Children"]
+        if ($null -ne $children -and $children.Count -gt 0) {
+            $sortedChildren = @($children | Sort-Object -Property TotalMs -Descending)
+
+            # Calculate prefix for children
+            if ($IsRoot) {
+                # Root's children get no inherited prefix (they start the tree branches)
+                $childPrefix = ""
+            }
+            else {
+                # Non-root: extend prefix with continuation line or spaces
+                $extension = if ($IsLast) { "   " } else { "│  " }
+                $childPrefix = $Prefix + $extension
+            }
+
+            for ($i = 0; $i -lt $sortedChildren.Count; $i++) {
+                $isLastChild = ($i -eq ($sortedChildren.Count - 1))
+                Show-OperationTree -Operation $sortedChildren[$i] -Prefix $childPrefix -IsLast $isLastChild -IsRoot $false
+            }
+        }
+    }
+
+    # Find and display root operations (those without parents or whose parents aren't in the data)
+    $roots = $operationsByName.Values | Where-Object {
+        -not $_.Parent -or -not $operationsByName.ContainsKey($_.Parent)
+    } | Sort-Object -Property TotalMs -Descending
+
+    for ($i = 0; $i -lt $roots.Count; $i++) {
+        $isLastRoot = ($i -eq ($roots.Count - 1))
+        Show-OperationTree -Operation $roots[$i] -Prefix "" -IsLast $isLastRoot -IsRoot $true
+    }
+
+    Write-Host ""
+
+    # Create performance results directory (per hostname)
+    $hostname = [System.Net.Dns]::GetHostName()
+    $perfDir = Join-Path $scriptRoot "results" "performance" $hostname
+    if (-not (Test-Path $perfDir)) {
+        New-Item -ItemType Directory -Path $perfDir -Force | Out-Null
+    }
+
+    # Save current metrics
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $metrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
+    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+
+    # Find most recent previous baseline (excluding current run)
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($previousFiles) {
+        Write-Host ""
+        Write-Host "${CYAN}Performance Comparison:${NC}"
+        Write-Host ""
+
+        $baseline = Get-Content $previousFiles.FullName | ConvertFrom-Json
+
+        # Compare key operations
+        $currentOps = @{}
+        foreach ($op in $metrics.Operations) {
+            if (-not $currentOps.ContainsKey($op.Name)) {
+                $currentOps[$op.Name] = @()
+            }
+            $currentOps[$op.Name] += $op.DurationMs
+        }
+
+        $baselineOps = @{}
+        foreach ($op in $baseline.Operations) {
+            if (-not $baselineOps.ContainsKey($op.Name)) {
+                $baselineOps[$op.Name] = @()
+            }
+            $baselineOps[$op.Name] += $op.DurationMs
+        }
+
+        # Display comparison for key operations
+        $keyOperations = @("FullImport", "FullSync", "Export", "ProcessConnectedSystemObjects")
+
+        foreach ($opName in $keyOperations) {
+            if ($currentOps.ContainsKey($opName) -and $baselineOps.ContainsKey($opName)) {
+                $currentAvg = ($currentOps[$opName] | Measure-Object -Average).Average
+                $baselineAvg = ($baselineOps[$opName] | Measure-Object -Average).Average
+                $delta = $currentAvg - $baselineAvg
+                $percentChange = if ($baselineAvg -gt 0) { ($delta / $baselineAvg) * 100 } else { 0 }
+
+                $symbol = if ($delta -lt 0) { "↓" } elseif ($delta -gt 0) { "↑" } else { "=" }
+                $colour = if ($delta -lt 0) { $GREEN } elseif ($delta -gt ($baselineAvg * 0.1)) { $RED } else { $YELLOW }
+
+                Write-Host ("  {0,-35} {1,8:F1}ms  {2}{3} {4,6:F1}ms ({5:+0.0;-0.0;0}%)${NC}" -f `
+                    $opName, $currentAvg, $colour, $symbol, $delta, $percentChange)
+            }
+        }
+
+        Write-Host ""
+        Write-Host "${GRAY}Baseline: $($previousFiles.Name) ($($baseline.Timestamp))${NC}"
+    }
+    else {
+        Write-Host ""
+        Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+    }
+}
+
+$timings["7. Capture Metrics"] = (Get-Date) - $step7Start
 
 # Summary
 $endTime = Get-Date

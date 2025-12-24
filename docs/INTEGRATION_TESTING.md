@@ -38,7 +38,13 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1
 
 # Run with a specific template size
+./test/integration/Run-IntegrationTests.ps1 -Template Nano
+./test/integration/Run-IntegrationTests.ps1 -Template Micro
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
+./test/integration/Run-IntegrationTests.ps1 -Template Medium
+./test/integration/Run-IntegrationTests.ps1 -Template Large
+./test/integration/Run-IntegrationTests.ps1 -Template XLarge
+./test/integration/Run-IntegrationTests.ps1 -Template XXLarge
 
 # Run only a specific test step
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner
@@ -49,6 +55,20 @@ This single script handles everything:
 # Skip rebuild (use existing Docker images)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
 ```
+
+**Available Templates (`-Template` parameter):**
+
+Choose a template based on your testing goals:
+
+- **Nano** (default): 3 users, 1 group - **< 1 min** - Fast dev iteration and debugging
+- **Micro**: 10 users, 3 groups - **< 2 min** - Quick smoke tests and development
+- **Small**: 100 users, 20 groups - **< 5 min** - Small business scenarios, unit testing
+- **Medium**: 1,000 users, 100 groups - **< 15 min** - Medium enterprise, CI/CD pipelines
+- **Large**: 10,000 users, 500 groups - **< 45 min** - Large enterprise, performance baselines
+- **XLarge**: 100,000 users, 2,000 groups - **2-3 hours** - Very large enterprise, stress testing
+- **XXLarge**: 1,000,000 users, 10,000 groups - **8+ hours** - Global enterprise, scale limits
+
+See [Data Scale Templates](#data-scale-templates) for detailed template specifications.
 
 **Alternative: Manual step-by-step (for debugging or more control)**
 
@@ -1029,6 +1049,103 @@ The scenario is now blocked by a different issue (LDAP connector object type mat
 - **External systems only**: Querying Samba AD, test databases, or other external systems being tested
 - **Verification queries**: Read-only queries to verify JIM's internal state (not for setup/teardown)
 - **Emergency debugging**: Temporary diagnostic queries during development (never committed)
+
+---
+
+## Performance Diagnostics
+
+JIM includes built-in performance diagnostics that automatically measure and log operation timings during sync operations. This is invaluable for identifying performance bottlenecks during integration testing.
+
+### Automatic Enablement
+
+Performance diagnostics are automatically enabled in:
+- **Worker Service**: 100ms slow operation threshold (logs warnings for operations exceeding this)
+- **Unit Tests**: 50ms slow operation threshold (via `GlobalTestSetup.cs` in test projects)
+
+### Viewing Performance Metrics
+
+**During Docker Stack Testing:**
+
+```bash
+# View worker logs with timing information
+docker logs jim.worker 2>&1 | grep -i "DiagnosticListener"
+
+# Follow logs in real-time during sync operations
+docker logs -f jim.worker 2>&1 | grep -i "DiagnosticListener"
+
+# View all worker logs (includes timing in context)
+docker logs jim.worker --tail 200
+```
+
+**During Unit/Integration Tests:**
+
+```powershell
+# Run tests with verbose output to see timing info
+dotnet test JIM.Worker.Tests --verbosity normal
+
+# Run specific test with detailed output
+dotnet test JIM.Worker.Tests --filter "FullyQualifiedName~SyncImport" --verbosity detailed
+```
+
+### Understanding Diagnostic Output
+
+Diagnostic output appears in logs like:
+
+```
+DiagnosticListener: FullImport completed in 1234.56ms
+DiagnosticListener: ImportPage completed in 45.23ms [pageNumber=1]
+DiagnosticListener: ProcessImportObjects completed in 892.10ms [objectCount=100]
+```
+
+Operations exceeding the slow threshold are logged at **Warning** level for easy identification.
+
+### Instrumented Operations
+
+The following sync operations are instrumented:
+
+| Operation | Description |
+|-----------|-------------|
+| `FullImport` | Complete import from a connected system |
+| `CallBasedImport` | Import using connector API calls |
+| `FileBasedImport` | Import from file-based connectors |
+| `ImportPage` | Single page of paginated import |
+| `ReadFile` | File connector file read |
+| `ProcessImportObjects` | Processing imported objects |
+| `ProcessDeletions` | Processing object deletions |
+| `ResolveReferences` | Resolving object references |
+| `PersistConnectedSystemObjects` | Database persistence |
+| `FullSync` | Full synchronisation cycle |
+| `LoadSyncRules` | Loading sync rules |
+| `LoadObjectTypes` | Loading object types |
+| `ProcessConnectedSystemObjects` | Processing CSOs during sync |
+| `Export` | Export to connected system |
+| `ExecuteExports` | Executing pending exports |
+
+### Adding Custom Instrumentation
+
+When adding new operations that should be timed:
+
+```csharp
+using JIM.Application.Diagnostics;
+
+using var span = Diagnostics.Sync.StartSpan("MyNewOperation");
+span.SetTag("relevantContext", contextValue);
+
+try
+{
+    await PerformOperationAsync();
+    span.SetSuccess();
+}
+catch (Exception ex)
+{
+    span.SetError(ex);
+    throw;
+}
+```
+
+### Path to OpenTelemetry
+
+The diagnostics infrastructure uses `System.Diagnostics.ActivitySource` (the .NET OpenTelemetry API). To export telemetry to external systems like Jaeger, Zipkin, or Azure Monitor, add OpenTelemetry exporters without any instrumentation code changes. See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Aspire evaluation.
 
 ---
 
