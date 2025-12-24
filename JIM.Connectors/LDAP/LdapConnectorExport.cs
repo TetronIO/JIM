@@ -17,6 +17,10 @@ internal class LdapConnectorExport
     // Setting names
     private const string SettingDeleteBehaviour = "Delete Behaviour";
     private const string SettingDisableAttribute = "Disable Attribute";
+    private const string SettingCreateContainersAsNeeded = "Create containers as needed?";
+
+    // Cache of containers we've already created or verified exist during this export session
+    private readonly HashSet<string> _verifiedContainers = new(StringComparer.OrdinalIgnoreCase);
 
     internal LdapConnectorExport(
         LdapConnection connection,
@@ -111,6 +115,13 @@ internal class LdapConnectorExport
             throw new InvalidOperationException("Cannot create object: Distinguished Name (DN) could not be determined from attribute changes.");
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Creating object at DN '{Dn}'", dn);
+
+        // Ensure parent containers exist if the setting is enabled
+        var createContainersAsNeeded = GetSettingBoolValue(SettingCreateContainersAsNeeded) ?? false;
+        if (createContainersAsNeeded)
+        {
+            EnsureParentContainersExist(dn);
+        }
 
         var addRequest = new AddRequest(dn);
 
@@ -544,5 +555,163 @@ internal class LdapConnectorExport
     private string? GetSettingValue(string settingName)
     {
         return _settings.SingleOrDefault(s => s.Setting.Name == settingName)?.StringValue;
+    }
+
+    private bool? GetSettingBoolValue(string settingName)
+    {
+        return _settings.SingleOrDefault(s => s.Setting.Name == settingName)?.CheckboxValue;
+    }
+
+    /// <summary>
+    /// Ensures that all parent containers (OUs) exist in the directory before creating an object.
+    /// This method recursively creates any missing parent OUs starting from the root and working down.
+    /// </summary>
+    /// <param name="objectDn">The DN of the object to be created.</param>
+    private void EnsureParentContainersExist(string objectDn)
+    {
+        var (_, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(objectDn);
+
+        if (string.IsNullOrEmpty(parentDn))
+        {
+            // No parent DN - this is a root-level object, nothing to create
+            return;
+        }
+
+        // Check if we've already verified this container exists in this session
+        if (_verifiedContainers.Contains(parentDn))
+        {
+            return;
+        }
+
+        // Build the chain of parent containers from root to immediate parent
+        var containerChain = BuildContainerChain(parentDn);
+
+        // Process from root downwards, creating any missing containers
+        foreach (var containerDn in containerChain)
+        {
+            if (_verifiedContainers.Contains(containerDn))
+            {
+                continue;
+            }
+
+            if (!ContainerExists(containerDn))
+            {
+                CreateContainer(containerDn);
+            }
+
+            _verifiedContainers.Add(containerDn);
+        }
+    }
+
+    /// <summary>
+    /// Builds a list of container DNs from root to the specified container.
+    /// For example, for "OU=Engineering,OU=Users,DC=testdomain,DC=local", returns:
+    /// ["OU=Users,DC=testdomain,DC=local", "OU=Engineering,OU=Users,DC=testdomain,DC=local"]
+    /// </summary>
+    internal static List<string> BuildContainerChain(string containerDn)
+    {
+        var chain = new List<string>();
+        var currentDn = containerDn;
+
+        while (!string.IsNullOrEmpty(currentDn))
+        {
+            var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(currentDn);
+
+            if (string.IsNullOrEmpty(rdn))
+                break;
+
+            // Check if this is an OU or CN container (not DC - domain components are not created)
+            if (rdn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase) ||
+                rdn.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
+            {
+                chain.Add(currentDn);
+            }
+            else if (rdn.StartsWith("DC=", StringComparison.OrdinalIgnoreCase))
+            {
+                // We've reached the domain level - stop here as DCs already exist
+                break;
+            }
+
+            currentDn = parentDn ?? string.Empty;
+        }
+
+        // Reverse so we process from root to leaf
+        chain.Reverse();
+        return chain;
+    }
+
+    /// <summary>
+    /// Checks if a container (OU) exists in the directory.
+    /// </summary>
+    private bool ContainerExists(string containerDn)
+    {
+        try
+        {
+            var searchRequest = new SearchRequest(
+                containerDn,
+                "(objectClass=*)",
+                SearchScope.Base,
+                "objectClass");
+
+            var response = (SearchResponse)_connection.SendRequest(searchRequest);
+            return response.ResultCode == ResultCode.Success && response.Entries.Count > 0;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            return false;
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // LDAP_NO_SUCH_OBJECT
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Creates an Organisational Unit (OU) container in the directory.
+    /// </summary>
+    private void CreateContainer(string containerDn)
+    {
+        var (rdn, _) = LdapConnectorUtilities.ParseDistinguishedName(containerDn);
+
+        if (string.IsNullOrEmpty(rdn))
+        {
+            throw new InvalidOperationException($"Cannot create container: Unable to parse RDN from DN '{containerDn}'");
+        }
+
+        _logger.Information("LdapConnectorExport.CreateContainer: Creating missing container '{ContainerDn}'", containerDn);
+
+        var addRequest = new AddRequest(containerDn);
+
+        // Determine object class based on RDN type
+        if (rdn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
+        {
+            // Organisational Unit
+            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", "organizationalUnit"));
+
+            // Extract the OU name for the 'ou' attribute (some directories require this)
+            var ouName = rdn.Substring(3); // Remove "OU="
+            addRequest.Attributes.Add(new DirectoryAttribute("ou", ouName));
+        }
+        else if (rdn.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
+        {
+            // Container - use the generic container objectClass
+            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", "container"));
+
+            // Extract the CN name
+            var cnName = rdn.Substring(3); // Remove "CN="
+            addRequest.Attributes.Add(new DirectoryAttribute("cn", cnName));
+        }
+        else
+        {
+            throw new InvalidOperationException($"Cannot create container with RDN type '{rdn.Split('=')[0]}'. Only OU and CN containers are supported.");
+        }
+
+        var response = (AddResponse)_connection.SendRequest(addRequest);
+        if (response.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
+        }
+
+        _logger.Information("LdapConnectorExport.CreateContainer: Successfully created container '{ContainerDn}'", containerDn);
     }
 }

@@ -228,6 +228,7 @@ try {
     $certValidationSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Certificate Validation" }
     $connectionTimeoutSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Connection Timeout" }
     $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
+    $createContainersSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Create containers as needed?" }
 
     $ldapSettings = @{}
     if ($hostSetting) {
@@ -260,10 +261,14 @@ try {
         # Simple authentication over TLS satisfies AD strong auth requirement
         $ldapSettings[$authTypeSetting.id] = @{ stringValue = "Simple" }
     }
+    if ($createContainersSetting) {
+        # Enable automatic OU creation when provisioning objects to non-existent OUs
+        $ldapSettings[$createContainersSetting.id] = @{ checkboxValue = $true }
+    }
 
     if ($ldapSettings.Count -gt 0) {
         Set-JIMConnectedSystem -Id $ldapSystem.id -SettingValues $ldapSettings | Out-Null
-        Write-Host "  ✓ Configured LDAP settings" -ForegroundColor Green
+        Write-Host "  ✓ Configured LDAP settings (including automatic container creation)" -ForegroundColor Green
     }
 }
 catch {
@@ -313,33 +318,10 @@ else {
     }
 }
 
-# Step 6a: Create Department OUs in Samba AD
-Write-TestStep "Step 6a" "Creating Department OUs in Samba AD"
-
-# Create OUs for each department that will be used in tests
-$departments = @("IT", "HR", "Finance", "Sales", "Admin")
-
-foreach ($dept in $departments) {
-    $ouDn = "OU=$dept,DC=testdomain,DC=local"
-
-    # Check if OU already exists
-    $ouExists = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(distinguishedName=$ouDn)' dn 2>&1" 2>$null
-
-    if ($ouExists -match $ouDn) {
-        Write-Host "  OU already exists: $dept" -ForegroundColor Gray
-    }
-    else {
-        # Create the OU using samba-tool
-        $createResult = docker exec samba-ad-primary samba-tool ou create $ouDn 2>&1
-
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ Created OU: $dept" -ForegroundColor Green
-        }
-        else {
-            Write-Host "  ⚠ Failed to create OU $dept : $createResult" -ForegroundColor Yellow
-        }
-    }
-}
+# Note: Department OUs are no longer pre-created here. The LDAP Connector's
+# "Create containers as needed?" setting (enabled above in Step 5) will
+# automatically create any required OUs during export when provisioning
+# users to department-based OUs. This tests the container creation functionality.
 
 # Step 6b: Create Sync Rules
 Write-TestStep "Step 6b" "Creating Sync Rules"
