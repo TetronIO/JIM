@@ -1090,6 +1090,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Batch loads all Connected System Objects that are joined to Metaverse Objects, grouped by target Connected System.
+    /// Uses a single database query to load all CSOs for the target systems, then builds a lookup dictionary.
+    /// </summary>
+    public async Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(IEnumerable<int> targetConnectedSystemIds)
+    {
+        var systemIds = targetConnectedSystemIds.ToList();
+        if (systemIds.Count == 0)
+            return new Dictionary<(Guid, int), ConnectedSystemObject>();
+
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.MetaverseObjectId.HasValue && systemIds.Contains(cso.ConnectedSystemId))
+            .ToListAsync();
+
+        return csos
+            .Where(cso => cso.MetaverseObjectId.HasValue)
+            .ToDictionary(
+                cso => (cso.MetaverseObjectId!.Value, cso.ConnectedSystemId),
+                cso => cso);
+    }
+
+    /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
     /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
@@ -1212,6 +1233,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
         return await Repository.Database.SyncRules
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
             .Include(sr => sr.AttributeFlowRules)
@@ -1227,6 +1249,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.Criteria)
+            .ThenInclude(c => c.MetaverseAttribute)
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.ChildGroups)
+            .ThenInclude(cg => cg.Criteria)
+            .ThenInclude(c => c.MetaverseAttribute)
             .OrderBy(x => x.Name)
             .ToListAsync();
     }

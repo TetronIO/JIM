@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
@@ -19,6 +20,7 @@ public class SyncFullSyncTaskProcessor
     private readonly CancellationTokenSource _cancellationTokenSource;
     private List<ConnectedSystemObjectType>? _objectTypes;
     private Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
+    private ExportEvaluationServer.ExportEvaluationCache? _exportEvaluationCache;
 
     // Batch collections for deferred MVO persistence and export evaluation
     private readonly List<MetaverseObject> _pendingMvoCreates = [];
@@ -89,6 +91,13 @@ public class SyncFullSyncTaskProcessor
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
                 .ToDictionary(g => g.Key, g => g.ToList());
             Log.Verbose("PerformFullSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
+        }
+
+        // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
+        // This eliminates O(N×M) database queries during export evaluation
+        using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
+        {
+            _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
         }
 
         // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe.
@@ -600,19 +609,27 @@ public class SyncFullSyncTaskProcessor
     /// Creates PendingExports for any connected systems that need to be updated.
     /// Also evaluates if MVO has fallen out of scope for any export rules (deprovisioning).
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
+    /// Uses pre-cached export rules and CSO lookups for O(1) access instead of O(N×M) database queries.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
-        // Evaluate export rules for MVOs that are IN scope, passing the current connected system for Q3 circular prevention
+        if (_exportEvaluationCache == null)
+        {
+            Log.Warning("EvaluateOutboundExportsAsync: Export evaluation cache not initialised, skipping export evaluation for MVO {MvoId}", mvo.Id);
+            return;
+        }
+
+        // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
         List<JIM.Models.Transactional.PendingExport> pendingExports;
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
             pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
                 mvo,
                 changedAttributes,
-                _connectedSystem);
+                _connectedSystem,
+                _exportEvaluationCache);
         }
 
         if (pendingExports.Count > 0)
@@ -621,13 +638,14 @@ public class SyncFullSyncTaskProcessor
                 pendingExports.Count, mvo.Id);
         }
 
-        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning)
+        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
         List<JIM.Models.Transactional.PendingExport> deprovisioningExports;
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
             deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
                 mvo,
-                _connectedSystem);
+                _connectedSystem,
+                _exportEvaluationCache);
         }
 
         if (deprovisioningExports.Count > 0)
