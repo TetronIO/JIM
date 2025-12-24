@@ -606,10 +606,14 @@ public class SyncFullSyncTaskProcessor
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
         // Evaluate export rules for MVOs that are IN scope, passing the current connected system for Q3 circular prevention
-        var pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
-            mvo,
-            changedAttributes,
-            _connectedSystem);
+        List<JIM.Models.Transactional.PendingExport> pendingExports;
+        using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
+        {
+            pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
+                mvo,
+                changedAttributes,
+                _connectedSystem);
+        }
 
         if (pendingExports.Count > 0)
         {
@@ -618,9 +622,13 @@ public class SyncFullSyncTaskProcessor
         }
 
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning)
-        var deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
-            mvo,
-            _connectedSystem);
+        List<JIM.Models.Transactional.PendingExport> deprovisioningExports;
+        using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
+        {
+            deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
+                mvo,
+                _connectedSystem);
+        }
 
         if (deprovisioningExports.Count > 0)
         {
