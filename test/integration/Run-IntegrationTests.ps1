@@ -493,10 +493,11 @@ else {
 
         Write-Host ("$displayPrefix{0,-50} {1,12}$countSuffix" -f $Operation["Name"], $totalTime)
 
-        # Sort children by total time descending
-        $sortedChildren = $Operation["Children"] | Sort-Object -Property TotalMs -Descending
+        # Sort children by total time descending (handle null/empty)
+        $children = $Operation["Children"]
+        if ($null -ne $children -and $children.Count -gt 0) {
+            $sortedChildren = @($children | Sort-Object -Property TotalMs -Descending)
 
-        if ($sortedChildren.Count -gt 0) {
             # Calculate prefix for children
             if ($IsRoot) {
                 # Root's children get no inherited prefix (they start the tree branches)
