@@ -209,10 +209,79 @@ function Get-TemplateScale {
     return $scales[$Template]
 }
 
+# Script-level cache for name data (loaded once)
+$script:TestNameData = $null
+
+function Get-TestNameData {
+    <#
+    .SYNOPSIS
+        Load and cache name data from reference CSV files
+    #>
+    if ($null -eq $script:TestNameData) {
+        $testDataPath = Join-Path $PSScriptRoot "../../test-data"
+
+        # Load first names from CSVs (skip header row)
+        $femaleNames = @()
+        $maleNames = @()
+        $lastNames = @()
+
+        $femaleFile = Join-Path $testDataPath "Firstnames-f.csv"
+        $maleFile = Join-Path $testDataPath "Firstnames-m.csv"
+        $lastNamesFile = Join-Path $testDataPath "Lastnames.csv"
+
+        if (Test-Path $femaleFile) {
+            $femaleNames = @(Import-Csv $femaleFile | ForEach-Object { $_.FirstName })
+        }
+
+        if (Test-Path $maleFile) {
+            $maleNames = @(Import-Csv $maleFile | ForEach-Object { $_.FirstName })
+        }
+
+        if (Test-Path $lastNamesFile) {
+            $lastNames = @(Import-Csv $lastNamesFile | ForEach-Object { $_.LastName })
+        }
+
+        # Fallback to small arrays if files not found
+        if ($femaleNames.Count -eq 0) {
+            $femaleNames = @("Alice", "Diana", "Fiona", "Hannah", "Julia", "Laura", "Nancy", "Patricia", "Rachel", "Tina")
+        }
+        if ($maleNames.Count -eq 0) {
+            $maleNames = @("Bob", "Charlie", "Edward", "George", "Ian", "Kevin", "Michael", "Oliver", "Quentin", "Steven")
+        }
+        if ($lastNames.Count -eq 0) {
+            $lastNames = @("Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez")
+        }
+
+        # Combine first names (alternating male/female for variety)
+        $allFirstNames = @()
+        $maxCount = [Math]::Max($femaleNames.Count, $maleNames.Count)
+        for ($i = 0; $i -lt $maxCount; $i++) {
+            if ($i -lt $maleNames.Count) { $allFirstNames += $maleNames[$i] }
+            if ($i -lt $femaleNames.Count) { $allFirstNames += $femaleNames[$i] }
+        }
+
+        $script:TestNameData = @{
+            FirstNames = $allFirstNames
+            LastNames = $lastNames
+            TotalCombinations = $allFirstNames.Count * $lastNames.Count
+        }
+
+        Write-Verbose "Loaded $($allFirstNames.Count) first names and $($lastNames.Count) last names ($($script:TestNameData.TotalCombinations) combinations)"
+    }
+
+    return $script:TestNameData
+}
+
 function New-TestUser {
     <#
     .SYNOPSIS
-        Generate a realistic test user object
+        Generate a realistic test user object with unique display name
+
+    .DESCRIPTION
+        Uses reference CSV files with ~2000 first names and ~500 last names
+        to generate ~1,000,000 unique name combinations. For datasets larger
+        than available combinations, a numeric suffix is appended to ensure
+        uniqueness.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -222,24 +291,39 @@ function New-TestUser {
         [string]$Domain = "testdomain.local"
     )
 
-    $firstNames = @("Alice", "Bob", "Charlie", "Diana", "Edward", "Fiona", "George", "Hannah", "Ian", "Julia",
-                    "Kevin", "Laura", "Michael", "Nancy", "Oliver", "Patricia", "Quentin", "Rachel", "Steven", "Tina")
+    $nameData = Get-TestNameData
+    $firstNames = $nameData.FirstNames
+    $lastNames = $nameData.LastNames
+    $totalCombinations = $nameData.TotalCombinations
 
-    $lastNames = @("Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
-                   "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin")
-
-    $departments = @("IT", "HR", "Sales", "Finance", "Operations", "Marketing", "Legal", "Engineering", "Support", "Admin")
-
+    # Match the departments from JIM.Application/Resources/Departments.en.txt
+    $departments = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
+                     "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
     $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")
 
-    $firstName = $firstNames[$Index % $firstNames.Length]
-    $lastName = $lastNames[[int][Math]::Floor($Index / $firstNames.Length) % $lastNames.Length]
+    # Calculate unique first/last name combination based on index
+    # Use modulo to cycle through all combinations
+    $combinationIndex = $Index % $totalCombinations
+    $firstNameIndex = $combinationIndex % $firstNames.Count
+    $lastNameIndex = [int][Math]::Floor($combinationIndex / $firstNames.Count) % $lastNames.Count
+
+    $firstName = $firstNames[$firstNameIndex]
+    $lastName = $lastNames[$lastNameIndex]
     $department = $departments[$Index % $departments.Length]
     $title = $titles[$Index % $titles.Length]
 
+    # Always include index in samAccountName for guaranteed uniqueness
     $samAccountName = "$($firstName.ToLower()).$($lastName.ToLower())$Index"
     $email = "$samAccountName@$Domain"
     $employeeId = "EMP{0:D6}" -f $Index
+
+    # For display name, add suffix only if we've exhausted unique combinations
+    $displayName = if ($Index -ge $totalCombinations) {
+        $suffix = [int][Math]::Floor($Index / $totalCombinations) + 1
+        "$firstName $lastName ($suffix)"
+    } else {
+        "$firstName $lastName"
+    }
 
     return @{
         FirstName = $firstName
@@ -249,7 +333,7 @@ function New-TestUser {
         Department = $department
         Title = $title
         EmployeeId = $employeeId
-        DisplayName = "$firstName $lastName"
+        DisplayName = $displayName
     }
 }
 
