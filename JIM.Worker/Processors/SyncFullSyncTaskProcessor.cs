@@ -171,13 +171,25 @@ public class SyncFullSyncTaskProcessor
 
         try
         {
-            await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
-            await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+            using (Diagnostics.Sync.StartSpan("ProcessPendingExport"))
+            {
+                await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
+            }
+
+            using (Diagnostics.Sync.StartSpan("ProcessObsoleteConnectedSystemObject"))
+            {
+                await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+            }
 
             // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
             // this requires that we have sync rules defined.
             if (activeSyncRules.Count > 0 && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-                await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+            {
+                using (Diagnostics.Sync.StartSpan("ProcessMetaverseObjectChanges"))
+                {
+                    await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+                }
+            }
         }
         catch (Exception e)
         {
@@ -486,14 +498,22 @@ public class SyncFullSyncTaskProcessor
             .ToList();
 
         // Check if CSO is in scope for any import sync rule before attempting join/projection
-        var inScopeImportRules = await GetInScopeImportRulesAsync(connectedSystemObject, importSyncRules);
+        List<SyncRule> inScopeImportRules;
+        using (Diagnostics.Sync.StartSpan("GetInScopeImportRules"))
+        {
+            inScopeImportRules = await GetInScopeImportRulesAsync(connectedSystemObject, importSyncRules);
+        }
+
         if (inScopeImportRules.Count == 0 && importSyncRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
             // CSO is out of scope for all import sync rules that have scoping criteria
             Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import sync rules", connectedSystemObject.Id);
 
             // Handle out of scope based on InboundOutOfScopeAction
-            await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules, runProfileExecutionItem);
+            using (Diagnostics.Sync.StartSpan("HandleCsoOutOfScope"))
+            {
+                await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules, runProfileExecutionItem);
+            }
             return;
         }
 
@@ -505,7 +525,11 @@ public class SyncFullSyncTaskProcessor
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
             // Only use in-scope sync rules for join/projection
             var scopedSyncRules = inScopeImportRules.Count > 0 ? inScopeImportRules : activeSyncRules;
-            await AttemptJoinAsync(scopedSyncRules, connectedSystemObject, runProfileExecutionItem);
+
+            using (Diagnostics.Sync.StartSpan("AttemptJoin"))
+            {
+                await AttemptJoinAsync(scopedSyncRules, connectedSystemObject, runProfileExecutionItem);
+            }
 
             // did we encounter an error whilst attempting a join? stop processing the CSO if so.
             if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -517,7 +541,10 @@ public class SyncFullSyncTaskProcessor
                 // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
                 // Only use in-scope sync rules for projection
-                AttemptProjection(scopedSyncRules, connectedSystemObject);
+                using (Diagnostics.Sync.StartSpan("AttemptProjection"))
+                {
+                    AttemptProjection(scopedSyncRules, connectedSystemObject);
+                }
             }
         }
 
@@ -525,10 +552,13 @@ public class SyncFullSyncTaskProcessor
         if (connectedSystemObject.MetaverseObject != null)
         {
             // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
-            foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+            using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
-                // evaluate inbound attribute flow rules
-                ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
+                foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+                {
+                    // evaluate inbound attribute flow rules
+                    ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
+                }
             }
 
             // Collect changed attributes BEFORE applying pending changes (we need them for export evaluation)
