@@ -130,8 +130,10 @@ public class SyncFullSyncTaskProcessor
                 await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
 
                 _activity.ObjectsProcessed++;
-                await _jim.Activities.UpdateActivityAsync(_activity);
             }
+
+            // update activity progress once per page instead of per object to reduce database round trips
+            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         // TODO: work out if CSO changes have been persisted. Is a dedicated db update call needed?
