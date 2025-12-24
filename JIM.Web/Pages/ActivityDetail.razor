@@ -134,32 +134,32 @@
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.button">Total Objects</MudText>
-                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectChangeCount</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectChangeCount.ToString("N0")</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.button">Objects Created</MudText>
-                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectCreates</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectCreates.ToString("N0")</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.button">Objects Updated</MudText>
-                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectUpdates</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectUpdates.ToString("N0")</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.button">Objects Deleted</MudText>
-                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectDeletes</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectDeletes.ToString("N0")</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.button">Object Types</MudText>
-                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectTypes</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectTypes.ToString("N0")</MudText>
                 </MudPaper>
 
                 <MudPaper Class="pa-5" Outlined="true" Style="@(_activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
                     <MudText Typo="Typo.button">Errors</MudText>
-                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectErrors</MudText>
+                    <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectErrors.ToString("N0")</MudText>
                 </MudPaper>
 
             </MudStack>
@@ -192,6 +192,10 @@
                     @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                     {
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Error">@context.ErrorType.Value.ToString().SplitOnCapitalLetters()</MudChip>
+                    }
+                    else
+                    {
+                        <span>-</span>
                     }
                 </MudTd>
             </RowTemplate>

@@ -120,12 +120,12 @@
     @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
         <MudText Typo="Typo.h5" Class="mb-5">Changes:</MudText>
-        <MudSimpleTable Style="overflow-x: auto;" Elevation="0" Outlined="true" Dense="true" Hover="true">
+        <MudSimpleTable Style="overflow-x: auto; width: 100%;" Elevation="0" Outlined="true" Dense="true" Hover="true">
             <thead>
                 <tr>
-                    <th>External Attribute Name</th>
-                    <th>Attribute Change Type</th>
-                    <th>Value</th>
+                    <th style="width: auto; text-align: left;">External Attribute Name</th>
+                    <th style="width: auto; text-align: left;">Attribute Change Type</th>
+                    <th style="width: 100%; text-align: left;">Value</th>
                 </tr>
             </thead>
             <tbody>
