@@ -359,13 +359,16 @@ $metrics = @{
 }
 
 foreach ($logLine in $workerLogs) {
-    # Example: DiagnosticListener: FullImport completed in 1234.56ms [connectedSystemId=1, objectCount=100]
-    if ($logLine -match 'DiagnosticListener:\s+(.+?)\s+completed in\s+([\d.]+)ms(?:\s+\[(.*)\])?') {
-        $operationName = $Matches[1]
-        $durationMs = [double]$Matches[2]
-        $tags = $Matches[3]
+    # Example: DiagnosticListener: Parent > Child completed in 1234.56ms [connectedSystemId=1, objectCount=100]
+    # Or: DiagnosticListener: OperationName completed in 1234.56ms [tags]
+    if ($logLine -match 'DiagnosticListener:\s+(?:(.+?)\s+>\s+)?(.+?)\s+completed in\s+([\d.]+)ms(?:\s+\[(.*)\])?') {
+        $parentName = $Matches[1]  # May be empty for root operations
+        $operationName = $Matches[2]
+        $durationMs = [double]$Matches[3]
+        $tags = $Matches[4]
 
         $operation = @{
+            Parent = if ($parentName) { $parentName } else { $null }
             Name = $operationName
             DurationMs = $durationMs
             Tags = @{}
@@ -390,6 +393,139 @@ if ($metrics.Operations.Count -eq 0) {
 }
 else {
     Write-Success "Captured $($metrics.Operations.Count) operation timings"
+
+    # Display hierarchical tree view of operations
+    Write-Host ""
+    Write-Host "${CYAN}Performance Breakdown (Hierarchical):${NC}"
+    Write-Host ""
+
+    # Build parent-child relationships and calculate totals
+    $operationsByName = @{}
+    foreach ($op in $metrics.Operations) {
+        $key = $op.Name
+        # Skip operations with empty or null names
+        if ([string]::IsNullOrWhiteSpace($key)) {
+            continue
+        }
+
+        if (-not $operationsByName.ContainsKey($key)) {
+            $operationsByName[$key] = @{
+                Name = $key
+                Parent = $op.Parent
+                TotalMs = 0
+                Count = 0
+                Children = @()
+            }
+        }
+        $operationsByName[$key].TotalMs += $op.DurationMs
+        $operationsByName[$key].Count += 1
+    }
+
+    # Link children to parents
+    foreach ($opName in $operationsByName.Keys) {
+        $op = $operationsByName[$opName]
+        if ($op.Parent -and $operationsByName.ContainsKey($op.Parent)) {
+            $operationsByName[$op.Parent].Children += $op
+        }
+    }
+
+    # Helper function to format milliseconds into friendly time values
+    function Format-FriendlyTime {
+        param([double]$Ms)
+
+        if ($Ms -lt 1000) {
+            # Less than 1 second - show milliseconds
+            return "$($Ms.ToString('F1'))ms"
+        }
+        elseif ($Ms -lt 60000) {
+            # Less than 1 minute - show seconds with 1 decimal place
+            $secs = $Ms / 1000
+            return "$($secs.ToString('F1'))s"
+        }
+        elseif ($Ms -lt 3600000) {
+            # Less than 1 hour - show minutes and seconds
+            $totalSecs = [int]($Ms / 1000)
+            $mins = [Math]::Floor($totalSecs / 60)
+            $secs = $totalSecs % 60
+            if ($secs -eq 0) {
+                return "${mins}m"
+            }
+            return "${mins}m ${secs}s"
+        }
+        else {
+            # 1 hour or more - show hours, minutes, seconds
+            $totalSecs = [int]($Ms / 1000)
+            $hours = [Math]::Floor($totalSecs / 3600)
+            $mins = [Math]::Floor(($totalSecs % 3600) / 60)
+            $secs = $totalSecs % 60
+            if ($mins -eq 0 -and $secs -eq 0) {
+                return "${hours}h"
+            }
+            elseif ($secs -eq 0) {
+                return "${hours}h ${mins}m"
+            }
+            return "${hours}h ${mins}m ${secs}s"
+        }
+    }
+
+    # Recursive function to display tree with ASCII art
+    function Show-OperationTree {
+        param(
+            [hashtable]$Operation,
+            [string]$Prefix = "",
+            [bool]$IsLast = $true,
+            [bool]$IsRoot = $false
+        )
+
+        # Guard against divide by zero
+        if ($Operation.Count -eq 0) {
+            return
+        }
+
+        $avgMs = $Operation.TotalMs / $Operation.Count
+        $totalTime = Format-FriendlyTime -Ms $Operation.TotalMs
+        $avgTime = Format-FriendlyTime -Ms $avgMs
+        $countSuffix = if ($Operation.Count -gt 1) { " (${GRAY}$($Operation.Count)x, avg $avgTime${NC})" } else { "" }
+
+        # Tree characters for display
+        $connector = if ($IsLast) { "└─ " } else { "├─ " }
+        $displayPrefix = if ($IsRoot) { "" } else { $Prefix + $connector }
+
+        Write-Host ("$displayPrefix{0,-50} {1,12}$countSuffix" -f $Operation.Name, $totalTime)
+
+        # Sort children by total time descending
+        $sortedChildren = $Operation.Children | Sort-Object -Property TotalMs -Descending
+
+        if ($sortedChildren.Count -gt 0) {
+            # Calculate prefix for children
+            if ($IsRoot) {
+                # Root's children get no inherited prefix (they start the tree branches)
+                $childPrefix = ""
+            }
+            else {
+                # Non-root: extend prefix with continuation line or spaces
+                $extension = if ($IsLast) { "   " } else { "│  " }
+                $childPrefix = $Prefix + $extension
+            }
+
+            for ($i = 0; $i -lt $sortedChildren.Count; $i++) {
+                $isLastChild = ($i -eq ($sortedChildren.Count - 1))
+                Show-OperationTree -Operation $sortedChildren[$i] -Prefix $childPrefix -IsLast $isLastChild -IsRoot $false
+            }
+        }
+    }
+
+    # Find and display root operations (those without parents or whose parents aren't in the data)
+    $roots = $operationsByName.Values | Where-Object {
+        -not $_.Parent -or -not $operationsByName.ContainsKey($_.Parent)
+    } | Sort-Object -Property TotalMs -Descending
+
+    for ($i = 0; $i -lt $roots.Count; $i++) {
+        $isLastRoot = ($i -eq ($roots.Count - 1))
+        Show-OperationTree -Operation $roots[$i] -Prefix "" -IsLast $isLastRoot -IsRoot $true
+    }
+
+    Write-Host ""
 
     # Create performance results directory (per hostname)
     $hostname = [System.Net.Dns]::GetHostName()
