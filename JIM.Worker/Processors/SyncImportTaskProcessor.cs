@@ -712,30 +712,59 @@ public class SyncImportTaskProcessor
                 switch (csoAttribute.Type)
                 {
                     case AttributeDataType.Text:
+                        // Debug logging for text attribute comparison
+                        var existingValues = connectedSystemObject.AttributeValues
+                            .Where(av => av.Attribute?.Name == csoAttributeName)
+                            .Select(av => av.StringValue)
+                            .ToList();
+                        var importedValues = importedObjectAttribute.StringValues.ToList();
+
+                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Comparing department attribute for CSO {CsoId}. Existing: [{ExistingValues}], Imported: [{ImportedValues}]",
+                                connectedSystemObject.Id,
+                                string.Join(", ", existingValues.Select(v => v ?? "(null)")),
+                                string.Join(", ", importedValues));
+                        }
+
                         // find values on the cso of type string that aren't on the imported object and remove them first
-                        var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingStringAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingStringAttributeValues);
+
+                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && missingStringAttributeValues.Count > 0)
+                        {
+                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to remove: [{Values}]",
+                                missingStringAttributeValues.Count,
+                                string.Join(", ", missingStringAttributeValues.Select(av => av.StringValue)));
+                        }
 
                         // find imported values of type string that aren't on the cso and add them
-                        var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv)));
+                        var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv))).ToList();
                         foreach (var newStringValue in newStringValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
+
+                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && newStringValues.Count > 0)
+                        {
+                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to add: [{Values}]",
+                                newStringValues.Count,
+                                string.Join(", ", newStringValues));
+                        }
                         break;
 
                     case AttributeDataType.Number:
                         // find values on the cso of type int that aren't on the imported object and remove them first
-                        var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && !importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingIntAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.IntValue != null && !importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingIntAttributeValues);
 
                         // find imported values of type int that aren't on the cso and add them
-                        var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv)));
+                        var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv))).ToList();
                         foreach (var newIntValue in newIntValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, IntValue = newIntValue });
                         break;
 
                     case AttributeDataType.DateTime:
                         // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
-                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
+                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute?.Name == csoAttributeName);
                         if (existingCsoDateTimeAttributeValue == null)
                         {
                             // we don't have a CSO value for this attribute. set the initial value
@@ -751,11 +780,11 @@ public class SyncImportTaskProcessor
 
                     case AttributeDataType.Binary:
                         // find values on the cso of type byte array that aren't on the imported object and remove them first
-                        var missingByteArrayAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && !importedObjectAttribute.ByteValues.Any(i => Utilities.Utilities.AreByteArraysTheSame(i, av.ByteValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingByteArrayAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingByteArrayAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.ByteValue != null && !importedObjectAttribute.ByteValues.Any(i => Utilities.Utilities.AreByteArraysTheSame(i, av.ByteValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingByteArrayAttributeValues);
 
                         // find imported values of type byte array that aren't on the cso and add them
-                        var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue)));
+                        var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue))).ToList();
                         foreach (var newByteArrayValue in newByteArrayValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, ByteValue = newByteArrayValue });
                         break;
@@ -763,22 +792,22 @@ public class SyncImportTaskProcessor
                     case AttributeDataType.Reference:
                         // find unresolved reference values on the cso that aren't on the imported object and remove them first
                         // Note: Reference values are compared case-sensitively to preserve data fidelity from source systems
-                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.Ordinal)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingUnresolvedReferenceValues.Any(msav => msav.Id == av.Id)));
+                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.Ordinal))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingUnresolvedReferenceValues);
 
                         // find imported unresolved reference values that aren't on the cso and add them
-                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.Ordinal)));
+                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.Ordinal))).ToList();
                         foreach (var newUnresolvedReferenceValue in newUnresolvedReferenceValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, UnresolvedReferenceValue = newUnresolvedReferenceValue });
                         break;
 
                     case AttributeDataType.Guid:
                         // find values on the cso of type Guid that aren't on the imported object and remove them first
-                        var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue)));
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av => missingGuidAttributeValues.Any(msav => msav.Id == av.Id)));
+                        var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingGuidAttributeValues);
 
                         // find imported values of type Guid that aren't on the cso and add them
-                        var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute.Name == csoAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv)));
+                        var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.GuidValue != null && av.GuidValue.Equals(sv))).ToList();
                         foreach (var newGuidValue in newGuidValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, GuidValue = newGuidValue });
                         break;
@@ -788,7 +817,7 @@ public class SyncImportTaskProcessor
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                         // todo: consider having the ability to update values instead of replacing.
-                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute.Name == csoAttributeName);
+                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => av.Attribute?.Name == csoAttributeName);
                         if (csoBooleanAttributeValue == null)
                         {
                             // set initial value
@@ -810,7 +839,7 @@ public class SyncImportTaskProcessor
             else
             {
                 // no values were imported for this attribute. delete all the cso attribute values for this attribute
-                var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => q.Attribute.Name == csoAttributeName);
+                var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => q.Attribute?.Name == csoAttributeName).ToList();
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
             }
         }

@@ -38,7 +38,13 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1
 
 # Run with a specific template size
+./test/integration/Run-IntegrationTests.ps1 -Template Nano
+./test/integration/Run-IntegrationTests.ps1 -Template Micro
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
+./test/integration/Run-IntegrationTests.ps1 -Template Medium
+./test/integration/Run-IntegrationTests.ps1 -Template Large
+./test/integration/Run-IntegrationTests.ps1 -Template XLarge
+./test/integration/Run-IntegrationTests.ps1 -Template XXLarge
 
 # Run only a specific test step
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner
@@ -49,6 +55,20 @@ This single script handles everything:
 # Skip rebuild (use existing Docker images)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
 ```
+
+**Available Templates (`-Template` parameter):**
+
+Choose a template based on your testing goals:
+
+- **Nano** (default): 3 users, 1 group - **< 1 min** - Fast dev iteration and debugging
+- **Micro**: 10 users, 3 groups - **< 2 min** - Quick smoke tests and development
+- **Small**: 100 users, 20 groups - **< 5 min** - Small business scenarios, unit testing
+- **Medium**: 1,000 users, 100 groups - **< 15 min** - Medium enterprise, CI/CD pipelines
+- **Large**: 10,000 users, 500 groups - **< 45 min** - Large enterprise, performance baselines
+- **XLarge**: 100,000 users, 2,000 groups - **2-3 hours** - Very large enterprise, stress testing
+- **XXLarge**: 1,000,000 users, 10,000 groups - **8+ hours** - Global enterprise, scale limits
+
+See [Data Scale Templates](#data-scale-templates) for detailed template specifications.
 
 **Alternative: Manual step-by-step (for debugging or more control)**
 

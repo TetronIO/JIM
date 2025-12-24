@@ -34,7 +34,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Reconnection", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Reconnection", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]

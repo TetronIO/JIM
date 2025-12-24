@@ -65,7 +65,7 @@ param(
     [string]$Scenario = "Scenario1-HRToDirectory",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Small", "Medium", "Large")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
