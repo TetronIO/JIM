@@ -359,9 +359,9 @@ $metrics = @{
 }
 
 foreach ($logLine in $workerLogs) {
-    # Example: DiagnosticListener: Parent > Child completed in 1234.56ms [connectedSystemId=1, objectCount=100]
+    # Example: DiagnosticListener: [SLOW] Parent > Child completed in 1234.56ms [connectedSystemId=1, objectCount=100]
     # Or: DiagnosticListener: OperationName completed in 1234.56ms [tags]
-    if ($logLine -match 'DiagnosticListener:\s+(?:(.+?)\s+>\s+)?(.+?)\s+completed in\s+([\d.]+)ms(?:\s+\[(.*)\])?') {
+    if ($logLine -match 'DiagnosticListener:\s+(?:\[SLOW\]\s+)?(?:(.+?)\s+>\s+)?(.+?)\s+completed in\s+([\d.]+)ms(?:\s+\[(.*)\])?') {
         $parentName = $Matches[1]  # May be empty for root operations
         $operationName = $Matches[2]
         $durationMs = [double]$Matches[3]

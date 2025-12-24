@@ -72,26 +72,19 @@ public sealed class DiagnosticListener : IDisposable
         var parentName = activity.Parent?.DisplayName;
         var hierarchyPrefix = parentName != null ? $"{parentName} > " : "";
 
-        if (isSlowOperation)
-        {
-            Log.Warning(
-                "DiagnosticListener: SLOW {HierarchyPrefix}{SpanName} completed in {DurationMs:F1}ms{Tags}",
-                hierarchyPrefix,
-                activity.DisplayName,
-                durationMs,
-                tagsSuffix);
-        }
-        else
-        {
-            // Use the configured log level for normal operations
-            Log.Write(
-                _logLevel,
-                "DiagnosticListener: {HierarchyPrefix}{SpanName} completed in {DurationMs:F1}ms{Tags}",
-                hierarchyPrefix,
-                activity.DisplayName,
-                durationMs,
-                tagsSuffix);
-        }
+        // Log format: "Parent > Child completed in Xms" for parseable output
+        // Use Warning level for slow operations but keep name format consistent for tree parsing
+        var logLevel = isSlowOperation ? Serilog.Events.LogEventLevel.Warning : _logLevel;
+        var slowMarker = isSlowOperation ? "[SLOW] " : "";
+
+        Log.Write(
+            logLevel,
+            "DiagnosticListener: {SlowMarker}{HierarchyPrefix}{SpanName} completed in {DurationMs:F1}ms{Tags}",
+            slowMarker,
+            hierarchyPrefix,
+            activity.DisplayName,
+            durationMs,
+            tagsSuffix);
 
         // Log errors specially
         if (activity.Status == ActivityStatusCode.Error)
