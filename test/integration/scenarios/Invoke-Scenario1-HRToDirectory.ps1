@@ -214,8 +214,8 @@ try {
         $updatedContent = $csvContent | ForEach-Object {
             if ($_ -match "test\.joiner") {
                 # Replace the title field (between department and samAccountName)
-                # Pattern: "...",Department,"OldTitle","samAccountName",...
-                $_ -replace ',"[^"]*","test\.joiner"', ',"Senior Developer","test.joiner"'
+                # Pattern: ,"Department","OldTitle","test.joiner" → ,"Department","Senior Developer","test.joiner"
+                $_ -replace ',"[^"]+","test\.joiner"', ',"Senior Developer","test.joiner"'
             }
             else {
                 $_
