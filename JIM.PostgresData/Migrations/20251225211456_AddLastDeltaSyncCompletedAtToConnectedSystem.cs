@@ -12,13 +12,6 @@ namespace JIM.PostgresData.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<DateTime>(
-                name: "Created",
-                table: "SyncRules",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
-
-            migrationBuilder.AddColumn<DateTime>(
                 name: "LastDeltaSyncCompletedAt",
                 table: "ConnectedSystems",
                 type: "timestamp with time zone",
@@ -28,10 +21,6 @@ namespace JIM.PostgresData.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Created",
-                table: "SyncRules");
-
             migrationBuilder.DropColumn(
                 name: "LastDeltaSyncCompletedAt",
                 table: "ConnectedSystems");
