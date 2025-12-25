@@ -495,7 +495,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         // start building the query for all the obsolete CSOs for a particular system.
         var query = Repository.Database.ConnectedSystemObjects.Include(cso => cso.AttributeValues);
-        
+
         // for optimum performance, do not include attributes
         // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema whilst in memory
         // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
@@ -503,12 +503,92 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             query.ThenInclude(av => av.Attribute);
 
         // add the Connected System filter
-        var objects = from cso in query.Where(q => 
-                q.ConnectedSystem.Id == connectedSystemId && 
+        var objects = from cso in query.Where(q =>
+                q.ConnectedSystem.Id == connectedSystemId &&
                 q.MetaverseObject == null)
             select cso;
 
         return await objects.ToListAsync();
+    }
+
+    /// <summary>
+    /// Retrieves a page's worth of Connected System Objects for a specific system that have been modified since a given timestamp.
+    /// Used for delta synchronisation to process only changed objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="modifiedSince">Only return CSOs where LastUpdated is greater than this timestamp.</param>
+    /// <param name="page">Which page to return results for, i.e. 1-n.</param>
+    /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+        int connectedSystemId,
+        DateTime modifiedSince,
+        int page,
+        int pageSize)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 500)
+            pageSize = 500;
+
+        // Build the query for CSOs modified since the given timestamp.
+        // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
+        // The MVO AttributeValues are needed during sync to detect attribute changes and create PendingExports.
+        var query = Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                         cso.LastUpdated.HasValue &&
+                         cso.LastUpdated.Value > modifiedSince);
+
+        // Get total count for paging
+        var grossCount = await query.CountAsync();
+
+        // Now page the results
+        var offset = (page - 1) * pageSize;
+        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
+        var pagedObjects = query.Skip(offset).Take(itemsToGet);
+        var results = await pagedObjects.ToListAsync();
+
+        // Build the paged result set
+        var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let callers try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System that have been modified since a given timestamp.
+    /// Used for delta synchronisation statistics.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="modifiedSince">Only count CSOs where LastUpdated is greater than this timestamp.</param>
+    public async Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
+    {
+        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
+            cso.ConnectedSystemId == connectedSystemId &&
+            cso.LastUpdated.HasValue &&
+            cso.LastUpdated.Value > modifiedSince);
     }
 
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)

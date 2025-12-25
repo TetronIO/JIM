@@ -1108,6 +1108,36 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsUnJoinedAsync(connectedSystemId, returnAttributes);
     }
 
+    /// <summary>
+    /// Retrieves a page's worth of Connected System Objects for a specific system that have been modified since a given timestamp.
+    /// Used for delta synchronisation to process only changed objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="modifiedSince">Only return CSOs where LastUpdated is greater than this timestamp.</param>
+    /// <param name="page">Which page to return results for, i.e. 1-n.</param>
+    /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+        int connectedSystemId,
+        DateTime modifiedSince,
+        int page,
+        int pageSize)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
+            connectedSystemId, modifiedSince, page, pageSize);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System that have been modified since a given timestamp.
+    /// Used for delta synchronisation statistics.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="modifiedSince">Only count CSOs where LastUpdated is greater than this timestamp.</param>
+    public async Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(
+            connectedSystemId, modifiedSince);
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);

@@ -233,7 +233,30 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsUnJoinedAsync(int connectedSystemId, bool returnAttributes);
-    
+
+    /// <summary>
+    /// Retrieves a page's worth of Connected System Objects for a specific system that have been modified since a given timestamp.
+    /// Used for delta synchronisation to process only changed objects.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
+    /// <param name="modifiedSince">Only return CSOs where LastUpdated is greater than this timestamp.</param>
+    /// <param name="page">Which page to return results for, i.e. 1-n.</param>
+    /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+        int connectedSystemId,
+        DateTime modifiedSince,
+        int page,
+        int pageSize);
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System that have been modified since a given timestamp.
+    /// Used for delta synchronisation statistics.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="modifiedSince">Only count CSOs where LastUpdated is greater than this timestamp.</param>
+    public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince);
+
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
