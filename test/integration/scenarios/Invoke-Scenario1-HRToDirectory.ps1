@@ -56,6 +56,53 @@ $ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive 
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 
+# Helper function to run the standard delta sync sequence with detailed output
+# This sequence is used after CSV changes to sync them through to LDAP:
+# 1. CSV Full Import - detect changes in CSV file
+# 2. CSV Delta Sync - process only changed CSOs, evaluate export rules
+# 3. LDAP Export - apply pending exports to AD
+# 4. LDAP Delta Import - confirm the exports succeeded
+# 5. LDAP Delta Sync - process confirmed imports
+function Invoke-SyncSequence {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+        [switch]$ShowProgress
+    )
+
+    $results = @{
+        Success = $true
+        Steps = @()
+    }
+
+    # Step 1: CSV Full Import
+    if ($ShowProgress) { Write-Host "  [1/5] CSV Full Import..." -ForegroundColor DarkGray }
+    $importResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVImportProfileId -Wait -PassThru
+    $results.Steps += @{ Name = "CSV Full Import"; ActivityId = $importResult.activityId }
+
+    # Step 2: CSV Delta Sync
+    if ($ShowProgress) { Write-Host "  [2/5] CSV Delta Sync..." -ForegroundColor DarkGray }
+    $syncResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVDeltaSyncProfileId -Wait -PassThru
+    $results.Steps += @{ Name = "CSV Delta Sync"; ActivityId = $syncResult.activityId }
+
+    # Step 3: LDAP Export
+    if ($ShowProgress) { Write-Host "  [3/5] LDAP Export..." -ForegroundColor DarkGray }
+    $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
+    $results.Steps += @{ Name = "LDAP Export"; ActivityId = $exportResult.activityId }
+
+    # Step 4: LDAP Delta Import (confirming export)
+    if ($ShowProgress) { Write-Host "  [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
+    $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaImportProfileId -Wait -PassThru
+    $results.Steps += @{ Name = "LDAP Delta Import"; ActivityId = $confirmImportResult.activityId }
+
+    # Step 5: LDAP Delta Sync
+    if ($ShowProgress) { Write-Host "  [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray }
+    $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaSyncProfileId -Wait -PassThru
+    $results.Steps += @{ Name = "LDAP Delta Sync"; ActivityId = $confirmSyncResult.activityId }
+
+    return $results
+}
+
 Write-TestSection "Scenario 1: HR to Enterprise Directory"
 Write-Host "Step:     $Step" -ForegroundColor Gray
 Write-Host "Template: $Template" -ForegroundColor Gray
@@ -192,7 +239,7 @@ try {
         # Validate user exists in AD
         Write-Host "Validating user in Samba AD..." -ForegroundColor Gray
 
-        $adUser = docker exec samba-ad-primary samba-tool user show $testUser.SamAccountName 2>&1
+        docker exec samba-ad-primary samba-tool user show $testUser.SamAccountName 2>&1 | Out-Null
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host "  ✓ User 'test.joiner' provisioned to AD" -ForegroundColor Green
@@ -240,14 +287,10 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
-        Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
-        Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
+        # Trigger sync sequence with progress output
+        Write-Host "Triggering sync sequence:" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate title change
         Write-Host "Validating attribute update in AD..." -ForegroundColor Gray
@@ -305,14 +348,10 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
-        Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
-        Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
+        # Trigger sync sequence with progress output
+        Write-Host "Triggering sync sequence:" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate rename in AD
         # The user should now have DN "CN=Renamed Joiner,CN=Users,DC=testdomain,DC=local"
@@ -352,16 +391,37 @@ try {
         # Get the current user info to determine current department
         $currentLine = $csvContent | Where-Object { $_ -match "test\.joiner" } | Select-Object -First 1
 
+        # Debug: Show current line before change
+        Write-Host "  Current CSV line: $currentLine" -ForegroundColor DarkGray
+
         # Change department from Sales to Finance
         # Note: Test user at index 9999 is assigned to Sales department (9999 % 12 = 3)
+        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName
+        # We need to update the department field (5th field, index 4)
         $updatedContent = $csvContent | ForEach-Object {
             if ($_ -match "test\.joiner") {
-                # Update department column (index 4, 0-based)
-                # Pattern: "...","Sales","..." → "...","Finance","..."
-                $line = $_ -replace ',"Sales",', ',"Finance",'
-                # Update DN to reflect new OU (if present)
-                $line = $line -replace ',OU=Sales,', ',OU=Finance,'
-                $line
+                # Parse CSV line and update department field directly
+                # This is more robust than regex replacement
+                $fields = $_ -split '","'
+                if ($fields.Count -ge 5) {
+                    # Field indices (after split on ","):
+                    # 0: "employeeId  (has leading quote)
+                    # 1: firstName
+                    # 2: lastName
+                    # 3: email
+                    # 4: department  <-- this is what we want to change
+                    # 5: title
+                    # etc.
+                    $oldDept = $fields[4]
+                    $fields[4] = "Finance"
+                    $newLine = $fields -join '","'
+                    Write-Host "  Changed department from '$oldDept' to 'Finance'" -ForegroundColor DarkGray
+                    $newLine
+                }
+                else {
+                    Write-Host "  Warning: Could not parse CSV line for test.joiner" -ForegroundColor Yellow
+                    $_
+                }
             }
             else {
                 $_
@@ -374,14 +434,10 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
-        Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
-        Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
+        # Trigger sync sequence with progress output
+        Write-Host "Triggering sync sequence:" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate move in AD
         # The user should now be in OU=Finance (moved from OU=Sales)
@@ -430,14 +486,10 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
-        Write-Host "Triggering synchronisation..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
-        Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
+        # Trigger sync sequence with progress output
+        Write-Host "Triggering sync sequence:" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate user state in AD
         # With a 7-day grace period configured, the MVO won't be deleted immediately,
@@ -489,17 +541,22 @@ try {
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Initial sync (Import → Full Sync → Export → Confirming Import → Delta Sync)
-        Write-Host "  Initial sync..." -ForegroundColor Gray
+        # Initial sync - uses Full Sync to create the user (first-time provisioning)
+        Write-Host "  Initial sync (with Full Sync for first-time provisioning):" -ForegroundColor Gray
+        Write-Host "    [1/5] CSV Full Import..." -ForegroundColor DarkGray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+        Write-Host "    [2/5] CSV Full Sync..." -ForegroundColor DarkGray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Write-Host "    [3/5] LDAP Export..." -ForegroundColor DarkGray
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+        Write-Host "    [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+        Write-Host "    [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
         # Verify user was created in AD
-        $initialCheck = docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1
+        docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ✗ User was not created in AD during initial sync" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User not provisioned during initial sync" }
@@ -514,12 +571,14 @@ try {
             $csvContent | Set-Content $csvPath
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
+            Write-Host "    [1/2] CSV Full Import..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+            Write-Host "    [2/2] CSV Delta Sync (marks CSO obsolete)..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
             Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
 
             # Verify user still exists in AD (grace period should prevent deletion)
-            $afterRemovalCheck = docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1
+            docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ User still in AD after removal (grace period active)" -ForegroundColor Green
             }
@@ -532,10 +591,15 @@ try {
             Add-Content -Path $csvPath -Value $csvLine
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
+            Write-Host "    [1/5] CSV Full Import..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+            Write-Host "    [2/5] CSV Delta Sync (reconnects CSO)..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
+            Write-Host "    [3/5] LDAP Export..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+            Write-Host "    [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+            Write-Host "    [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
 

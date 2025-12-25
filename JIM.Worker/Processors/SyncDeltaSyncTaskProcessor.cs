@@ -132,16 +132,17 @@ public class SyncDeltaSyncTaskProcessor
         processCsosSpan.SetTag("pageSize", pageSize);
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
-        for (var i = 0; i < totalCsoPages; i++)
+        for (var page = 1; page <= totalCsoPages; page++)
         {
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
             {
                 // Use the delta-specific query that filters by LastUpdated > watermark
+                // Note: Page is 1-indexed to match the repository's paging convention
                 csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
                     _connectedSystem.Id,
                     lastSyncTimestamp,
-                    i,
+                    page,
                     pageSize);
             }
 
