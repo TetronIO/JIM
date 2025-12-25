@@ -536,16 +536,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 500)
             pageSize = 500;
 
-        // Build the query for CSOs modified since the given timestamp.
+        // Build the query for CSOs created or modified since the given timestamp.
         // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
         // The MVO AttributeValues are needed during sync to detect attribute changes and create PendingExports.
+        //
+        // IMPORTANT: We check BOTH Created AND LastUpdated because:
+        // - Created > watermark: Captures newly created CSOs that haven't been modified yet
+        // - LastUpdated > watermark: Captures existing CSOs that have been modified
+        // This ensures delta sync processes both new and updated objects.
         var query = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.AttributeValues)
             .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
-                         cso.LastUpdated.HasValue &&
-                         cso.LastUpdated.Value > modifiedSince);
+                         (cso.Created > modifiedSince ||
+                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
 
         // Get total count for paging
         var grossCount = await query.CountAsync();
@@ -578,17 +583,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Returns the count of Connected System Objects for a particular Connected System that have been modified since a given timestamp.
+    /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
     /// Used for delta synchronisation statistics.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <param name="modifiedSince">Only count CSOs where LastUpdated is greater than this timestamp.</param>
+    /// <param name="modifiedSince">Only count CSOs where Created or LastUpdated is greater than this timestamp.</param>
     public async Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
+        // Count CSOs that are either newly created OR have been modified since the watermark.
+        // This ensures delta sync counts both new and updated objects.
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
             cso.ConnectedSystemId == connectedSystemId &&
-            cso.LastUpdated.HasValue &&
-            cso.LastUpdated.Value > modifiedSince);
+            (cso.Created > modifiedSince ||
+             (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
     }
 
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
