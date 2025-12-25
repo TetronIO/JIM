@@ -302,6 +302,7 @@ public class SyncImportTaskProcessor
         
         // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
+        cso.LastUpdated = DateTime.UtcNow;
 
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         connectedSystemObjectsToBeUpdated.Add(cso);
@@ -387,6 +388,7 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
+                        connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
                         Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} as Obsolete.",
                             importObject.ObjectType, connectedSystemObject.Id);
@@ -434,6 +436,7 @@ public class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                     activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
+                    connectedSystemObject.LastUpdated = DateTime.UtcNow;
                     connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
                 }
             }

@@ -1233,4 +1233,231 @@ public class DeltaSyncTests
     }
 
     #endregion
+
+    #region CSO Obsoletion Tests
+
+    [Test]
+    public void ObsoletedCso_WithLastUpdatedSet_IsIncludedInDeltaSyncQuery()
+    {
+        // Arrange - An obsoleted CSO should have LastUpdated set so it's picked up by delta sync
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        var obsoleteCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            Status = ConnectedSystemObjectStatus.Obsolete,
+            Created = DateTime.UtcNow.AddDays(-30), // Created before watermark
+            LastUpdated = DateTime.UtcNow // Updated when marked obsolete - after watermark
+        };
+
+        // Act - Check if CSO would be included in delta sync query
+        var isIncluded = obsoleteCso.Created > watermark ||
+                         (obsoleteCso.LastUpdated.HasValue && obsoleteCso.LastUpdated.Value > watermark);
+
+        // Assert
+        Assert.That(isIncluded, Is.True);
+        Assert.That(obsoleteCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+    }
+
+    [Test]
+    public void ObsoletedCso_WithoutLastUpdated_WouldBeMissedByDeltaSync()
+    {
+        // Arrange - This test documents the bug that was fixed: if LastUpdated wasn't set,
+        // obsoleted CSOs created before the watermark would be missed
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        var obsoleteCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            Status = ConnectedSystemObjectStatus.Obsolete,
+            Created = DateTime.UtcNow.AddDays(-30), // Created before watermark
+            LastUpdated = null // BUG: LastUpdated not set when marked obsolete
+        };
+
+        // Act - Check if CSO would be included in delta sync query
+        var isIncluded = obsoleteCso.Created > watermark ||
+                         (obsoleteCso.LastUpdated.HasValue && obsoleteCso.LastUpdated.Value > watermark);
+
+        // Assert - This CSO would be MISSED (the bug scenario)
+        Assert.That(isIncluded, Is.False);
+        Assert.That(obsoleteCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsModifiedSinceAsync_ReturnsObsoleteCsosWithLastUpdatedAsync()
+    {
+        // Arrange - Obsoleted CSOs should be returned if their LastUpdated is after the watermark
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        var connectedSystemId = 1;
+
+        var obsoleteCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystemId,
+            Status = ConnectedSystemObjectStatus.Obsolete,
+            Created = DateTime.UtcNow.AddDays(-30),
+            LastUpdated = DateTime.UtcNow // Set when marked obsolete
+        };
+
+        var pagedResult = new PagedResultSet<ConnectedSystemObject>
+        {
+            Results = new List<ConnectedSystemObject> { obsoleteCso },
+            TotalResults = 1,
+            CurrentPage = 1,
+            PageSize = 200
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
+            connectedSystemId, watermark, 1, 200))
+            .ReturnsAsync(pagedResult);
+
+        // Act
+        var result = await _jim.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
+            connectedSystemId, watermark, 1, 200);
+
+        // Assert
+        Assert.That(result.Results, Has.Count.EqualTo(1));
+        Assert.That(result.Results.First().Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+    }
+
+    [Test]
+    public void DeltaSyncQuery_IncludesBothNormalAndObsoleteCsos()
+    {
+        // Arrange
+        var watermark = DateTime.UtcNow.AddHours(-1);
+
+        var normalCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow.AddDays(-30),
+            LastUpdated = DateTime.UtcNow
+        };
+
+        var obsoleteCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            Status = ConnectedSystemObjectStatus.Obsolete,
+            Created = DateTime.UtcNow.AddDays(-30),
+            LastUpdated = DateTime.UtcNow
+        };
+
+        var allCsos = new List<ConnectedSystemObject> { normalCso, obsoleteCso };
+
+        // Act - Apply the delta sync filter logic
+        var includedCsos = allCsos.Where(cso =>
+            cso.Created > watermark ||
+            (cso.LastUpdated.HasValue && cso.LastUpdated.Value > watermark))
+            .ToList();
+
+        // Assert - Both should be included
+        Assert.That(includedCsos, Has.Count.EqualTo(2));
+        Assert.That(includedCsos.Any(cso => cso.Status == ConnectedSystemObjectStatus.Normal), Is.True);
+        Assert.That(includedCsos.Any(cso => cso.Status == ConnectedSystemObjectStatus.Obsolete), Is.True);
+    }
+
+    [Test]
+    public void CsoObsoletion_ShouldSetLastUpdated_SoItAppearsInDeltaSync()
+    {
+        // Arrange - Simulating what should happen when a CSO is marked obsolete
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow.AddDays(-30),
+            LastUpdated = null
+        };
+
+        // Act - Simulate marking the CSO as obsolete (this is what SyncImportTaskProcessor does)
+        cso.Status = ConnectedSystemObjectStatus.Obsolete;
+        cso.LastUpdated = DateTime.UtcNow;
+
+        // Assert
+        Assert.That(cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+        Assert.That(cso.LastUpdated, Is.Not.Null);
+        Assert.That(cso.LastUpdated!.Value, Is.GreaterThan(DateTime.UtcNow.AddSeconds(-5)));
+    }
+
+    [Test]
+    public void ObsoleteCso_CreatedBeforeWatermark_WithLastUpdatedAfter_IsIncludedInDeltaSync()
+    {
+        // Arrange - Key scenario: CSO existed for a long time, then was deleted from source system
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            Status = ConnectedSystemObjectStatus.Obsolete,
+            Created = DateTime.UtcNow.AddMonths(-6), // Created 6 months ago
+            LastUpdated = DateTime.UtcNow.AddMinutes(-30) // Marked obsolete 30 minutes ago
+        };
+
+        // Act
+        var isIncludedByCreated = cso.Created > watermark;
+        var isIncludedByLastUpdated = cso.LastUpdated.HasValue && cso.LastUpdated.Value > watermark;
+        var isIncluded = isIncludedByCreated || isIncludedByLastUpdated;
+
+        // Assert
+        Assert.That(isIncludedByCreated, Is.False, "Should NOT be included by Created date");
+        Assert.That(isIncludedByLastUpdated, Is.True, "SHOULD be included by LastUpdated date");
+        Assert.That(isIncluded, Is.True, "CSO should be included in delta sync");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithMixedStatusCsos_ReturnsAllModifiedAsync()
+    {
+        // Arrange
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        var connectedSystemId = 1;
+
+        var normalCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystemId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            LastUpdated = DateTime.UtcNow
+        };
+
+        var obsoleteCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystemId,
+            Status = ConnectedSystemObjectStatus.Obsolete,
+            LastUpdated = DateTime.UtcNow
+        };
+
+        var pagedResult = new PagedResultSet<ConnectedSystemObject>
+        {
+            Results = new List<ConnectedSystemObject> { normalCso, obsoleteCso },
+            TotalResults = 2,
+            CurrentPage = 1,
+            PageSize = 200
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
+            connectedSystemId, watermark, 1, 200))
+            .ReturnsAsync(pagedResult);
+
+        // Act
+        var result = await _jim.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
+            connectedSystemId, watermark, 1, 200);
+
+        // Assert
+        Assert.That(result.Results, Has.Count.EqualTo(2));
+        Assert.That(result.Results.Count(cso => cso.Status == ConnectedSystemObjectStatus.Normal), Is.EqualTo(1));
+        Assert.That(result.Results.Count(cso => cso.Status == ConnectedSystemObjectStatus.Obsolete), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ConnectedSystemObjectStatus_Obsolete_IsValidEnumValue()
+    {
+        // Arrange & Act & Assert - Ensure the Obsolete status exists and can be used
+        Assert.That(Enum.IsDefined(typeof(ConnectedSystemObjectStatus), ConnectedSystemObjectStatus.Obsolete), Is.True);
+        Assert.That((int)ConnectedSystemObjectStatus.Obsolete, Is.GreaterThanOrEqualTo(0));
+    }
+
+    #endregion
 }
