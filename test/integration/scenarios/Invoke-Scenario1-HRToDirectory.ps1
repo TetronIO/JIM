@@ -177,6 +177,18 @@ try {
 
         Write-Host "  ✓ LDAP export completed (Activity: $($exportResult.activityId))" -ForegroundColor Green
 
+        # Confirming Import - import the changes we just exported to LDAP
+        Write-Host "Triggering LDAP delta import (confirming export)..." -ForegroundColor Gray
+        $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
+
+        Write-Host "  ✓ LDAP delta import completed (Activity: $($confirmImportResult.activityId))" -ForegroundColor Green
+
+        # Delta Sync - synchronise the confirmed imports
+        Write-Host "Triggering LDAP delta sync..." -ForegroundColor Gray
+        $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+
+        Write-Host "  ✓ LDAP delta sync completed (Activity: $($confirmSyncResult.activityId))" -ForegroundColor Green
+
         # Validate user exists in AD
         Write-Host "Validating user in Samba AD..." -ForegroundColor Gray
 
@@ -228,11 +240,13 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Full Sync → Export)
+        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate title change
@@ -291,11 +305,13 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Full Sync → Export)
+        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate rename in AD
@@ -358,11 +374,13 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Full Sync → Export)
+        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate move in AD
@@ -412,11 +430,13 @@ try {
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Trigger sync (Import → Full Sync → Export)
+        # Trigger sync (Import → Delta Sync → Export → Confirming Import → Delta Sync)
         Write-Host "Triggering synchronisation..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
         Write-Host "  ✓ Synchronisation completed" -ForegroundColor Green
 
         # Validate user state in AD
@@ -469,11 +489,13 @@ try {
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Initial sync (Import → Full Sync → Export)
+        # Initial sync (Import → Full Sync → Export → Confirming Import → Delta Sync)
         Write-Host "  Initial sync..." -ForegroundColor Gray
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
         # Verify user was created in AD
@@ -493,7 +515,7 @@ try {
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
             Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
             Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
 
             # Verify user still exists in AD (grace period should prevent deletion)
@@ -511,8 +533,10 @@ try {
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
             Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
             Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
+            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
 
             # Verify user still exists (reconnection should preserve AD account)

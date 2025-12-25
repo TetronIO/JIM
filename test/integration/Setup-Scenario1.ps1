@@ -726,6 +726,48 @@ try {
     else {
         Write-Host "  Run profile 'Samba AD - Export' already exists" -ForegroundColor Gray
     }
+
+    # Delta Import from LDAP - for confirming exports
+    $ldapDeltaImportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Delta Import" }
+    if (-not $ldapDeltaImportProfile) {
+        $ldapDeltaImportProfile = New-JIMRunProfile `
+            -Name "Samba AD - Delta Import" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "DeltaImport" `
+            -PassThru
+        Write-Host "  ✓ Created 'Samba AD - Delta Import' run profile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Samba AD - Delta Import' already exists" -ForegroundColor Gray
+    }
+
+    # Delta Sync for CSV - for efficient sync of changes
+    $csvDeltaSyncProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Delta Sync" }
+    if (-not $csvDeltaSyncProfile) {
+        $csvDeltaSyncProfile = New-JIMRunProfile `
+            -Name "HR CSV - Delta Sync" `
+            -ConnectedSystemId $csvSystem.id `
+            -RunType "DeltaSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'HR CSV - Delta Sync' run profile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'HR CSV - Delta Sync' already exists" -ForegroundColor Gray
+    }
+
+    # Delta Sync for LDAP - for efficient sync of changes
+    $ldapDeltaSyncProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Delta Sync" }
+    if (-not $ldapDeltaSyncProfile) {
+        $ldapDeltaSyncProfile = New-JIMRunProfile `
+            -Name "Samba AD - Delta Sync" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "DeltaSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'Samba AD - Delta Sync' run profile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Samba AD - Delta Sync' already exists" -ForegroundColor Gray
+    }
 }
 catch {
     Write-Host "  ✗ Failed to create run profiles: $_" -ForegroundColor Red
@@ -752,5 +794,8 @@ return @{
     LDAPSystemId = $ldapSystem.id
     CSVImportProfileId = $csvImportProfile.id
     CSVSyncProfileId = $csvSyncProfile.id
+    CSVDeltaSyncProfileId = $csvDeltaSyncProfile.id
     LDAPExportProfileId = $ldapExportProfile.id
+    LDAPDeltaImportProfileId = $ldapDeltaImportProfile.id
+    LDAPDeltaSyncProfileId = $ldapDeltaSyncProfile.id
 }
