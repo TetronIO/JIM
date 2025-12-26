@@ -3,6 +3,7 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
@@ -208,54 +209,97 @@ public class SyncDeltaSyncTaskProcessor
     }
 
     // ============================================================================
-    // The following methods are identical to SyncFullSyncTaskProcessor.
+    // The following methods are aligned with SyncFullSyncTaskProcessor.
     // In future, consider extracting to a base class or shared helper to reduce duplication.
     // ============================================================================
 
     /// <summary>
     /// Attempts to join/project/delete/flow attributes to the Metaverse for a single Connected System Object.
+    /// Records successful operations (joins, projections, attribute flow) and errors to ActivityRunProfileExecutionItems.
+    /// Only creates execution items for CSOs that had actual changes to avoid unnecessary allocations.
     /// </summary>
     private async Task ProcessConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         Log.Verbose($"ProcessConnectedSystemObjectAsync: Performing a delta sync on Connected System Object: {connectedSystemObject}.");
 
-        var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+        // Track changes to determine if we need to create an execution item.
+        // Only create items for CSOs that had actual changes (optimisation to avoid allocations for unchanged objects).
+        var changeResult = MetaverseObjectChangeResult.NoChanges();
+        ActivityRunProfileExecutionItem? obsoleteExecutionItem = null;
 
         try
         {
             using (Diagnostics.Sync.StartSpan("ProcessPendingExport"))
             {
-                await ProcessPendingExportAsync(connectedSystemObject, runProfileExecutionItem);
+                // Note: ProcessPendingExportAsync handles pending export confirmation, not CSO/MVO changes
+                await ProcessPendingExportAsync(connectedSystemObject);
             }
 
             using (Diagnostics.Sync.StartSpan("ProcessObsoleteConnectedSystemObject"))
             {
-                await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+                obsoleteExecutionItem = await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
             }
 
+            // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
+            // this requires that we have sync rules defined.
             if (activeSyncRules.Count > 0 && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
             {
                 using (Diagnostics.Sync.StartSpan("ProcessMetaverseObjectChanges"))
                 {
-                    await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject, runProfileExecutionItem);
+                    changeResult = await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject);
                 }
             }
+
+            // Add execution item for obsolete CSO (created by ProcessObsoleteConnectedSystemObjectAsync)
+            if (obsoleteExecutionItem != null)
+            {
+                _activity.RunProfileExecutionItems.Add(obsoleteExecutionItem);
+            }
+            // Create execution item for successful changes (join, projection, attribute flow)
+            else if (changeResult.HasChanges)
+            {
+                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
+                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+            }
+        }
+        catch (SyncJoinException joinEx)
+        {
+            // Create execution item for join-specific errors with proper error type
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ErrorType = joinEx.ErrorType;
+            runProfileExecutionItem.ErrorMessage = joinEx.Message;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning(joinEx, "ProcessConnectedSystemObjectAsync: Join error for {Cso}: {Message}",
+                connectedSystemObject, joinEx.Message);
         }
         catch (Exception e)
         {
+            // Create execution item for unhandled error tracking
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
             runProfileExecutionItem.ErrorMessage = e.Message;
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Error(e, $"ProcessConnectedSystemObjectAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing {connectedSystemObject}.");
+            Log.Error(e, "ProcessConnectedSystemObjectAsync: Unhandled {RunProfile} sync error whilst processing {Cso}.",
+                _connectedSystemRunProfile, connectedSystemObject);
         }
     }
 
-    private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    /// <summary>
+    /// See if a Pending Export Object for a Connected System Object can be invalidated and deleted.
+    /// This would occur when the Pending Export changes are visible on the Connected System Object after a confirming import.
+    /// </summary>
+    private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject)
     {
         Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
 
+        // use pre-loaded pending exports dictionary for O(1) lookup instead of O(n) database query
         if (_pendingExportsByCsoId == null || !_pendingExportsByCsoId.TryGetValue(connectedSystemObject.Id, out var pendingExportsForThisCso))
         {
             Log.Verbose($"ProcessPendingExportAsync: No pending exports found for CSO {connectedSystemObject.Id}.");
@@ -272,14 +316,17 @@ public class SyncDeltaSyncTaskProcessor
 
         foreach (var pendingExport in pendingExportsForThisCso)
         {
+            // track which attribute changes succeeded and which failed
             var successfulChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
             var failedChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
 
             foreach (var attributeChange in pendingExport.AttributeValueChanges)
             {
+                // find the corresponding attribute value on the CSO
                 var csoAttributeValue = connectedSystemObject.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == attributeChange.AttributeId);
 
+                // check if the attribute change matches the CSO's current state
                 var changeMatches = attributeChange.ChangeType switch
                 {
                     JIM.Models.Transactional.PendingExportAttributeChangeType.Add or
@@ -305,22 +352,28 @@ public class SyncDeltaSyncTaskProcessor
                 }
             }
 
+            // if all changes have been confirmed, delete the pending export
             if (failedChanges.Count == 0)
             {
                 Log.Information($"ProcessPendingExportAsync: All changes confirmed for pending export {pendingExport.Id}. Deleting.");
                 await _jim.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+
+                // remove from in-memory cache to keep it consistent
                 pendingExportsForThisCso.Remove(pendingExport);
             }
             else if (successfulChanges.Count > 0)
             {
+                // partial success: remove successful attribute changes, keep failed ones
                 Log.Information($"ProcessPendingExportAsync: Partial success for pending export {pendingExport.Id}. " +
                     $"{successfulChanges.Count} succeeded, {failedChanges.Count} failed. Updating pending export.");
 
+                // remove the successful attribute changes from the pending export
                 foreach (var successfulChange in successfulChanges)
                 {
                     pendingExport.AttributeValueChanges.Remove(successfulChange);
                 }
 
+                // increment error count and update status
                 pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
@@ -328,9 +381,11 @@ public class SyncDeltaSyncTaskProcessor
             }
             else
             {
+                // complete failure: all attribute changes failed
                 Log.Warning($"ProcessPendingExportAsync: Complete failure for pending export {pendingExport.Id}. " +
                     $"All {failedChanges.Count} attribute changes failed. Incrementing error count.");
 
+                // increment error count and update status
                 pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
@@ -359,33 +414,55 @@ public class SyncDeltaSyncTaskProcessor
         return true;
     }
 
-    private async Task ProcessObsoleteConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    /// <summary>
+    /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
+    /// Respects the InboundOutOfScopeAction setting on import sync rules to determine whether to disconnect.
+    /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
+    /// </summary>
+    /// <returns>The execution item if CSO was obsoleted (for the caller to add to the activity), null otherwise.</returns>
+    private async Task<ActivityRunProfileExecutionItem?> ProcessObsoleteConnectedSystemObjectAsync(
+        List<SyncRule> activeSyncRules,
+        ConnectedSystemObject connectedSystemObject)
     {
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-            return;
+            return null;
+
+        // Create the execution item for this obsolete CSO
+        var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+        runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
 
         if (connectedSystemObject.MetaverseObject == null)
         {
+            // Not joined, just delete the CSO.
             await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
-            return;
+            return runProfileExecutionItem;
         }
 
+        // CSO is joined to an MVO - check InboundOutOfScopeAction to determine behaviour
         var inboundOutOfScopeAction = DetermineInboundOutOfScopeAction(activeSyncRules, connectedSystemObject);
 
         if (inboundOutOfScopeAction == InboundOutOfScopeAction.RemainJoined)
         {
+            // Keep the join intact - just delete the CSO record but don't disconnect from MVO
+            // This implements "once managed, always managed" behaviour
             Log.Information($"ProcessObsoleteConnectedSystemObjectAsync: InboundOutOfScopeAction=RemainJoined for CSO {connectedSystemObject.Id}. " +
                 "CSO will be deleted but MVO join state preserved (object considered 'always managed').");
 
+            // Note: We still delete the CSO as it's obsolete in the source system,
+            // but we don't disconnect from MVO or trigger deletion rules
             await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
-            return;
+            return runProfileExecutionItem;
         }
 
+        // InboundOutOfScopeAction = Disconnect (default) - break the join and handle MVO deletion rules
         var mvo = connectedSystemObject.MetaverseObject;
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
 
+        // Check if we should remove contributed attributes based on the object type setting
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
         {
+            // Find all MVO attribute values contributed by this connected system and mark them for removal
             var contributedAttributes = mvo.AttributeValues
                 .Where(av => av.ContributedBySystem?.Id == connectedSystemId)
                 .ToList();
@@ -397,6 +474,7 @@ public class SyncDeltaSyncTaskProcessor
             }
         }
 
+        // Break the CSO-MVO join
         var mvoId = mvo.Id;
         mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
         connectedSystemObject.MetaverseObject = null;
@@ -405,13 +483,18 @@ public class SyncDeltaSyncTaskProcessor
         connectedSystemObject.DateJoined = null;
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Broke join between CSO {connectedSystemObject.Id} and MVO {mvoId}.");
 
+        // Delete the CSO first so the database reflects the disconnection
         await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
 
+        // Check if this was the last connector by querying the database for remaining CSOs
+        // (the in-memory collection may not reflect CSOs from other connected systems)
         var remainingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
         if (remainingCsoCount == 0)
         {
-            await ProcessMvoDeletionRuleAsync(mvo, runProfileExecutionItem);
+            await ProcessMvoDeletionRuleAsync(mvo);
         }
+
+        return runProfileExecutionItem;
     }
 
     private static InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
@@ -429,7 +512,12 @@ public class SyncDeltaSyncTaskProcessor
         return importSyncRule.InboundOutOfScopeAction;
     }
 
-    private async Task ProcessMvoDeletionRuleAsync(MetaverseObject mvo, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    /// <summary>
+    /// Processes the MVO deletion rule when the last connector is disconnected.
+    /// Following industry-standard identity management practices, this method NEVER deletes the MVO directly.
+    /// Instead, it sets LastConnectorDisconnectedDate and lets housekeeping handle actual deletion.
+    /// </summary>
+    private async Task ProcessMvoDeletionRuleAsync(MetaverseObject mvo)
     {
         if (mvo.Type == null)
         {
@@ -440,16 +528,20 @@ public class SyncDeltaSyncTaskProcessor
         switch (mvo.Type.DeletionRule)
         {
             case MetaverseObjectDeletionRule.Manual:
+                // No automatic deletion - MVO remains intact
                 Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has DeletionRule=Manual. No automatic deletion.");
                 break;
 
             case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                // Only apply to Projected MVOs (Internal MVOs like admin accounts are protected)
                 if (mvo.Origin == MetaverseObjectOrigin.Internal)
                 {
                     Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has Origin=Internal. Protected from automatic deletion.");
                     break;
                 }
 
+                // Record when the last connector was disconnected
+                // This timestamp is used by housekeeping to determine when the grace period expires
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
 
                 if (mvo.Type.DeletionGracePeriodDays.HasValue && mvo.Type.DeletionGracePeriodDays.Value > 0)
@@ -458,9 +550,11 @@ public class SyncDeltaSyncTaskProcessor
                 }
                 else
                 {
+                    // No grace period - housekeeping will delete immediately on next run
                     Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion (disconnected at {mvo.LastConnectorDisconnectedDate}). No grace period configured - will be deleted by housekeeping.");
                 }
 
+                // Persist the LastConnectorDisconnectedDate
                 await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
                 break;
 
@@ -470,19 +564,31 @@ public class SyncDeltaSyncTaskProcessor
         }
     }
 
-    private async Task ProcessMetaverseObjectChangesAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    /// <summary>
+    /// Checks if the not-Obsolete CSO is joined to a Metaverse Object and updates it per any sync rules,
+    /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any sync rules.
+    /// Changes to Metaverse Objects can have downstream impacts on other Connected System objects.
+    /// </summary>
+    /// <returns>A result indicating what MVO changes occurred (projection, join, attribute flow).</returns>
+    private async Task<MetaverseObjectChangeResult> ProcessMetaverseObjectChangesAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
-            return;
+            return MetaverseObjectChangeResult.NoChanges();
 
         if (activeSyncRules.Count == 0)
-            return;
+            return MetaverseObjectChangeResult.NoChanges();
 
+        // Track what kind of change occurred
+        var wasJoined = false;
+        var wasProjected = false;
+
+        // Get import sync rules for this CSO type
         var importSyncRules = activeSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
             .ToList();
 
+        // Check if CSO is in scope for any import sync rule before attempting join/projection
         List<SyncRule> inScopeImportRules;
         using (Diagnostics.Sync.StartSpan("GetInScopeImportRules"))
         {
@@ -491,36 +597,50 @@ public class SyncDeltaSyncTaskProcessor
 
         if (inScopeImportRules.Count == 0 && importSyncRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
+            // CSO is out of scope for all import sync rules that have scoping criteria
             Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import sync rules", connectedSystemObject.Id);
 
+            // Handle out of scope based on InboundOutOfScopeAction
             using (Diagnostics.Sync.StartSpan("HandleCsoOutOfScope"))
             {
-                await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules, runProfileExecutionItem);
+                var wasDisconnected = await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules);
+                if (wasDisconnected)
+                {
+                    // Return an update result indicating the CSO was disconnected
+                    return MetaverseObjectChangeResult.AttributeFlow(0, 0) with { HasChanges = true };
+                }
             }
-            return;
+            return MetaverseObjectChangeResult.NoChanges();
         }
 
+        // do we need to join, or project the CSO to the Metaverse?
         if (connectedSystemObject.MetaverseObject == null)
         {
+            // CSO is not joined to a Metaverse Object.
+            // inspect sync rules to determine if we have any join or projection requirements.
+            // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
+            // Only use in-scope sync rules for join/projection
             var scopedSyncRules = inScopeImportRules.Count > 0 ? inScopeImportRules : activeSyncRules;
 
             using (Diagnostics.Sync.StartSpan("AttemptJoin"))
             {
-                await AttemptJoinAsync(scopedSyncRules, connectedSystemObject, runProfileExecutionItem);
+                wasJoined = await AttemptJoinAsync(scopedSyncRules, connectedSystemObject);
             }
 
-            if (runProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-                return;
-
-            if (connectedSystemObject.MetaverseObject == null)
+            // were we able to join to an existing MVO?
+            if (!wasJoined && connectedSystemObject.MetaverseObject == null)
             {
+                // try and project the CSO to the Metaverse.
+                // this may cause onward sync operations, so may take time.
+                // Only use in-scope sync rules for projection
                 using (Diagnostics.Sync.StartSpan("AttemptProjection"))
                 {
-                    AttemptProjection(scopedSyncRules, connectedSystemObject);
+                    wasProjected = AttemptProjection(scopedSyncRules, connectedSystemObject);
                 }
             }
         }
 
+        // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
             // Debug: Log MVO state before processing
@@ -529,6 +649,7 @@ public class SyncDeltaSyncTaskProcessor
                 connectedSystemObject.MetaverseObject.AttributeValues?.Count ?? 0,
                 connectedSystemObject.AttributeValues?.Count ?? 0);
 
+            // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
             using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
                 var matchingSyncRules = activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId).ToList();
@@ -542,33 +663,56 @@ public class SyncDeltaSyncTaskProcessor
                 }
             }
 
+            // Count actual attribute changes that were queued
+            var attributesAdded = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.Count;
+            var attributesRemoved = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count;
+
+            // Collect changed attributes BEFORE applying pending changes (we need them for export evaluation)
             var changedAttributes = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions
                 .Concat(connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals)
                 .ToList();
 
             // Debug: Log pending changes
             Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} resulted in {AddCount} pending additions and {RemoveCount} pending removals for MVO {MvoId}",
-                connectedSystemObject.Id,
-                connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions?.Count ?? 0,
-                connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals?.Count ?? 0,
-                connectedSystemObject.MetaverseObject.Id);
+                connectedSystemObject.Id, attributesAdded, attributesRemoved, connectedSystemObject.MetaverseObject.Id);
 
+            // Apply pending attribute value changes to the MVO
             ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
 
+            // Queue MVO for batch persistence at end of page (reduces database round trips)
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
             {
+                // New MVO - queue for batch create
                 _pendingMvoCreates.Add(connectedSystemObject.MetaverseObject);
             }
             else
             {
+                // Existing MVO - queue for batch update
                 _pendingMvoUpdates.Add(connectedSystemObject.MetaverseObject);
             }
 
+            // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
             if (changedAttributes.Count > 0)
             {
                 _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes));
             }
+
+            // Return appropriate result based on what happened
+            if (wasProjected)
+            {
+                return MetaverseObjectChangeResult.Projected(attributesAdded);
+            }
+            if (wasJoined)
+            {
+                return MetaverseObjectChangeResult.Joined(attributesAdded, attributesRemoved);
+            }
+            if (attributesAdded > 0 || attributesRemoved > 0)
+            {
+                return MetaverseObjectChangeResult.AttributeFlow(attributesAdded, attributesRemoved);
+            }
         }
+
+        return MetaverseObjectChangeResult.NoChanges();
     }
 
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
@@ -665,10 +809,22 @@ public class SyncDeltaSyncTaskProcessor
         span.SetSuccess();
     }
 
-    private async Task AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem runProfileExecutionItem)
+    /// <summary>
+    /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Sync Rules for this system and object type.
+    /// </summary>
+    /// <param name="activeSyncRules">The active sync rules that contain all possible join rules to be evaluated.</param>
+    /// <param name="connectedSystemObject">The Connected System Object to try and find a matching Metaverse Object for.</param>
+    /// <returns>True if a join was established, false if no matching MVO was found.</returns>
+    /// <exception cref="SyncJoinException">Thrown when a join cannot be established due to ambiguous match or existing join.</exception>
+    /// <exception cref="InvalidDataException">Thrown if an unsupported join state is found preventing processing.</exception>
+    private async Task<bool> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
+        // Enumerate import sync rules for this CSO type to attempt matching.
+        // Uses ObjectMatchingServer which handles both ConnectedSystem mode (rules on object type)
+        // and SyncRule mode (rules on sync rule).
         foreach (var importSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
         {
+            // Use ObjectMatchingServer to find a matching MVO - this properly handles both matching modes
             MetaverseObject? mvo;
             try
             {
@@ -679,17 +835,17 @@ public class SyncDeltaSyncTaskProcessor
             }
             catch (JIM.Models.Exceptions.MultipleMatchesException ex)
             {
-                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.AmbiguousMatch;
-                runProfileExecutionItem.ErrorMessage = $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object. " +
+                throw new SyncJoinException(
+                    ActivityRunProfileExecutionItemErrorType.AmbiguousMatch,
+                    $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object. " +
                     $"An MVO can only be joined to a single CSO per Connected System. " +
-                    $"Check your Object Matching Rules to ensure unique matches. Matching MVO IDs: {string.Join(", ", ex.Matches)}";
-                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
-                return;
+                    $"Check your Object Matching Rules to ensure unique matches. Matching MVO IDs: {string.Join(", ", ex.Matches)}");
             }
 
             if (mvo == null)
                 continue;
 
+            // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
             var existingCsoJoins = mvo.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
 
             if (existingCsoJoins.Count > 1)
@@ -697,20 +853,21 @@ public class SyncDeltaSyncTaskProcessor
 
             if (existingCsoJoins.Count == 1)
             {
-                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin;
-                runProfileExecutionItem.ErrorMessage = $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
-                                                       $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check your " +
-                                                       $"Object Matching Rules for uniqueness.";
-                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
-                return;
+                throw new SyncJoinException(
+                    ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
+                    $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
+                    $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check your " +
+                    $"Object Matching Rules for uniqueness.");
             }
 
+            // Establish join! First rule to match, wins.
             connectedSystemObject.MetaverseObject = mvo;
             connectedSystemObject.MetaverseObjectId = mvo.Id;
             connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
             connectedSystemObject.DateJoined = DateTime.UtcNow;
             mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
+            // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
             if (mvo.LastConnectorDisconnectedDate.HasValue)
             {
                 Log.Information($"AttemptJoinAsync: Clearing LastConnectorDisconnectedDate for MVO {mvo.Id} as connector has reconnected.");
@@ -718,25 +875,45 @@ public class SyncDeltaSyncTaskProcessor
             }
 
             Log.Information("AttemptJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
-            return;
+            return true;
         }
+
+        // No join could be established.
+        return false;
     }
 
-    private static void AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    /// <summary>
+    /// Attempts to create a Metaverse Object from the Connected System Object using the first Sync Rule for the object type that has Projection enabled.
+    /// </summary>
+    /// <param name="activeSyncRules">The active sync rules that contain projection and attribute flow information.</param>
+    /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
+    /// <returns>True if projection occurred, false otherwise.</returns>
+    /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Sync Rule.</exception>
+    /// <exception cref="NotImplementedException">Will be thrown if a Sync Rule attempts to use a Function as a source.</exception>
+    private static bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
+        // see if there are any sync rules for this object type where projection is enabled. first to project, wins.
         var projectionSyncRule = activeSyncRules?.FirstOrDefault(sr =>
             sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
             sr.ConnectedSystemObjectType.Id == connectedSystemObject.TypeId);
 
         if (projectionSyncRule == null)
-            return;
+            return false;
 
+        // create the MVO using type from the Sync Rule.
+        // Note: Do NOT assign Id here - let it remain Guid.Empty so that
+        // ProcessMetaverseObjectChangesAsync knows to call CreateMetaverseObjectAsync.
+        // The Id will be assigned by EF when the MVO is saved to the database.
         var mvo = new MetaverseObject();
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
         mvo.Type = projectionSyncRule.MetaverseObjectType;
         connectedSystemObject.MetaverseObject = mvo;
+        // Don't set MetaverseObjectId yet - it will be set after the MVO is persisted
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         connectedSystemObject.DateJoined = DateTime.UtcNow;
+
+        // do not flow attributes at this point. let that happen separately, so we don't re-process sync rules later.
+        return true;
     }
 
     private void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
@@ -821,17 +998,23 @@ public class SyncDeltaSyncTaskProcessor
         return inScopeRules;
     }
 
-    private async Task HandleCsoOutOfScopeAsync(
+    /// <summary>
+    /// Handles a CSO that has fallen out of scope for all import sync rules.
+    /// If the CSO is currently joined to an MVO, applies the InboundOutOfScopeAction.
+    /// </summary>
+    /// <returns>True if the CSO was disconnected from its MVO, false otherwise.</returns>
+    private async Task<bool> HandleCsoOutOfScopeAsync(
         ConnectedSystemObject connectedSystemObject,
-        List<SyncRule> importSyncRules,
-        ActivityRunProfileExecutionItem runProfileExecutionItem)
+        List<SyncRule> importSyncRules)
     {
+        // If not joined, nothing special to do - just skip processing
         if (connectedSystemObject.MetaverseObject == null)
         {
             Log.Verbose("HandleCsoOutOfScopeAsync: CSO {CsoId} is not joined, skipping out-of-scope processing", connectedSystemObject.Id);
-            return;
+            return false;
         }
 
+        // Find the first sync rule's InboundOutOfScopeAction (or default to Disconnect)
         var inboundOutOfScopeAction = importSyncRules
             .Where(sr => sr.ObjectScopingCriteriaGroups.Count > 0)
             .Select(sr => sr.InboundOutOfScopeAction)
@@ -840,18 +1023,22 @@ public class SyncDeltaSyncTaskProcessor
         switch (inboundOutOfScopeAction)
         {
             case InboundOutOfScopeAction.RemainJoined:
+                // Keep the join intact - CSO remains connected to MVO
+                // No attribute flow will occur since CSO is out of scope
                 Log.Information("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of scope but InboundOutOfScopeAction=RemainJoined. " +
                     "Join preserved, no attribute flow.", connectedSystemObject.Id);
-                break;
+                return false;
 
             case InboundOutOfScopeAction.Disconnect:
             default:
+                // Break the join between CSO and MVO
                 Log.Information("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of scope. InboundOutOfScopeAction=Disconnect. Breaking join.",
                     connectedSystemObject.Id);
 
                 var mvo = connectedSystemObject.MetaverseObject;
                 var mvoId = mvo.Id;
 
+                // Check if we should remove contributed attributes based on the object type setting
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
                 {
                     var contributedAttributes = mvo.AttributeValues
@@ -866,6 +1053,7 @@ public class SyncDeltaSyncTaskProcessor
                     }
                 }
 
+                // Break the CSO-MVO join
                 mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
                 connectedSystemObject.MetaverseObject = null;
                 connectedSystemObject.MetaverseObjectId = null;
@@ -873,15 +1061,17 @@ public class SyncDeltaSyncTaskProcessor
                 connectedSystemObject.DateJoined = null;
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
 
+                // Apply pending attribute changes and update MVO
                 ApplyPendingMetaverseObjectAttributeChanges(mvo);
                 await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
 
+                // Check if this was the last connector
                 var remainingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
                 if (remainingCsoCount == 0)
                 {
-                    await ProcessMvoDeletionRuleAsync(mvo, runProfileExecutionItem);
+                    await ProcessMvoDeletionRuleAsync(mvo);
                 }
-                break;
+                return true;
         }
     }
 }
