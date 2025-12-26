@@ -42,6 +42,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Template Micro
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
 ./test/integration/Run-IntegrationTests.ps1 -Template Medium
+./test/integration/Run-IntegrationTests.ps1 -Template MediumLarge
 ./test/integration/Run-IntegrationTests.ps1 -Template Large
 ./test/integration/Run-IntegrationTests.ps1 -Template XLarge
 ./test/integration/Run-IntegrationTests.ps1 -Template XXLarge
@@ -64,6 +65,7 @@ Choose a template based on your testing goals:
 - **Micro**: 10 users, 3 groups - **< 30 sec** - Quick smoke tests and development
 - **Small**: 100 users, 20 groups - **< 2 min** - Small business scenarios, unit testing
 - **Medium**: 1,000 users, 100 groups - **< 2 min** - Medium enterprise, CI/CD pipelines
+- **MediumLarge**: 5,000 users, 250 groups - **< 5 min** - Large medium enterprise, performance validation
 - **Large**: 10,000 users, 500 groups - **< 15 min** - Large enterprise, performance baselines
 - **XLarge**: 100,000 users, 2,000 groups - **< 2 hours** - Very large enterprise, stress testing
 - **XXLarge**: 1,000,000 users, 10,000 groups - **TBD** - Global enterprise, scale limits
@@ -364,6 +366,7 @@ Choose the appropriate template based on test goals:
 | **Micro**  | 10        | 3       | 3               | 13            | Quick smoke tests, development    | < 30 sec   |
 | **Small**  | 100       | 20      | 5               | 120           | Small business, unit tests        | < 2 min    |
 | **Medium** | 1,000     | 100     | 8               | 1,100         | Medium enterprise, CI/CD          | < 2 min    |
+| **MediumLarge** | 5,000 | 250     | 9               | 5,250         | Large medium enterprise, validation | < 5 min  |
 | **Large**  | 10,000    | 500     | 10              | 10,500        | Large enterprise, baselines       | < 15 min   |
 | **XLarge** | 100,000   | 2,000   | 12              | 102,000       | Very large enterprise, stress     | < 2 hours  |
 | **XXLarge**| 1,000,000 | 10,000  | 15              | 1,010,000     | Global enterprise, scale limits   | TBD        |
