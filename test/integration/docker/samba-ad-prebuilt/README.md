@@ -2,9 +2,17 @@
 
 Pre-initialised Samba AD Docker images for faster integration testing.
 
+## Architecture Support
+
+The images use `diegogslomp/samba-ad-dc` as the base, which provides native multi-architecture support for both:
+- **AMD64** (x86_64) - Intel/AMD processors
+- **ARM64** - Apple Silicon (M1/M2/M3), AWS Graviton, etc.
+
+Docker automatically pulls the correct architecture for your platform, providing native performance without emulation.
+
 ## Why Pre-built Images?
 
-The standard `nowsci/samba-domain` image provisions a new Active Directory domain on every startup, which takes **3-5 minutes**. These pre-built images have domain provisioning already complete, reducing startup time to **~30 seconds**.
+The standard base image provisions a new Active Directory domain on every startup, which takes **3-5 minutes**. These pre-built images have domain provisioning already complete, reducing startup time to **~30 seconds**.
 
 | Metric | Standard Image | Pre-built Image |
 |--------|----------------|-----------------|
@@ -25,21 +33,12 @@ The standard `nowsci/samba-domain` image provisions a new Active Directory domai
 
 Each image includes:
 
-- Domain fully provisioned (smb.conf marker in `/etc/samba/external/`)
+- Domain fully provisioned
 - Administrator account (password: `Test@123!`)
 - Password complexity disabled
-- TLS/LDAPS enabled with self-signed certificates (in smb.conf)
+- TLS/LDAPS enabled with self-signed certificates
 - RFC2307 attributes configured
-
-## What's Created at Runtime
-
-Due to Docker volume limitations, some items are created when the container starts:
-
-- AD database `/var/lib/samba/private/sam.ldb` (provisioned from scratch, but fast because config exists)
-- Test OUs: `OU=TestUsers`, `OU=TestGroups` (created by `Populate-SambaAD.ps1`)
-- Test users and groups
-
-**Note**: The base `nowsci/samba-domain` image declares `/var/lib/samba` as a VOLUME, so the AD database is recreated on each container start. However, because the smb.conf marker file exists, the init script skips the slow provisioning process and the domain is ready in ~10 seconds.
+- SSH public key schema installed
 
 ## What's NOT Included
 
@@ -73,8 +72,8 @@ docker compose -f docker-compose.integration-tests.yml up -d
 # Build images locally if not available
 docker compose -f docker-compose.integration-tests.yml up -d --build
 
-# Fall back to standard image (slow)
-SAMBA_IMAGE_PRIMARY=nowsci/samba-domain \
+# Fall back to standard base image (slow, but no pre-build required)
+SAMBA_IMAGE_PRIMARY=diegogslomp/samba-ad-dc \
 SAMBA_START_PERIOD=180s \
 docker compose -f docker-compose.integration-tests.yml up -d
 ```
@@ -82,19 +81,19 @@ docker compose -f docker-compose.integration-tests.yml up -d
 ## Image Structure
 
 ```
-/var/lib/samba/
+/usr/local/samba/
+├── etc/
+│   └── smb.conf              # Samba configuration
 ├── private/
-│   ├── sam.ldb              # AD database
-│   ├── secrets.ldb          # Machine secrets
+│   ├── sam.ldb               # AD database
+│   ├── secrets.ldb           # Machine secrets
 │   ├── dns/                  # DNS zones
 │   └── tls/                  # TLS certificates
 │       ├── key.pem
 │       ├── cert.pem
 │       └── ca.pem
-/etc/samba/
-├── smb.conf                  # Samba configuration
-└── external/
-    └── smb.conf              # Marker file (tells init.sh to skip provisioning)
+└── var/
+    └── locks/                # Runtime data
 ```
 
 ## Troubleshooting
@@ -121,5 +120,5 @@ docker inspect samba-ad-primary --format='{{.Config.Image}}'
 Verify TLS is configured:
 
 ```bash
-docker exec samba-ad-primary grep "tls enabled" /etc/samba/smb.conf
+docker exec samba-ad-primary grep "tls enabled" /usr/local/samba/etc/smb.conf
 ```
