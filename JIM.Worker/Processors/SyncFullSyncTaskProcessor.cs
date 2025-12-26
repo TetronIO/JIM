@@ -171,7 +171,30 @@ public class SyncFullSyncTaskProcessor
             await ResolveReferencesAsync();
         }
 
+        // Update the delta sync watermark to establish baseline for future delta syncs
+        await UpdateDeltaSyncWatermarkAsync();
+
         syncSpan.SetSuccess();
+    }
+
+    /// <summary>
+    /// Updates the Connected System's LastDeltaSyncCompletedAt timestamp to mark the sync as complete.
+    /// This becomes the watermark for the next delta sync.
+    /// Full sync also sets this to establish a baseline for subsequent delta syncs.
+    /// </summary>
+    private async Task UpdateDeltaSyncWatermarkAsync()
+    {
+        using var span = Diagnostics.Sync.StartSpan("UpdateDeltaSyncWatermark");
+
+        _connectedSystem.LastDeltaSyncCompletedAt = DateTime.UtcNow;
+
+        // Use repository directly to avoid validation that expects RunProfiles to be loaded
+        await _jim.Repository.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem);
+
+        Log.Information("PerformFullSyncAsync: Updated delta sync watermark to {Timestamp}",
+            _connectedSystem.LastDeltaSyncCompletedAt);
+
+        span.SetSuccess();
     }
 
     /// <summary>

@@ -22,11 +22,17 @@
     Seconds to wait between steps for JIM processing (default: 5)
     Note: Most operations now use -Wait for synchronous execution.
 
+.PARAMETER ContinueOnError
+    Continue executing remaining tests even if a test fails. By default, tests stop on first failure.
+
 .EXAMPLE
     ./Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small -ApiKey "jim_..."
 
 .EXAMPLE
     ./Invoke-Scenario1-HRToDirectory.ps1 -Step Joiner -Template Micro -ApiKey $env:JIM_API_KEY
+
+.EXAMPLE
+    ./Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Large -ApiKey "jim_..." -ContinueOnError
 #>
 
 param(
@@ -35,7 +41,7 @@ param(
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
@@ -45,7 +51,10 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [int]$WaitSeconds = 5
+    [int]$WaitSeconds = 5,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ContinueOnError
 )
 
 Set-StrictMode -Version Latest
@@ -89,6 +98,10 @@ function Invoke-SyncSequence {
     if ($ShowProgress) { Write-Host "  [3/5] LDAP Export..." -ForegroundColor DarkGray }
     $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Export"; ActivityId = $exportResult.activityId }
+
+    # Wait for AD replication
+    if ($ShowProgress) { Write-Host "  Waiting 5s for AD replication..." -ForegroundColor DarkGray }
+    Start-Sleep -Seconds 5
 
     # Step 4: LDAP Delta Import (confirming export)
     if ($ShowProgress) { Write-Host "  [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
@@ -224,6 +237,10 @@ try {
 
         Write-Host "  ✓ LDAP export completed (Activity: $($exportResult.activityId))" -ForegroundColor Green
 
+        # Wait for AD replication (local AD should be fast, but needs time to process)
+        Write-Host "Waiting 5 seconds for AD replication..." -ForegroundColor Gray
+        Start-Sleep -Seconds 5
+
         # Confirming Import - import the changes we just exported to LDAP
         Write-Host "Triggering LDAP delta import (confirming export)..." -ForegroundColor Gray
         $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
@@ -248,6 +265,11 @@ try {
         else {
             Write-Host "  ✗ User 'test.joiner' NOT found in AD" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Joiner"; Success = $false; Error = "User not found in AD" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
         }
         $stepTimings["1. Joiner"] = (Get-Date) - $step1Start
     }
@@ -305,6 +327,11 @@ try {
             Write-Host "  ✗ Title not updated in AD" -ForegroundColor Red
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover"; Success = $false; Error = "Attribute not updated" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
         }
         $stepTimings["2a. Mover"] = (Get-Date) - $step2aStart
     }
@@ -368,6 +395,11 @@ try {
             Write-Host "  ✗ User NOT renamed in AD" -ForegroundColor Red
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover-Rename"; Success = $false; Error = "DN not renamed" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
         }
         $stepTimings["2b. Mover-Rename"] = (Get-Date) - $step2bStart
     }
@@ -461,6 +493,11 @@ try {
             Write-Host "  ✗ User NOT moved to OU=Finance in AD" -ForegroundColor Red
             Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "OU move did not occur" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
         }
         $stepTimings["2c. Mover-Move"] = (Get-Date) - $step2cStart
     }
@@ -512,6 +549,11 @@ try {
         else {
             Write-Host "  ✗ Unexpected state for $userToRemove in AD" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Leaver"; Success = $false; Error = "Unexpected AD state: $adUserCheck" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
         }
         $stepTimings["3. Leaver"] = (Get-Date) - $step3Start
     }
@@ -549,6 +591,8 @@ try {
         Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
         Write-Host "    [3/5] LDAP Export..." -ForegroundColor DarkGray
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
+        Write-Host "    Waiting 5s for AD replication..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds 5
         Write-Host "    [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray
         Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
         Write-Host "    [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray
@@ -560,6 +604,11 @@ try {
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ✗ User was not created in AD during initial sync" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User not provisioned during initial sync" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
             $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
         }
         else {
@@ -613,6 +662,11 @@ try {
             else {
                 Write-Host "  ✗ Reconnection failed - user lost in AD" -ForegroundColor Red
                 $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User deleted instead of preserved" }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
             }
             $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
         }
@@ -649,15 +703,49 @@ try {
         Write-Host "$("=" * 65)" -ForegroundColor Cyan
         Write-Host ""
         $totalTestTime = 0
+        $maxSeconds = ($stepTimings.Values | Measure-Object -Property TotalSeconds -Maximum).Maximum
         foreach ($timing in $stepTimings.GetEnumerator() | Sort-Object Name) {
-            $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
+            $seconds = $timing.Value.TotalSeconds
             $totalTestTime += $seconds
-            $bar = "█" * [math]::Min(40, [math]::Floor($seconds / 3))
-            Write-Host ("  {0,-20} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Gray" })
+
+            # Format time appropriately based on magnitude
+            $timeDisplay = if ($seconds -lt 1) {
+                "{0,6}ms" -f [math]::Round($seconds * 1000)
+            } elseif ($seconds -lt 60) {
+                "{0,6}s" -f [math]::Round($seconds, 1)
+            } elseif ($seconds -lt 3600) {
+                $mins = [math]::Floor($seconds / 60)
+                $secs = [math]::Round($seconds % 60)
+                "{0}m {1}s" -f $mins, $secs
+            } else {
+                $hours = [math]::Floor($seconds / 3600)
+                $mins = [math]::Floor(($seconds % 3600) / 60)
+                "{0}h {1}m" -f $hours, $mins
+            }
+
+            # Scale bar relative to max time, with reasonable max width
+            $barWidth = if ($maxSeconds -gt 0) {
+                [math]::Min(50, [math]::Floor(($seconds / $maxSeconds) * 50))
+            } else { 0 }
+            $bar = "█" * $barWidth
+
+            Write-Host ("  {0,-20} {1,8}  {2}" -f $timing.Name, $timeDisplay, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Gray" })
         }
         $scenarioDuration = (Get-Date) - $scenarioStartTime
+        $totalSeconds = $scenarioDuration.TotalSeconds
+        $totalDisplay = if ($totalSeconds -lt 60) {
+            "{0}s" -f [math]::Round($totalSeconds, 1)
+        } elseif ($totalSeconds -lt 3600) {
+            $mins = [math]::Floor($totalSeconds / 60)
+            $secs = [math]::Round($totalSeconds % 60)
+            "{0}m {1}s" -f $mins, $secs
+        } else {
+            $hours = [math]::Floor($totalSeconds / 3600)
+            $mins = [math]::Floor(($totalSeconds % 3600) / 60)
+            "{0}h {1}m" -f $hours, $mins
+        }
         Write-Host ""
-        Write-Host ("  {0,-20} {1,6}s" -f "Scenario Total", [math]::Round($scenarioDuration.TotalSeconds, 1)) -ForegroundColor Cyan
+        Write-Host ("  {0,-20} {1}" -f "Scenario Total", $totalDisplay) -ForegroundColor Cyan
         Write-Host ""
     }
 
