@@ -203,6 +203,12 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 
 ## Writing Workflow Tests
 
+> **Note**: Reference implementations are available in [`docs/examples/`](examples/):
+> - [`WorkflowTestBase.cs`](examples/WorkflowTestBase.cs) - Base class scaffold
+> - [`SyncWorkflowTests.cs`](examples/SyncWorkflowTests.cs) - Example workflow tests
+>
+> These files are scaffolds demonstrating the approach and will require updates to match current model properties when implementing.
+
 ### 1. Create Base Class
 
 ```csharp
