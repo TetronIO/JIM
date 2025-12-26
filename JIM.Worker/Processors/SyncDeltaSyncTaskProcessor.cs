@@ -523,10 +523,21 @@ public class SyncDeltaSyncTaskProcessor
 
         if (connectedSystemObject.MetaverseObject != null)
         {
+            // Debug: Log MVO state before processing
+            Log.Debug("ProcessMetaverseObjectChangesAsync: Processing CSO {CsoId} joined to MVO {MvoId}. MVO has {MvoAttrCount} attributes, CSO has {CsoAttrCount} attributes",
+                connectedSystemObject.Id, connectedSystemObject.MetaverseObject.Id,
+                connectedSystemObject.MetaverseObject.AttributeValues?.Count ?? 0,
+                connectedSystemObject.AttributeValues?.Count ?? 0);
+
             using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
-                foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+                var matchingSyncRules = activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId).ToList();
+                Log.Debug("ProcessMetaverseObjectChangesAsync: Found {RuleCount} matching import sync rules for CSO {CsoId}", matchingSyncRules.Count, connectedSystemObject.Id);
+
+                foreach (var inboundSyncRule in matchingSyncRules)
                 {
+                    Log.Debug("ProcessMetaverseObjectChangesAsync: Applying sync rule '{RuleName}' with {MappingCount} attribute flow rules to CSO {CsoId}",
+                        inboundSyncRule.Name, inboundSyncRule.AttributeFlowRules?.Count ?? 0, connectedSystemObject.Id);
                     ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
                 }
             }
@@ -534,6 +545,13 @@ public class SyncDeltaSyncTaskProcessor
             var changedAttributes = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions
                 .Concat(connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals)
                 .ToList();
+
+            // Debug: Log pending changes
+            Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} resulted in {AddCount} pending additions and {RemoveCount} pending removals for MVO {MvoId}",
+                connectedSystemObject.Id,
+                connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions?.Count ?? 0,
+                connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals?.Count ?? 0,
+                connectedSystemObject.MetaverseObject.Id);
 
             ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
 

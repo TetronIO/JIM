@@ -59,6 +59,18 @@ public static class SyncRuleMappingProcessor
                             {
                                 case AttributeDataType.Text:
                                 {
+                                    // Debug: Log comparison for all text attributes
+                                    var existingMvoValues = mvo.AttributeValues
+                                        .Where(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id)
+                                        .Select(mvoav => mvoav.StringValue)
+                                        .ToList();
+                                    var incomingCsoValues = csoAttributeValues.Select(csoav => csoav.StringValue).ToList();
+
+                                    Log.Debug("SyncRuleMappingProcessor: Comparing attribute '{AttrName}' for CSO. MVO values: [{MvoValues}], CSO values: [{CsoValues}]",
+                                        csotAttribute.Name,
+                                        string.Join(", ", existingMvoValues.Select(v => v ?? "(null)")),
+                                        string.Join(", ", incomingCsoValues.Select(v => v ?? "(null)")));
+
                                     // find values on the MVO of type string that aren't on the CSO and remove them.
                                     var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
                                         mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id &&
@@ -71,6 +83,12 @@ public static class SyncRuleMappingProcessor
                                         !mvo.AttributeValues.Any(mvoav =>
                                             mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id &&
                                             mvoav.StringValue != null && mvoav.StringValue.Equals(csoav.StringValue)));
+
+                                    if (mvoObsoleteAttributeValues.Any() || csoNewAttributeValues.Any())
+                                    {
+                                        Log.Debug("SyncRuleMappingProcessor: Attribute '{AttrName}' has changes. Removing {RemoveCount}, Adding {AddCount}",
+                                            csotAttribute.Name, mvoObsoleteAttributeValues.Count(), csoNewAttributeValues.Count());
+                                    }
 
                                     // now turn the new CSO attribute values into MVO attribute values we can add to the MVO.
                                     foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
