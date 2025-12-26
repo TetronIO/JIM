@@ -61,6 +61,13 @@ public class ConnectedSystem
     public ObjectMatchingRuleMode ObjectMatchingRuleMode { get; set; } = ObjectMatchingRuleMode.ConnectedSystem;
 
     /// <summary>
+    /// Timestamp of when the last delta synchronisation completed successfully.
+    /// Used by delta sync to determine which CSOs have been modified since the last run.
+    /// Delta sync queries CSOs where LastUpdated > LastDeltaSyncCompletedAt.
+    /// </summary>
+    public DateTime? LastDeltaSyncCompletedAt { get; set; }
+
+    /// <summary>
     /// EF back-link.
     /// </summary>
     public List<Activity>? Activities { get; set; }

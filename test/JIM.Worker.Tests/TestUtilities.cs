@@ -165,6 +165,20 @@ public static class TestUtilities
                 Name = "Dummy Target System Export",
                 RunType = ConnectedSystemRunType.Export,
                 ConnectedSystemId = 2
+            },
+            new()
+            {
+                Id = 6,
+                Name = "Dummy Source System Delta Sync",
+                RunType = ConnectedSystemRunType.DeltaSynchronisation,
+                ConnectedSystemId = 1
+            },
+            new()
+            {
+                Id = 7,
+                Name = "Dummy Target System Delta Sync",
+                RunType = ConnectedSystemRunType.DeltaSynchronisation,
+                ConnectedSystemId = 2
             }
         };
     }

@@ -211,8 +211,11 @@ public class Worker : BackgroundService
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
-                                                            Log.Error($"ExecuteAsync: Not supporting run type: {runProfile.RunType} yet.");
+                                                        {
+                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(taskJim, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            await syncDeltaSyncTaskProcessor.PerformDeltaSyncAsync();
                                                             break;
+                                                        }
                                                         default:
                                                             Log.Error($"ExecuteAsync: Unsupported run type: {runProfile.RunType}");
                                                             break;
