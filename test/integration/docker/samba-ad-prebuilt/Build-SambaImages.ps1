@@ -6,6 +6,12 @@
     Builds Docker images with Samba AD domain provisioning already complete.
     This reduces container startup time from ~5 minutes to ~30 seconds.
 
+    ARCHITECTURE SUPPORT:
+    Uses diegogslomp/samba-ad-dc as the base image, which provides native
+    multi-architecture support for both AMD64 (x86_64) and ARM64 (Apple Silicon).
+    Docker will automatically pull the correct architecture for your platform,
+    eliminating the need for Rosetta emulation on Apple Silicon Macs.
+
     The build process:
     1. Starts a container from the base image in privileged mode
     2. Waits for domain provisioning to complete (indicated by healthy status)
@@ -86,6 +92,9 @@ else {
     @($Images)
 }
 
+# Base image for Samba AD - supports both AMD64 and ARM64
+$baseImage = "diegogslomp/samba-ad-dc:latest"
+
 function Wait-SambaReady {
     param(
         [string]$ContainerName,
@@ -106,8 +115,9 @@ function Wait-SambaReady {
         }
 
         # Check if provisioning completed by looking for marker file
+        # diegogslomp/samba-ad-dc uses /usr/local/samba/etc/smb.conf
         if (-not $provisioningComplete) {
-            $markerCheck = docker exec $ContainerName test -f /etc/samba/external/smb.conf 2>&1
+            $markerCheck = docker exec $ContainerName test -f /usr/local/samba/etc/smb.conf 2>&1
             if ($LASTEXITCODE -eq 0) {
                 $provisioningComplete = $true
                 Write-Host "  Provisioning complete ($elapsedSec s)" -ForegroundColor Green
@@ -115,8 +125,9 @@ function Wait-SambaReady {
         }
 
         # Check if smbclient can connect (Samba is ready for connections)
+        # diegogslomp/samba-ad-dc has samba binaries in /usr/local/samba/bin/
         if ($provisioningComplete) {
-            $smbCheck = docker exec $ContainerName smbclient -L localhost -U% -N 2>&1
+            $smbCheck = docker exec $ContainerName /usr/local/samba/bin/smbclient -L localhost -U% -N 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  Samba accepting connections ($elapsedSec s)" -ForegroundColor Green
                 return $true
@@ -164,15 +175,24 @@ foreach ($imageName in $imagesToBuild) {
     docker rm -f $containerName 2>$null | Out-Null
 
     # Start the container in privileged mode (required for Samba provisioning)
+    # diegogslomp/samba-ad-dc environment variables:
+    #   REALM = full domain (e.g., TESTDOMAIN.LOCAL)
+    #   DOMAIN = short domain (e.g., TESTDOMAIN)
+    #   ADMIN_PASS = administrator password
+    #   DNS_FORWARDER = DNS forwarder IP
+    $shortDomain = $config.Domain.Split('.')[0]
     Write-Host "Step 2: Starting container for provisioning..." -ForegroundColor Cyan
+    Write-Host "  Base image: $baseImage" -ForegroundColor DarkGray
+    Write-Host "  Realm: $($config.Domain)" -ForegroundColor DarkGray
+    Write-Host "  Short domain: $shortDomain" -ForegroundColor DarkGray
     docker run -d `
         --name $containerName `
         --privileged `
-        -e "DOMAIN=$($config.Domain)" `
-        -e "DOMAINPASS=$($config.Password)" `
-        -e "NOCOMPLEXITY=true" `
-        -e "DNSFORWARDER=8.8.8.8" `
-        nowsci/samba-domain:latest
+        -e "REALM=$($config.Domain)" `
+        -e "DOMAIN=$shortDomain" `
+        -e "ADMIN_PASS=$($config.Password)" `
+        -e "DNS_FORWARDER=8.8.8.8" `
+        $baseImage
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Failed to start container" -ForegroundColor Red
@@ -205,19 +225,35 @@ foreach ($imageName in $imagesToBuild) {
         exit 1
     }
 
+    # The base image declares /usr/local/samba/{etc,private,var} as volumes.
+    # Docker commit/export don't capture volume data, so we need to copy the
+    # provisioned data to non-volume locations, then move it back at runtime.
+    Write-Host "Step 5: Copying provisioned data from volumes..." -ForegroundColor Cyan
+
+    # Copy volume data to backup locations (these will be captured by commit)
+    docker exec $containerName bash -c "cp -a /usr/local/samba/etc /usr/local/samba/etc.provisioned"
+    docker exec $containerName bash -c "cp -a /usr/local/samba/private /usr/local/samba/private.provisioned"
+    docker exec $containerName bash -c "cp -a /usr/local/samba/var /usr/local/samba/var.provisioned"
+
+    # Copy the startup script that restores volume data and starts samba
+    docker cp "$scriptDir/start-samba.sh" "${containerName}:/start-samba.sh"
+    docker exec $containerName chmod +x /start-samba.sh
+
     # Stop the container cleanly before committing
-    Write-Host "Step 5: Stopping container for commit..." -ForegroundColor Cyan
+    Write-Host "Step 6: Stopping container for commit..." -ForegroundColor Cyan
     docker stop $containerName | Out-Null
 
     # Commit the container as a new image
-    Write-Host "Step 6: Committing container as image..." -ForegroundColor Cyan
+    Write-Host "Step 7: Committing container as image..." -ForegroundColor Cyan
     docker commit `
-        --change "ENV DOMAIN=$($config.Domain)" `
+        --change "ENV REALM=$($config.Domain)" `
+        --change "ENV DOMAIN=$shortDomain" `
+        --change "ENV ADMIN_PASS=$($config.Password)" `
+        --change "ENV DNS_FORWARDER=8.8.8.8" `
         --change "ENV DOMAINPASS=$($config.Password)" `
         --change "ENV NOCOMPLEXITY=true" `
-        --change "ENV DNSFORWARDER=8.8.8.8" `
-        --change 'HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 CMD smbclient -L localhost -U% -N || exit 1' `
-        --change 'CMD ["/bin/sh", "-c", "/init.sh"]' `
+        --change 'HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 CMD /usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1' `
+        --change 'CMD ["/start-samba.sh"]' `
         $containerName `
         $fullTag
 
@@ -228,7 +264,7 @@ foreach ($imageName in $imagesToBuild) {
     }
 
     # Clean up build container
-    Write-Host "Step 7: Cleaning up build container..." -ForegroundColor Cyan
+    Write-Host "Step 8: Cleaning up build container..." -ForegroundColor Cyan
     docker rm -f $containerName | Out-Null
 
     $elapsed = (Get-Date) - $startTime

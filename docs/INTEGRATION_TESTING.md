@@ -94,6 +94,7 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 **Current Limitations:**
 - ⚠️ Progress bars not yet implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
 - ✅ Samba AD optimised with pre-built images (~30 seconds startup, down from ~5 minutes)
+- ✅ **Multi-architecture support** (AMD64 and ARM64/Apple Silicon - no Rosetta emulation needed)
 - ✅ Unit tests all passing (617 tests)
 - ✅ Expression evaluation support implemented
 - ✅ Automated Samba AD readiness check
@@ -1546,27 +1547,29 @@ Integration test scripts should provide visual progress feedback including:
 - ✅ Phase 2 services (SQL Server, Oracle, PostgreSQL, MySQL, OpenLDAP)
 
 #### 3. Stand-up Performance Optimization
-**Priority: Medium | Status: Investigation Needed**
+**Priority: Medium | Status: ✅ Complete**
 
-**Current Issues:**
-- JIM.Web rebuild takes ~19 seconds on code changes
-- Samba AD initialization takes ~2 minutes (LDAP/DC startup)
-- No parallelization of independent startup tasks
+**Implemented Optimisations:**
+- ✅ **Pre-built Samba AD images**: Domain provisioning is done at image build time, reducing startup from ~5 minutes to ~30 seconds
+- ✅ **Multi-architecture support**: Uses `diegogslomp/samba-ad-dc` base image which provides native ARM64 support (no Rosetta emulation on Apple Silicon Macs)
+- ✅ **Automatic architecture detection**: Docker automatically pulls the correct image variant for AMD64 or ARM64
 
-**Investigation Areas:**
-- Can Samba AD startup be optimized (pre-initialized image)?
-- Can JIM.Web use incremental builds in Docker?
-- Can we start JIM services while waiting for Samba AD?
-- Is there unnecessary sequential waiting?
+**Base Image Details:**
+- Base image: `diegogslomp/samba-ad-dc:latest` (supports linux/amd64 and linux/arm64)
+- Pre-built images: `ghcr.io/tetronio/jim-samba-ad:{primary,source,target}`
+- Samba binaries location: `/usr/local/samba/bin/`
 
-**Baseline Timings to Establish:**
-- JIM stack cold start: ?
+**To rebuild pre-built images locally (required after base image updates):**
+```powershell
+pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
+```
+
+**Baseline Timings:**
+- JIM stack cold start: ~19s
 - JIM stack warm start (after code change): ~19s (measured)
-- Samba AD cold start: ~120s (documented)
-- Samba AD warm restart: ?
+- Samba AD cold start (pre-built image): ~30s
+- Samba AD cold start (standard image): ~5 minutes
 - CSV file generation (Nano): <1s (measured)
-- Schema import: ?
-- Run profile execution: ?
 
 #### 4. Test Data Reset Automation
 **Priority: Low | Status: Partial**
