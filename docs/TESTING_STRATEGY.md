@@ -203,11 +203,11 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 
 ## Writing Workflow Tests
 
-> **Note**: Reference implementations are available in [`docs/examples/`](examples/):
-> - [`WorkflowTestBase.cs`](examples/WorkflowTestBase.cs) - Base class scaffold
-> - [`SyncWorkflowTests.cs`](examples/SyncWorkflowTests.cs) - Example workflow tests
+> **Implementation**: Workflow tests are now implemented in [`test/JIM.Worker.Tests/Workflows/`](../test/JIM.Worker.Tests/Workflows/):
+> - [`WorkflowTestBase.cs`](../test/JIM.Worker.Tests/Workflows/WorkflowTestBase.cs) - Base class with in-memory database setup and helper methods
+> - [`SyncWorkflowTests.cs`](../test/JIM.Worker.Tests/Workflows/SyncWorkflowTests.cs) - Tests for Full Sync → Delta Sync workflows
 >
-> These files are scaffolds demonstrating the approach and will require updates to match current model properties when implementing.
+> These tests caught the watermark bug and now ensure it doesn't regress.
 
 ### 1. Create Base Class
 
