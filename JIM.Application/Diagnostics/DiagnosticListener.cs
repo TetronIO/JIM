@@ -64,8 +64,18 @@ public sealed class DiagnosticListener : IDisposable
         var durationMs = activity.Duration.TotalMilliseconds;
         var isSlowOperation = durationMs >= _slowOperationThresholdMs;
 
-        // Build tags string for context
-        var tags = string.Join(", ", activity.Tags.Select(t => $"{t.Key}={t.Value}"));
+        // Build tags list including parent ID for accurate tree reconstruction
+        var tagsList = activity.Tags.Select(t => $"{t.Key}={t.Value}").ToList();
+
+        // Add parentId to enable proper parent-child time tracking in the tree display
+        // Without this, child times across multiple parent invocations get incorrectly summed
+        var parentId = activity.Parent?.Id;
+        if (parentId != null)
+        {
+            tagsList.Insert(0, $"parentId={parentId}");
+        }
+
+        var tags = string.Join(", ", tagsList);
         var tagsSuffix = string.IsNullOrEmpty(tags) ? "" : $" [{tags}]";
 
         // Determine parent context for hierarchical display

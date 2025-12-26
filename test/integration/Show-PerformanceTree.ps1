@@ -204,9 +204,14 @@ if ($metrics.Operations.Count -eq 0) {
 }
 
 Write-Host "${CYAN}Performance Breakdown (Hierarchical):${NC}"
+Write-Host "${GRAY}Note: Times show CUMULATIVE totals across all invocations. Child totals may exceed${NC}"
+Write-Host "${GRAY}parent totals when operations are called multiple times within loops (e.g., per page).${NC}"
 Write-Host ""
 
 # Build parent-child relationships and calculate totals
+# NOTE: Child times represent CUMULATIVE time across all invocations, not time within a single parent invocation.
+# When a child operation is called multiple times within a loop (e.g., once per page), the sum of all child
+# invocations may exceed the parent's single invocation time. This is expected behaviour.
 $operationsByName = @{}
 foreach ($op in $metrics.Operations) {
     $key = $op.Name
