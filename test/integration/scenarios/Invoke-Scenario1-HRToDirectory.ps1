@@ -196,12 +196,12 @@ try {
     Write-Host ""
     Write-Host "Establishing baseline state from Active Directory..." -ForegroundColor Gray
     Write-Host "  Importing existing OUs, users, and groups from AD..." -ForegroundColor DarkGray
-    $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPImportProfileId -Wait -PassThru
+    $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
     Write-Host "  ✓ LDAP baseline import completed (Activity: $($baselineImportResult.activityId))" -ForegroundColor Green
 
-    # Run Full Sync to process baseline imports and establish MVOs for existing AD objects
+    # Run Delta Sync to process baseline imports and establish MVOs for existing AD objects
     Write-Host "  Processing baseline imports..." -ForegroundColor DarkGray
-    $baselineSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPSyncProfileId -Wait -PassThru
+    $baselineSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
     Write-Host "  ✓ LDAP baseline sync completed (Activity: $($baselineSyncResult.activityId))" -ForegroundColor Green
     Write-Host "✓ Baseline state established" -ForegroundColor Green
 
