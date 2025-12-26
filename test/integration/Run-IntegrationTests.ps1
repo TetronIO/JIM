@@ -160,7 +160,19 @@ if (-not $SkipReset) {
     Write-Step "Stopping all containers and removing volumes..."
     docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down -v 2>&1 | Out-Null
     docker compose -f docker-compose.integration-tests.yml down -v 2>&1 | Out-Null
-    Write-Success "Containers stopped and volumes removed"
+
+    # Also remove any orphan integration test volumes that might have different names
+    # This ensures a completely clean state even if volume naming has changed
+    Write-Step "Removing any orphan integration test volumes..."
+    $orphanVolumes = docker volume ls --format '{{.Name}}' | Where-Object { $_ -match 'jim-integration' }
+    foreach ($vol in $orphanVolumes) {
+        docker volume rm $vol 2>&1 | Out-Null
+    }
+
+    # Remove the JIM database volume to ensure completely fresh state
+    docker volume rm jim-db-volume 2>&1 | Out-Null
+
+    Write-Success "Containers stopped and all volumes removed"
 }
 else {
     Write-Section "Step 1: Reset Skipped"

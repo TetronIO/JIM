@@ -6,6 +6,9 @@
     Checks if the Samba AD container is running and healthy by attempting to query
     the domain controller. Provides clear status updates and a progress indicator.
 
+    ARCHITECTURE: Supports both AMD64 and ARM64 via diegogslomp/samba-ad-dc base image.
+    The Samba binaries are located at /usr/local/samba/bin/ in this image.
+
 .PARAMETER TimeoutSeconds
     Maximum time to wait for Samba AD to become ready (default: 180 seconds / 3 minutes)
 
@@ -70,7 +73,14 @@ Write-Host ""
 while ($elapsed -lt $TimeoutSeconds) {
     # Check if Samba is responding to domain queries
     # Use samba-tool to check if the domain controller is functional
-    $testResult = docker exec samba-ad-primary samba-tool domain level show 2>&1
+    # Try both paths for backwards compatibility:
+    #   - /usr/local/samba/bin/samba-tool (diegogslomp/samba-ad-dc - new)
+    #   - samba-tool (nowsci/samba-domain - old, in PATH)
+    $testResult = docker exec samba-ad-primary /usr/local/samba/bin/samba-tool domain level show 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        # Fallback to old path (nowsci/samba-domain based images)
+        $testResult = docker exec samba-ad-primary samba-tool domain level show 2>&1
+    }
 
     if ($LASTEXITCODE -eq 0 -and $testResult -match "Domain and forest function level") {
         $ready = $true
@@ -102,8 +112,11 @@ if ($ready) {
     Write-Host ""
     Write-Host "${GRAY}Domain Information:${NC}"
 
-    # Show domain info
-    $domainInfo = docker exec samba-ad-primary samba-tool domain info 127.0.0.1 2>&1
+    # Show domain info (try new path first, fall back to old)
+    $domainInfo = docker exec samba-ad-primary /usr/local/samba/bin/samba-tool domain info 127.0.0.1 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $domainInfo = docker exec samba-ad-primary samba-tool domain info 127.0.0.1 2>&1
+    }
     Write-Host "${GRAY}$domainInfo${NC}"
 
     Write-Host ""

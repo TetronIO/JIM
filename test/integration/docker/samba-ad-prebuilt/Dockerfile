@@ -21,15 +21,30 @@
 #   2. Waits for provisioning to complete
 #   3. Configures TLS and test OUs
 #   4. Commits the container as a new image
+#
+# ARCHITECTURE SUPPORT:
+#   This image uses diegogslomp/samba-ad-dc as the base, which provides native
+#   multi-architecture support for both AMD64 (x86_64) and ARM64 (Apple Silicon).
+#   Docker will automatically pull the correct architecture for your platform.
 
-FROM nowsci/samba-domain:latest
+FROM diegogslomp/samba-ad-dc:latest
 
 # Build arguments (used by docker-compose build context)
 ARG SAMBA_DOMAIN=TESTDOMAIN.LOCAL
 ARG SAMBA_PASSWORD=Test@123!
 
 # Store domain info for runtime use
-ENV DOMAIN=${SAMBA_DOMAIN}
+# Note: diegogslomp/samba-ad-dc uses different env vars than nowsci/samba-domain:
+#   - REALM = full domain (e.g., TESTDOMAIN.LOCAL)
+#   - DOMAIN = short domain (e.g., TESTDOMAIN)
+#   - ADMIN_PASS = administrator password
+#   - DNS_FORWARDER = DNS forwarder IP
+ENV REALM=${SAMBA_DOMAIN}
+ENV DOMAIN=${SAMBA_DOMAIN%%.*}
+ENV ADMIN_PASS=${SAMBA_PASSWORD}
+ENV DNS_FORWARDER=8.8.8.8
+
+# Also set legacy env vars for compatibility with existing scripts
 ENV DOMAINPASS=${SAMBA_PASSWORD}
 ENV NOCOMPLEXITY=true
 ENV DNSFORWARDER=8.8.8.8
@@ -41,8 +56,11 @@ RUN chmod +x /provision.sh /post-provision.sh
 
 # Faster healthcheck for pre-provisioned image
 # When built with Build-SambaImages.ps1, startup is much faster
+# Note: samba binaries are in /usr/local/samba/bin/ for this base image
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
-    CMD smbclient -L localhost -U% -N || exit 1
+    CMD /usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1
 
-# Default command remains the same - starts supervisord with samba
-CMD ["/bin/sh", "-c", "/init.sh"]
+# Default command - start Samba in foreground
+# The base image uses: /bin/bash -c samba-domain-provision && samba -F
+# For pre-provisioned images, we skip provisioning and just start samba
+CMD ["/usr/local/samba/sbin/samba", "-F"]

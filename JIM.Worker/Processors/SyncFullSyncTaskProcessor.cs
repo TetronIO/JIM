@@ -111,7 +111,7 @@ public class SyncFullSyncTaskProcessor
         processCsosSpan.SetTag("pageSize", pageSize);
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
-        for (var i = 0; i < totalCsoPages; i++)
+        for (var i = 1; i <= totalCsoPages; i++)
         {
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))

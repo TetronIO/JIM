@@ -69,39 +69,49 @@ $phase1Systems = @(
         HasHealthCheck = $true
         AdditionalCheck = $null
         PostReadySetup = {
-            # Pre-built images already have TLS configured at build time
-            # Only need to configure TLS if using the standard nowsci/samba-domain image
-            $tlsConfigured = docker exec samba-ad-primary grep -q "tls enabled" /etc/samba/smb.conf 2>$null; $LASTEXITCODE -eq 0
+            # Pre-built images (diegogslomp/samba-ad-dc) already have TLS configured at build time
+            # Check both possible smb.conf locations for backwards compatibility
+            $tlsConfigured = docker exec samba-ad-primary bash -c 'grep -q "tls enabled" /usr/local/samba/etc/smb.conf 2>/dev/null || grep -q "tls enabled" /etc/samba/smb.conf 2>/dev/null' 2>$null; $LASTEXITCODE -eq 0
 
             if ($tlsConfigured) {
                 Write-Host "  ✓ Samba AD already configured with LDAPS (pre-built image)" -ForegroundColor Green
             }
             else {
-                # Fallback: Configure TLS for standard nowsci/samba-domain image
-                Write-Host "  Configuring LDAPS (TLS) on Samba AD (standard image)..." -ForegroundColor Gray
+                # Fallback: Configure TLS for base image without pre-configured TLS
+                Write-Host "  Configuring LDAPS (TLS) on Samba AD..." -ForegroundColor Gray
 
-                # Add TLS settings to [global] section of smb.conf
+                # Detect which Samba image is in use by checking paths
+                # diegogslomp/samba-ad-dc uses /usr/local/samba/
+                # nowsci/samba-domain uses /var/lib/samba/ and /etc/samba/
                 $script = @'
+# Detect Samba paths - diegogslomp/samba-ad-dc vs nowsci/samba-domain
+if [ -d /usr/local/samba ]; then
+    SAMBA_PRIVATE="/usr/local/samba/private"
+    SAMBA_ETC="/usr/local/samba/etc"
+else
+    SAMBA_PRIVATE="/var/lib/samba/private"
+    SAMBA_ETC="/etc/samba"
+fi
+
 # Generate TLS certificates if they don't exist
-mkdir -p /var/lib/samba/private/tls
-if [ ! -f /var/lib/samba/private/tls/cert.pem ]; then
+mkdir -p ${SAMBA_PRIVATE}/tls
+if [ ! -f ${SAMBA_PRIVATE}/tls/cert.pem ]; then
     openssl req -x509 -nodes -days 3650 \
         -newkey rsa:2048 \
-        -keyout /var/lib/samba/private/tls/key.pem \
-        -out /var/lib/samba/private/tls/cert.pem \
+        -keyout ${SAMBA_PRIVATE}/tls/key.pem \
+        -out ${SAMBA_PRIVATE}/tls/cert.pem \
         -subj "/CN=testdomain.local/O=JIM Integration Testing" 2>/dev/null
-    cp /var/lib/samba/private/tls/cert.pem /var/lib/samba/private/tls/ca.pem
-    chmod 600 /var/lib/samba/private/tls/key.pem
+    cp ${SAMBA_PRIVATE}/tls/cert.pem ${SAMBA_PRIVATE}/tls/ca.pem
+    chmod 600 ${SAMBA_PRIVATE}/tls/key.pem
 fi
 
 # Add TLS settings to smb.conf if not present
-if ! grep -q "tls enabled" /etc/samba/smb.conf; then
-    sed -i '/^\[global\]/a\
-tls enabled = yes\
-tls keyfile = /var/lib/samba/private/tls/key.pem\
-tls certfile = /var/lib/samba/private/tls/cert.pem\
-tls cafile = /var/lib/samba/private/tls/ca.pem' /etc/samba/smb.conf
-    cp /etc/samba/smb.conf /etc/samba/external/smb.conf
+if ! grep -q "tls enabled" ${SAMBA_ETC}/smb.conf; then
+    sed -i "/^\[global\]/a\\
+tls enabled = yes\\
+tls keyfile = ${SAMBA_PRIVATE}/tls/key.pem\\
+tls certfile = ${SAMBA_PRIVATE}/tls/cert.pem\\
+tls cafile = ${SAMBA_PRIVATE}/tls/ca.pem" ${SAMBA_ETC}/smb.conf
     echo "TLS configuration added to smb.conf"
 fi
 '@
@@ -129,6 +139,7 @@ fi
             }
 
             # Ensure Administrator password is set correctly (idempotent)
+            # Use samba-tool from symlinked path (works for both image types)
             docker exec samba-ad-primary samba-tool user setpassword Administrator --newpassword="Test@123!" 2>$null
         }
     }

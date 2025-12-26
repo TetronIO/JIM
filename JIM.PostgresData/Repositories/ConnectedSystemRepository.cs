@@ -428,10 +428,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (returnAttributes)
             query.ThenInclude(av => av.Attribute);
 
-        // add the Connected System filter
-        var objects = from cso in query.Where(q => q.ConnectedSystemId == connectedSystemId)
-            select cso;
-        
+        // add the Connected System filter and order by Id for consistent pagination
+        // Without ordering, Skip/Take can return inconsistent results across pages
+        var objects = query
+            .Where(q => q.ConnectedSystemId == connectedSystemId)
+            .OrderBy(cso => cso.Id);
+
         // now just add a page's worth of results filter to the query and project to a list we can return.
         var grossCount = objects.Count();
         var offset = (page - 1) * pageSize;
@@ -544,13 +546,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - Created > watermark: Captures newly created CSOs that haven't been modified yet
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
         // This ensures delta sync processes both new and updated objects.
+        // Order by Id for consistent pagination - without ordering, Skip/Take can return inconsistent results.
         var query = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.AttributeValues)
             .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
-                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
+            .OrderBy(cso => cso.Id);
 
         // Get total count for paging
         var grossCount = await query.CountAsync();

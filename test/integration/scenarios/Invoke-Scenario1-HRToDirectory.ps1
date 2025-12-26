@@ -400,7 +400,7 @@ try {
         Write-Host "Validating rename in AD..." -ForegroundColor Gray
 
         # Try to find the user with the new name
-        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn displayName 2>&1"
+        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn displayName 2>&1"
 
         if ($adUserInfo -match "CN=Renamed Joiner") {
             Write-Host "  ✓ User renamed to 'CN=Renamed Joiner' in AD" -ForegroundColor Green
@@ -491,7 +491,7 @@ try {
         Write-Host "Validating OU move in AD..." -ForegroundColor Gray
 
         # Query AD to find the user and check DN
-        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /var/lib/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn department 2>&1"
+        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=test.joiner)' dn department 2>&1"
 
         # Check if user is now in OU=Finance
         if ($adUserInfo -match "OU=Finance") {

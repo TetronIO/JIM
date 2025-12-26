@@ -2,6 +2,8 @@
 # Post-provisioning setup for Samba AD
 # This script runs after the domain is provisioned to add TLS and test OUs
 # Called by Build-SambaImages.ps1 after the container is running and healthy
+#
+# ARCHITECTURE: Supports both AMD64 and ARM64 via diegogslomp/samba-ad-dc base image
 
 set -e
 
@@ -10,60 +12,89 @@ echo "Post-provisioning Samba AD Configuration"
 echo "=============================================="
 
 # Parse domain components from environment
-LDOMAIN=${DOMAIN,,}
-UDOMAIN=${DOMAIN^^}
+# diegogslomp/samba-ad-dc uses REALM for full domain (e.g., TESTDOMAIN.LOCAL)
+# and DOMAIN for short domain (e.g., TESTDOMAIN)
+FULL_DOMAIN=${REALM:-${DOMAIN}}
+LDOMAIN=${FULL_DOMAIN,,}
+UDOMAIN=${FULL_DOMAIN^^}
 URDOMAIN=${UDOMAIN%%.*}
 
 # Build the DC string (e.g., TESTDOMAIN.LOCAL -> DC=testdomain,DC=local)
 DOMAIN_DC=$(echo "$LDOMAIN" | sed 's/\./,DC=/g' | sed 's/^/DC=/')
 
-echo "Domain: ${DOMAIN}"
+echo "Domain: ${FULL_DOMAIN}"
 echo "Domain DN: ${DOMAIN_DC}"
+
+# diegogslomp/samba-ad-dc paths (different from nowsci/samba-domain)
+SAMBA_BASE="/usr/local/samba"
+SAMBA_PRIVATE="${SAMBA_BASE}/private"
+SAMBA_ETC="${SAMBA_BASE}/etc"
+SAMBA_BIN="${SAMBA_BASE}/bin"
+
+echo "Samba base path: ${SAMBA_BASE}"
+
+# Create symlinks for common samba commands so they work without full paths
+# This makes scripts compatible with both old (nowsci) and new (diegogslomp) images
+echo "Creating symlinks for samba commands..."
+for cmd in samba-tool smbclient ldbsearch ldbadd ldbmodify ldbedit; do
+    if [ -f "${SAMBA_BIN}/${cmd}" ] && [ ! -f "/usr/bin/${cmd}" ]; then
+        ln -sf "${SAMBA_BIN}/${cmd}" "/usr/bin/${cmd}" 2>/dev/null || true
+    fi
+done
+echo "  Symlinks created"
 
 # Generate TLS certificates for LDAPS
 echo "Generating TLS certificates for LDAPS..."
-mkdir -p /var/lib/samba/private/tls
+mkdir -p ${SAMBA_PRIVATE}/tls
 
-if [ ! -f /var/lib/samba/private/tls/cert.pem ]; then
+if [ ! -f ${SAMBA_PRIVATE}/tls/cert.pem ]; then
     openssl req -x509 -nodes -days 3650 \
         -newkey rsa:2048 \
-        -keyout /var/lib/samba/private/tls/key.pem \
-        -out /var/lib/samba/private/tls/cert.pem \
+        -keyout ${SAMBA_PRIVATE}/tls/key.pem \
+        -out ${SAMBA_PRIVATE}/tls/cert.pem \
         -subj "/CN=${LDOMAIN}/O=JIM Integration Testing" \
         2>/dev/null
 
-    cp /var/lib/samba/private/tls/cert.pem /var/lib/samba/private/tls/ca.pem
-    chmod 600 /var/lib/samba/private/tls/key.pem
+    cp ${SAMBA_PRIVATE}/tls/cert.pem ${SAMBA_PRIVATE}/tls/ca.pem
+    chmod 600 ${SAMBA_PRIVATE}/tls/key.pem
     echo "  TLS certificates generated"
 else
     echo "  TLS certificates already exist"
 fi
 
 # Add TLS configuration to smb.conf if not present
-if ! grep -q "tls enabled" /etc/samba/smb.conf; then
+if ! grep -q "tls enabled" ${SAMBA_ETC}/smb.conf; then
     echo "Adding TLS configuration to smb.conf..."
     sed -i "/\[global\]/a \\
 tls enabled = yes\\n\\
-tls keyfile = /var/lib/samba/private/tls/key.pem\\n\\
-tls certfile = /var/lib/samba/private/tls/cert.pem\\n\\
-tls cafile = /var/lib/samba/private/tls/ca.pem\\
-" /etc/samba/smb.conf
+tls keyfile = ${SAMBA_PRIVATE}/tls/key.pem\\n\\
+tls certfile = ${SAMBA_PRIVATE}/tls/cert.pem\\n\\
+tls cafile = ${SAMBA_PRIVATE}/tls/ca.pem\\n\\
+ldap server require strong auth = no\\
+" ${SAMBA_ETC}/smb.conf
     echo "  TLS configuration added"
 else
     echo "  TLS already configured"
 fi
 
-# Save smb.conf to external location
-cp /etc/samba/smb.conf /etc/samba/external/smb.conf
+# Disable password complexity if NOCOMPLEXITY is set
+if [ "${NOCOMPLEXITY}" = "true" ]; then
+    echo "Disabling password complexity..."
+    ${SAMBA_BIN}/samba-tool domain passwordsettings set --complexity=off 2>/dev/null || true
+    ${SAMBA_BIN}/samba-tool domain passwordsettings set --history-length=0 2>/dev/null || true
+    ${SAMBA_BIN}/samba-tool domain passwordsettings set --min-pwd-age=0 2>/dev/null || true
+    ${SAMBA_BIN}/samba-tool domain passwordsettings set --max-pwd-age=0 2>/dev/null || true
+    echo "  Password complexity disabled"
+fi
 
 # NOTE: Test OUs (OU=TestUsers, OU=TestGroups) are NOT created here because
-# /var/lib/samba is declared as a VOLUME in the base image, and docker commit
+# the samba data directories may be declared as VOLUMEs, and docker commit
 # does not include volume data. The OUs should be created at runtime by
 # Populate-SambaAD.ps1 or similar scripts. Creating OUs is fast (<1s).
 
-# Install SSH public key schema (optional, may already exist from init.sh)
+# Install SSH public key schema (optional, may already exist)
 echo "Checking SSH public key schema..."
-if ! ldbedit -H /var/lib/samba/private/sam.ldb -e cat "cn=sshPublicKey,cn=Schema,cn=Configuration,${DOMAIN_DC}" 2>/dev/null | grep -q sshPublicKey; then
+if ! ${SAMBA_BIN}/ldbsearch -H ${SAMBA_PRIVATE}/sam.ldb "cn=sshPublicKey" 2>/dev/null | grep -q sshPublicKey; then
     echo "Installing SSH public key schema..."
 
     echo "dn: CN=sshPublicKey,CN=Schema,CN=Configuration,${DOMAIN_DC}
@@ -98,8 +129,8 @@ defaultObjectCategory: CN=ldapPublicKey,CN=Schema,CN=Configuration,${DOMAIN_DC}
 mayContain: sshPublicKey
 schemaIDGUID:: +8nFQ43rpkWTOgbCCcSkqA==" > /tmp/sshpubkey.class.ldif
 
-    ldbadd -H /var/lib/samba/private/sam.ldb /tmp/sshpubkey.attr.ldif --option="dsdb:schema update allowed"=true 2>/dev/null || true
-    ldbadd -H /var/lib/samba/private/sam.ldb /tmp/sshpubkey.class.ldif --option="dsdb:schema update allowed"=true 2>/dev/null || true
+    ${SAMBA_BIN}/ldbadd -H ${SAMBA_PRIVATE}/sam.ldb /tmp/sshpubkey.attr.ldif --option="dsdb:schema update allowed"=true 2>/dev/null || true
+    ${SAMBA_BIN}/ldbadd -H ${SAMBA_PRIVATE}/sam.ldb /tmp/sshpubkey.class.ldif --option="dsdb:schema update allowed"=true 2>/dev/null || true
     rm -f /tmp/sshpubkey.*.ldif
     echo "  SSH public key schema installed"
 else
