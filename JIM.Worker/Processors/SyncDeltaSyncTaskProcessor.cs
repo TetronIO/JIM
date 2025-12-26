@@ -197,7 +197,9 @@ public class SyncDeltaSyncTaskProcessor
         using var span = Diagnostics.Sync.StartSpan("UpdateDeltaSyncWatermark");
 
         _connectedSystem.LastDeltaSyncCompletedAt = DateTime.UtcNow;
-        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, null, _activity);
+
+        // Use repository directly to avoid validation that expects RunProfiles to be loaded
+        await _jim.Repository.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem);
 
         Log.Information("PerformDeltaSyncAsync: Updated delta sync watermark to {Timestamp}",
             _connectedSystem.LastDeltaSyncCompletedAt);
