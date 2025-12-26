@@ -190,6 +190,21 @@ try {
     Import-Module $modulePath -Force -ErrorAction Stop
 
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+    # Establish baseline state: Import existing AD structure (OUs, users, groups)
+    # This is critical so JIM knows what already exists in AD before applying business rules
+    Write-Host ""
+    Write-Host "Establishing baseline state from Active Directory..." -ForegroundColor Gray
+    Write-Host "  Importing existing OUs, users, and groups from AD..." -ForegroundColor DarkGray
+    $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPImportProfileId -Wait -PassThru
+    Write-Host "  ✓ LDAP baseline import completed (Activity: $($baselineImportResult.activityId))" -ForegroundColor Green
+
+    # Run Full Sync to process baseline imports and establish MVOs for existing AD objects
+    Write-Host "  Processing baseline imports..." -ForegroundColor DarkGray
+    $baselineSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPSyncProfileId -Wait -PassThru
+    Write-Host "  ✓ LDAP baseline sync completed (Activity: $($baselineSyncResult.activityId))" -ForegroundColor Green
+    Write-Host "✓ Baseline state established" -ForegroundColor Green
+
     $stepTimings["0. Setup"] = (Get-Date) - $step0Start
 
     # Test 1: Joiner (New Hire)
