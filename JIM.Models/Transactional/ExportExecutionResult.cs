@@ -1,3 +1,5 @@
+using JIM.Models.Staging;
+
 namespace JIM.Models.Transactional;
 
 /// <summary>
@@ -48,6 +50,49 @@ public class ExportExecutionResult
     /// <summary>
     /// IDs of the pending exports that were processed.
     /// Use these IDs to fetch the actual PendingExport records for detailed information.
+    /// Note: These records may be deleted after successful export, use ProcessedExportItems instead.
     /// </summary>
     public List<Guid> ProcessedPendingExportIds { get; set; } = [];
+
+    /// <summary>
+    /// Information about each processed export for activity tracking.
+    /// This is captured before pending exports are deleted, allowing execution item creation.
+    /// </summary>
+    public List<ProcessedExportItem> ProcessedExportItems { get; set; } = [];
+}
+
+/// <summary>
+/// Information about a processed export, captured before deletion for activity tracking.
+/// </summary>
+public class ProcessedExportItem
+{
+    /// <summary>
+    /// The change type that was exported (Create, Update, Delete).
+    /// </summary>
+    public PendingExportChangeType ChangeType { get; set; }
+
+    /// <summary>
+    /// The Connected System Object that was exported (if available).
+    /// </summary>
+    public ConnectedSystemObject? ConnectedSystemObject { get; set; }
+
+    /// <summary>
+    /// Number of attribute value changes in this export.
+    /// </summary>
+    public int AttributeChangeCount { get; set; }
+
+    /// <summary>
+    /// Whether the export succeeded.
+    /// </summary>
+    public bool Succeeded { get; set; }
+
+    /// <summary>
+    /// Error message if the export failed.
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Number of retry attempts if the export failed.
+    /// </summary>
+    public int ErrorCount { get; set; }
 }

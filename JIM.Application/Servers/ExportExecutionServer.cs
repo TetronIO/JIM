@@ -393,8 +393,28 @@ public class ExportExecutionServer
                 // Export failed - mark as failed and continue
                 await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
                 result.FailedCount++;
+
+                // Capture export data for activity tracking (before any state changes)
+                result.ProcessedExportItems.Add(new ProcessedExportItem
+                {
+                    ChangeType = export.ChangeType,
+                    ConnectedSystemObject = export.ConnectedSystemObject,
+                    AttributeChangeCount = export.AttributeValueChanges.Count,
+                    Succeeded = false,
+                    ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+                    ErrorCount = export.ErrorCount
+                });
                 continue;
             }
+
+            // Capture export data for activity tracking (before deletion)
+            result.ProcessedExportItems.Add(new ProcessedExportItem
+            {
+                ChangeType = export.ChangeType,
+                ConnectedSystemObject = export.ConnectedSystemObject,
+                AttributeChangeCount = export.AttributeValueChanges.Count,
+                Succeeded = true
+            });
 
             export.Status = PendingExportStatus.Exported;
 
@@ -540,8 +560,28 @@ public class ExportExecutionServer
                 {
                     await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
                     result.FailedCount++;
+
+                    // Capture export data for activity tracking
+                    result.ProcessedExportItems.Add(new ProcessedExportItem
+                    {
+                        ChangeType = export.ChangeType,
+                        ConnectedSystemObject = export.ConnectedSystemObject,
+                        AttributeChangeCount = export.AttributeValueChanges.Count,
+                        Succeeded = false,
+                        ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+                        ErrorCount = export.ErrorCount
+                    });
                     continue;
                 }
+
+                // Capture export data for activity tracking (before deletion or status update)
+                result.ProcessedExportItems.Add(new ProcessedExportItem
+                {
+                    ChangeType = export.ChangeType,
+                    ConnectedSystemObject = export.ConnectedSystemObject,
+                    AttributeChangeCount = export.AttributeValueChanges.Count,
+                    Succeeded = true
+                });
 
                 // For Create exports, update the CSO status from PendingProvisioning to Normal
                 if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
@@ -679,8 +719,28 @@ public class ExportExecutionServer
         {
             await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
             result.FailedCount++;
+
+            // Capture export data for activity tracking (before any state changes)
+            result.ProcessedExportItems.Add(new ProcessedExportItem
+            {
+                ChangeType = export.ChangeType,
+                ConnectedSystemObject = export.ConnectedSystemObject,
+                AttributeChangeCount = export.AttributeValueChanges.Count,
+                Succeeded = false,
+                ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
+                ErrorCount = export.ErrorCount
+            });
             return;
         }
+
+        // Capture export data for activity tracking (before deletion)
+        result.ProcessedExportItems.Add(new ProcessedExportItem
+        {
+            ChangeType = export.ChangeType,
+            ConnectedSystemObject = export.ConnectedSystemObject,
+            AttributeChangeCount = export.AttributeValueChanges.Count,
+            Succeeded = true
+        });
 
         export.Status = PendingExportStatus.Exported;
 
