@@ -1001,6 +1001,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var exportList = pendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        Repository.Database.PendingExports.RemoveRange(exportList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var exportList = pendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        Repository.Database.PendingExports.UpdateRange(exportList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task CreatePendingExportAsync(PendingExport pendingExport)
     {
         await Repository.Database.PendingExports.AddAsync(pendingExport);

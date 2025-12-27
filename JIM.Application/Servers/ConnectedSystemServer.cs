@@ -1808,6 +1808,26 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Deletes multiple Pending Export objects in a single batch operation.
+    /// Used to efficiently remove confirmed pending exports during sync.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to delete.</param>
+    public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        await Application.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExports);
+    }
+
+    /// <summary>
+    /// Updates multiple Pending Export objects in a single batch operation.
+    /// Used to efficiently update pending exports during sync.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to update.</param>
+    public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
+    }
+
+    /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
