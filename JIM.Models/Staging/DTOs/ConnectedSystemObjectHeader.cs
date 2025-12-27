@@ -11,7 +11,11 @@ public class ConnectedSystemObjectHeader
 
     public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue { get; set; }
 
+    public string? ExternalIdAttributeName { get; set; }
+
     public ConnectedSystemObjectAttributeValue? SecondaryExternalIdAttributeValue { get; set; }
+
+    public string? SecondaryExternalIdAttributeName { get; set; }
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
 

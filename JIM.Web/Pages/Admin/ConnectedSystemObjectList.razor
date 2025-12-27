@@ -44,11 +44,11 @@
             <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue?.ToString() ?? string.Empty)">External Id</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue?.ToString() ?? string.Empty)">@GetExternalIdColumnHeader()</MudTableSortLabel></MudTh>
             @* TODO: change this so a check is done on whether the connector supports secondary external ids or not so we don't have to do two linq queries *@
             @if (_connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
             {
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue?.ToString() ?? string.Empty)">Secondary External Id</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue?.ToString() ?? string.Empty)">@GetSecondaryExternalIdColumnHeader()</MudTableSortLabel></MudTh>
             }
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName!)">Display Name</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
@@ -188,15 +188,40 @@
         return $"{(int)(timeSpan.TotalDays / 365)}y ago";
     }
 
+    private string GetExternalIdColumnHeader()
+    {
+        if (_connectedSystemObjectHeaders?.Results == null || !_connectedSystemObjectHeaders.Results.Any())
+            return "External Id";
+
+        var attributeName = _connectedSystemObjectHeaders.Results.First().ExternalIdAttributeName;
+
+        return string.IsNullOrEmpty(attributeName)
+            ? "External Id"
+            : $"External Id ({attributeName})";
+    }
+
+    private string GetSecondaryExternalIdColumnHeader()
+    {
+        if (_connectedSystemObjectHeaders?.Results == null || !_connectedSystemObjectHeaders.Results.Any())
+            return "Secondary External Id";
+
+        var attributeName = _connectedSystemObjectHeaders.Results
+            .FirstOrDefault(r => r.SecondaryExternalIdAttributeValue != null)?.SecondaryExternalIdAttributeName;
+
+        return string.IsNullOrEmpty(attributeName)
+            ? "Secondary External Id"
+            : $"Secondary External Id ({attributeName})";
+    }
+
     private async Task HandleDeleteAllObjectsClickAsync()
     {
         if (DeleteAllObjectsMessageBox == null)
             return;
 
         var userPromptResult = await DeleteAllObjectsMessageBox.ShowAsync();
-        if (!userPromptResult.HasValue || !userPromptResult.Value) 
+        if (!userPromptResult.HasValue || !userPromptResult.Value)
             return;
-        
+
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         var task = new ClearConnectedSystemObjectsWorkerTask(Id, user);
