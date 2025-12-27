@@ -68,4 +68,30 @@ public class PostgresDataRepository : IRepository
         if ((await Database.Database.GetPendingMigrationsAsync()).Any())
             await Database.Database.MigrateAsync();
     }
+
+    #region IDisposable
+
+    private bool _disposed;
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Dispose the DbContext to release database connections
+            Database.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    #endregion
 }

@@ -64,7 +64,7 @@ public class Worker : BackgroundService
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
-        var mainLoopJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+        using var mainLoopJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
         await mainLoopJim.InitialiseDatabaseAsync();
 
         // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
@@ -126,10 +126,11 @@ public class Worker : BackgroundService
                         {
                             // create an instance of JIM, specific to the processing of this task.
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
-                            var taskJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+                            // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
+                            using var taskJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
-                            var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ?? 
+                            var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ??
                                                 throw new InvalidDataException($"WorkerTask '{mainLoopNewWorkerTask.Id}' could not be retrieved.");
 
                             newWorkerTask.Activity.Executed = DateTime.UtcNow;
@@ -222,24 +223,13 @@ public class Worker : BackgroundService
                                                     }
 
                                                     // task completed. determine final status, depending on how the run profile execution went
-                                                    // Note: .All() returns true for empty collections, so we must check for Any() first
-                                                    var hasItems = newWorkerTask.Activity.RunProfileExecutionItems.Count > 0;
-                                                    var hasErrors = newWorkerTask.Activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-                                                    var allErrors = hasItems && newWorkerTask.Activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-
-                                                    if (allErrors)
-                                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, "All run profile execution items experienced an error. Review the items for more information.");
-                                                    else if (hasErrors)
-                                                        await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
-                                                    else
-                                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                                    await CompleteActivityBasedOnExecutionResultsAsync(taskJim, newWorkerTask.Activity);
                                                 }
                                                 catch (Exception ex)
                                                 {
                                                     // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view
                                                     // issues with connectors through JIM, rather than an admin having to dig through server logs.
-                                                    await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
-                                                    Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing sync run.");
+                                                    await SafeFailActivityAsync(taskJim, newWorkerTask.Activity, ex, "Unhandled exception whilst executing sync run");
                                                 }
                                                 finally
                                                 {
@@ -426,6 +416,106 @@ public class Worker : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Completes an activity based on the execution results of its run profile execution items.
+    /// Determines whether to mark as complete, complete with warning, or failed based on error counts.
+    /// This method is wrapped in robust error handling to ensure activities are always finalised.
+    /// </summary>
+    private async Task CompleteActivityBasedOnExecutionResultsAsync(JimApplication jim, Activity activity)
+    {
+        try
+        {
+            // Note: .All() returns true for empty collections, so we must check for Any() first
+            var hasItems = activity.RunProfileExecutionItems.Count > 0;
+            var hasErrors = activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+            var allErrors = hasItems && activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+
+            if (allErrors)
+            {
+                await jim.Activities.FailActivityWithErrorAsync(activity, "All run profile execution items experienced an error. Review the items for more information.");
+                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
+            }
+            else if (hasErrors)
+            {
+                await jim.Activities.CompleteActivityWithWarningAsync(activity);
+                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings", activity.Id);
+            }
+            else
+            {
+                await jim.Activities.CompleteActivityAsync(activity);
+                Log.Debug("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed successfully", activity.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            // If completing the activity fails, try to fail it with the error
+            Log.Error(ex, "CompleteActivityBasedOnExecutionResultsAsync: Failed to complete activity {ActivityId}, attempting to mark as failed", activity.Id);
+            await SafeFailActivityAsync(jim, activity, ex, "Failed to complete activity after sync run");
+        }
+    }
+
+    /// <summary>
+    /// Safely attempts to fail an activity with an error. If the primary failure attempt fails,
+    /// it will attempt a direct database update as a last resort to ensure the activity is not left in InProgress state.
+    /// Activities must never be left in InProgress state as this blocks the integration test scripts and monitoring systems.
+    /// </summary>
+    private async Task SafeFailActivityAsync(JimApplication jim, Activity activity, Exception originalException, string context)
+    {
+        Log.Error(originalException, "SafeFailActivityAsync: {Context} for activity {ActivityId}", context, activity.Id);
+
+        try
+        {
+            // First attempt: Use the normal activity failure method
+            await jim.Activities.FailActivityWithErrorAsync(activity, originalException);
+            Log.Information("SafeFailActivityAsync: Successfully marked activity {ActivityId} as failed", activity.Id);
+        }
+        catch (Exception failEx)
+        {
+            Log.Error(failEx, "SafeFailActivityAsync: Failed to mark activity {ActivityId} as failed via normal method, attempting direct update", activity.Id);
+
+            try
+            {
+                // Second attempt: Try to update the activity status directly
+                // This handles EF Core tracking issues or DbContext disposal problems
+                activity.Status = ActivityStatus.FailedWithError;
+                activity.ErrorMessage = $"{context}: {originalException.Message}";
+                activity.ErrorStackTrace = originalException.StackTrace;
+                activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
+                activity.TotalActivityTime = DateTime.UtcNow - activity.Created;
+
+                await jim.Repository.Activity.UpdateActivityAsync(activity);
+                Log.Warning("SafeFailActivityAsync: Marked activity {ActivityId} as failed via direct repository update", activity.Id);
+            }
+            catch (Exception directEx)
+            {
+                Log.Fatal(directEx, "SafeFailActivityAsync: CRITICAL - Could not update activity {ActivityId} status. Activity will remain stuck in InProgress state. " +
+                    "Original error: {OriginalError}. Failure error: {FailError}",
+                    activity.Id, originalException.Message, failEx.Message);
+
+                // Last resort: Create a new DbContext and try to update the activity
+                try
+                {
+                    using var emergencyContext = new JimDbContext();
+                    var emergencyJim = new JimApplication(new PostgresDataRepository(emergencyContext));
+                    var freshActivity = await emergencyJim.Activities.GetActivityAsync(activity.Id);
+                    if (freshActivity != null && freshActivity.Status == ActivityStatus.InProgress)
+                    {
+                        freshActivity.Status = ActivityStatus.FailedWithError;
+                        freshActivity.ErrorMessage = $"EMERGENCY UPDATE: {context}: {originalException.Message}";
+                        freshActivity.ExecutionTime = DateTime.UtcNow - freshActivity.Executed;
+                        freshActivity.TotalActivityTime = DateTime.UtcNow - freshActivity.Created;
+                        await emergencyJim.Activities.UpdateActivityAsync(freshActivity);
+                        Log.Warning("SafeFailActivityAsync: EMERGENCY - Marked activity {ActivityId} as failed via emergency DbContext", activity.Id);
+                    }
+                }
+                catch (Exception emergencyEx)
+                {
+                    Log.Fatal(emergencyEx, "SafeFailActivityAsync: EMERGENCY UPDATE FAILED for activity {ActivityId}. Manual database intervention required.", activity.Id);
+                }
+            }
+        }
+    }
+
     private static void InitialiseLogging()
     {
         var loggerConfiguration = new LoggerConfiguration();
@@ -460,7 +550,12 @@ public class Worker : BackgroundService
         }
 
         loggerConfiguration.Enrich.FromLogContext();
-        loggerConfiguration.WriteTo.File(Path.Combine(loggingPath, "jim.worker..log"), rollingInterval: RollingInterval.Day);
+        loggerConfiguration.WriteTo.File(
+            Path.Combine(loggingPath, "jim.worker..log"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
+            fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max
+            rollOnFileSizeLimit: true);
         loggerConfiguration.WriteTo.Console();
         Log.Logger = loggerConfiguration.CreateLogger();
     }

@@ -44,6 +44,8 @@ public abstract class WorkflowTestBase
     [TearDown]
     public void BaseTearDown()
     {
+        Jim?.Dispose();
+        (Repository as IDisposable)?.Dispose();
         DbContext?.Dispose();
     }
 

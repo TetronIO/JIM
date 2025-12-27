@@ -43,6 +43,12 @@ public class ExportExecutionTests
     private JimApplication Jim { get; set; } = null!;
     #endregion
 
+    [TearDown]
+    public void TearDown()
+    {
+        Jim?.Dispose();
+    }
+
     [SetUp]
     public void Setup()
     {
@@ -318,6 +324,8 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -327,7 +335,18 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Test Value",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
         };
         PendingExportsData.Add(pendingExport);
 
@@ -365,6 +384,8 @@ public class ExportExecutionTests
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
 
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
         // Create multiple pending exports
         for (int i = 0; i < 10; i++)
         {
@@ -386,7 +407,18 @@ public class ExportExecutionTests
                 Status = PendingExportStatus.Pending,
                 ChangeType = PendingExportChangeType.Update,
                 CreatedAt = DateTime.UtcNow,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Test Value {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
             });
         }
 
@@ -807,7 +839,8 @@ public class ExportExecutionTests
                     ChangeType = PendingExportAttributeChangeType.Add,
                     AttributeId = displayNameAttr.Id,
                     Attribute = displayNameAttr,
-                    StringValue = "John Doe"
+                    StringValue = "John Doe",
+                    Status = PendingExportAttributeChangeStatus.Pending
                 }
             }
         };
@@ -824,15 +857,6 @@ public class ExportExecutionTests
                 ExportResult.Succeeded(generatedObjectGuid.ToString())
             });
 
-        // Track deleted pending exports
-        var deletedExportIds = new List<Guid>();
-        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>()))
-            .Callback((PendingExport pe) =>
-            {
-                deletedExportIds.Add(pe.Id);
-                PendingExportsData.RemoveAll(p => p.Id == pe.Id);
-            });
-
         // Track CSO updates
         var updatedCsos = new List<ConnectedSystemObject>();
         MockDbSetConnectedSystemObjects.Setup(set => set.Update(It.IsAny<ConnectedSystemObject>()))
@@ -841,8 +865,13 @@ public class ExportExecutionTests
                 updatedCsos.Add(cso);
             });
 
-        // Also need to mock PendingExport updates
-        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
+        // Mock PendingExport updates (now we update instead of delete after export)
+        var updatedPendingExports = new List<PendingExport>();
+        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
+            .Callback((PendingExport pe) =>
+            {
+                updatedPendingExports.Add(pe);
+            });
 
         // Act
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
@@ -871,9 +900,14 @@ public class ExportExecutionTests
         Assert.That(externalIdAttrValue!.GuidValue, Is.EqualTo(generatedObjectGuid),
             "External ID should be set to the objectGUID returned by the connector");
 
-        // Assert - PendingExport should have been deleted (cleaned up)
-        Assert.That(deletedExportIds, Does.Contain(pendingExport.Id),
-            "PendingExport should be deleted after successful export");
+        // Assert - PendingExport should have been updated (not deleted) with ExportedPendingConfirmation status
+        // Deletion happens during import confirmation, not immediately after export
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Exported),
+            "PendingExport status should be Exported after successful export");
+        Assert.That(pendingExport.AttributeValueChanges[0].Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+            "Attribute change status should be ExportedPendingConfirmation");
+        Assert.That(pendingExport.AttributeValueChanges[0].ExportAttemptCount, Is.EqualTo(1),
+            "Export attempt count should be 1");
     }
 
     #endregion

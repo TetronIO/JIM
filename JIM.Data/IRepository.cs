@@ -1,7 +1,7 @@
 ﻿using JIM.Data.Repositories;
 namespace JIM.Data;
 
-public interface IRepository
+public interface IRepository : IDisposable
 {
     public IActivityRepository Activity { get; }
     public IApiKeyRepository ApiKeys { get; }

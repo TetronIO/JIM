@@ -21,6 +21,12 @@ public class ObjectMatchingModeTests
     private MetaverseObject _initiatedBy = null!;
     private ConnectorDefinition _connectorDefinition = null!;
 
+    [TearDown]
+    public void TearDown()
+    {
+        _jim?.Dispose();
+    }
+
     [SetUp]
     public void SetUp()
     {

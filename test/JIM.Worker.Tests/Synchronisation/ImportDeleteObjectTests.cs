@@ -30,8 +30,14 @@ public class ImportDeleteObjectTests
     private Mock<JimDbContext> MockJimDbContext { get; set; }
     private JimApplication Jim { get; set; }
     #endregion
-    
-     [SetUp]
+
+    [TearDown]
+    public void TearDown()
+    {
+        Jim?.Dispose();
+    }
+
+    [SetUp]
     public void Setup()
     {
         TestUtilities.SetEnvironmentVariables();

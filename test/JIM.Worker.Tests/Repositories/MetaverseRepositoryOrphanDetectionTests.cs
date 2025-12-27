@@ -33,6 +33,12 @@ public class MetaverseRepositoryOrphanDetectionTests
     // Test MVO Type with Manual deletion rule
     private MetaverseObjectType _personTypeWithManualDeletion = null!;
 
+    [TearDown]
+    public void TearDown()
+    {
+        _repository?.Dispose();
+    }
+
     [SetUp]
     public void SetUp()
     {
