@@ -165,12 +165,34 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Determines if a pending export is ready for execution.
-    /// Considers status and retry timing (Q6 decision).
+    /// Considers status and retry timing (Q6 decision), as well as attribute change statuses.
     /// </summary>
     private static bool IsReadyForExecution(PendingExport pendingExport)
     {
-        // Only execute Pending or Failed (for retry) exports
+        // For Delete operations, we don't need attribute changes - just the operation itself
+        // For Create/Update operations, check if there are exportable attribute changes
+        if (pendingExport.ChangeType == PendingExportChangeType.Update)
+        {
+            // For Update operations, we need at least one attribute change to export
+            var hasExportableAttributeChanges = pendingExport.AttributeValueChanges.Any(ac =>
+                ac.Status == PendingExportAttributeChangeStatus.Pending ||
+                ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+
+            // If there are no attribute changes that need exporting, skip this export
+            if (!hasExportableAttributeChanges)
+            {
+                return false;
+            }
+        }
+        // For Create and Delete, we proceed even if there are no attribute changes
+        // (Create might have no initial attributes, Delete just needs the operation)
+
+        // Execute if status is Pending, Exported (for retry), or ExportNotImported
+        // - Pending: New export, not yet processed
+        // - Exported: Was exported, but has attribute changes needing retry (ExportedNotConfirmed)
+        // - ExportNotImported: Previous export indicated not all values persisted
         if (pendingExport.Status != PendingExportStatus.Pending &&
+            pendingExport.Status != PendingExportStatus.Exported &&
             pendingExport.Status != PendingExportStatus.ExportNotImported)
         {
             return false;
@@ -182,7 +204,8 @@ public class ExportExecutionServer
             return false;
         }
 
-        // If max retries exceeded, don't execute (Q6 decision - requires manual intervention)
+        // If max retries exceeded at the PendingExport level, don't execute
+        // (Individual attribute changes have their own retry limits)
         if (pendingExport.ErrorCount >= pendingExport.MaxRetries)
         {
             return false;
@@ -407,7 +430,7 @@ public class ExportExecutionServer
                 continue;
             }
 
-            // Capture export data for activity tracking (before deletion)
+            // Capture export data for activity tracking
             result.ProcessedExportItems.Add(new ProcessedExportItem
             {
                 ChangeType = export.ChangeType,
@@ -427,9 +450,13 @@ public class ExportExecutionServer
                 await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
             }
 
-            await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
+            // Update attribute change statuses to ExportedPendingConfirmation
+            // They will be confirmed (and deleted) or marked for retry during the next import
+            UpdateAttributeChangeStatusesAfterExport(export);
+
+            await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
             result.SuccessCount++;
-            Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}", export.Id);
+            Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
         }
     }
 
@@ -515,6 +542,30 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Updates the status of attribute changes after a successful export.
+    /// Changes with Pending or ExportedNotConfirmed status are transitioned to ExportedPendingConfirmation.
+    /// </summary>
+    private static void UpdateAttributeChangeStatusesAfterExport(PendingExport export)
+    {
+        var now = DateTime.UtcNow;
+
+        foreach (var attrChange in export.AttributeValueChanges)
+        {
+            // Only update changes that were pending or being retried
+            if (attrChange.Status == PendingExportAttributeChangeStatus.Pending ||
+                attrChange.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+            {
+                attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+                attrChange.ExportAttemptCount++;
+                attrChange.LastExportedAt = now;
+
+                Log.Debug("UpdateAttributeChangeStatusesAfterExport: Attribute {AttrId} status set to ExportedPendingConfirmation (attempt {Attempt})",
+                    attrChange.AttributeId, attrChange.ExportAttemptCount);
+            }
+        }
+    }
+
+    /// <summary>
     /// Executes exports using the IConnectorExportUsingFiles interface with batching.
     /// </summary>
     private async Task ExecuteUsingFilesWithBatchingAsync(
@@ -589,9 +640,13 @@ public class ExportExecutionServer
                     await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
                 }
 
+                // Update attribute change statuses to ExportedPendingConfirmation
+                UpdateAttributeChangeStatusesAfterExport(export);
+
                 if (autoConfirm)
                 {
-                    // Auto-confirm: delete the pending export immediately (confirmed)
+                    // Auto-confirm: for file-based exports where the file system is the source of truth,
+                    // we can consider the export confirmed immediately
                     await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
                 }
                 else
@@ -750,12 +805,14 @@ public class ExportExecutionServer
             await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
         }
 
-        // For call-based exports with Create operations, we might want to keep the pending export
-        // until a confirming import verifies the object was created. For now, delete on success.
-        await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
+        // Update attribute change statuses to ExportedPendingConfirmation
+        // They will be confirmed (and deleted) or marked for retry during the next import
+        UpdateAttributeChangeStatusesAfterExport(export);
+
+        await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
 
         result.SuccessCount++;
-        Log.Debug("ProcessExportSuccessAsync: Successfully exported {ExportId}", export.Id);
+        Log.Debug("ProcessExportSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
     }
 
     /// <summary>

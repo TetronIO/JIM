@@ -36,6 +36,33 @@ public enum PendingExportAttributeChangeType
     RemoveAll = 3
 }
 
+/// <summary>
+/// Tracks the confirmation status of individual attribute changes within a PendingExport.
+/// </summary>
+public enum PendingExportAttributeChangeStatus
+{
+    /// <summary>
+    /// The attribute change has not yet been exported.
+    /// </summary>
+    Pending = 0,
+
+    /// <summary>
+    /// The attribute change has been exported and is awaiting confirmation via a confirming import.
+    /// </summary>
+    ExportedPendingConfirmation = 1,
+
+    /// <summary>
+    /// The attribute change was exported, but the confirming import returned a different value.
+    /// Will be retried on the next export run.
+    /// </summary>
+    ExportedNotConfirmed = 2,
+
+    /// <summary>
+    /// The attribute change failed after maximum retry attempts and requires manual intervention.
+    /// </summary>
+    Failed = 3
+}
+
 public enum PendingExportStatus
 {
     /// <summary>

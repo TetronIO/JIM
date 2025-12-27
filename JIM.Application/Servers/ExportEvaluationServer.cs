@@ -687,6 +687,7 @@ public class ExportEvaluationServer
                             var change = new PendingExportAttributeValueChange
                             {
                                 Id = Guid.NewGuid(),
+                                Attribute = mapping.TargetConnectedSystemAttribute,
                                 AttributeId = mapping.TargetConnectedSystemAttribute.Id,
                                 ChangeType = PendingExportAttributeChangeType.Update
                             };
@@ -748,6 +749,7 @@ public class ExportEvaluationServer
                 var attributeChange = new PendingExportAttributeValueChange
                 {
                     Id = Guid.NewGuid(),
+                    Attribute = mapping.TargetConnectedSystemAttribute,
                     AttributeId = mapping.TargetConnectedSystemAttribute.Id,
                     ChangeType = PendingExportAttributeChangeType.Update
                 };

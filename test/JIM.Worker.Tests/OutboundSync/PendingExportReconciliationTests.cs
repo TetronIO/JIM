@@ -1,0 +1,674 @@
+using JIM.Application;
+using JIM.Application.Services;
+using JIM.Models.Core;
+using JIM.Models.Staging;
+using JIM.Models.Transactional;
+using JIM.PostgresData;
+using JIM.Worker.Tests.Models;
+using Microsoft.EntityFrameworkCore;
+using MockQueryable.Moq;
+using Moq;
+
+namespace JIM.Worker.Tests.OutboundSync;
+
+/// <summary>
+/// Tests for PendingExport confirmation via import (reconciliation).
+/// Covers the attribute change status lifecycle and retry scenarios.
+/// </summary>
+public class PendingExportReconciliationTests
+{
+    #region accessors
+    private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
+    private List<ConnectedSystem> ConnectedSystemsData { get; set; } = null!;
+    private List<ConnectedSystemObject> ConnectedSystemObjectsData { get; set; } = null!;
+    private Mock<DbSet<ConnectedSystemObject>> MockDbSetConnectedSystemObjects { get; set; } = null!;
+    private Mock<DbSet<ConnectedSystem>> MockDbSetConnectedSystems { get; set; } = null!;
+    private List<ConnectedSystemObjectType> ConnectedSystemObjectTypesData { get; set; } = null!;
+    private Mock<DbSet<ConnectedSystemObjectType>> MockDbSetConnectedSystemObjectTypes { get; set; } = null!;
+    private List<PendingExport> PendingExportsData { get; set; } = null!;
+    private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; } = null!;
+    private List<PendingExportAttributeValueChange> PendingExportAttributeValueChangesData { get; set; } = null!;
+    private Mock<DbSet<PendingExportAttributeValueChange>> MockDbSetPendingExportAttributeValueChanges { get; set; } = null!;
+    private JimApplication Jim { get; set; } = null!;
+    private ConnectedSystem TargetSystem { get; set; } = null!;
+    private ConnectedSystemObjectType TargetUserType { get; set; } = null!;
+    private ConnectedSystemObjectTypeAttribute DisplayNameAttr { get; set; } = null!;
+    private ConnectedSystemObjectTypeAttribute MailAttr { get; set; } = null!;
+    #endregion
+
+    [TearDown]
+    public void TearDown()
+    {
+        Jim?.Dispose();
+    }
+
+    [SetUp]
+    public void Setup()
+    {
+        TestUtilities.SetEnvironmentVariables();
+
+        // Set up the Connected Systems mock
+        ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
+        MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
+
+        // Set up the Connected System Object Types mock
+        ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
+        MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
+
+        // Set up the Connected System Objects mock
+        ConnectedSystemObjectsData = TestUtilities.GetConnectedSystemObjectData();
+        MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
+
+        // Set up the Pending Export objects mock
+        PendingExportsData = new List<PendingExport>();
+        MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
+
+        // Set up the Pending Export Attribute Value Changes mock
+        PendingExportAttributeValueChangesData = new List<PendingExportAttributeValueChange>();
+        MockDbSetPendingExportAttributeValueChanges = PendingExportAttributeValueChangesData.BuildMockDbSet();
+
+        // Mock entity framework calls
+        MockJimDbContext = new Mock<JimDbContext>();
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
+        MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
+        MockJimDbContext.Setup(m => m.PendingExportAttributeValueChanges).Returns(MockDbSetPendingExportAttributeValueChanges.Object);
+
+        // Instantiate Jim using the mocked db context
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+
+        // Store references to commonly used objects
+        TargetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        TargetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        DisplayNameAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        MailAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Mail.ToString());
+    }
+
+    #region Helper Methods
+
+    private ConnectedSystemObject CreateTestCso()
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            Type = TargetUserType,
+            TypeId = TargetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        return cso;
+    }
+
+    private PendingExport CreateTestPendingExport(
+        ConnectedSystemObject cso,
+        PendingExportStatus status = PendingExportStatus.Exported)
+    {
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObject = cso,
+            Status = status,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        return pendingExport;
+    }
+
+    private PendingExportAttributeValueChange CreateTestAttributeChange(
+        PendingExport pendingExport,
+        ConnectedSystemObjectTypeAttribute attribute,
+        string stringValue,
+        PendingExportAttributeChangeStatus status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+        int exportAttemptCount = 1)
+    {
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = attribute.Id,
+            Attribute = attribute,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = stringValue,
+            Status = status,
+            ExportAttemptCount = exportAttemptCount,
+            LastExportedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+        PendingExportAttributeValueChangesData.Add(attrChange);
+        return attrChange;
+    }
+
+    private void AddCsoAttributeValue(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string stringValue)
+    {
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = attribute,
+            AttributeId = attribute.Id,
+            StringValue = stringValue
+        });
+    }
+
+    #endregion
+
+    #region Single Attribute Change Tests
+
+    /// <summary>
+    /// Tests that a single attribute change is confirmed when the imported value matches.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SingleAttributeChange_ConfirmsWhenValueMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
+
+        // Import has the same value
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "One attribute change should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0), "No changes should need retry");
+        Assert.That(result.FailedChanges.Count, Is.EqualTo(0), "No changes should have failed");
+        Assert.That(result.PendingExportDeleted, Is.True, "PendingExport should be deleted when all changes confirmed");
+    }
+
+    /// <summary>
+    /// Tests that a single attribute change is marked for retry when the imported value doesn't match.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SingleAttributeChange_MarksForRetryWhenValueDoesNotMatchAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe", exportAttemptCount: 1);
+
+        // Import has a different value
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Jane Doe");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "No attribute changes should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "One change should need retry");
+        Assert.That(result.FailedChanges.Count, Is.EqualTo(0), "No changes should have failed yet");
+        Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed),
+            "Attribute change should be marked for retry");
+        Assert.That(attrChange.LastImportedValue, Is.EqualTo("Jane Doe"),
+            "Last imported value should be captured for debugging");
+    }
+
+    /// <summary>
+    /// Tests that a single attribute change is marked as Failed when max retries are exceeded.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SingleAttributeChange_MarksAsFailedWhenMaxRetriesExceededAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = CreateTestAttributeChange(
+            pendingExport, DisplayNameAttr, "John Doe",
+            exportAttemptCount: PendingExportReconciliationService.DefaultMaxRetries);
+
+        // Import has a different value
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Value");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "No attribute changes should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0), "No changes should be marked for retry");
+        Assert.That(result.FailedChanges.Count, Is.EqualTo(1), "One change should have failed");
+        Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed),
+            "Attribute change should be marked as Failed");
+    }
+
+    #endregion
+
+    #region Multiple Attribute Change Tests
+
+    /// <summary>
+    /// Tests that multiple attribute changes are all confirmed when all values match.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_MultipleAttributeChanges_ConfirmsAllWhenAllMatchAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var displayNameChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
+        var mailChange = CreateTestAttributeChange(pendingExport, MailAttr, "john@example.com");
+
+        // Import has matching values
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+        AddCsoAttributeValue(cso, MailAttr, "john@example.com");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(2), "Both attribute changes should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0), "No changes should need retry");
+        Assert.That(result.PendingExportDeleted, Is.True, "PendingExport should be deleted");
+    }
+
+    /// <summary>
+    /// Tests that some attribute changes confirm and others are marked for retry.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_MultipleAttributeChanges_SomeConfirmedSomeRetryAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var displayNameChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
+        var mailChange = CreateTestAttributeChange(pendingExport, MailAttr, "john@example.com");
+
+        // Import has one matching value and one different
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Matches
+        AddCsoAttributeValue(cso, MailAttr, "wrong@example.com"); // Doesn't match
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "One attribute change should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "One change should need retry");
+        Assert.That(result.PendingExportDeleted, Is.False, "PendingExport should NOT be deleted");
+        Assert.That(displayNameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+            "Confirmed change should have been removed from the pending export (not in changes list anymore)");
+        Assert.That(mailChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed),
+            "Non-matching change should be marked for retry");
+    }
+
+    /// <summary>
+    /// Tests retry scenario where a problematic change eventually confirms.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_RetryScenario_ProblemChangeResolvesOnSecondAttemptAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var mailChange = CreateTestAttributeChange(
+            pendingExport, MailAttr, "john@example.com",
+            status: PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            exportAttemptCount: 2);
+
+        // After second export attempt, import now shows the correct value
+        AddCsoAttributeValue(cso, MailAttr, "john@example.com");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Attribute change should now be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0), "No changes should need retry");
+        Assert.That(result.PendingExportDeleted, Is.True, "PendingExport should be deleted");
+    }
+
+    /// <summary>
+    /// Tests scenario where new attribute changes are added while existing ones are still pending.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_NewChangesAddedWhileExistingPending_HandlesCorrectlyAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        // Existing change that was already exported (awaiting confirmation)
+        var existingChange = CreateTestAttributeChange(
+            pendingExport, DisplayNameAttr, "John Doe",
+            status: PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            exportAttemptCount: 1);
+
+        // New change that was just added (pending export)
+        var newChange = CreateTestAttributeChange(
+            pendingExport, MailAttr, "john@example.com",
+            status: PendingExportAttributeChangeStatus.Pending,
+            exportAttemptCount: 0);
+
+        // Import confirms the existing change
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+        // New change hasn't been exported yet, so it won't be on the CSO
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "Existing exported change should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0),
+            "New pending changes shouldn't be processed during reconciliation");
+        Assert.That(result.PendingExportDeleted, Is.False,
+            "PendingExport should NOT be deleted because there are pending changes");
+
+        // The pending change should still be in Pending status
+        Assert.That(newChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending),
+            "New pending change should remain in Pending status");
+    }
+
+    #endregion
+
+    #region Add/Remove Change Type Tests
+
+    /// <summary>
+    /// Tests that Add change type is confirmed when value exists on CSO.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_AddChangeType_ConfirmsWhenValueExistsAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = DisplayNameAttr.Id,
+            Attribute = DisplayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.Add,
+            StringValue = "John Doe",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Value exists on CSO
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Tests that Remove change type is confirmed when value does NOT exist on CSO.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_RemoveChangeType_ConfirmsWhenValueRemovedAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = DisplayNameAttr.Id,
+            Attribute = DisplayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.Remove,
+            StringValue = "Old Value",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Value does NOT exist on CSO (was removed)
+        // Don't add any value for DisplayNameAttr
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Remove should be confirmed when value is gone");
+    }
+
+    /// <summary>
+    /// Tests that Remove change type is NOT confirmed when value still exists on CSO.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_RemoveChangeType_RetriesWhenValueStillExistsAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = DisplayNameAttr.Id,
+            Attribute = DisplayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.Remove,
+            StringValue = "Old Value",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Value STILL exists on CSO (wasn't removed)
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Old Value");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0));
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "Should retry when value wasn't removed");
+    }
+
+    /// <summary>
+    /// Tests that RemoveAll change type is confirmed when no values exist on CSO.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_RemoveAllChangeType_ConfirmsWhenNoValuesExistAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = DisplayNameAttr.Id,
+            Attribute = DisplayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.RemoveAll,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // No values exist for the attribute
+        // Don't add any value for DisplayNameAttr
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "RemoveAll should be confirmed when no values exist");
+    }
+
+    #endregion
+
+    #region Edge Cases
+
+    /// <summary>
+    /// Tests that reconciliation is skipped for PendingExports not in Exported status.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_PendingExportNotInExportedStatus_SkipsReconciliationAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.Pending);
+        var attrChange = CreateTestAttributeChange(
+            pendingExport, DisplayNameAttr, "John Doe",
+            status: PendingExportAttributeChangeStatus.Pending);
+
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.HasChanges, Is.False, "No reconciliation should happen for Pending exports");
+        Assert.That(result.PendingExportDeleted, Is.False);
+    }
+
+    /// <summary>
+    /// Tests that reconciliation is skipped when no PendingExport exists for the CSO.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_NoPendingExport_ReturnsEmptyResultAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        // Don't create any pending export
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.HasChanges, Is.False);
+        Assert.That(result.PendingExportDeleted, Is.False);
+    }
+
+    /// <summary>
+    /// Tests that PendingExport status is updated to Failed when all attribute changes fail.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_AllAttributeChangesFail_PendingExportStatusIsFailedAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        // Both changes have hit max retries
+        var displayNameChange = CreateTestAttributeChange(
+            pendingExport, DisplayNameAttr, "John Doe",
+            exportAttemptCount: PendingExportReconciliationService.DefaultMaxRetries);
+        var mailChange = CreateTestAttributeChange(
+            pendingExport, MailAttr, "john@example.com",
+            exportAttemptCount: PendingExportReconciliationService.DefaultMaxRetries);
+
+        // Import has different values
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
+        AddCsoAttributeValue(cso, MailAttr, "wrong@example.com");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.FailedChanges.Count, Is.EqualTo(2), "Both changes should have failed");
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Failed),
+            "PendingExport should be marked as Failed");
+    }
+
+    /// <summary>
+    /// Tests that PendingExport status is updated to ExportNotImported when there are changes needing retry.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SomeChangesNeedRetry_PendingExportStatusIsExportNotImportedAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = CreateTestAttributeChange(
+            pendingExport, DisplayNameAttr, "John Doe",
+            exportAttemptCount: 1);
+
+        // Import has different value
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1));
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotImported),
+            "PendingExport should be marked as ExportNotImported for retry");
+    }
+
+    #endregion
+
+    #region Integer Value Tests
+
+    /// <summary>
+    /// Tests that integer attribute values are correctly compared.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_IntegerValue_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var uacAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.UserAccountControl.ToString());
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = uacAttr.Id,
+            Attribute = uacAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            IntValue = 512,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add matching integer value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = uacAttr,
+            AttributeId = uacAttr.Id,
+            IntValue = 512
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1));
+    }
+
+    #endregion
+}

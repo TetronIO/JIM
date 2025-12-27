@@ -81,6 +81,14 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportAsync(Guid id);
 
     /// <summary>
+    /// Retrieves the Pending Export for a specific Connected System Object.
+    /// There should only be one PendingExport per CSO at any time.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <returns>The PendingExport for the CSO, or null if none exists.</returns>
+    public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.
     /// Used for evaluating MVO deletion exports.
     /// </summary>

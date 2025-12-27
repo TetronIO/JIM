@@ -180,6 +180,14 @@ public class SyncImportTaskProcessor
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
         }
 
+        // Reconcile pending exports against imported values (confirming import)
+        // This confirms exported attribute changes or marks them for retry
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
+        using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
+        {
+            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated);
+        }
+
         // now persist the activity run profile execution items with the activity
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
         _activity.AddRunProfileExecutionItems(_activityRunProfileExecutionItems);
@@ -1007,6 +1015,48 @@ public class SyncImportTaskProcessor
             }
 
             Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
+        }
+    }
+
+    /// <summary>
+    /// Reconciles pending exports against imported CSO values.
+    /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
+    /// </summary>
+    /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
+    private async Task ReconcilePendingExportsAsync(IReadOnlyCollection<ConnectedSystemObject> updatedCsos)
+    {
+        var reconciliationService = new PendingExportReconciliationService(_jim);
+        var totalConfirmed = 0;
+        var totalRetry = 0;
+        var totalFailed = 0;
+        var exportsDeleted = 0;
+
+        foreach (var cso in updatedCsos)
+        {
+            try
+            {
+                var result = await reconciliationService.ReconcileAsync(cso);
+
+                if (result.HasChanges)
+                {
+                    totalConfirmed += result.ConfirmedChanges.Count;
+                    totalRetry += result.RetryChanges.Count;
+                    totalFailed += result.FailedChanges.Count;
+
+                    if (result.PendingExportDeleted)
+                        exportsDeleted++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
+            }
+        }
+
+        if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0)
+        {
+            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, Exports deleted: {Deleted}",
+                totalConfirmed, totalRetry, totalFailed, exportsDeleted);
         }
     }
 }
