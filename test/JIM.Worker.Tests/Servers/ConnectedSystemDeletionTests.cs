@@ -22,6 +22,12 @@ public class ConnectedSystemDeletionTests
     private JimApplication _jim = null!;
     private MetaverseObject _initiatedBy = null!;
 
+    [TearDown]
+    public void TearDown()
+    {
+        _jim?.Dispose();
+    }
+
     [SetUp]
     public void SetUp()
     {

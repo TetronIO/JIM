@@ -142,27 +142,19 @@ public class SyncExportTaskProcessor
     /// </summary>
     private async Task ProcessExportResultAsync(ExportExecutionResult result)
     {
-        // Fetch the actual PendingExport records to get current status and error info
-        foreach (var pendingExportId in result.ProcessedPendingExportIds)
+        // Use ProcessedExportItems which are captured before pending exports are deleted
+        foreach (var exportItem in result.ProcessedExportItems)
         {
-            var pendingExport = await _jim.Repository.ConnectedSystems.GetPendingExportAsync(pendingExportId);
-            if (pendingExport == null)
-            {
-                Log.Warning("ProcessExportResultAsync: Could not find PendingExport {Id}", pendingExportId);
-                continue;
-            }
-
             // Build a description of the export
-            var attributeCount = pendingExport.AttributeValueChanges.Count;
             var description = _runMode == SyncRunMode.PreviewOnly
-                ? $"Preview: {pendingExport.ChangeType} with {attributeCount} attribute change(s)"
-                : $"Export: {pendingExport.ChangeType} with {attributeCount} attribute change(s)";
+                ? $"Preview: {exportItem.ChangeType} with {exportItem.AttributeChangeCount} attribute change(s)"
+                : $"Export: {exportItem.ChangeType} with {exportItem.AttributeChangeCount} attribute change(s)";
 
             var executionItem = new ActivityRunProfileExecutionItem
             {
                 Activity = _activity,
                 ActivityId = _activity.Id,
-                ObjectChangeType = pendingExport.ChangeType switch
+                ObjectChangeType = exportItem.ChangeType switch
                 {
                     PendingExportChangeType.Create => ObjectChangeType.Create,
                     PendingExportChangeType.Update => ObjectChangeType.Update,
@@ -173,25 +165,22 @@ public class SyncExportTaskProcessor
             };
 
             // Link to the Connected System Object if available
-            if (pendingExport.ConnectedSystemObject != null)
+            if (exportItem.ConnectedSystemObject != null)
             {
-                executionItem.ConnectedSystemObject = pendingExport.ConnectedSystemObject;
+                executionItem.ConnectedSystemObject = exportItem.ConnectedSystemObject;
             }
 
-            // Set error information if the export failed or is retrying
-            if (pendingExport.ErrorCount > 0 && !string.IsNullOrEmpty(pendingExport.LastErrorMessage))
+            // Set error information if the export failed
+            if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
-                if (pendingExport.Status == PendingExportStatus.Failed)
+                executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+                if (exportItem.ErrorCount > 0)
                 {
-                    // Export exceeded max retries
-                    executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-                    executionItem.ErrorMessage = $"Export failed after {pendingExport.ErrorCount} attempts: {pendingExport.LastErrorMessage}";
+                    executionItem.ErrorMessage = $"Export failed (attempt {exportItem.ErrorCount}): {exportItem.ErrorMessage}";
                 }
-                else if (pendingExport.Status == PendingExportStatus.Pending)
+                else
                 {
-                    // Export failed but is retrying
-                    executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-                    executionItem.ErrorMessage = $"Export failed (attempt {pendingExport.ErrorCount}/{pendingExport.MaxRetries}), will retry: {pendingExport.LastErrorMessage}";
+                    executionItem.ErrorMessage = exportItem.ErrorMessage;
                 }
             }
 

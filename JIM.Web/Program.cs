@@ -389,7 +389,12 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
     loggerConfiguration.MinimumLevel.Override("Microsoft", LogEventLevel.Information);
     loggerConfiguration.MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning);
     loggerConfiguration.Enrich.FromLogContext();
-    loggerConfiguration.WriteTo.File(Path.Combine(loggingPath, "jim.web..log"), rollingInterval: RollingInterval.Day);
+    loggerConfiguration.WriteTo.File(
+        Path.Combine(loggingPath, "jim.web..log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
+        fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max
+        rollOnFileSizeLimit: true);
     loggerConfiguration.WriteTo.Console();
 
     if (assignLogLogger)

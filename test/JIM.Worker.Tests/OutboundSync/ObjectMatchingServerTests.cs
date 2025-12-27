@@ -34,6 +34,12 @@ public class ObjectMatchingServerTests
     private JimApplication Jim { get; set; } = null!;
     #endregion
 
+    [TearDown]
+    public void TearDown()
+    {
+        Jim?.Dispose();
+    }
+
     [SetUp]
     public void Setup()
     {

@@ -24,6 +24,12 @@ public class CertificateServerTests
     private string _testThumbprint = null!;
     private string _testSubject = null!;
 
+    [TearDown]
+    public void TearDown()
+    {
+        _jim?.Dispose();
+    }
+
     [SetUp]
     public void SetUp()
     {

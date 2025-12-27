@@ -41,7 +41,13 @@ public class FullSyncTests
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; }
     private JimApplication Jim { get; set; }
     #endregion
-    
+
+    [TearDown]
+    public void TearDown()
+    {
+        Jim?.Dispose();
+    }
+
     [SetUp]
     public void Setup()
     {

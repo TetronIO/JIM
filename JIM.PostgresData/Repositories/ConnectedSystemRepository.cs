@@ -362,7 +362,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             TypeName = cso.Type.Name,
             DisplayName = cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname")) ? cso.AttributeValues.Single(av => EF.Functions.ILike(av.Attribute.Name, "displayname")).StringValue : null,
             ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
-            SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId)
+            ExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.ExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
+            SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId),
+            SecondaryExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault()
         });
         var results = await selectedObjects.ToListAsync();
 

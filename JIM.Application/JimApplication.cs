@@ -4,7 +4,7 @@ using JIM.Models.Core;
 using Serilog;
 namespace JIM.Application;
 
-public class JimApplication
+public class JimApplication : IDisposable
 {
     public IRepository Repository { get; }
     private SeedingServer Seeding { get; }
@@ -178,4 +178,30 @@ public class JimApplication
         var serviceSettings = await ServiceSettings.GetServiceSettingsAsync();
         return serviceSettings is { IsServiceInMaintenanceMode: false };
     }
+
+    #region IDisposable
+
+    private bool _disposed;
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Dispose the repository to release database connections
+            Repository.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    #endregion
 }

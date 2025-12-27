@@ -31,7 +31,13 @@ public class ImportUpdateObjectMvaTests
     private Mock<JimDbContext> MockJimDbContext { get; set; }
     private JimApplication Jim { get; set; }
     #endregion
-    
+
+    [TearDown]
+    public void TearDown()
+    {
+        Jim?.Dispose();
+    }
+
     [SetUp]
     public void Setup()
     {
