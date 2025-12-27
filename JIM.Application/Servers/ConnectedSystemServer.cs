@@ -1031,23 +1031,42 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
+        // Capture the external ID value string representation BEFORE deletion.
+        // We cannot reference the attribute value entity after deletion because it gets cascade deleted with the CSO.
+        var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToString();
+
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
-        
-        // create a Change Object for this deletion
+
+        // Create a Change Object for this deletion.
+        // Note: ConnectedSystemObject and DeletedObjectExternalIdAttributeValue are intentionally NOT set
+        // because the CSO and its attribute values have been cascade deleted from the database.
+        // The DeletedObjectType field preserves the object type information.
+        // TODO: Consider adding a DeletedObjectExternalIdValue (string) field to store the external ID value
+        // without requiring a FK reference to the deleted attribute value entity.
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
-            ConnectedSystemObject = connectedSystemObject,
+            // ConnectedSystemObject is null for DELETE operations (CSO no longer exists)
             ChangeType = ObjectChangeType.Delete,
             ChangeTime = DateTime.UtcNow,
             DeletedObjectType = connectedSystemObject.Type,
-            DeletedObjectExternalIdAttributeValue = connectedSystemObject.ExternalIdAttributeValue,
+            // DeletedObjectExternalIdAttributeValue cannot be set - the attribute value is cascade deleted with the CSO
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
         };
 
-        // the change object will be persisted with the activity run profile execution item further up the stack.
-        // we just need to associate the change with the execution item.
+        // Log the external ID for audit purposes since we can't persist it via FK
+        if (!string.IsNullOrEmpty(externalIdDisplayValue))
+        {
+            Log.Debug("DeleteConnectedSystemObjectAsync: Deleted CSO with external ID: {ExternalId}", externalIdDisplayValue);
+        }
+
+        // The change object will be persisted with the activity run profile execution item further up the stack.
+        // We just need to associate the change with the execution item.
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
+
+        // Clear the navigation property to the deleted CSO to prevent FK constraint violations.
+        // The CSO is now deleted, so we cannot maintain a reference to it.
+        activityRunProfileExecutionItem.ConnectedSystemObject = null;
     }
     
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
