@@ -97,7 +97,7 @@ public class SyncImportTaskProcessor
                     ConnectedSystemImportResult result;
                     using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
                     {
-                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, null, Log.Logger, _cancellationTokenSource.Token);
+                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, _connectedSystem.PersistedConnectorData, Log.Logger, _cancellationTokenSource.Token);
                     }
                     pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
