@@ -157,22 +157,29 @@ function Start-JIMRunProfile {
                             $lastStatus = $status
                         }
 
+                        # Build progress display from activity's progress fields
+                        $objectsToProcess = $activity.objectsToProcess ?? 0
+                        $objectsProcessed = $activity.objectsProcessed ?? 0
+                        $message = $activity.message ?? ""
+
                         $progressParams = @{
                             Activity = "Executing Run Profile"
                             Status = "$status - Elapsed: ${elapsed}s"
                             PercentComplete = -1  # Indeterminate
                         }
 
-                        # Try to get stats for better progress info
-                        try {
-                            $stats = Invoke-JIMApi -Endpoint "/api/v1/activities/$activityId/stats"
-                            if ($stats.totalItems -gt 0) {
-                                $percent = [int](($stats.processedItems / $stats.totalItems) * 100)
-                                $progressParams.Status = "$status - $($stats.processedItems) of $($stats.totalItems) items"
-                                $progressParams.PercentComplete = $percent
+                        # Use object counts for progress if available
+                        if ($objectsToProcess -gt 0) {
+                            $percent = [int](($objectsProcessed / $objectsToProcess) * 100)
+                            $progressParams.Status = "$status - $objectsProcessed of $objectsToProcess objects"
+                            $progressParams.PercentComplete = $percent
+
+                            # Add message if available
+                            if ($message) {
+                                $progressParams.Status += " - $message"
                             }
-                        } catch {
-                            # Stats not available, continue with indeterminate progress
+                        } elseif ($message) {
+                            $progressParams.Status = "$status - $message"
                         }
 
                         Write-Progress @progressParams

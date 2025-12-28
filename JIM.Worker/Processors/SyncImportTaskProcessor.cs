@@ -97,6 +97,10 @@ public class SyncImportTaskProcessor
                     pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
 
+                    // Update progress - for paginated imports we don't know the total, but we track objects imported so far
+                    _activity.ObjectsProcessed = totalObjectsImported;
+                    await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Imported {totalObjectsImported} objects (page {pageNumber})");
+
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                     AddExternalIdsToCollection(result, externalIdsImported);
 
@@ -134,6 +138,11 @@ public class SyncImportTaskProcessor
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 
+                // Update progress - for file-based imports we know the total after reading the file
+                _activity.ObjectsToProcess = totalObjectsImported;
+                _activity.ObjectsProcessed = 0;
+                await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Processing {totalObjectsImported} objects");
+
                 // todo: simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
@@ -142,6 +151,10 @@ public class SyncImportTaskProcessor
                 {
                     await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
                 }
+
+                // Mark file processing complete
+                _activity.ObjectsProcessed = totalObjectsImported;
+                await _jim.Activities.UpdateActivityAsync(_activity);
                 break;
             }
             default:

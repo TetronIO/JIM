@@ -38,6 +38,7 @@ public class SyncDeltaSyncTaskProcessor
     // Batch collections for deferred pending export operations (avoid per-CSO database calls)
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
+    private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportCreates = [];
 
     public SyncDeltaSyncTaskProcessor(
         JimApplication jimApplication,
@@ -725,6 +726,10 @@ public class SyncDeltaSyncTaskProcessor
         return MetaverseObjectChangeResult.NoChanges();
     }
 
+    /// <summary>
+    /// Evaluates export rules for an MVO and collects pending exports for batch-save.
+    /// Note: Pending exports are collected in _pendingExportCreates and batch-saved via FlushPendingExportOperationsAsync.
+    /// </summary>
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
         if (_exportEvaluationCache == null)
@@ -733,6 +738,7 @@ public class SyncDeltaSyncTaskProcessor
             return;
         }
 
+        // Evaluate export rules - exports are NOT persisted here, collected for batch-save
         List<JIM.Models.Transactional.PendingExport> pendingExports;
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
@@ -745,10 +751,12 @@ public class SyncDeltaSyncTaskProcessor
 
         if (pendingExports.Count > 0)
         {
-            Log.Information("EvaluateOutboundExportsAsync: Created {Count} pending exports for MVO {MvoId}",
+            _pendingExportCreates.AddRange(pendingExports);
+            Log.Debug("EvaluateOutboundExportsAsync: Queued {Count} pending exports for MVO {MvoId} (will batch-save later)",
                 pendingExports.Count, mvo.Id);
         }
 
+        // Evaluate deprovisioning - exports are NOT persisted here, collected for batch-save
         List<JIM.Models.Transactional.PendingExport> deprovisioningExports;
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
@@ -760,7 +768,8 @@ public class SyncDeltaSyncTaskProcessor
 
         if (deprovisioningExports.Count > 0)
         {
-            Log.Information("EvaluateOutboundExportsAsync: Created {Count} deprovisioning exports for MVO {MvoId}",
+            _pendingExportCreates.AddRange(deprovisioningExports);
+            Log.Debug("EvaluateOutboundExportsAsync: Queued {Count} deprovisioning exports for MVO {MvoId} (will batch-save later)",
                 deprovisioningExports.Count, mvo.Id);
         }
     }
@@ -820,17 +829,26 @@ public class SyncDeltaSyncTaskProcessor
     }
 
     /// <summary>
-    /// Batch persists all pending export deletes and updates collected during the current page.
-    /// This reduces database round trips from n writes to 2 writes (one for deletes, one for updates).
+    /// Batch persists all pending export creates, deletes, and updates collected during the current page.
+    /// This reduces database round trips from n writes to 3 writes (one each for creates, deletes, updates).
     /// </summary>
     private async Task FlushPendingExportOperationsAsync()
     {
-        if (_pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
+        if (_pendingExportCreates.Count == 0 && _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("FlushPendingExportOperations");
+        span.SetTag("createCount", _pendingExportCreates.Count);
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
+
+        // Batch create new pending exports (from export rule evaluation)
+        if (_pendingExportCreates.Count > 0)
+        {
+            await _jim.ExportEvaluation.PersistPendingExportsAsync(_pendingExportCreates);
+            Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} pending exports in batch", _pendingExportCreates.Count);
+            _pendingExportCreates.Clear();
+        }
 
         // Batch delete confirmed pending exports
         if (_pendingExportsToDelete.Count > 0)

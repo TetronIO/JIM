@@ -536,6 +536,8 @@ public class ExportEvaluationServer
     /// <summary>
     /// Optimised version of CreateOrUpdatePendingExportAsync that uses pre-cached CSO lookup.
     /// Also updates the cache when new CSOs are created for provisioning.
+    /// Note: This method does NOT persist the pending export to the database. The caller must
+    /// collect the returned exports and call PersistPendingExportsAsync to batch-save them.
     /// </summary>
     private async Task<PendingExport?> CreateOrUpdatePendingExportAsync(
         MetaverseObject mvo,
@@ -594,12 +596,26 @@ public class ExportEvaluationServer
             CreatedAt = DateTime.UtcNow
         };
 
-        await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
-
-        Log.Information("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes",
+        // Note: We do NOT save here - caller collects and batch-saves via PersistPendingExportsAsync
+        Log.Debug("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes (not yet persisted)",
             changeType, pendingExport.Id, mvo.Id, exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(), attributeChanges.Count);
 
         return pendingExport;
+    }
+
+    /// <summary>
+    /// Batch persists a collection of pending exports to the database in a single operation.
+    /// Call this after collecting exports from EvaluateExportRulesAsync and EvaluateOutOfScopeExportsAsync.
+    /// </summary>
+    /// <param name="pendingExports">The pending exports to persist.</param>
+    public async Task PersistPendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var exportList = pendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        await Application.Repository.ConnectedSystems.CreatePendingExportsAsync(exportList);
+        Log.Information("PersistPendingExportsAsync: Batch-saved {Count} pending exports", exportList.Count);
     }
 
     /// <summary>
