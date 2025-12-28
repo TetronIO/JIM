@@ -70,13 +70,6 @@ public interface IConnectedSystemRepository
     public Task CreatePendingExportAsync(PendingExport pendingExport);
 
     /// <summary>
-    /// Creates multiple Pending Export objects in a single batch operation.
-    /// More efficient than calling CreatePendingExportAsync multiple times.
-    /// </summary>
-    /// <param name="pendingExports">The Pending Exports to create.</param>
-    public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
-
-    /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>

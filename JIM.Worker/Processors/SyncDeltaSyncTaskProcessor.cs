@@ -38,7 +38,6 @@ public class SyncDeltaSyncTaskProcessor
     // Batch collections for deferred pending export operations (avoid per-CSO database calls)
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
-    private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportCreates = [];
 
     public SyncDeltaSyncTaskProcessor(
         JimApplication jimApplication,
@@ -727,8 +726,10 @@ public class SyncDeltaSyncTaskProcessor
     }
 
     /// <summary>
-    /// Evaluates export rules for an MVO and collects pending exports for batch-save.
-    /// Note: Pending exports are collected in _pendingExportCreates and batch-saved via FlushPendingExportOperationsAsync.
+    /// Evaluates export rules for an MVO that has changed during inbound sync.
+    /// Creates PendingExports for any connected systems that need to be updated.
+    /// Also evaluates if MVO has fallen out of scope for any export rules (deprovisioning).
+    /// Pending exports are saved immediately to avoid memory pressure from holding large numbers of objects.
     /// </summary>
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
@@ -738,39 +739,25 @@ public class SyncDeltaSyncTaskProcessor
             return;
         }
 
-        // Evaluate export rules - exports are NOT persisted here, collected for batch-save
-        List<JIM.Models.Transactional.PendingExport> pendingExports;
+        // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
+        // Pending exports are saved immediately within EvaluateExportRulesAsync to avoid
+        // memory pressure from holding 5000+ pending export objects in memory
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
-            pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
+            await _jim.ExportEvaluation.EvaluateExportRulesAsync(
                 mvo,
                 changedAttributes,
                 _connectedSystem,
                 _exportEvaluationCache);
         }
 
-        if (pendingExports.Count > 0)
-        {
-            _pendingExportCreates.AddRange(pendingExports);
-            Log.Debug("EvaluateOutboundExportsAsync: Queued {Count} pending exports for MVO {MvoId} (will batch-save later)",
-                pendingExports.Count, mvo.Id);
-        }
-
-        // Evaluate deprovisioning - exports are NOT persisted here, collected for batch-save
-        List<JIM.Models.Transactional.PendingExport> deprovisioningExports;
+        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
-            deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
+            await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
                 mvo,
                 _connectedSystem,
                 _exportEvaluationCache);
-        }
-
-        if (deprovisioningExports.Count > 0)
-        {
-            _pendingExportCreates.AddRange(deprovisioningExports);
-            Log.Debug("EvaluateOutboundExportsAsync: Queued {Count} deprovisioning exports for MVO {MvoId} (will batch-save later)",
-                deprovisioningExports.Count, mvo.Id);
         }
     }
 
@@ -829,26 +816,19 @@ public class SyncDeltaSyncTaskProcessor
     }
 
     /// <summary>
-    /// Batch persists all pending export creates, deletes, and updates collected during the current page.
-    /// This reduces database round trips from n writes to 3 writes (one each for creates, deletes, updates).
+    /// Batch persists all pending export deletes and updates collected during the current page.
+    /// This reduces database round trips from n writes to 2 writes (one each for deletes, updates).
+    /// Note: Pending export creates are saved immediately during EvaluateExportRulesAsync to avoid
+    /// memory pressure from holding large numbers of pending export objects.
     /// </summary>
     private async Task FlushPendingExportOperationsAsync()
     {
-        if (_pendingExportCreates.Count == 0 && _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
+        if (_pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("FlushPendingExportOperations");
-        span.SetTag("createCount", _pendingExportCreates.Count);
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
-
-        // Batch create new pending exports (from export rule evaluation)
-        if (_pendingExportCreates.Count > 0)
-        {
-            await _jim.ExportEvaluation.PersistPendingExportsAsync(_pendingExportCreates);
-            Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} pending exports in batch", _pendingExportCreates.Count);
-            _pendingExportCreates.Clear();
-        }
 
         // Batch delete confirmed pending exports
         if (_pendingExportsToDelete.Count > 0)
