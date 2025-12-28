@@ -354,7 +354,7 @@ Write-Step "Extracting diagnostic timing from worker logs..."
 # Capture worker logs with diagnostic output
 $workerLogs = docker logs jim.worker 2>&1 | Where-Object { $_ -match "DiagnosticListener:" }
 
-# Parse metrics into structured data
+# Parse metrics into structured data using parallel processing
 $metrics = @{
     Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     Scenario = $Scenario
@@ -363,7 +363,9 @@ $metrics = @{
     Operations = @()
 }
 
-foreach ($logLine in $workerLogs) {
+# Use parallel processing for log parsing (PowerShell 7+)
+$operations = $workerLogs | ForEach-Object -Parallel {
+    $logLine = $_
     # Example: DiagnosticListener: [SLOW] Parent > Child completed in 1234.56ms [connectedSystemId=1, objectCount=100]
     # Or: DiagnosticListener: OperationName completed in 1234.56ms [tags]
     if ($logLine -match 'DiagnosticListener:\s+(?:\[SLOW\]\s+)?(?:(.+?)\s+>\s+)?(.+?)\s+completed in\s+([\d.]+)ms(?:\s+\[(.*)\])?') {
@@ -389,8 +391,14 @@ foreach ($logLine in $workerLogs) {
             }
         }
 
-        $metrics.Operations += $operation
+        # Return the operation (will be collected)
+        $operation
     }
+} -ThrottleLimit ([Environment]::ProcessorCount)
+
+# Add parsed operations to metrics
+if ($operations) {
+    $metrics.Operations = @($operations)
 }
 
 if ($metrics.Operations.Count -eq 0) {
@@ -564,30 +572,17 @@ else {
 
         $baseline = Get-Content $previousFiles.FullName | ConvertFrom-Json
 
-        # Compare key operations
-        $currentOps = @{}
-        foreach ($op in $metrics.Operations) {
-            if (-not $currentOps.ContainsKey($op.Name)) {
-                $currentOps[$op.Name] = @()
-            }
-            $currentOps[$op.Name] += $op.DurationMs
-        }
-
-        $baselineOps = @{}
-        foreach ($op in $baseline.Operations) {
-            if (-not $baselineOps.ContainsKey($op.Name)) {
-                $baselineOps[$op.Name] = @()
-            }
-            $baselineOps[$op.Name] += $op.DurationMs
-        }
+        # Compare key operations - use parallel grouping for better performance
+        $currentOps = $metrics.Operations | Group-Object -Property Name -AsHashTable -AsString
+        $baselineOps = $baseline.Operations | Group-Object -Property Name -AsHashTable -AsString
 
         # Display comparison for key operations
         $keyOperations = @("FullImport", "FullSync", "Export", "ProcessConnectedSystemObjects")
 
         foreach ($opName in $keyOperations) {
             if ($currentOps.ContainsKey($opName) -and $baselineOps.ContainsKey($opName)) {
-                $currentAvg = ($currentOps[$opName] | Measure-Object -Average).Average
-                $baselineAvg = ($baselineOps[$opName] | Measure-Object -Average).Average
+                $currentAvg = ($currentOps[$opName].DurationMs | Measure-Object -Average).Average
+                $baselineAvg = ($baselineOps[$opName].DurationMs | Measure-Object -Average).Average
                 $delta = $currentAvg - $baselineAvg
                 $percentChange = if ($baselineAvg -gt 0) { ($delta / $baselineAvg) * 100 } else { 0 }
 
