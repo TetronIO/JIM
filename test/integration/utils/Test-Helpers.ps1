@@ -615,5 +615,123 @@ function Write-Spinner {
     Write-Host "`r  $spinner $Message".PadRight(80) -NoNewline -ForegroundColor Yellow
 }
 
+function Assert-ActivitySuccess {
+    <#
+    .SYNOPSIS
+        Assert that an Activity completed successfully (status = 'Complete')
+
+    .DESCRIPTION
+        Validates that a JIM Activity completed without warnings or errors.
+        This prevents integration tests from silently passing when Activities
+        have warnings/errors that should be investigated.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) to validate
+
+    .PARAMETER Name
+        A friendly name for the operation (used in error messages)
+
+    .PARAMETER AllowWarnings
+        If specified, allows 'CompleteWithWarning' status to pass.
+        Use sparingly - warnings often indicate real issues.
+
+    .EXAMPLE
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Full Import"
+
+        Validates that the CSV Full Import completed successfully.
+
+    .EXAMPLE
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Delta Sync" -AllowWarnings
+
+        Validates that Delta Sync completed, allowing warnings (but not errors).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$AllowWarnings
+    )
+
+    # Fetch the Activity details
+    $activity = Get-JIMActivity -Id $ActivityId
+
+    if (-not $activity) {
+        throw "Activity not found: $ActivityId for '$Name'"
+    }
+
+    $status = $activity.status
+
+    # Define acceptable statuses
+    $acceptableStatuses = @('Complete')
+    if ($AllowWarnings) {
+        $acceptableStatuses += 'CompleteWithWarning'
+    }
+
+    # Check if status is acceptable
+    if ($status -in $acceptableStatuses) {
+        Write-Host "  ✓ $Name completed successfully (Status: $status)" -ForegroundColor Green
+        return $true
+    }
+
+    # Activity did not complete successfully - gather diagnostic information
+    $errorDetails = @()
+    $errorDetails += "Activity '$Name' ended with status: $status"
+    $errorDetails += "Activity ID: $ActivityId"
+
+    if ($activity.errorMessage) {
+        $errorDetails += "Error Message: $($activity.errorMessage)"
+    }
+
+    if ($activity.message) {
+        $errorDetails += "Status Message: $($activity.message)"
+    }
+
+    # Get execution statistics if available
+    try {
+        $stats = Get-JIMActivityStats -ActivityId $ActivityId -ErrorAction SilentlyContinue
+        if ($stats) {
+            $errorDetails += "Statistics:"
+            $errorDetails += "  - Objects Processed: $($stats.totalObjectChangeCount)"
+            $errorDetails += "  - Creates: $($stats.totalObjectCreates)"
+            $errorDetails += "  - Updates: $($stats.totalObjectUpdates)"
+            $errorDetails += "  - Deletes: $($stats.totalObjectDeletes)"
+            $errorDetails += "  - Errors: $($stats.totalObjectErrors)"
+
+            # If there are errors, try to get the first few error items
+            if ($stats.totalObjectErrors -gt 0) {
+                $errorItems = Get-JIMActivity -Id $ActivityId -ExecutionItems |
+                    Where-Object { $_.errorType -and $_.errorType -ne 'NotSet' } |
+                    Select-Object -First 5
+
+                if ($errorItems) {
+                    $errorDetails += "First error items:"
+                    foreach ($item in $errorItems) {
+                        $errorDetails += "  - Error: $($item.errorType)"
+                        if ($item.connectedSystemObjectExternalId) {
+                            $errorDetails += "    Object: $($item.connectedSystemObjectExternalId)"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        # Statistics may not be available for all activity types
+        Write-Verbose "Could not retrieve activity statistics: $_"
+    }
+
+    # Output error details
+    Write-Host "  ✗ $Name FAILED" -ForegroundColor Red
+    foreach ($detail in $errorDetails) {
+        Write-Host "    $detail" -ForegroundColor Red
+    }
+
+    throw "Activity '$Name' did not complete successfully. Status: $status (ActivityId: $ActivityId)"
+}
+
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember

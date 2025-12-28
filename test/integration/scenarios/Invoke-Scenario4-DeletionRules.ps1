@@ -160,12 +160,13 @@ try {
 
         # Initial sync to provision the user
         Write-Host "Provisioning user via sync..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (LeaverGracePeriod provisioning)"
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (LeaverGracePeriod provisioning)"
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export (LeaverGracePeriod provisioning)"
+        Start-Sleep -Seconds 5  # Brief wait for AD replication
 
         # Verify user was provisioned
         $adUserCheck = docker exec samba-ad-primary samba-tool user show test.leaver 2>&1
@@ -182,10 +183,10 @@ try {
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
             # Sync to process the leaver
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-            Start-Sleep -Seconds $WaitSeconds
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-            Start-Sleep -Seconds $WaitSeconds
+            $leaverImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $leaverImportResult.activityId -Name "CSV Import (LeaverGracePeriod removal)"
+            $leaverSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $leaverSyncResult.activityId -Name "Full Sync (LeaverGracePeriod removal)"
 
             # Check MVO status via API - should have LastConnectorDisconnectedDate set
             Write-Host "Checking MVO deletion status..." -ForegroundColor Gray
@@ -233,12 +234,13 @@ try {
 
         # Initial sync to provision the user
         Write-Host "Provisioning user via sync..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Reconnection provisioning)"
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (Reconnection provisioning)"
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Reconnection provisioning)"
+        Start-Sleep -Seconds 5  # Brief wait for AD replication
 
         # Verify user was provisioned
         $adUserCheck = docker exec samba-ad-primary samba-tool user show test.reconnect2 2>&1
@@ -255,10 +257,10 @@ try {
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
             # Short sync to mark CSO obsolete
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-            Start-Sleep -Seconds 15
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-            Start-Sleep -Seconds 15
+            $quitImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $quitImportResult.activityId -Name "CSV Import (Reconnection quit)"
+            $quitSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $quitSyncResult.activityId -Name "Full Sync (Reconnection quit)"
 
             # Re-add user to CSV (simulating rehire before grace period)
             Write-Host "Re-adding user to CSV (simulating rehire)..." -ForegroundColor Gray
@@ -266,10 +268,10 @@ try {
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
             # Sync to process the rehire
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-            Start-Sleep -Seconds $WaitSeconds
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-            Start-Sleep -Seconds $WaitSeconds
+            $rehireImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $rehireImportResult.activityId -Name "CSV Import (Reconnection rehire)"
+            $rehireSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $rehireSyncResult.activityId -Name "Full Sync (Reconnection rehire)"
 
             # Verify user still exists in AD and MVO is reconnected
             $adUserCheck = docker exec samba-ad-primary samba-tool user show test.reconnect2 2>&1
@@ -427,9 +429,8 @@ try {
                                             Where-Object { $_.name -match "Import" } | Select-Object -First 1
 
                                         if ($runProfile) {
-                                            Start-JIMRunProfile -ConnectedSystemId $csvConnectedSystem.id -RunProfileId $runProfile.id -ErrorAction SilentlyContinue
-                                            Write-Host "  Waiting $WaitSeconds seconds for import to complete..." -ForegroundColor Gray
-                                            Start-Sleep -Seconds $WaitSeconds
+                                            $scopeImportResult = Start-JIMRunProfile -ConnectedSystemId $csvConnectedSystem.id -RunProfileId $runProfile.id -Wait -PassThru -ErrorAction SilentlyContinue
+                                            Assert-ActivitySuccess -ActivityId $scopeImportResult.activityId -Name "CSV Import (InboundScopeFilter)"
 
                                             # Step 4: Verify scoping worked
                                             Write-Host "  Verifying scoping results..." -ForegroundColor Gray
