@@ -923,16 +923,6 @@ public class SyncImportTaskProcessor
         // try and find the referenced object by the external id amongst the two processing lists of CSOs first
         ConnectedSystemObject? referencedConnectedSystemObject;
 
-        // couldn't get this to match anything. no idea why
-        //referencedConnectedSystemObject = connectedSystemObjectsToProcess.SingleOrDefault(cso =>
-        //    cso.AttributeValues.Any(av =>
-        //        av.Attribute.Id == externalIdAttributeToUse.Id &&
-        //        av.StringValue != null &&
-        //        av.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)));
-
-        // this does work, but might not be optimal:
-        // ideally fix the above query, so it works and don't use this, but for now, works is works.
-
         if (externalIdAttribute.IsExternalId)
         {
             switch (externalIdAttribute.Type)
