@@ -2,6 +2,7 @@
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Tasking;
 using JIM.Utilities;
 using JIM.Worker.Tests.Models;
 
@@ -1059,5 +1060,22 @@ public static class TestUtilities
                 InitiatedByName = "Joe Bloggs"
             }
         };
+    }
+
+    /// <summary>
+    /// Creates a test WorkerTask with the specified activity and initiator for use with SyncImportTaskProcessor.
+    /// </summary>
+    public static SynchronisationWorkerTask CreateTestWorkerTask(Activity activity, MetaverseObject? initiatedBy)
+    {
+        var workerTask = new SynchronisationWorkerTask
+        {
+            Id = Guid.NewGuid(),
+            Activity = activity,
+            InitiatedByType = initiatedBy != null ? ActivityInitiatorType.User : ActivityInitiatorType.NotSet,
+            InitiatedByMetaverseObject = initiatedBy,
+            InitiatedById = initiatedBy?.Id,
+            InitiatedByName = initiatedBy?.DisplayName
+        };
+        return workerTask;
     }
 }

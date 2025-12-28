@@ -7,7 +7,9 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
+using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Models.Tasking;
 using Serilog;
 using JIM.Worker.Models;
 
@@ -19,7 +21,9 @@ public class SyncImportTaskProcessor
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
-    private readonly MetaverseObject? _initiatedBy;
+    private readonly ActivityInitiatorType _initiatedByType;
+    private readonly MetaverseObject? _initiatedByMetaverseObject;
+    private readonly ApiKey? _initiatedByApiKey;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly CancellationTokenSource _cancellationTokenSource;
@@ -29,8 +33,7 @@ public class SyncImportTaskProcessor
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
-        MetaverseObject? initiatedBy,
-        JIM.Models.Activities.Activity activity,
+        WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource)
     {
         _jim = jimApplication;
@@ -38,8 +41,10 @@ public class SyncImportTaskProcessor
         _connectedSystem = connectedSystem;
         _cancellationTokenSource = cancellationTokenSource;
         _connectedSystemRunProfile = connectedSystemRunProfile;
-        _initiatedBy = initiatedBy;
-        _activity = activity;
+        _initiatedByType = workerTask.InitiatedByType;
+        _initiatedByMetaverseObject = workerTask.InitiatedByMetaverseObject;
+        _initiatedByApiKey = workerTask.InitiatedByApiKey;
+        _activity = workerTask.Activity;
 
         // we will maintain this list separate from the activity, and add the items to the activity when all CSOs are persisted
         // this is so we don't create a dependency on CSOs with the Activity whilst we're still processing and updating the activity status, which would cause EF to persist
@@ -112,7 +117,7 @@ public class SyncImportTaskProcessor
                         // the connector wants to persist some data between sync runs. update the connected system with the new value
                         Log.Debug($"ExecuteAsync: updating persisted connector data. old value: '{_connectedSystem.PersistedConnectorData}', new value: '{result.PersistedConnectorData}'");
                         _connectedSystem.PersistedConnectorData = result.PersistedConnectorData;
-                        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedBy, _activity);
+                        await UpdateConnectedSystemWithInitiatorAsync();
                     }
 
                     // process the results from this page
@@ -1060,6 +1065,21 @@ public class SyncImportTaskProcessor
         {
             Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, Exports deleted: {Deleted}",
                 totalConfirmed, totalRetry, totalFailed, exportsDeleted);
+        }
+    }
+
+    /// <summary>
+    /// Updates the connected system with the appropriate initiator (MetaverseObject or ApiKey).
+    /// </summary>
+    private async Task UpdateConnectedSystemWithInitiatorAsync()
+    {
+        if (_initiatedByType == ActivityInitiatorType.ApiKey && _initiatedByApiKey != null)
+        {
+            await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedByApiKey, _activity);
+        }
+        else
+        {
+            await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedByMetaverseObject, _activity);
         }
     }
 }
