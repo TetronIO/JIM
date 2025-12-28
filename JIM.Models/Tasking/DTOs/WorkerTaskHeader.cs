@@ -1,4 +1,4 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
 namespace JIM.Models.Tasking.DTOs;
 
 public class WorkerTaskHeader
@@ -13,5 +13,18 @@ public class WorkerTaskHeader
 
     public WorkerTaskStatus Status { get; set; }
 
-    public MetaverseObject? InitiatedBy { get; set; }
+    /// <summary>
+    /// The type of security principal that initiated this task.
+    /// </summary>
+    public ActivityInitiatorType InitiatedByType { get; set; } = ActivityInitiatorType.NotSet;
+
+    /// <summary>
+    /// The unique identifier of the security principal (MetaverseObject or ApiKey) that initiated this task.
+    /// </summary>
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>
+    /// The name of the security principal at the time of task creation.
+    /// </summary>
+    public string? InitiatedByName { get; set; }
 }

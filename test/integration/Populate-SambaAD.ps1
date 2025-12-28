@@ -69,8 +69,9 @@ Write-Host "Groups to create: $($scale.Groups)" -ForegroundColor Gray
 # Create OUs
 Write-TestStep "Step 1" "Creating organisational units"
 
-$ous = @("TestUsers", "TestGroups")
-foreach ($ou in $ous) {
+# Base OUs for test users and groups
+$baseOus = @("TestUsers", "TestGroups")
+foreach ($ou in $baseOus) {
     Write-Host "  Creating OU: $ou" -ForegroundColor Gray
 
     $result = docker exec $container samba-tool ou create "OU=$ou,$domainDN" 2>&1
@@ -79,6 +80,21 @@ foreach ($ou in $ous) {
     }
     else {
         Write-Host "    ✓ OU created: $ou" -ForegroundColor Green
+    }
+}
+
+# Department OUs - these match the departments in Test-Helpers.ps1 New-TestUser function
+# Required for DN expression: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=..."
+$departmentOus = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
+                   "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
+Write-Host "  Creating department OUs for user placement..." -ForegroundColor Gray
+foreach ($deptOu in $departmentOus) {
+    $result = docker exec $container samba-tool ou create "OU=$deptOu,$domainDN" 2>&1
+    if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
+        Write-Host "    Warning: Failed to create OU $deptOu : $result" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "    ✓ OU created: $deptOu" -ForegroundColor Green
     }
 }
 

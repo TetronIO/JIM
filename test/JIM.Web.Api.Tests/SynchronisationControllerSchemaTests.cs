@@ -28,10 +28,12 @@ public class SynchronisationControllerSchemaTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
+    private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
     private Mock<ILogger<SynchronisationController>> _mockLogger = null!;
     private IExpressionEvaluator _expressionEvaluator = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
+    private JIM.Models.Security.ApiKey _testApiKey = null!;
 
     [SetUp]
     public void SetUp()
@@ -39,17 +41,36 @@ public class SynchronisationControllerSchemaTests
         _mockRepository = new Mock<IRepository>();
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
+        _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
         _application = new JimApplication(_mockRepository.Object);
         _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator);
 
+        // Create a test API key
+        var apiKeyId = Guid.NewGuid();
+        _testApiKey = new JIM.Models.Security.ApiKey
+        {
+            Id = apiKeyId,
+            Name = "TestApiKey",
+            KeyHash = "test-hash",
+            KeyPrefix = "test",
+            IsEnabled = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        // Set up the API key repository to return our test API key
+        _mockApiKeyRepo.Setup(r => r.GetByIdAsync(apiKeyId))
+            .ReturnsAsync(_testApiKey);
+
         // Set up API key authentication context for the controller
         var claims = new List<Claim>
         {
             new Claim("auth_method", "api_key"),
+            new Claim(ClaimTypes.NameIdentifier, apiKeyId.ToString()),
             new Claim(ClaimTypes.Name, "TestApiKey")
         };
         var identity = new ClaimsIdentity(claims, "ApiKey");

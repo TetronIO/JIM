@@ -66,27 +66,30 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Initiated By:</MudText>
                 @{
-                    if (_activity.InitiatedBy != null)
+                    if (_activity.InitiatedByType == ActivityInitiatorType.User && _activity.InitiatedByMetaverseObject != null)
                     {
                         <MudText>
                             <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedBy)</MudLink>
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedByMetaverseObject)</MudLink>
+                        </MudText>
+                    }
+                    else if (_activity.InitiatedByType == ActivityInitiatorType.ApiKey)
+                    {
+                        <MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            @if (_activity.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">@_activity.InitiatedByName</MudLink>
+                            }
+                            else
+                            {
+                                <span>@_activity.InitiatedByName</span>
+                            }
                         </MudText>
                     }
                     else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
                     {
-                        var apiKeyName = Utilities.ExtractApiKeyName(_activity.InitiatedByName);
-                        if (apiKeyName != null)
-                        {
-                            <MudText>
-                                <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                                <MudLink Href="@Utilities.GetApiKeysHref()">@apiKeyName</MudLink>
-                            </MudText>
-                        }
-                        else
-                        {
-                            <MudText>@_activity.InitiatedByName</MudText>
-                        }
+                        <MudText>@_activity.InitiatedByName</MudText>
                     }
                 }
             </MudItem>
@@ -118,9 +121,7 @@
             @if (!string.IsNullOrEmpty(_activity.ErrorStackTrace))
             {
                 <MudText Typo="Typo.button">Error Stack:</MudText>
-                <pre>
-@_activity.ErrorStackTrace
-                </pre>
+                <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; max-width: 100%;">@_activity.ErrorStackTrace</pre>
             }
         </MudPaper>
     }

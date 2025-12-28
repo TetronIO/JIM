@@ -168,7 +168,7 @@ public class Worker : BackgroundService
                                 }
                                 case SynchronisationWorkerTask syncWorkerTask:
                                 {
-                                    var initiatedByDisplay = newWorkerTask.InitiatedBy?.DisplayName ?? newWorkerTask.InitiatedByName ?? "Unknown";
+                                    var initiatedByDisplay = newWorkerTask.InitiatedByMetaverseObject?.DisplayName ?? newWorkerTask.InitiatedByName ?? "Unknown";
                                     Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
                                         syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     {
@@ -196,7 +196,7 @@ public class Worker : BackgroundService
                                                         // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
-                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedByMetaverseObject, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
@@ -205,7 +205,7 @@ public class Worker : BackgroundService
                                                             // Delta Import uses the import processor just like Full Import.
                                                             // The connector's ImportAsync method checks the run profile type
                                                             // to determine whether to do full or delta import.
-                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedByMetaverseObject, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncDeltaImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
@@ -262,9 +262,9 @@ public class Worker : BackgroundService
                                 case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
                                 {
                                     Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
-                                    if (clearConnectedSystemObjectsTask.InitiatedBy == null)
+                                    if (clearConnectedSystemObjectsTask.InitiatedByType == ActivityInitiatorType.NotSet)
                                     {
-                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing an InitiatedBy value. Cannot continue processing worker task.");
+                                        Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing initiator information. Cannot continue processing worker task.");
                                     }
                                     else
                                     {
@@ -322,7 +322,7 @@ public class Worker : BackgroundService
                                             if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
                                             {
                                                 connectedSystem.Status = ConnectedSystemStatus.Active;
-                                                await taskJim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, null);
+                                                await taskJim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, (MetaverseObject?)null);
                                                 Log.Warning("ExecuteAsync: Reset Connected System {Id} status to Active after deletion failure", deleteConnectedSystemTask.ConnectedSystemId);
                                             }
                                         }

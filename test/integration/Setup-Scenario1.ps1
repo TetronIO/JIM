@@ -457,7 +457,8 @@ try {
         )
 
         # Expression-based mappings for computed values
-        # DN now uses Department to place users in department OUs
+        # DN uses Department to place users in department OUs (created by Populate-SambaAD.ps1)
+        # This enables OU move testing when department changes
         $expressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
@@ -683,6 +684,21 @@ try {
     $csvProfiles = Get-JIMRunProfile -ConnectedSystemId $csvSystem.id
     $ldapProfiles = Get-JIMRunProfile -ConnectedSystemId $ldapSystem.id
 
+    # Full Import from LDAP - MUST be created first and run before any syncs
+    # This establishes the baseline for Delta Import (USN watermark)
+    $ldapFullImportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Full Import" }
+    if (-not $ldapFullImportProfile) {
+        $ldapFullImportProfile = New-JIMRunProfile `
+            -Name "Samba AD - Full Import" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "FullImport" `
+            -PassThru
+        Write-Host "  ✓ Created 'Samba AD - Full Import' run profile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Samba AD - Full Import' already exists" -ForegroundColor Gray
+    }
+
     # Full Import from CSV - FilePath is required for file-based connectors
     $csvFilePath = "/var/connector-files/test-data/hr-users.csv"
     $csvImportProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Full Import" }
@@ -795,6 +811,7 @@ return @{
     CSVImportProfileId = $csvImportProfile.id
     CSVSyncProfileId = $csvSyncProfile.id
     CSVDeltaSyncProfileId = $csvDeltaSyncProfile.id
+    LDAPFullImportProfileId = $ldapFullImportProfile.id
     LDAPExportProfileId = $ldapExportProfile.id
     LDAPDeltaImportProfileId = $ldapDeltaImportProfile.id
     LDAPDeltaSyncProfileId = $ldapDeltaSyncProfile.id

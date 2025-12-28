@@ -90,6 +90,14 @@ public static class Utilities
     }
 
     /// <summary>
+    /// Returns the href for a specific API Key detail page.
+    /// </summary>
+    public static string GetApiKeyHref(Guid apiKeyId)
+    {
+        return $"/admin/apikeys/{apiKeyId}";
+    }
+
+    /// <summary>
     /// Checks if an InitiatedByName string represents an API Key.
     /// Returns the API key name without the prefix if it's an API key, otherwise returns null.
     /// </summary>

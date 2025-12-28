@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 namespace JIM.Models.Activities;
 
@@ -26,12 +27,38 @@ public class Activity
     /// </summary>
     public DateTime Executed { get; set; }
 
-    /// <summary>
-    /// A link to the Metaverse Object for a user if this activity was initiated by a person.
-    /// </summary>
-    public MetaverseObject? InitiatedBy { get; set; }
+    // -----------------------------------------------------------------------------------------------------------------
+    // Initiator tracking - all activities MUST be attributed to a security principal for audit compliance
+    // -----------------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The type of security principal that initiated this activity.
+    /// </summary>
+    public ActivityInitiatorType InitiatedByType { get; set; } = ActivityInitiatorType.NotSet;
+
+    /// <summary>
+    /// The unique identifier of the security principal (MetaverseObject or ApiKey) that initiated this activity.
+    /// Retained even if the principal is deleted to support audit investigations.
+    /// </summary>
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the security principal at the time of the activity.
+    /// Retained even if the principal is deleted to maintain audit trail readability.
+    /// </summary>
     public string? InitiatedByName { get; set; }
+
+    /// <summary>
+    /// Reference to the MetaverseObject if this activity was initiated by a user.
+    /// May be null if the user has been deleted or if initiated by an API key.
+    /// </summary>
+    public MetaverseObject? InitiatedByMetaverseObject { get; set; }
+
+    /// <summary>
+    /// Reference to the ApiKey if this activity was initiated via API key authentication.
+    /// May be null if the API key has been deleted or if initiated by a user.
+    /// </summary>
+    public ApiKey? InitiatedByApiKey { get; set; }
 
     public string? ErrorMessage { get; set; }
 

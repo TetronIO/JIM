@@ -76,23 +76,19 @@
         </MudTd>
         <MudTd DataLabel="Initiated By">
             @{
-                if (context.InitiatedBy != null)
+                if (context.InitiatedByType == ActivityInitiatorType.User && context.InitiatedByMetaverseObject != null)
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)</span>
+                    <span>@Utilities.GetMetaverseObjectHrefText(context.InitiatedByMetaverseObject)</span>
+                }
+                else if (context.InitiatedByType == ActivityInitiatorType.ApiKey)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    <span>@context.InitiatedByName</span>
                 }
                 else if (!string.IsNullOrEmpty(context.InitiatedByName))
                 {
-                    var apiKeyName = Utilities.ExtractApiKeyName(context.InitiatedByName);
-                    if (apiKeyName != null)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                        <span>@apiKeyName</span>
-                    }
-                    else
-                    {
-                        <span>@context.InitiatedByName</span>
-                    }
+                    <span>@context.InitiatedByName</span>
                 }
             }
         </MudTd>

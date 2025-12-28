@@ -38,30 +38,30 @@
             </MudPaper>
         }
 
-        @{
-            string? apiKeyName = null;
-            if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
-            {
-                apiKeyName = Utilities.ExtractApiKeyName(_activity.InitiatedByName);
-            }
-        }
-        @if (_activity is { InitiatedBy: not null })
+        @if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedByMetaverseObject: not null })
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Initiated By</MudText>
                 <MudText>
                     <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                    <MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedBy))" Typo="Typo.h5">@_activity.InitiatedBy.DisplayName</MudLink>
+                    <MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject))" Typo="Typo.h5">@_activity.InitiatedByMetaverseObject.DisplayName</MudLink>
                 </MudText>
             </MudPaper>
         }
-        else if (apiKeyName != null)
+        else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
         {
             <MudPaper Class="pa-5" Outlined="true">
                 <MudText Typo="Typo.overline">Initiated By</MudText>
                 <MudText>
                     <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                    <MudLink Href="@Utilities.GetApiKeysHref()" Typo="Typo.h5">@apiKeyName</MudLink>
+                    @if (_activity.InitiatedByApiKey != null)
+                    {
+                        <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedByApiKey.Id)" Typo="Typo.h5">@_activity.InitiatedByName</MudLink>
+                    }
+                    else
+                    {
+                        <span>@_activity.InitiatedByName</span>
+                    }
                 </MudText>
             </MudPaper>
         }
@@ -184,9 +184,7 @@
             @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
             {
                 <MudText Typo="Typo.button">Error Stack:</MudText>
-                <pre>
-                    @_activityRunProfileExecutionItem.ErrorStackTrace
-                </pre>
+                <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; max-width: 100%;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
             }
         </MudPaper>
     }

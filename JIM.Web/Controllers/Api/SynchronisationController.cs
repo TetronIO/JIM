@@ -148,7 +148,12 @@ public class SynchronisationController(
         if (request.RemoveContributedAttributesOnObsoletion.HasValue)
             objectType.RemoveContributedAttributesOnObsoletion = request.RemoveContributedAttributesOnObsoletion.Value;
 
-        await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, initiatedBy);
+        // Get the current API key for Activity attribution if authenticated via API key
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, apiKey);
+        else
+            await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, initiatedBy);
 
         _logger.LogInformation("Updated object type {ObjectTypeId} ({Name})", objectType.Id, objectType.Name);
 
@@ -212,6 +217,9 @@ public class SynchronisationController(
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
 
+        // Get the current API key for Activity attribution if authenticated via API key
+        var apiKey = await GetCurrentApiKeyAsync();
+
         if (request.IsExternalId.HasValue && request.IsExternalId.Value)
         {
             // Clear existing external ID on other attributes in the same object type
@@ -222,7 +230,10 @@ public class SynchronisationController(
                 foreach (var attr in objectType.Attributes.Where(a => a.IsExternalId && a.Id != attributeId))
                 {
                     attr.IsExternalId = false;
-                    await _application.ConnectedSystems.UpdateAttributeAsync(attr, initiatedBy);
+                    if (apiKey != null)
+                        await _application.ConnectedSystems.UpdateAttributeAsync(attr, apiKey);
+                    else
+                        await _application.ConnectedSystems.UpdateAttributeAsync(attr, initiatedBy);
                 }
             }
             attribute.IsExternalId = true;
@@ -235,7 +246,10 @@ public class SynchronisationController(
         if (request.IsSecondaryExternalId.HasValue)
             attribute.IsSecondaryExternalId = request.IsSecondaryExternalId.Value;
 
-        await _application.ConnectedSystems.UpdateAttributeAsync(attribute, initiatedBy);
+        if (apiKey != null)
+            await _application.ConnectedSystems.UpdateAttributeAsync(attribute, apiKey);
+        else
+            await _application.ConnectedSystems.UpdateAttributeAsync(attribute, initiatedBy);
 
         _logger.LogInformation("Updated attribute {AttributeId} ({Name})", attribute.Id, attribute.Name);
 
@@ -475,7 +489,12 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, initiatedBy);
+            // Get the current API key for Activity attribution if authenticated via API key
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, apiKey);
+            else
+                await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, initiatedBy);
 
             _logger.LogInformation("Created connected system: {Id} ({Name})", connectedSystem.Id, connectedSystem.Name);
 
@@ -559,7 +578,12 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, initiatedBy);
+            // Get the current API key for Activity attribution if authenticated via API key
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, apiKey);
+            else
+                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, initiatedBy);
 
             _logger.LogInformation("Updated connected system: {Id} ({Name})", connectedSystem.Id, connectedSystem.Name);
 
@@ -614,7 +638,12 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, initiatedBy);
+            // Get the current API key for Activity attribution if authenticated via API key
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, apiKey);
+            else
+                await _application.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, initiatedBy);
 
             _logger.LogInformation("Schema imported for connected system: {Id} ({Name}), {Count} object types",
                 connectedSystemId, connectedSystem.Name, connectedSystem.ObjectTypes?.Count ?? 0);
@@ -868,7 +897,7 @@ public class SynchronisationController(
         }
 
         // Create and queue the synchronisation task
-        // Use API key name for attribution when authenticated via API key
+        // Use API key for attribution when authenticated via API key
         SynchronisationWorkerTask workerTask;
         if (initiatedBy != null)
         {
@@ -876,8 +905,13 @@ public class SynchronisationController(
         }
         else
         {
-            var apiKeyName = GetApiKeyName() ?? "Unknown";
-            workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, apiKeyName);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey == null)
+            {
+                _logger.LogError("Failed to resolve API key for run profile execution");
+                return BadRequest(new { error = "Failed to identify initiating API key" });
+            }
+            workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, apiKey);
         }
 
         await _application.Tasking.CreateWorkerTaskAsync(workerTask);
@@ -949,7 +983,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, apiKey);
+            else
+                await _application.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
             _logger.LogInformation("Created run profile: {Id} ({Name})", runProfile.Id, runProfile.Name);
 
@@ -1184,7 +1222,12 @@ public class SynchronisationController(
             Enabled = request.Enabled
         };
 
-        var success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+        var apiKey = await GetCurrentApiKeyAsync();
+        bool success;
+        if (apiKey != null)
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+        else
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -1244,7 +1287,12 @@ public class SynchronisationController(
         if (request.ProvisionToConnectedSystem.HasValue)
             syncRule.ProvisionToConnectedSystem = request.ProvisionToConnectedSystem.Value;
 
-        var success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+        var apiKey = await GetCurrentApiKeyAsync();
+        bool success;
+        if (apiKey != null)
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+        else
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -1475,7 +1523,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, apiKey);
+            else
+                await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, initiatedBy);
 
             _logger.LogInformation("Created mapping {MappingId} for sync rule {SyncRuleId}", mapping.Id, syncRuleId);
 
@@ -1522,7 +1574,12 @@ public class SynchronisationController(
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
             return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in sync rule {syncRuleId}."));
 
-        await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy);
+        // Get the current API key for Activity attribution if authenticated via API key
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, apiKey);
+        else
+            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy);
 
         _logger.LogInformation("Deleted mapping {MappingId} from sync rule {SyncRuleId}", mappingId, syncRuleId);
 
@@ -1636,7 +1693,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
             _logger.LogInformation("Created scoping criteria group {GroupId} for sync rule {SyncRuleId}", group.Id, syncRuleId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = group.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(group));
         }
@@ -1689,7 +1750,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
             _logger.LogInformation("Created child scoping criteria group {GroupId} under {ParentId}", childGroup.Id, parentGroupId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = childGroup.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(childGroup));
         }
@@ -1740,7 +1805,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
             _logger.LogInformation("Updated scoping criteria group {GroupId}", groupId);
             return Ok(SyncRuleScopingCriteriaGroupDto.FromEntity(group));
         }
@@ -1785,7 +1854,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
             _logger.LogInformation("Deleted scoping criteria group {GroupId}", groupId);
             return NoContent();
         }
@@ -1876,7 +1949,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
             _logger.LogInformation("Created criterion {CriterionId} in group {GroupId}", criterion.Id, groupId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId }, SyncRuleScopingCriteriaDto.FromEntity(criterion));
         }
@@ -1922,7 +1999,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
             _logger.LogInformation("Deleted criterion {CriterionId} from group {GroupId}", criterionId, groupId);
             return NoContent();
         }
@@ -2105,7 +2186,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, initiatedBy);
 
             _logger.LogInformation("Created object matching rule {RuleId} for connected system {SystemId}", rule.Id, connectedSystemId);
 
@@ -2352,6 +2437,22 @@ public class SynchronisationController(
             return null;
 
         return User.Identity?.Name;
+    }
+
+    /// <summary>
+    /// Gets the current API key entity if authenticated via API key.
+    /// </summary>
+    private async Task<JIM.Models.Security.ApiKey?> GetCurrentApiKeyAsync()
+    {
+        if (!IsApiKeyAuthenticated())
+            return null;
+
+        // The API key ID is stored in the NameIdentifier claim
+        var apiKeyIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(apiKeyIdClaim) || !Guid.TryParse(apiKeyIdClaim, out var apiKeyId))
+            return null;
+
+        return await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
     }
 
     /// <summary>

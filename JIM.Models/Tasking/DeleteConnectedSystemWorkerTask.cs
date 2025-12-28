@@ -1,4 +1,6 @@
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
 /// <summary>
@@ -37,7 +39,22 @@ public class DeleteConnectedSystemWorkerTask : WorkerTask
     {
         ConnectedSystemId = connectedSystemId;
         EvaluateMvoDeletionRules = evaluateMvoDeletionRules;
-        InitiatedBy = initiatedBy;
+        InitiatedByType = ActivityInitiatorType.User;
+        InitiatedById = initiatedBy.Id;
+        InitiatedByMetaverseObject = initiatedBy;
         InitiatedByName = initiatedBy.DisplayName;
+    }
+
+    /// <summary>
+    /// When deletion is triggered by an API key, this overload should be used to attribute the action to the API key.
+    /// </summary>
+    public DeleteConnectedSystemWorkerTask(int connectedSystemId, ApiKey apiKey, bool evaluateMvoDeletionRules = false)
+    {
+        ConnectedSystemId = connectedSystemId;
+        EvaluateMvoDeletionRules = evaluateMvoDeletionRules;
+        InitiatedByType = ActivityInitiatorType.ApiKey;
+        InitiatedById = apiKey.Id;
+        InitiatedByApiKey = apiKey;
+        InitiatedByName = apiKey.Name;
     }
 }

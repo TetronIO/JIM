@@ -103,7 +103,19 @@ public static class TestUtilities
 
     public static MetaverseObject GetInitiatedBy()
     {
-        return new MetaverseObject { Id = Guid.Parse("25441317-D01C-47DE-BA69-47EEEFD09DC4") };
+        var user = new MetaverseObject
+        {
+            Id = Guid.Parse("25441317-D01C-47DE-BA69-47EEEFD09DC4"),
+            Type = new MetaverseObjectType { Id = 1, Name = "User" }
+        };
+        // Add Display Name attribute for proper activity tracking
+        user.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            MetaverseObject = user,
+            Attribute = new MetaverseAttribute { Id = 1, Name = Constants.BuiltInAttributes.DisplayName },
+            StringValue = "Test User"
+        });
+        return user;
     }
 
     public static List<ConnectedSystem> GetConnectedSystemData()
@@ -1027,6 +1039,11 @@ public static class TestUtilities
 
     public static List<Activity> GetActivityData(ConnectedSystemRunType connectedSystemRunType, int runProfileId)
     {
+        var testUser = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = 1, Name = "User" }
+        };
         return new List<Activity>
         {
             new ()
@@ -1036,7 +1053,9 @@ public static class TestUtilities
                 Status = ActivityStatus.InProgress,
                 ConnectedSystemRunProfileId = runProfileId,
                 ConnectedSystemRunType = connectedSystemRunType,
-                InitiatedBy = GetInitiatedBy(),
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = testUser.Id,
+                InitiatedByMetaverseObject = testUser,
                 InitiatedByName = "Joe Bloggs"
             }
         };

@@ -1,4 +1,6 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
 public class SynchronisationWorkerTask : WorkerTask
@@ -31,17 +33,22 @@ public class SynchronisationWorkerTask : WorkerTask
     {
         ConnectedSystemId = connectedSystemId;
         ConnectedSystemRunProfileId = connectedSystemRunProfileId;
-        InitiatedBy = initiatingBy;
+        InitiatedByType = ActivityInitiatorType.User;
+        InitiatedById = initiatingBy.Id;
+        InitiatedByMetaverseObject = initiatingBy;
         InitiatedByName = initiatingBy.DisplayName;
     }
 
     /// <summary>
     /// When a synchronisation service task is triggered by an API key (automation), this overload should be used to attribute the action to the API key.
     /// </summary>
-    public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId, string apiKeyName)
+    public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId, ApiKey apiKey)
     {
         ConnectedSystemId = connectedSystemId;
         ConnectedSystemRunProfileId = connectedSystemRunProfileId;
-        InitiatedByName = $"API Key: {apiKeyName}";
+        InitiatedByType = ActivityInitiatorType.ApiKey;
+        InitiatedById = apiKey.Id;
+        InitiatedByApiKey = apiKey;
+        InitiatedByName = apiKey.Name;
     }
 }

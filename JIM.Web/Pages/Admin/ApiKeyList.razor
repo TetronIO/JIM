@@ -70,6 +70,8 @@
     <RowTemplate>
         <MudTd>
             <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                <MudMenuItem Icon="@Icons.Material.Filled.Visibility" Href="@($"/admin/apikeys/{context.Id}")">View
+                </MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit
                 </MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete
@@ -78,7 +80,7 @@
         </MudTd>
         <MudTd DataLabel="Name">
             <div class="d-flex align-center gap-2">
-                @context.Name
+                <MudLink Href="@($"/admin/apikeys/{context.Id}")">@context.Name</MudLink>
                 @if (context.IsInfrastructureKey)
                 {
                     <MudTooltip

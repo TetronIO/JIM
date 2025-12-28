@@ -25,12 +25,27 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
-        /// Retrieves a list of the current tasks, with any inherited task information formatted into the name, 
+        /// Retrieves a list of the current tasks, with any inherited task information formatted into the name,
         /// i.e. connected system name and connected system run profile name for a SynchronisationWorkerTask.
         /// </summary>
         public async Task<List<WorkerTaskHeader>> GetWorkerTaskHeadersAsync()
         {
             return await Application.Repository.Tasking.GetWorkerTaskHeadersAsync();
+        }
+
+        /// <summary>
+        /// Creates an activity from a worker task, using the correct initiator type.
+        /// </summary>
+        private async Task CreateActivityFromWorkerTaskAsync(Activity activity, WorkerTask workerTask)
+        {
+            if (workerTask.InitiatedByType == ActivityInitiatorType.ApiKey && workerTask.InitiatedByApiKey != null)
+            {
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedByApiKey);
+            }
+            else
+            {
+                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedByMetaverseObject);
+            }
         }
 
         public async Task CreateWorkerTaskAsync(WorkerTask workerTask)
@@ -48,14 +63,14 @@ namespace JIM.Application.Servers
                     ConnectedSystemId = synchronisationWorkerTask.ConnectedSystemId,
                     ConnectedSystemRunProfileId = runProfile.Id
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
             else if (workerTask is DataGenerationTemplateWorkerTask dataGenerationWorkerTask)
             {
-                var template = await Application.DataGeneration.GetTemplateAsync(dataGenerationWorkerTask.TemplateId) ?? 
+                var template = await Application.DataGeneration.GetTemplateAsync(dataGenerationWorkerTask.TemplateId) ??
                     throw new InvalidDataException("CreateWorkerTaskAsync: template not found for id " + dataGenerationWorkerTask.TemplateId);
 
                 // every data generation operation requires tracking with an activity...
@@ -64,9 +79,9 @@ namespace JIM.Application.Servers
                     TargetName = template.Name,
                     TargetType = ActivityTargetType.DataGenerationTemplate,
                     TargetOperationType = ActivityTargetOperationType.Execute,
-                    DataGenerationTemplateId = template.Id                    
+                    DataGenerationTemplateId = template.Id
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
@@ -82,7 +97,7 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Clear,
                     ConnectedSystemId = clearConnectedSystemObjectsTask.ConnectedSystemId,
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
@@ -99,7 +114,7 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Delete,
                     ConnectedSystemId = deleteConnectedSystemTask.ConnectedSystemId,
                 };
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedBy, workerTask.InitiatedByName);
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;

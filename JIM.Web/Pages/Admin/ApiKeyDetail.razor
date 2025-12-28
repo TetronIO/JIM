@@ -1,0 +1,280 @@
+@page "/admin/apikeys/{Id:guid}"
+@attribute [Authorize(Roles = "Administrator")]
+@using JIM.Application
+@using JIM.Models.Activities
+@using JIM.Models.Security
+@using JIM.Models.Utility
+@using JIM.Utilities
+@using Humanizer
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+@inject ISnackbar Snackbar
+
+<PageTitle>API Key: @_apiKey?.Name</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">API Key:</span> @_apiKey?.Name</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+@if (_apiKey != null)
+{
+    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <MudPaper Class="pa-5 mt-3" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">ID:</MudText>
+                <MudText Class="mud-text-secondary">@_apiKey.Id</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Name:</MudText>
+                <MudText Class="mud-text-secondary">@_apiKey.Name</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Key Prefix:</MudText>
+                <MudText Class="mud-text-secondary mud-text-code">@_apiKey.KeyPrefix...</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Status:</MudText>
+                @if (_apiKey.IsEnabled)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-0">Enabled</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-0">Disabled</MudChip>
+                }
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Created:</MudText>
+                <MudText Class="mud-text-secondary">@_apiKey.CreatedAt.ToLocalTime().ToFriendlyDate()</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Expires:</MudText>
+                @if (_apiKey.ExpiresAt.HasValue)
+                {
+                    @if (_apiKey.ExpiresAt.Value < DateTime.UtcNow)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-0">Expired (@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate())</MudChip>
+                    }
+                    else
+                    {
+                        <MudText Class="mud-text-secondary">@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()</MudText>
+                    }
+                }
+                else
+                {
+                    <MudText Class="mud-text-secondary">Never</MudText>
+                }
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Last Used:</MudText>
+                @if (_apiKey.LastUsedAt.HasValue)
+                {
+                    <MudText Class="mud-text-secondary">
+                        @_apiKey.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()
+                        @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
+                        {
+                            <span> from @_apiKey.LastUsedFromIp</span>
+                        }
+                    </MudText>
+                }
+                else
+                {
+                    <MudText Class="mud-text-secondary">Never</MudText>
+                }
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button">Roles:</MudText>
+                @if (_apiKey.Roles.Count > 0)
+                {
+                    @foreach (var role in _apiKey.Roles)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
+                    }
+                }
+                else
+                {
+                    <MudText Class="mud-text-secondary">No roles assigned</MudText>
+                }
+            </MudItem>
+
+            @if (_apiKey.IsInfrastructureKey)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.button">Type:</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure Key</MudChip>
+                </MudItem>
+            }
+
+            @if (!string.IsNullOrEmpty(_apiKey.Description))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.button">Description:</MudText>
+                    <MudText Class="mud-text-secondary">@_apiKey.Description</MudText>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudPaper>
+
+    <MudText Typo="Typo.h5" Class="mt-5">Activity History</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 mb-3">
+        All activities initiated by this API key.
+    </MudText>
+
+    <MudTable @ref="_table" T="Activity" ServerData="ServerReload" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+        Class="mt-3" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
+        LoadingProgressColor="Color.Primary">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="Search type or target"
+                Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
+                Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>
+                <MudTableSortLabel SortLabel="type" T="Activity">
+                    <MudText Typo="Typo.button">Type</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="target" T="Activity">
+                    <MudText Typo="Typo.button">Target</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="operation" T="Activity">
+                    <MudText Typo="Typo.button">Operation</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="created" T="Activity" InitialDirection="SortDirection.Descending">
+                    <MudText Typo="Typo.button">Created</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="status" T="Activity">
+                    <MudText Typo="Typo.button">Status</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="executiontime" T="Activity">
+                    <MudText Typo="Typo.button">Execution Time</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+        </HeaderContent>
+        <RowTemplate Context="context">
+            <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Target">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudTd>
+            <MudTd DataLabel="Operation">@context.TargetOperationType.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Created">
+                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Created.ToLocalTime().ToRelativeTime()
+                </MudTooltip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Variant="Variant.Text"
+                    Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
+                    @context.Status.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.ToCasualString() ?? "-")</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            No activities have been recorded for this API key yet.
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+else if (!_loading)
+{
+    <MudAlert Severity="Severity.Warning" Class="mt-5">
+        API Key not found. It may have been deleted.
+    </MudAlert>
+}
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private ApiKey? _apiKey;
+    private MudTable<Activity>? _table;
+    private string _searchString = "";
+    private bool _loading = true;
+
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _apiKey = await Jim.Repository.ApiKeys.GetByIdAsync(Id);
+        _loading = false;
+
+        _breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Admin", href: "/admin/operations"),
+            new("API Keys", href: "/admin/apikeys"),
+            new(_apiKey?.Name ?? "Not Found", href: null, disabled: true)
+        };
+    }
+
+    private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
+    {
+        if (_apiKey == null)
+        {
+            return new TableData<Activity>
+            {
+                TotalItems = 0,
+                Items = new List<Activity>()
+            };
+        }
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Convert MudBlazor's 0-indexed page to our 1-indexed page
+            var page = state.Page + 1;
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+
+            var result = await Jim.Activities.GetActivitiesAsync(
+                page,
+                state.PageSize,
+                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                state.SortLabel,
+                sortDescending,
+                _apiKey.Id);
+
+            return new TableData<Activity>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnSearch(string text)
+    {
+        _searchString = text;
+        _table?.ReloadServerData();
+    }
+
+    private void HandleRowClick(TableRowClickEventArgs<Activity> args)
+    {
+        if (args.Item != null)
+            NavManager.NavigateTo($"/activity/{args.Item.Id}");
+    }
+}
