@@ -8,6 +8,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using JIM.Utilities;
+using JIM.Worker.Models;
 using Serilog;
 
 namespace JIM.Worker.Processors;

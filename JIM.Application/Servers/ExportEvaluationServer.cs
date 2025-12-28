@@ -684,10 +684,12 @@ public class ExportEvaluationServer
 
                         if (result != null)
                         {
+                            // Note: We only set AttributeId here (not the Attribute navigation property)
+                            // to avoid EF Core change tracking overhead during batch evaluation.
+                            // The Attribute is loaded via Include when reading pending exports.
                             var change = new PendingExportAttributeValueChange
                             {
                                 Id = Guid.NewGuid(),
-                                Attribute = mapping.TargetConnectedSystemAttribute,
                                 AttributeId = mapping.TargetConnectedSystemAttribute.Id,
                                 ChangeType = PendingExportAttributeChangeType.Update
                             };
@@ -746,10 +748,12 @@ public class ExportEvaluationServer
                 if (mvoValue == null)
                     continue;
 
+                // Note: We only set AttributeId here (not the Attribute navigation property)
+                // to avoid EF Core change tracking overhead during batch evaluation.
+                // The Attribute is loaded via Include when reading pending exports.
                 var attributeChange = new PendingExportAttributeValueChange
                 {
                     Id = Guid.NewGuid(),
-                    Attribute = mapping.TargetConnectedSystemAttribute,
                     AttributeId = mapping.TargetConnectedSystemAttribute.Id,
                     ChangeType = PendingExportAttributeChangeType.Update
                 };

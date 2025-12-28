@@ -40,7 +40,7 @@ public class SyncImportTaskProcessor
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _initiatedBy = initiatedBy;
         _activity = activity;
-        
+
         // we will maintain this list separate from the activity, and add the items to the activity when all CSOs are persisted
         // this is so we don't create a dependency on CSOs with the Activity whilst we're still processing and updating the activity status, which would cause EF to persist
         // CSOs before we're ready to do so.
@@ -62,11 +62,11 @@ public class SyncImportTaskProcessor
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
-        
+
         // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions later.
         var externalIdsImported = new List<ExternalIdPair>();
         var totalObjectsImported = 0;
-            
+
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Performing import");
         switch (_connector)
         {
@@ -96,10 +96,10 @@ public class SyncImportTaskProcessor
                     }
                     pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
-                    
+
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                     AddExternalIdsToCollection(result, externalIdsImported);
-                    
+
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
 
@@ -147,7 +147,7 @@ public class SyncImportTaskProcessor
             default:
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
         }
-        
+
         // process deletions
         // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
@@ -203,7 +203,7 @@ public class SyncImportTaskProcessor
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
-        
+
         // have any objects been deleted in the connected system since our last import?
         // get the connected system object type list for the ones the user has selected to manage
         foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
@@ -242,7 +242,7 @@ public class SyncImportTaskProcessor
 
                     // create a collection with the connected system objects no longer in the connected system for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
-                    
+
                     // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
@@ -260,7 +260,7 @@ public class SyncImportTaskProcessor
 
                     // create a collection with the connected system objects no longer in the connected system for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeGuid.Except(connectedSystemGuidExternalIdValues);
-                    
+
                     // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
@@ -301,13 +301,13 @@ public class SyncImportTaskProcessor
             Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{connectedSystemObjectExternalId}' not found. No work to do.");
             return;
         }
-        
+
         // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
-        
+
         // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
@@ -315,9 +315,9 @@ public class SyncImportTaskProcessor
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         connectedSystemObjectsToBeUpdated.Add(cso);
     }
-    
+
     /// <summary>
-    /// Adds the External IDs on CSOs returned in an import result to a collection to help with resolving references later. 
+    /// Adds the External IDs on CSOs returned in an import result to a collection to help with resolving references later.
     /// </summary>
     /// <param name="importResult">The entire, or a page's worth of import results from a Connected System to retrieve External IDs from.</param>
     /// <param name="externalIdsImported">The collection used to store all External IDs, over all pages of import results.</param>
@@ -325,7 +325,7 @@ public class SyncImportTaskProcessor
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
-        
+
         // add the external ids from the results to our external id collection
         foreach (var importedObject in importResult.ImportObjects)
         {
@@ -354,7 +354,7 @@ public class SyncImportTaskProcessor
             // this will store the detail for the import object that will persist in the history for the run
             var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
             _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
-            
+
             try
             {
                 // validate the results.
@@ -380,7 +380,7 @@ public class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                     continue;
                 }
-                
+
                 // precautionary pre-processing...
                 RemoveNullImportObjectAttributes(importObject);
 
@@ -454,7 +454,7 @@ public class SyncImportTaskProcessor
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
                 activityRunProfileExecutionItem.ErrorMessage = e.Message;
                 activityRunProfileExecutionItem.ErrorStackTrace = e.StackTrace;
-            
+
                 // still perform system logging.
                 Log.Error(e, $"ProcessImportObjectsAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing import object {importObject}.");
             }
@@ -475,14 +475,14 @@ public class SyncImportTaskProcessor
             var noStrings = false;
             var noBytes = false;
             var noReferences = false;
-            
+
             // first remove any null attribute values. this might mean we'll be left with no values at all
             attribute.GuidValues.RemoveAll(q => q.Equals(null));
             attribute.IntValues.RemoveAll(q => q.Equals(null));
             attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
             attribute.ByteValues.RemoveAll(q => q.Equals(null));
             attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
-            
+
             // now work out if we're left with any values at all
             if (attribute.GuidValues.Count == 0)
                 noGuids = true;
@@ -605,7 +605,7 @@ public class SyncImportTaskProcessor
             }
 
             // assign the attribute value(s)
-            // remember, jim requires an attribute value object for each connected system attribute value, i.e. everything's multi-valued capable
+            // remember, JIM requires an attribute value object for each connected system attribute value, i.e. everything's multi-valued capable
             switch (csAttribute.Type)
             {
                 case AttributeDataType.Text:
@@ -841,7 +841,7 @@ public class SyncImportTaskProcessor
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, BoolValue = importedObjectAttribute.BoolValue });
                         }
                         break;
-                    
+
                     case AttributeDataType.NotSet:
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -867,31 +867,31 @@ public class SyncImportTaskProcessor
         // remove the unresolved reference value
         // update the cso
         // create a connected system object change for this
-        
+
         // enumerate just the CSOs with unresolved references, for efficiency
         foreach (var csoToProcess in connectedSystemObjectsToBeCreated.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
         {
             var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
             var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
             var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
-            
+
             // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
                 await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
         }
-        
+
         foreach (var csoToProcess in connectedSystemObjectsToBeUpdated.Where(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
         {
             var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
             var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
             var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
-            
+
             // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
                 await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
         }
     }
-    
+
     private async Task ResolveAttributeValueReferenceAsync(ConnectedSystemObject csoToProcess, ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         // try and find a cso in the database, or in the processing list we've been passed in, that has an identifier mentioned in the UnresolvedReferenceValue property.
@@ -951,7 +951,7 @@ public class SyncImportTaskProcessor
                 default:
                     throw new ArgumentOutOfRangeException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} cannot be used for external ids.");
             }
-        } 
+        }
         else if (externalIdAttribute.IsSecondaryExternalId)
         {
             switch (externalIdAttribute.Type)
@@ -969,7 +969,7 @@ public class SyncImportTaskProcessor
                     break;
                 case AttributeDataType.Guid:
                     if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
-                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ?? 
+                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ??
                                                           connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
@@ -981,13 +981,13 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.NotSet:
                 default:
                     throw new ArgumentOutOfRangeException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} cannot be used for secondary external ids.");
-            }    
+            }
         }
         else
         {
             throw new InvalidDataException("externalIdAttributeToUse wasn't external or secondary external id");
         }
-        
+
         // no match, try and find a matching CSO in the database
         referencedConnectedSystemObject ??= await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, referenceAttributeValue.UnresolvedReferenceValue);
 
@@ -1019,7 +1019,7 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Reconciles pending exports against imported CSO values.
+    /// Reconciles Pending Exports against imported CSO values.
     /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
     /// </summary>
     /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>

@@ -1,7 +1,7 @@
 using JIM.Models.Core;
 using JIM.Models.Enums;
 
-namespace JIM.Worker.Processors;
+namespace JIM.Worker.Models;
 
 /// <summary>
 /// Lightweight struct to track what MVO changes occurred during sync processing.

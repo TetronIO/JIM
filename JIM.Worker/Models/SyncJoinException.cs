@@ -1,6 +1,6 @@
 using JIM.Models.Activities;
 
-namespace JIM.Worker.Processors;
+namespace JIM.Worker.Models;
 
 /// <summary>
 /// Exception thrown when a join operation fails during sync processing.
