@@ -85,8 +85,7 @@
                 {
                     <MudTooltip
                         Text="Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable.">
-                        <MudChip T="string" Size="Size.Small" Color="Color.Warning"
-                            Icon="@Icons.Material.Filled.Construction">Infrastructure</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction" Text="Infrastructure" />
                     </MudTooltip>
                 }
             </div>
@@ -101,7 +100,7 @@
         <MudTd DataLabel="Roles">
             @foreach (var role in context.Roles)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mr-1" Text="@role.Name" />
             }
             @if (context.Roles.Count == 0)
             {
@@ -127,15 +126,14 @@
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
                         Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Expired</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Text="Expired" />
                     </MudTooltip>
                 }
                 else if (context.ExpiresAt.Value < DateTime.UtcNow.AddDays(7))
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
                         Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@((context.ExpiresAt.Value -
-                                                DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Minute))</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Text="@((context.ExpiresAt.Value - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Minute))" />
                     </MudTooltip>
                 }
                 else
@@ -154,11 +152,11 @@
         <MudTd DataLabel="Status">
             @if (context.IsEnabled)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Success">Enabled</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Text="Enabled" />
             }
             else
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Default">Disabled</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Text="Disabled" />
             }
         </MudTd>
     </RowTemplate>
