@@ -598,20 +598,9 @@ try {
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Initial sync - uses Full Sync to create the user (first-time provisioning)
-        Write-Host "  Initial sync (with Full Sync for first-time provisioning):" -ForegroundColor Gray
-        Write-Host "    [1/5] CSV Full Import..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Write-Host "    [2/5] CSV Full Sync..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
-        Write-Host "    [3/5] LDAP Export..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-        Write-Host "    Waiting 5s for AD replication..." -ForegroundColor DarkGray
-        Start-Sleep -Seconds 5
-        Write-Host "    [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-        Write-Host "    [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
+        # Initial sync - uses Delta Sync for efficiency (baseline already established)
+        Write-Host "  Initial sync (provisioning new user):" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
         # Verify user was created in AD
@@ -635,6 +624,7 @@ try {
             $csvContent | Set-Content $csvPath
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
+            # Only need CSV import/sync for removal - no LDAP export needed
             Write-Host "    [1/2] CSV Full Import..." -ForegroundColor DarkGray
             Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
             Write-Host "    [2/2] CSV Delta Sync (marks CSO obsolete)..." -ForegroundColor DarkGray
@@ -655,16 +645,7 @@ try {
             Add-Content -Path $csvPath -Value $csvLine
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-            Write-Host "    [1/5] CSV Full Import..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-            Write-Host "    [2/5] CSV Delta Sync (reconnects CSO)..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
-            Write-Host "    [3/5] LDAP Export..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-            Write-Host "    [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-            Write-Host "    [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
+            Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
 
             # Verify user still exists (reconnection should preserve AD account)
