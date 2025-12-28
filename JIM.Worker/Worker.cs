@@ -201,10 +201,20 @@ public class Worker : BackgroundService
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaImport:
+                                                        {
+                                                            // Delta Import uses the import processor just like Full Import.
+                                                            // The connector's ImportAsync method checks the run profile type
+                                                            // to determine whether to do full or delta import.
+                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.InitiatedBy, newWorkerTask.Activity, cancellationTokenSource);
+                                                            await syncDeltaImportTaskProcessor.PerformFullImportAsync();
+                                                            break;
+                                                        }
                                                         case ConnectedSystemRunType.FullSynchronisation:
+                                                        {
                                                             var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(taskJim, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
                                                             break;
+                                                        }
                                                         case ConnectedSystemRunType.Export:
                                                         {
                                                             var syncExportTaskProcessor = new SyncExportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
