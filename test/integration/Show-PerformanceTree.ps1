@@ -212,25 +212,23 @@ Write-Host ""
 # NOTE: Child times represent CUMULATIVE time across all invocations, not time within a single parent invocation.
 # When a child operation is called multiple times within a loop (e.g., once per page), the sum of all child
 # invocations may exceed the parent's single invocation time. This is expected behaviour.
-$operationsByName = @{}
-foreach ($op in $metrics.Operations) {
-    $key = $op.Name
-    # Skip operations with empty or null names
-    if ([string]::IsNullOrWhiteSpace($key)) {
-        continue
-    }
 
-    if (-not $operationsByName.ContainsKey($key)) {
-        $operationsByName[$key] = @{
-            Name = $key
-            Parent = $op.Parent
-            TotalMs = 0
-            Count = 0
-            Children = @()
-        }
+# Filter out operations with empty or null names first
+$validOperations = $metrics.Operations | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) }
+
+# Group operations by name and calculate totals in parallel
+$operationsByName = $validOperations | Group-Object -Property Name -AsHashTable -AsString
+
+# Calculate totals for each operation group
+foreach ($key in $operationsByName.Keys) {
+    $ops = $operationsByName[$key]
+    $operationsByName[$key] = @{
+        Name = $key
+        Parent = $ops[0].Parent  # All operations with same name should have same parent
+        TotalMs = ($ops.DurationMs | Measure-Object -Sum).Sum
+        Count = $ops.Count
+        Children = @()
     }
-    $operationsByName[$key].TotalMs += $op.DurationMs
-    $operationsByName[$key].Count += 1
 }
 
 # Link children to parents

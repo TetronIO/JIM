@@ -1,9 +1,11 @@
+using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -206,7 +208,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             }
         }
 
-        await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, null);
+        // Get the current API key for Activity attribution
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey);
+        else
+            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
 
         _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
 
@@ -276,7 +283,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             }
         }
 
-        await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, null);
+        // Get the current API key for Activity attribution
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, apiKey);
+        else
+            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
 
         _logger.LogInformation("Updated metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
 
@@ -309,7 +321,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (attribute.BuiltIn)
             return BadRequest(ApiErrorResponse.BadRequest("Cannot delete built-in attributes."));
 
-        await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, null);
+        // Get the current API key for Activity attribution
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, apiKey);
+        else
+            await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
 
         _logger.LogInformation("Deleted metaverse attribute: {Id}", id);
 
@@ -490,4 +507,32 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         return Ok(summary);
     }
+
+    #region Private Helpers
+
+    /// <summary>
+    /// Checks if the current authentication is via API key.
+    /// </summary>
+    private bool IsApiKeyAuthenticated()
+    {
+        return User.HasClaim("auth_method", "api_key");
+    }
+
+    /// <summary>
+    /// Gets the current API key entity if authenticated via API key.
+    /// </summary>
+    private async Task<ApiKey?> GetCurrentApiKeyAsync()
+    {
+        if (!IsApiKeyAuthenticated())
+            return null;
+
+        // The API key ID is stored in the NameIdentifier claim
+        var apiKeyIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(apiKeyIdClaim) || !Guid.TryParse(apiKeyIdClaim, out var apiKeyId))
+            return null;
+
+        return await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
+    }
+
+    #endregion
 }

@@ -6,6 +6,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Utilities;
 using Moq;
 using NUnit.Framework;
 
@@ -18,6 +19,7 @@ public class CertificateServerTests
     private Mock<ITrustedCertificateRepository> _mockCertRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private JimApplication _jim = null!;
+    private MetaverseObject _testUser = null!;
 
     // Test certificate data - self-signed certificate for testing
     private byte[] _testCertificateData = null!;
@@ -47,6 +49,18 @@ public class CertificateServerTests
             .Returns(Task.CompletedTask);
 
         _jim = new JimApplication(_mockRepository.Object);
+
+        // Create test user for activity tracking
+        _testUser = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = 1, Name = "User" }
+        };
+        _testUser.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = new MetaverseAttribute { Id = 1, Name = Constants.BuiltInAttributes.DisplayName },
+            StringValue = "Test User"
+        });
 
         // Generate a self-signed test certificate
         GenerateTestCertificate();
@@ -178,7 +192,7 @@ public class CertificateServerTests
             .ReturnsAsync((TrustedCertificate c) => c);
 
         // Act
-        var result = await _jim.Certificates.AddFromDataAsync(certName, _testCertificateData);
+        var result = await _jim.Certificates.AddFromDataAsync(certName, _testCertificateData, _testUser);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -198,7 +212,7 @@ public class CertificateServerTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _jim.Certificates.AddFromDataAsync("Test", _testCertificateData));
+            await _jim.Certificates.AddFromDataAsync("Test", _testCertificateData, _testUser));
 
         Assert.That(ex!.Message, Does.Contain("already exists"));
     }
@@ -212,7 +226,7 @@ public class CertificateServerTests
 
         // Act & Assert - invalid certificate data throws CryptographicException
         Assert.ThrowsAsync<CryptographicException>(async () =>
-            await _jim.Certificates.AddFromDataAsync("Test", invalidData));
+            await _jim.Certificates.AddFromDataAsync("Test", invalidData, _testUser));
     }
 
     [Test]
@@ -225,7 +239,7 @@ public class CertificateServerTests
             .ReturnsAsync((TrustedCertificate c) => c);
 
         // Act
-        var result = await _jim.Certificates.AddFromDataAsync("Test", _testCertificateData, notes: notes);
+        var result = await _jim.Certificates.AddFromDataAsync("Test", _testCertificateData, _testUser, notes);
 
         // Assert
         Assert.That(result.Notes, Is.EqualTo(notes));
@@ -251,7 +265,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.UpdateAsync(It.IsAny<TrustedCertificate>())).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.Certificates.UpdateAsync(certId, name: "New Name", notes: "New Notes", isEnabled: false);
+        await _jim.Certificates.UpdateAsync(certId, _testUser, name: "New Name", notes: "New Notes", isEnabled: false);
 
         // Assert
         Assert.That(certificate.Name, Is.EqualTo("New Name"));
@@ -269,7 +283,7 @@ public class CertificateServerTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _jim.Certificates.UpdateAsync(certId, name: "New Name"));
+            await _jim.Certificates.UpdateAsync(certId, _testUser, name: "New Name"));
 
         Assert.That(ex!.Message, Does.Contain("not found"));
     }
@@ -284,7 +298,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.UpdateAsync(It.IsAny<TrustedCertificate>())).Returns(Task.CompletedTask);
 
         // Act & Assert (should not throw)
-        await _jim.Certificates.UpdateAsync(certId);
+        await _jim.Certificates.UpdateAsync(certId, _testUser);
         _mockCertRepo.Verify(r => r.UpdateAsync(certificate), Times.Once);
     }
 
@@ -302,7 +316,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.DeleteAsync(certId)).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.Certificates.DeleteAsync(certId);
+        await _jim.Certificates.DeleteAsync(certId, _testUser);
 
         // Assert
         _mockCertRepo.Verify(r => r.DeleteAsync(certId), Times.Once);
@@ -317,7 +331,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.DeleteAsync(certId)).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.Certificates.DeleteAsync(certId);
+        await _jim.Certificates.DeleteAsync(certId, _testUser);
 
         // Assert - Delete is still called (repository handles non-existent gracefully)
         _mockCertRepo.Verify(r => r.DeleteAsync(certId), Times.Once);
@@ -534,7 +548,7 @@ public class CertificateServerTests
 
         // Act & Assert - empty data throws CryptographicException
         Assert.ThrowsAsync<CryptographicException>(async () =>
-            await _jim.Certificates.AddFromDataAsync("Test", emptyData));
+            await _jim.Certificates.AddFromDataAsync("Test", emptyData, _testUser));
     }
 
     [Test]
@@ -546,7 +560,7 @@ public class CertificateServerTests
 
         // Act & Assert - corrupted data throws CryptographicException
         Assert.ThrowsAsync<CryptographicException>(async () =>
-            await _jim.Certificates.AddFromDataAsync("Test", corruptedData));
+            await _jim.Certificates.AddFromDataAsync("Test", corruptedData, _testUser));
     }
 
     [Test]
@@ -558,7 +572,7 @@ public class CertificateServerTests
 
         // Act & Assert - truncated data throws CryptographicException
         Assert.ThrowsAsync<CryptographicException>(async () =>
-            await _jim.Certificates.AddFromDataAsync("Test", truncatedData));
+            await _jim.Certificates.AddFromDataAsync("Test", truncatedData, _testUser));
     }
 
     [Test]
@@ -570,7 +584,7 @@ public class CertificateServerTests
 
         // Act & Assert - malformed PEM throws CryptographicException
         Assert.ThrowsAsync<CryptographicException>(async () =>
-            await _jim.Certificates.AddFromDataAsync("Test", invalidPem));
+            await _jim.Certificates.AddFromDataAsync("Test", invalidPem, _testUser));
     }
 
     [Test]
@@ -781,7 +795,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.UpdateAsync(It.IsAny<TrustedCertificate>())).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.Certificates.UpdateAsync(certId, name: "");
+        await _jim.Certificates.UpdateAsync(certId, _testUser, name: "");
 
         // Assert
         Assert.That(certificate.Name, Is.EqualTo(""));
@@ -800,7 +814,7 @@ public class CertificateServerTests
             .ReturnsAsync((TrustedCertificate c) => c);
 
         // Act
-        await _jim.Certificates.AddFromDataAsync("Test", _testCertificateData);
+        await _jim.Certificates.AddFromDataAsync("Test", _testCertificateData, _testUser);
 
         // Assert
         _mockActivityRepo.Verify(r => r.CreateActivityAsync(It.Is<Activity>(a =>
@@ -818,7 +832,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.DeleteAsync(certId)).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.Certificates.DeleteAsync(certId);
+        await _jim.Certificates.DeleteAsync(certId, _testUser);
 
         // Assert
         _mockActivityRepo.Verify(r => r.CreateActivityAsync(It.Is<Activity>(a =>

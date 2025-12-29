@@ -9,9 +9,16 @@ public static class Utilities
 {
     public static string SplitOnCapitalLetters(this string inputString)
     {
-        var words = Regex.Matches(inputString, @"([A-Z][a-z]+)").Cast<Match>().Select(m => m.Value);
-        var withSpaces = string.Join(" ", words);
-        return withSpaces;
+        if (string.IsNullOrEmpty(inputString))
+            return inputString;
+
+        var words = Regex.Matches(inputString, @"([A-Z][a-z]+)").Cast<Match>().Select(m => m.Value).ToList();
+
+        // If no matches (e.g., all lowercase like "person"), return the original string
+        if (words.Count == 0)
+            return inputString;
+
+        return string.Join(" ", words);
     }
         
     public static bool AreByteArraysTheSame(ReadOnlySpan<byte> array1, ReadOnlySpan<byte> array2)
@@ -87,6 +94,14 @@ public static class Utilities
     public static string GetApiKeysHref()
     {
         return "/admin/apikeys";
+    }
+
+    /// <summary>
+    /// Returns the href for a specific API Key detail page.
+    /// </summary>
+    public static string GetApiKeyHref(Guid apiKeyId)
+    {
+        return $"/admin/apikeys/{apiKeyId}";
     }
 
     /// <summary>

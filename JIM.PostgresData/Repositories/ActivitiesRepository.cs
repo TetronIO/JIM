@@ -57,18 +57,19 @@ public class ActivityRepository : IActivityRepository
 
         var query = Repository.Database.Activities
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.InitiatedBy)
+            .Include(a => a.InitiatedByMetaverseObject)
             .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .ThenInclude(av => av.Attribute)
-            .Include(st => st.InitiatedBy)
+            .Include(st => st.InitiatedByMetaverseObject)
             .ThenInclude(ib => ib!.Type)
+            .Include(a => a.InitiatedByApiKey)
             .Where(a => a.ParentActivityId == null)
             .AsQueryable();
 
-        // Apply initiated by filter
+        // Apply initiated by filter (searches by InitiatedById which covers both MVO and ApiKey)
         if (initiatedById.HasValue)
         {
-            query = query.Where(a => a.InitiatedBy != null && a.InitiatedBy.Id == initiatedById.Value);
+            query = query.Where(a => a.InitiatedById == initiatedById.Value);
         }
 
         // Apply search filter
@@ -135,11 +136,12 @@ public class ActivityRepository : IActivityRepository
     {
         return await Repository.Database.Activities
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.InitiatedBy)
+            .Include(a => a.InitiatedByMetaverseObject)
             .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .ThenInclude(av => av.Attribute)
-            .Include(st => st.InitiatedBy)
+            .Include(st => st.InitiatedByMetaverseObject)
             .ThenInclude(ib => ib!.Type)
+            .Include(a => a.InitiatedByApiKey)
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
@@ -172,12 +174,13 @@ public class ActivityRepository : IActivityRepository
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
         // Materialize the entities first, then project to DTO in memory
         var entities = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
+
         var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
         {
             Id = i.Id,
             ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName(),
             DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue,
-            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type.Name,
+            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name,
             ErrorType = i.ErrorType,
             ObjectChangeType = i.ObjectChangeType
         }).ToList();

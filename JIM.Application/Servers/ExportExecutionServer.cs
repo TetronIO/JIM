@@ -165,12 +165,34 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Determines if a pending export is ready for execution.
-    /// Considers status and retry timing (Q6 decision).
+    /// Considers status and retry timing (Q6 decision), as well as attribute change statuses.
     /// </summary>
     private static bool IsReadyForExecution(PendingExport pendingExport)
     {
-        // Only execute Pending or Failed (for retry) exports
+        // For Delete operations, we don't need attribute changes - just the operation itself
+        // For Create/Update operations, check if there are exportable attribute changes
+        if (pendingExport.ChangeType == PendingExportChangeType.Update)
+        {
+            // For Update operations, we need at least one attribute change to export
+            var hasExportableAttributeChanges = pendingExport.AttributeValueChanges.Any(ac =>
+                ac.Status == PendingExportAttributeChangeStatus.Pending ||
+                ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+
+            // If there are no attribute changes that need exporting, skip this export
+            if (!hasExportableAttributeChanges)
+            {
+                return false;
+            }
+        }
+        // For Create and Delete, we proceed even if there are no attribute changes
+        // (Create might have no initial attributes, Delete just needs the operation)
+
+        // Execute if status is Pending, Exported (for retry), or ExportNotImported
+        // - Pending: New export, not yet processed
+        // - Exported: Was exported, but has attribute changes needing retry (ExportedNotConfirmed)
+        // - ExportNotImported: Previous export indicated not all values persisted
         if (pendingExport.Status != PendingExportStatus.Pending &&
+            pendingExport.Status != PendingExportStatus.Exported &&
             pendingExport.Status != PendingExportStatus.ExportNotImported)
         {
             return false;
@@ -182,7 +204,8 @@ public class ExportExecutionServer
             return false;
         }
 
-        // If max retries exceeded, don't execute (Q6 decision - requires manual intervention)
+        // If max retries exceeded at the PendingExport level, don't execute
+        // (Individual attribute changes have their own retry limits)
         if (pendingExport.ErrorCount >= pendingExport.MaxRetries)
         {
             return false;
@@ -354,35 +377,43 @@ public class ExportExecutionServer
         {
             Log.Error(ex, "ExecuteUsingCallsWithBatchingAsync: Failed to execute exports for {SystemName}", connectedSystem.Name);
 
-            // Mark all pending exports as failed
-            foreach (var export in pendingExports.Where(pe => pe.Status == PendingExportStatus.Executing))
+            // Mark all pending exports as failed using batch update
+            var executingExports = pendingExports.Where(pe => pe.Status == PendingExportStatus.Executing).ToList();
+            foreach (var export in executingExports)
             {
-                await MarkExportFailedAsync(export, ex.Message);
+                MarkExportFailed(export, ex.Message);
                 result.FailedCount++;
+            }
+            if (executingExports.Count > 0)
+            {
+                await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(executingExports);
             }
         }
     }
 
     /// <summary>
-    /// Marks a batch of exports as executing.
-    /// Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc).
+    /// Marks a batch of exports as executing using batch update for efficiency.
     /// </summary>
     private async Task MarkBatchAsExecutingAsync(List<PendingExport> batch)
     {
+        var now = DateTime.UtcNow;
         foreach (var export in batch)
         {
             export.Status = PendingExportStatus.Executing;
-            export.LastAttemptedAt = DateTime.UtcNow;
-            await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+            export.LastAttemptedAt = now;
         }
+        await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(batch);
     }
 
     /// <summary>
-    /// Processes a batch of successful exports with their corresponding ExportResult data.
-    /// Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc).
+    /// Processes a batch of exports with their corresponding ExportResult data.
+    /// Uses batch updates for efficiency.
     /// </summary>
     private async Task ProcessBatchSuccessAsync(List<PendingExport> batch, List<ExportResult> exportResults, ExportExecutionResult result)
     {
+        var exportsToUpdate = new List<PendingExport>();
+        var csosToUpdate = new List<(ConnectedSystemObject cso, ExportResult exportResult)>();
+
         for (var i = 0; i < batch.Count; i++)
         {
             var export = batch[i];
@@ -390,8 +421,9 @@ public class ExportExecutionServer
 
             if (!exportResult.Success)
             {
-                // Export failed - mark as failed and continue
-                await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
+                // Export failed - mark as failed
+                MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+                exportsToUpdate.Add(export);
                 result.FailedCount++;
 
                 // Capture export data for activity tracking (before any state changes)
@@ -424,12 +456,55 @@ public class ExportExecutionServer
                 (export.ChangeType == PendingExportChangeType.Create ||
                  !string.IsNullOrEmpty(exportResult.SecondaryExternalId)))
             {
-                await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
+                csosToUpdate.Add((export.ConnectedSystemObject, exportResult));
             }
 
-            await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
+            // Update attribute change statuses to ExportedPendingConfirmation
+            UpdateAttributeChangeStatusesAfterExport(export);
+
+            exportsToUpdate.Add(export);
             result.SuccessCount++;
-            Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}", export.Id);
+            Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
+        }
+
+        // Batch update all pending exports
+        if (exportsToUpdate.Count > 0)
+        {
+            await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(exportsToUpdate);
+        }
+
+        // Update CSOs that need external ID or status changes
+        // These are less frequent (only Create exports and renames), so individual updates are acceptable
+        foreach (var (cso, exportResult) in csosToUpdate)
+        {
+            await UpdateCsoAfterSuccessfulExportAsync(cso, exportResult);
+        }
+    }
+
+    /// <summary>
+    /// Marks an export as failed and applies retry logic (Q6 decision).
+    /// This is a synchronous version for batch processing - does not save to database.
+    /// </summary>
+    private static void MarkExportFailed(PendingExport export, string errorMessage)
+    {
+        export.ErrorCount++;
+        export.LastErrorMessage = errorMessage;
+        export.LastAttemptedAt = DateTime.UtcNow;
+        export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
+
+        // If max retries exceeded, mark as Failed (Q6 decision - requires manual intervention)
+        if (export.ErrorCount >= export.MaxRetries)
+        {
+            export.Status = PendingExportStatus.Failed;
+            Log.Warning("MarkExportFailed: Export {ExportId} has exceeded max retries ({MaxRetries}). Requires manual intervention.",
+                export.Id, export.MaxRetries);
+        }
+        else
+        {
+            // Keep as Pending while we're still retrying
+            export.Status = PendingExportStatus.Pending;
+            Log.Warning("MarkExportFailed: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
+                export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, errorMessage);
         }
     }
 
@@ -515,6 +590,30 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Updates the status of attribute changes after a successful export.
+    /// Changes with Pending or ExportedNotConfirmed status are transitioned to ExportedPendingConfirmation.
+    /// </summary>
+    private static void UpdateAttributeChangeStatusesAfterExport(PendingExport export)
+    {
+        var now = DateTime.UtcNow;
+
+        foreach (var attrChange in export.AttributeValueChanges)
+        {
+            // Only update changes that were pending or being retried
+            if (attrChange.Status == PendingExportAttributeChangeStatus.Pending ||
+                attrChange.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+            {
+                attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+                attrChange.ExportAttemptCount++;
+                attrChange.LastExportedAt = now;
+
+                Log.Debug("UpdateAttributeChangeStatusesAfterExport: Attribute {AttrId} status set to ExportedPendingConfirmation (attempt {Attempt})",
+                    attrChange.AttributeId, attrChange.ExportAttemptCount);
+            }
+        }
+    }
+
+    /// <summary>
     /// Executes exports using the IConnectorExportUsingFiles interface with batching.
     /// </summary>
     private async Task ExecuteUsingFilesWithBatchingAsync(
@@ -550,7 +649,11 @@ public class ExportExecutionServer
                 autoConfirm = autoConfirmSetting?.CheckboxValue ?? true; // default true when capability exists
             }
 
-            // Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc)
+            // Process exports and collect for batch operations
+            var exportsToUpdate = new List<PendingExport>();
+            var exportsToDelete = new List<PendingExport>();
+            var csosToUpdate = new List<(ConnectedSystemObject cso, ExportResult exportResult)>();
+
             for (var i = 0; i < pendingExports.Count; i++)
             {
                 var export = pendingExports[i];
@@ -558,7 +661,8 @@ public class ExportExecutionServer
 
                 if (!exportResult.Success)
                 {
-                    await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
+                    MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
+                    exportsToUpdate.Add(export);
                     result.FailedCount++;
 
                     // Capture export data for activity tracking
@@ -586,23 +690,46 @@ public class ExportExecutionServer
                 // For Create exports, update the CSO status from PendingProvisioning to Normal
                 if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
                 {
-                    await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
+                    csosToUpdate.Add((export.ConnectedSystemObject, exportResult));
                 }
+
+                // Update attribute change statuses to ExportedPendingConfirmation
+                UpdateAttributeChangeStatusesAfterExport(export);
 
                 if (autoConfirm)
                 {
-                    // Auto-confirm: delete the pending export immediately (confirmed)
-                    await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
+                    // Auto-confirm: for file-based exports where the file system is the source of truth,
+                    // we can consider the export confirmed immediately
+                    exportsToDelete.Add(export);
                 }
                 else
                 {
                     // Standard behaviour: mark as exported, will be confirmed on next import
                     export.Status = PendingExportStatus.Exported;
                     export.LastAttemptedAt = DateTime.UtcNow;
-                    await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+                    exportsToUpdate.Add(export);
                 }
                 result.SuccessCount++;
             }
+
+            // Batch update exports that need updating
+            if (exportsToUpdate.Count > 0)
+            {
+                await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(exportsToUpdate);
+            }
+
+            // Batch delete exports that are auto-confirmed
+            if (exportsToDelete.Count > 0)
+            {
+                await Application.Repository.ConnectedSystems.DeletePendingExportsAsync(exportsToDelete);
+            }
+
+            // Update CSOs (typically a small number for Create operations)
+            foreach (var (cso, exportResult) in csosToUpdate)
+            {
+                await UpdateCsoAfterSuccessfulExportAsync(cso, exportResult);
+            }
+
             Log.Information("ExecuteUsingFilesWithBatchingAsync: Exported {Count} changes to file for {SystemName}",
                 pendingExports.Count, connectedSystem.Name);
         }
@@ -615,17 +742,17 @@ public class ExportExecutionServer
         {
             Log.Error(ex, "ExecuteUsingFilesWithBatchingAsync: Failed to export to file for {SystemName}", connectedSystem.Name);
 
-            // Mark all as failed
-            // Note: Sequential for EF Core DbContext thread safety (see Q8 in design doc)
+            // Mark all as failed using batch update
+            var now = DateTime.UtcNow;
             foreach (var export in pendingExports)
             {
                 export.ErrorCount++;
                 export.LastErrorMessage = ex.Message;
-                export.LastAttemptedAt = DateTime.UtcNow;
+                export.LastAttemptedAt = now;
                 export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
                 export.Status = PendingExportStatus.ExportNotImported;
-                await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
             }
+            await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
 
             result.FailedCount = pendingExports.Count;
         }
@@ -750,12 +877,14 @@ public class ExportExecutionServer
             await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
         }
 
-        // For call-based exports with Create operations, we might want to keep the pending export
-        // until a confirming import verifies the object was created. For now, delete on success.
-        await Application.Repository.ConnectedSystems.DeletePendingExportAsync(export);
+        // Update attribute change statuses to ExportedPendingConfirmation
+        // They will be confirmed (and deleted) or marked for retry during the next import
+        UpdateAttributeChangeStatusesAfterExport(export);
+
+        await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
 
         result.SuccessCount++;
-        Log.Debug("ProcessExportSuccessAsync: Successfully exported {ExportId}", export.Id);
+        Log.Debug("ProcessExportSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
     }
 
     /// <summary>

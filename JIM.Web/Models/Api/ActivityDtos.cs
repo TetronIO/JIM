@@ -49,7 +49,17 @@ public class ActivityHeader
     public string? Message { get; set; }
 
     /// <summary>
-    /// Name of the user who initiated this activity.
+    /// The type of security principal that initiated this activity.
+    /// </summary>
+    public ActivityInitiatorType InitiatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the security principal that initiated this activity.
+    /// </summary>
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>
+    /// Name of the user or API key that initiated this activity.
     /// </summary>
     public string? InitiatedByName { get; set; }
 
@@ -93,6 +103,8 @@ public class ActivityHeader
             TargetOperationType = activity.TargetOperationType,
             TargetName = activity.TargetName,
             Message = activity.Message,
+            InitiatedByType = activity.InitiatedByType,
+            InitiatedById = activity.InitiatedById,
             InitiatedByName = activity.InitiatedByName,
             ObjectsToProcess = activity.ObjectsToProcess,
             ObjectsProcessed = activity.ObjectsProcessed,
@@ -154,7 +166,17 @@ public class ActivityDetailDto
     public string? Message { get; set; }
 
     /// <summary>
-    /// Name of the user who initiated this activity.
+    /// The type of security principal that initiated this activity.
+    /// </summary>
+    public ActivityInitiatorType InitiatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the security principal that initiated this activity.
+    /// </summary>
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>
+    /// Name of the user or API key that initiated this activity.
     /// </summary>
     public string? InitiatedByName { get; set; }
 
@@ -239,6 +261,8 @@ public class ActivityDetailDto
             TargetOperationType = activity.TargetOperationType,
             TargetName = activity.TargetName,
             Message = activity.Message,
+            InitiatedByType = activity.InitiatedByType,
+            InitiatedById = activity.InitiatedById,
             InitiatedByName = activity.InitiatedByName,
             ObjectsToProcess = activity.ObjectsToProcess,
             ObjectsProcessed = activity.ObjectsProcessed,

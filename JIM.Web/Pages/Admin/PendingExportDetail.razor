@@ -224,33 +224,7 @@
                 </MudCardContent>
             </MudCard>
         </MudItem>
-
-        <MudItem xs="12" Class="d-flex gap-2 mt-4">
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Default"
-                       StartIcon="@Icons.Material.Filled.ArrowBack"
-                       Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")">
-                Back to List
-            </MudButton>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Error"
-                       StartIcon="@Icons.Material.Filled.Delete"
-                       OnClick="HandleDeleteClickAsync">
-                Delete Pending Export
-            </MudButton>
-        </MudItem>
     </MudGrid>
-
-    <MudMessageBox @ref="DeleteMessageBox" Title="Confirm Delete" CancelText="Cancel">
-        <MessageContent>
-            Are you sure you want to delete this pending export? This action cannot be undone.
-            <br/><br/>
-            The change will <strong>not</strong> be applied to the connected system.
-        </MessageContent>
-        <YesButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false" StartIcon="@Icons.Material.Filled.Delete" Class="ml-2">Delete</MudButton>
-        </YesButton>
-    </MudMessageBox>
 }
 else if (_notFound)
 {
@@ -276,7 +250,6 @@ else
     private ConnectedSystemHeader? _connectedSystemHeader;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _notFound;
-    private MudMessageBox? DeleteMessageBox;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -371,19 +344,5 @@ else
             PendingExportAttributeChangeType.RemoveAll => MudBlazor.Color.Error,
             _ => MudBlazor.Color.Default,
         };
-    }
-
-    private async Task HandleDeleteClickAsync()
-    {
-        if (DeleteMessageBox == null || _pendingExport == null)
-            return;
-
-        var result = await DeleteMessageBox.ShowAsync();
-        if (!result.HasValue || !result.Value)
-            return;
-
-        await Jim.ConnectedSystems.DeletePendingExportAsync(_pendingExport);
-        Snackbar.Add("Pending export deleted successfully.", Severity.Success);
-        NavManager.NavigateTo($"/admin/connected-systems/{ConnectedSystemId}/pending-exports");
     }
 }

@@ -17,7 +17,7 @@
 
 @if (_isInitialised && PredefinedSearch != null)
 {
-    <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" Hover="true"
+    <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" @bind-CurrentPage="_currentPage" Hover="true"
         Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick"
         RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
         <ToolBarContent>
@@ -77,6 +77,7 @@ else if (_isInitialised)
     private string _searchString = "";
     private bool _loading;
     private bool _isInitialised;
+    private int _currentPage;
 
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private PredefinedSearch? PredefinedSearch { get; set; }
@@ -88,6 +89,9 @@ else if (_isInitialised)
     {
         // Reset state when parameters change (e.g., navigating between types)
         _isInitialised = false;
+
+        // Read page from URL query string (MudTable uses 0-indexed pages)
+        _currentPage = GetPageFromUrl() - 1;
 
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
@@ -197,9 +201,25 @@ else if (_isInitialised)
         _table?.ReloadServerData();
     }
 
+    private int GetPageFromUrl()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var pageStr = query["p"];
+        if (int.TryParse(pageStr, out var page) && page > 0)
+            return page;
+        return 1; // Default to page 1
+    }
+
     private void HandleRowClick(TableRowClickEventArgs<MetaverseObjectHeader> args)
     {
-        if (args.Item != null)
-            NavManager.NavigateTo(Utilities.GetMetaverseObjectHref(args.Item));
+        // Prevent navigation while data is loading to avoid concurrent EF operations
+        if (_loading || args.Item == null)
+            return;
+
+        // Navigate using absolute path to ensure no query params are carried over
+        var href = Utilities.GetMetaverseObjectHref(args.Item);
+        var uri = NavManager.ToAbsoluteUri(href);
+        NavManager.NavigateTo(uri.AbsolutePath);
     }
 }

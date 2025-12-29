@@ -4,6 +4,7 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Serilog;
@@ -157,6 +158,81 @@ public class MetaverseServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await Application.Repository.Metaverse.DeleteMetaverseAttributeAsync(attribute);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates a new Metaverse Attribute (initiated by API key).
+    /// </summary>
+    /// <param name="attribute">The attribute to create.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the creation.</param>
+    public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
+    {
+        if (attribute == null)
+            throw new ArgumentNullException(nameof(attribute));
+
+        Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+
+        var activity = new Activity
+        {
+            TargetName = attribute.Name,
+            TargetType = ActivityTargetType.MetaverseAttribute,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        await Application.Repository.Metaverse.CreateMetaverseAttributeAsync(attribute);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates an existing Metaverse Attribute (initiated by API key).
+    /// </summary>
+    /// <param name="attribute">The attribute to update.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
+    public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
+    {
+        if (attribute == null)
+            throw new ArgumentNullException(nameof(attribute));
+
+        Log.Debug("UpdateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+
+        var activity = new Activity
+        {
+            TargetName = attribute.Name,
+            TargetType = ActivityTargetType.MetaverseAttribute,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Deletes a Metaverse Attribute (initiated by API key).
+    /// </summary>
+    /// <param name="attribute">The attribute to delete.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
+    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
+    {
+        if (attribute == null)
+            throw new ArgumentNullException(nameof(attribute));
+
+        Log.Debug("DeleteMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+
+        var activity = new Activity
+        {
+            TargetName = attribute.Name,
+            TargetType = ActivityTargetType.MetaverseAttribute,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         await Application.Repository.Metaverse.DeleteMetaverseAttributeAsync(attribute);
 

@@ -92,6 +92,17 @@ catch {
 }
 
 # Step 2b: Clean up existing configuration from previous runs
+# NOTE: This cleanup is only needed when:
+# 1. Running Setup-Scenario1.ps1 manually during development
+# 2. Running with Invoke-IntegrationTests.ps1 -ScenariosOnly (skips database reset)
+# 3. Re-running setup without tearing down containers
+#
+# When Invoke-IntegrationTests.ps1 runs normally (default), it does:
+#   docker compose down -v (Step 0: Reset Environment)
+# This deletes the database volume, so there are no Connected Systems to clean up.
+#
+# This cleanup is idempotent and fast (single API call), so it's safe to keep
+# for developer convenience during iterative testing workflows.
 Write-TestStep "Step 2b" "Cleaning up existing JIM configuration"
 
 try {
@@ -457,7 +468,8 @@ try {
         )
 
         # Expression-based mappings for computed values
-        # DN now uses Department to place users in department OUs
+        # DN uses Department to place users in department OUs (created by Populate-SambaAD.ps1)
+        # This enables OU move testing when department changes
         $expressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
@@ -683,6 +695,21 @@ try {
     $csvProfiles = Get-JIMRunProfile -ConnectedSystemId $csvSystem.id
     $ldapProfiles = Get-JIMRunProfile -ConnectedSystemId $ldapSystem.id
 
+    # Full Import from LDAP - MUST be created first and run before any syncs
+    # This establishes the baseline for Delta Import (USN watermark)
+    $ldapFullImportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Full Import" }
+    if (-not $ldapFullImportProfile) {
+        $ldapFullImportProfile = New-JIMRunProfile `
+            -Name "Samba AD - Full Import" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "FullImport" `
+            -PassThru
+        Write-Host "  ✓ Created 'Samba AD - Full Import' run profile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Samba AD - Full Import' already exists" -ForegroundColor Gray
+    }
+
     # Full Import from CSV - FilePath is required for file-based connectors
     $csvFilePath = "/var/connector-files/test-data/hr-users.csv"
     $csvImportProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Full Import" }
@@ -795,6 +822,7 @@ return @{
     CSVImportProfileId = $csvImportProfile.id
     CSVSyncProfileId = $csvSyncProfile.id
     CSVDeltaSyncProfileId = $csvDeltaSyncProfile.id
+    LDAPFullImportProfileId = $ldapFullImportProfile.id
     LDAPExportProfileId = $ldapExportProfile.id
     LDAPDeltaImportProfileId = $ldapDeltaImportProfile.id
     LDAPDeltaSyncProfileId = $ldapDeltaSyncProfile.id

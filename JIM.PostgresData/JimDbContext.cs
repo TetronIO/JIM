@@ -131,6 +131,7 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasMany(cso => cso.ActivityRunProfileExecutionItems)
             .WithOne(i => i.ConnectedSystemObject)
+            .HasForeignKey(i => i.ConnectedSystemObjectId)
             .OnDelete(DeleteBehavior.SetNull); // let the db clear the fk value to the CSO.
         
         modelBuilder.Entity<ConnectedSystemObject>()

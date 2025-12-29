@@ -21,7 +21,7 @@
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">ID:</MudText>
-                <MudText Class="mud-text-secondary">@_activity.Id</MudText>
+                <MudText Class="mud-text-secondary jim-text-code">@_activity.Id</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
@@ -66,27 +66,30 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Initiated By:</MudText>
                 @{
-                    if (_activity.InitiatedBy != null)
+                    if (_activity.InitiatedByType == ActivityInitiatorType.User && _activity.InitiatedByMetaverseObject != null)
                     {
                         <MudText>
                             <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedBy)</MudLink>
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedByMetaverseObject)</MudLink>
+                        </MudText>
+                    }
+                    else if (_activity.InitiatedByType == ActivityInitiatorType.ApiKey)
+                    {
+                        <MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            @if (_activity.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">@_activity.InitiatedByName</MudLink>
+                            }
+                            else
+                            {
+                                <span>@_activity.InitiatedByName</span>
+                            }
                         </MudText>
                     }
                     else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
                     {
-                        var apiKeyName = Utilities.ExtractApiKeyName(_activity.InitiatedByName);
-                        if (apiKeyName != null)
-                        {
-                            <MudText>
-                                <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                                <MudLink Href="@Utilities.GetApiKeysHref()">@apiKeyName</MudLink>
-                            </MudText>
-                        }
-                        else
-                        {
-                            <MudText>@_activity.InitiatedByName</MudText>
-                        }
+                        <MudText>@_activity.InitiatedByName</MudText>
                     }
                 }
             </MudItem>
@@ -104,7 +107,7 @@
             </MudItem>
         </MudGrid>
     </MudPaper>
-    
+
     @if (!string.IsNullOrEmpty(_activity.ErrorMessage) || !string.IsNullOrEmpty(_activity.ErrorStackTrace))
     {
         <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
@@ -118,9 +121,7 @@
             @if (!string.IsNullOrEmpty(_activity.ErrorStackTrace))
             {
                 <MudText Typo="Typo.button">Error Stack:</MudText>
-                <pre>
-@_activity.ErrorStackTrace
-                </pre>
+                <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; max-width: 100%;">@_activity.ErrorStackTrace</pre>
             }
         </MudPaper>
     }
@@ -182,7 +183,7 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Internal Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.Id</MudLink></MudTd>
-                <MudTd DataLabel="External Id">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
+                <MudTd DataLabel="External Id" class="jim-text-code">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
                 <MudTd DataLabel="Change Type">

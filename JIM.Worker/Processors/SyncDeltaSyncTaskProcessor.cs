@@ -8,6 +8,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using JIM.Utilities;
+using JIM.Worker.Models;
 using Serilog;
 
 namespace JIM.Worker.Processors;
@@ -33,6 +34,10 @@ public class SyncDeltaSyncTaskProcessor
     private readonly List<MetaverseObject> _pendingMvoCreates = [];
     private readonly List<MetaverseObject> _pendingMvoUpdates = [];
     private readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes)> _pendingExportEvaluations = [];
+
+    // Batch collections for deferred pending export operations (avoid per-CSO database calls)
+    private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
+    private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
     public SyncDeltaSyncTaskProcessor(
         JimApplication jimApplication,
@@ -169,6 +174,9 @@ public class SyncDeltaSyncTaskProcessor
             // Batch evaluate exports for all MVOs that changed during this page
             await EvaluatePendingExportsAsync();
 
+            // batch process pending export confirmations (deletes and updates)
+            await FlushPendingExportOperationsAsync();
+
             // Update activity progress once per page
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
@@ -231,8 +239,9 @@ public class SyncDeltaSyncTaskProcessor
         {
             using (Diagnostics.Sync.StartSpan("ProcessPendingExport"))
             {
-                // Note: ProcessPendingExportAsync handles pending export confirmation, not CSO/MVO changes
-                await ProcessPendingExportAsync(connectedSystemObject);
+                // Note: ProcessPendingExport handles pending export confirmation, not CSO/MVO changes
+                // Queues operations for batch processing at end of page (avoids per-CSO database calls)
+                ProcessPendingExport(connectedSystemObject);
             }
 
             using (Diagnostics.Sync.StartSpan("ProcessObsoleteConnectedSystemObject"))
@@ -294,25 +303,26 @@ public class SyncDeltaSyncTaskProcessor
     /// <summary>
     /// See if a Pending Export Object for a Connected System Object can be invalidated and deleted.
     /// This would occur when the Pending Export changes are visible on the Connected System Object after a confirming import.
+    /// Queues pending export operations for batch processing at the end of page processing (avoids per-CSO database calls).
     /// </summary>
-    private async Task ProcessPendingExportAsync(ConnectedSystemObject connectedSystemObject)
+    private void ProcessPendingExport(ConnectedSystemObject connectedSystemObject)
     {
-        Log.Verbose($"ProcessPendingExportAsync: Executing for: {connectedSystemObject}.");
+        Log.Verbose($"ProcessPendingExport: Executing for: {connectedSystemObject}.");
 
         // use pre-loaded pending exports dictionary for O(1) lookup instead of O(n) database query
         if (_pendingExportsByCsoId == null || !_pendingExportsByCsoId.TryGetValue(connectedSystemObject.Id, out var pendingExportsForThisCso))
         {
-            Log.Verbose($"ProcessPendingExportAsync: No pending exports found for CSO {connectedSystemObject.Id}.");
+            Log.Verbose($"ProcessPendingExport: No pending exports found for CSO {connectedSystemObject.Id}.");
             return;
         }
 
         if (pendingExportsForThisCso.Count == 0)
         {
-            Log.Verbose($"ProcessPendingExportAsync: No pending exports found for CSO {connectedSystemObject.Id}.");
+            Log.Verbose($"ProcessPendingExport: No pending exports found for CSO {connectedSystemObject.Id}.");
             return;
         }
 
-        Log.Verbose($"ProcessPendingExportAsync: Found {pendingExportsForThisCso.Count} pending export(s) for CSO {connectedSystemObject.Id}.");
+        Log.Verbose($"ProcessPendingExport: Found {pendingExportsForThisCso.Count} pending export(s) for CSO {connectedSystemObject.Id}.");
 
         foreach (var pendingExport in pendingExportsForThisCso)
         {
@@ -343,20 +353,20 @@ public class SyncDeltaSyncTaskProcessor
                 if (changeMatches)
                 {
                     successfulChanges.Add(attributeChange);
-                    Log.Verbose($"ProcessPendingExportAsync: Attribute change for {attributeChange.AttributeId} confirmed on CSO.");
+                    Log.Verbose($"ProcessPendingExport: Attribute change for {attributeChange.AttributeId} confirmed on CSO.");
                 }
                 else
                 {
                     failedChanges.Add(attributeChange);
-                    Log.Verbose($"ProcessPendingExportAsync: Attribute change for {attributeChange.AttributeId} does not match CSO state.");
+                    Log.Verbose($"ProcessPendingExport: Attribute change for {attributeChange.AttributeId} does not match CSO state.");
                 }
             }
 
-            // if all changes have been confirmed, delete the pending export
+            // if all changes have been confirmed, queue pending export for deletion
             if (failedChanges.Count == 0)
             {
-                Log.Information($"ProcessPendingExportAsync: All changes confirmed for pending export {pendingExport.Id}. Deleting.");
-                await _jim.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+                Log.Information($"ProcessPendingExport: All changes confirmed for pending export {pendingExport.Id}. Queuing for deletion.");
+                _pendingExportsToDelete.Add(pendingExport);
 
                 // remove from in-memory cache to keep it consistent
                 pendingExportsForThisCso.Remove(pendingExport);
@@ -364,8 +374,8 @@ public class SyncDeltaSyncTaskProcessor
             else if (successfulChanges.Count > 0)
             {
                 // partial success: remove successful attribute changes, keep failed ones
-                Log.Information($"ProcessPendingExportAsync: Partial success for pending export {pendingExport.Id}. " +
-                    $"{successfulChanges.Count} succeeded, {failedChanges.Count} failed. Updating pending export.");
+                Log.Information($"ProcessPendingExport: Partial success for pending export {pendingExport.Id}. " +
+                    $"{successfulChanges.Count} succeeded, {failedChanges.Count} failed. Queuing for update.");
 
                 // remove the successful attribute changes from the pending export
                 foreach (var successfulChange in successfulChanges)
@@ -373,23 +383,32 @@ public class SyncDeltaSyncTaskProcessor
                     pendingExport.AttributeValueChanges.Remove(successfulChange);
                 }
 
+                // If this was a Create operation and it partially succeeded, the object now exists.
+                // Change to Update so subsequent export attempts update the existing object
+                // rather than trying to create it again (which would fail without DN).
+                if (pendingExport.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Create)
+                {
+                    Log.Information($"ProcessPendingExport: Changing pending export {pendingExport.Id} from Create to Update (object was created, updating remaining attributes).");
+                    pendingExport.ChangeType = JIM.Models.Transactional.PendingExportChangeType.Update;
+                }
+
                 // increment error count and update status
                 pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
-                await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+                _pendingExportsToUpdate.Add(pendingExport);
             }
             else
             {
                 // complete failure: all attribute changes failed
-                Log.Warning($"ProcessPendingExportAsync: Complete failure for pending export {pendingExport.Id}. " +
-                    $"All {failedChanges.Count} attribute changes failed. Incrementing error count.");
+                Log.Warning($"ProcessPendingExport: Complete failure for pending export {pendingExport.Id}. " +
+                    $"All {failedChanges.Count} attribute changes failed. Queuing for update.");
 
                 // increment error count and update status
                 pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
 
-                await _jim.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+                _pendingExportsToUpdate.Add(pendingExport);
             }
         }
     }
@@ -715,6 +734,12 @@ public class SyncDeltaSyncTaskProcessor
         return MetaverseObjectChangeResult.NoChanges();
     }
 
+    /// <summary>
+    /// Evaluates export rules for an MVO that has changed during inbound sync.
+    /// Creates PendingExports for any connected systems that need to be updated.
+    /// Also evaluates if MVO has fallen out of scope for any export rules (deprovisioning).
+    /// Pending exports are saved immediately to avoid memory pressure from holding large numbers of objects.
+    /// </summary>
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
         if (_exportEvaluationCache == null)
@@ -723,35 +748,25 @@ public class SyncDeltaSyncTaskProcessor
             return;
         }
 
-        List<JIM.Models.Transactional.PendingExport> pendingExports;
+        // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
+        // Pending exports are saved immediately within EvaluateExportRulesAsync to avoid
+        // memory pressure from holding 5000+ pending export objects in memory
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
-            pendingExports = await _jim.ExportEvaluation.EvaluateExportRulesAsync(
+            await _jim.ExportEvaluation.EvaluateExportRulesAsync(
                 mvo,
                 changedAttributes,
                 _connectedSystem,
                 _exportEvaluationCache);
         }
 
-        if (pendingExports.Count > 0)
-        {
-            Log.Information("EvaluateOutboundExportsAsync: Created {Count} pending exports for MVO {MvoId}",
-                pendingExports.Count, mvo.Id);
-        }
-
-        List<JIM.Models.Transactional.PendingExport> deprovisioningExports;
+        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
-            deprovisioningExports = await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
+            await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
                 mvo,
                 _connectedSystem,
                 _exportEvaluationCache);
-        }
-
-        if (deprovisioningExports.Count > 0)
-        {
-            Log.Information("EvaluateOutboundExportsAsync: Created {Count} deprovisioning exports for MVO {MvoId}",
-                deprovisioningExports.Count, mvo.Id);
         }
     }
 
@@ -805,6 +820,40 @@ public class SyncDeltaSyncTaskProcessor
 
         Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs", _pendingExportEvaluations.Count);
         _pendingExportEvaluations.Clear();
+
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Batch persists all pending export deletes and updates collected during the current page.
+    /// This reduces database round trips from n writes to 2 writes (one each for deletes, updates).
+    /// Note: Pending export creates are saved immediately during EvaluateExportRulesAsync to avoid
+    /// memory pressure from holding large numbers of pending export objects.
+    /// </summary>
+    private async Task FlushPendingExportOperationsAsync()
+    {
+        if (_pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("FlushPendingExportOperations");
+        span.SetTag("deleteCount", _pendingExportsToDelete.Count);
+        span.SetTag("updateCount", _pendingExportsToUpdate.Count);
+
+        // Batch delete confirmed pending exports
+        if (_pendingExportsToDelete.Count > 0)
+        {
+            await _jim.ConnectedSystems.DeletePendingExportsAsync(_pendingExportsToDelete);
+            Log.Verbose("FlushPendingExportOperationsAsync: Deleted {Count} confirmed pending exports in batch", _pendingExportsToDelete.Count);
+            _pendingExportsToDelete.Clear();
+        }
+
+        // Batch update pending exports that need error tracking
+        if (_pendingExportsToUpdate.Count > 0)
+        {
+            await _jim.ConnectedSystems.UpdatePendingExportsAsync(_pendingExportsToUpdate);
+            Log.Verbose("FlushPendingExportOperationsAsync: Updated {Count} pending exports in batch", _pendingExportsToUpdate.Count);
+            _pendingExportsToUpdate.Clear();
+        }
 
         span.SetSuccess();
     }

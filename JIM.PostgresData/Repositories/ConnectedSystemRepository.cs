@@ -1001,6 +1001,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var exportList = pendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        Repository.Database.PendingExports.RemoveRange(exportList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var exportList = pendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        Repository.Database.PendingExports.UpdateRange(exportList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task CreatePendingExportAsync(PendingExport pendingExport)
     {
         await Repository.Database.PendingExports.AddAsync(pendingExport);
@@ -1161,6 +1181,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
             .FirstOrDefaultAsync(pe => pe.Id == id);
+    }
+
+    public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+    {
+        return await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.ConnectedSystem)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .FirstOrDefaultAsync(pe => pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.Id == connectedSystemObjectId);
     }
 
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)

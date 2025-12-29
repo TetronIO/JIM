@@ -50,6 +50,20 @@ public interface IConnectedSystemRepository
     public Task UpdatePendingExportAsync(PendingExport pendingExport);
 
     /// <summary>
+    /// Deletes multiple Pending Export objects in a single batch operation.
+    /// Used to efficiently remove confirmed pending exports during sync.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to delete.</param>
+    public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Updates multiple Pending Export objects in a single batch operation.
+    /// Used to efficiently update pending exports during sync.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to update.</param>
+    public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
+
+    /// <summary>
     /// Creates a new Pending Export object.
     /// </summary>
     /// <param name="pendingExport">The Pending Export to create.</param>
@@ -79,6 +93,14 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
     public Task<PendingExport?> GetPendingExportAsync(Guid id);
+
+    /// <summary>
+    /// Retrieves the Pending Export for a specific Connected System Object.
+    /// There should only be one PendingExport per CSO at any time.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <returns>The PendingExport for the CSO, or null if none exists.</returns>
+    public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.

@@ -86,8 +86,17 @@ namespace JIM.PostgresData.Migrations
                     b.Property<TimeSpan?>("ExecutionTime")
                         .HasColumnType("interval");
 
+                    b.Property<Guid?>("InitiatedByApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InitiatedById")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("InitiatedByName")
                         .HasColumnType("text");
+
+                    b.Property<int>("InitiatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Message")
                         .HasColumnType("text");
@@ -127,6 +136,8 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemId");
 
                     b.HasIndex("ConnectedSystemRunProfileId");
+
+                    b.HasIndex("InitiatedByApiKeyId");
 
                     b.HasIndex("MetaverseObjectId");
 
@@ -2050,11 +2061,20 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ExecutionMode")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("InitiatedByApiKeyId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("InitiatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InitiatedByMetaverseObjectId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("InitiatedByName")
                         .HasColumnType("text");
+
+                    b.Property<int>("InitiatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -2066,7 +2086,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ActivityId");
 
-                    b.HasIndex("InitiatedById");
+                    b.HasIndex("InitiatedByApiKeyId");
+
+                    b.HasIndex("InitiatedByMetaverseObjectId");
 
                     b.ToTable("WorkerTasks");
 
@@ -2186,11 +2208,23 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("ExportAttemptCount")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("LastExportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastImportedValue")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("PendingExportId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.Property<string>("StringValue")
                         .HasColumnType("text");
@@ -2335,7 +2369,11 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("Activities")
                         .HasForeignKey("ConnectedSystemRunProfileId");
 
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedBy")
+                    b.HasOne("JIM.Models.Security.ApiKey", "InitiatedByApiKey")
+                        .WithMany()
+                        .HasForeignKey("InitiatedByApiKeyId");
+
+                    b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedByMetaverseObject")
                         .WithMany()
                         .HasForeignKey("MetaverseObjectId");
 
@@ -2343,7 +2381,9 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("Activities")
                         .HasForeignKey("SyncRuleId");
 
-                    b.Navigation("InitiatedBy");
+                    b.Navigation("InitiatedByApiKey");
+
+                    b.Navigation("InitiatedByMetaverseObject");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
@@ -3067,13 +3107,19 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedBy")
+                    b.HasOne("JIM.Models.Security.ApiKey", "InitiatedByApiKey")
                         .WithMany()
-                        .HasForeignKey("InitiatedById");
+                        .HasForeignKey("InitiatedByApiKeyId");
+
+                    b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedByMetaverseObject")
+                        .WithMany()
+                        .HasForeignKey("InitiatedByMetaverseObjectId");
 
                     b.Navigation("Activity");
 
-                    b.Navigation("InitiatedBy");
+                    b.Navigation("InitiatedByApiKey");
+
+                    b.Navigation("InitiatedByMetaverseObject");
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.DeferredReference", b =>

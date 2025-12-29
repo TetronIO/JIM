@@ -95,20 +95,34 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | `Populate-SambaAD.ps1` | test/integration/ | Create users/groups in Samba AD |
 | `Generate-TestCSV.ps1` | test/integration/ | Generate HR CSV files |
 | `Setup-Scenario1.ps1` | test/integration/ | Configure JIM for Scenario 1 |
+| `Invoke-Scenario1-HRToDirectory.ps1` | test/integration/scenarios/ | Run Scenario 1 tests (Joiner, Mover, Leaver, Reconnection) |
 
 ## Data Scale Templates
 
-| Template | Users | Groups | Use Case |
-|----------|-------|--------|----------|
-| **Nano** | 3 | 2 | Minimal testing, debugging |
-| **Micro** | 10 | 3 | Quick smoke tests, Codespaces |
-| **Small** | 100 | 20 | Small business, local development |
-| **Medium** | 1,000 | 100 | Medium enterprise, CI/CD |
-| **Large** | 10,000 | 500 | Large enterprise, baselines |
-| **XLarge** | 100,000 | 2,000 | Very large enterprise |
-| **XXLarge** | 1,000,000 | 10,000 | Global enterprise |
+| Template | Users | Groups | Avg Memberships | Use Case |
+|----------|-------|--------|-----------------|----------|
+| **Nano** | 3 | 1 | 1 | Minimal testing, debugging |
+| **Micro** | 10 | 3 | 3 | Quick smoke tests, Codespaces |
+| **Small** | 100 | 20 | 5 | Small business, local development |
+| **Medium** | 1,000 | 100 | 8 | Medium enterprise, CI/CD |
+| **MediumLarge** | 5,000 | 250 | 9 | Growing enterprise |
+| **Large** | 10,000 | 500 | 10 | Large enterprise, baselines |
+| **XLarge** | 100,000 | 2,000 | 12 | Very large enterprise |
+| **XXLarge** | 1,000,000 | 10,000 | 15 | Global enterprise, performance testing |
 
 > **Note**: For GitHub Codespaces or resource-constrained environments, use **Nano** or **Micro** templates.
+
+### Test Data Quality
+
+Test user data is generated using reference CSV files with British naming conventions:
+- **~1,000 female first names** (`Firstnames-f.csv`)
+- **~1,000 male first names** (`Firstnames-m.csv`)
+- **~500 British surnames** (`Lastnames.csv`)
+
+Names are distributed using a prime-based algorithm to ensure realistic diversity across all template sizes:
+- Templates up to ~994,000 users have unique display names
+- Larger templates automatically append numeric suffixes: `(2)`, `(3)`, etc.
+- All generated data is deterministic (same template always produces same names) for test repeatability
 
 ## External Systems
 
@@ -185,23 +199,50 @@ This scenario tests the complete Identity Lifecycle Management (ILM) pattern:
 
 2. **Joiner Test** - New hire provisioning:
    - Adds `test.joiner` to CSV
-   - Triggers import and export
+   - Triggers CSV import → Full Sync → LDAP export
    - Validates user created in Samba AD with correct attributes
 
-3. **Mover Test** - Attribute updates:
-   - Changes department from HR to IT
-   - Triggers sync
-   - Validates department updated in AD
+3. **Mover Tests** - User lifecycle changes:
+   - **3a. Attribute Change**: Updates job title (non-DN attribute)
+   - **3b. Rename**: Changes display name (triggers DN rename in AD)
+   - **3c. OU Move**: Changes department (triggers OU move in AD via DN change)
+   - Each triggers delta sync sequence and validates changes in AD
 
 4. **Leaver Test** - Deprovisioning:
-   - Removes user from CSV
-   - Triggers sync
-   - Validates user deprovisioned in AD
+   - Removes user from CSV (simulating termination)
+   - Triggers delta sync sequence
+   - Validates CSO disconnected and MVO enters grace period
+   - User remains in AD during grace period (configurable: 7 days default)
 
-5. **Reconnection Test** - Deletion cancellation:
-   - Creates user, removes from CSV (simulating quit)
+5. **Reconnection Test** - Rehire within grace period:
+   - Creates `test.reconnect`, provisions to AD
+   - Removes from CSV (simulating termination/quit)
    - Restores to CSV within grace period (simulating rehire)
-   - Validates user preserved (not deleted)
+   - Validates user preserved in AD (reconnection successful, not re-provisioned)
+
+### Running Individual Test Steps
+
+You can run specific tests from Scenario 1:
+
+```powershell
+# Run all tests (default)
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small -ApiKey $env:JIM_API_KEY
+
+# Run only Joiner test
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Joiner -Template Micro -ApiKey $env:JIM_API_KEY
+
+# Run only Mover tests (all three variants: attribute, rename, OU move)
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Mover -Template Small -ApiKey $env:JIM_API_KEY
+
+# Run only Leaver test
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Leaver -Template Small -ApiKey $env:JIM_API_KEY
+
+# Run only Reconnection test
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Reconnection -Template Small -ApiKey $env:JIM_API_KEY
+
+# Continue on error (run all tests even if some fail)
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small -ApiKey $env:JIM_API_KEY -ContinueOnError
+```
 
 ## Troubleshooting
 

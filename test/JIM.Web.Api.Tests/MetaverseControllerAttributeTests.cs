@@ -26,9 +26,11 @@ public class MetaverseControllerAttributeTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
+    private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
     private Mock<ILogger<MetaverseController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private MetaverseController _controller = null!;
+    private JIM.Models.Security.ApiKey _testApiKey = null!;
 
     [SetUp]
     public void SetUp()
@@ -36,16 +38,35 @@ public class MetaverseControllerAttributeTests
         _mockRepository = new Mock<IRepository>();
         _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
+        _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
         _mockLogger = new Mock<ILogger<MetaverseController>>();
         _application = new JimApplication(_mockRepository.Object);
         _controller = new MetaverseController(_mockLogger.Object, _application);
+
+        // Create a test API key
+        var apiKeyId = Guid.NewGuid();
+        _testApiKey = new JIM.Models.Security.ApiKey
+        {
+            Id = apiKeyId,
+            Name = "TestApiKey",
+            KeyHash = "test-hash",
+            KeyPrefix = "test",
+            IsEnabled = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        // Set up the API key repository to return our test API key
+        _mockApiKeyRepo.Setup(r => r.GetByIdAsync(apiKeyId))
+            .ReturnsAsync(_testApiKey);
 
         // Set up API key authentication context for the controller
         var claims = new List<Claim>
         {
             new Claim("auth_method", "api_key"),
+            new Claim(ClaimTypes.NameIdentifier, apiKeyId.ToString()),
             new Claim(ClaimTypes.Name, "TestApiKey")
         };
         var identity = new ClaimsIdentity(claims, "ApiKey");

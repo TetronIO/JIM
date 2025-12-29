@@ -6,6 +6,7 @@ using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
@@ -144,6 +145,60 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
+    /// <summary>
+    /// Creates a new Connected System (initiated by API key).
+    /// </summary>
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+
+        if (connectedSystem.ConnectorDefinition == null)
+            throw new ArgumentException("connectedSystem.ConnectorDefinition is null!");
+
+        if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
+            throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
+
+        if (!AreRunProfilesValid(connectedSystem))
+            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
+
+        // create the connected system setting value objects from the connected system definition settings
+        foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
+        {
+            var settingValue = new ConnectedSystemSettingValue {
+                Setting = connectedSystemDefinitionSetting
+            };
+
+            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
+                settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
+
+            // Apply default string values for String, DropDown, and File settings
+            if ((connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String ||
+                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.DropDown ||
+                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.File) &&
+                !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
+                settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
+
+            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
+                settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
+
+            connectedSystem.SettingValues.Add(settingValue);
+        }
+
+        SanitiseConnectedSystemUserInput(connectedSystem);
+
+        // every CRUD operation requires tracking with an activity...
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
     public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, Activity? parentActivity = null)
     {
         if (connectedSystem == null)
@@ -173,7 +228,43 @@ public class ConnectedSystemServer
             
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
-            
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates an existing Connected System (initiated by API key).
+    /// </summary>
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, Activity? parentActivity = null)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+
+        if (!AreRunProfilesValid(connectedSystem))
+            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
+
+        Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem} (API key initiated)");
+
+        // are the settings valid?
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+
+        connectedSystem.LastUpdated = DateTime.UtcNow;
+
+        // every CRUD operation requires tracking with an activity...
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ParentActivityId = parentActivity?.Id,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -862,6 +953,146 @@ public class ConnectedSystemServer
 
         return result;
     }
+
+    /// <summary>
+    /// Imports a Connected System schema (initiated by API key).
+    /// </summary>
+    public async Task<SchemaRefreshResult> ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var result = new SchemaRefreshResult { Success = true };
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        ConnectorSchema schema;
+        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
+            schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+        else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
+            schema = await new FileConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+        else
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+
+        schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
+
+        var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
+        var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
+        var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
+
+        connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
+
+        foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
+        {
+            result.RemovedObjectTypes.Add(removedObjectTypeName);
+        }
+
+        foreach (var schemaObjectType in schema.ObjectTypes)
+        {
+            schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
+
+            var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
+
+            ConnectedSystemObjectType connectedSystemObjectType;
+            if (existingObjectType != null)
+            {
+                result.UpdatedObjectTypes.Add(schemaObjectType.Name);
+                connectedSystemObjectType = existingObjectType;
+                var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
+                var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
+                var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
+
+                connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
+
+                var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
+                if (removedAttributeNames.Count > 0)
+                {
+                    result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
+                }
+
+                var addedAttributeNames = new List<string>();
+
+                foreach (var schemaAttribute in schemaObjectType.Attributes)
+                {
+                    var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                    if (existingAttribute != null)
+                    {
+                        existingAttribute.Description = schemaAttribute.Description;
+                        existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
+                        existingAttribute.Type = schemaAttribute.Type;
+                        existingAttribute.ClassName = schemaAttribute.ClassName;
+                        connectedSystemObjectType.Attributes.Add(existingAttribute);
+                    }
+                    else
+                    {
+                        addedAttributeNames.Add(schemaAttribute.Name);
+                        connectedSystemObjectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
+                        {
+                            Name = schemaAttribute.Name,
+                            Description = schemaAttribute.Description,
+                            AttributePlurality = schemaAttribute.AttributePlurality,
+                            Type = schemaAttribute.Type,
+                            ClassName = schemaAttribute.ClassName
+                        });
+                    }
+                }
+
+                if (addedAttributeNames.Count > 0)
+                {
+                    result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
+                }
+            }
+            else
+            {
+                result.AddedObjectTypes.Add(schemaObjectType.Name);
+                connectedSystemObjectType = new ConnectedSystemObjectType
+                {
+                    Name = schemaObjectType.Name,
+                    Attributes = schemaObjectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
+                    {
+                        Name = a.Name,
+                        Description = a.Description,
+                        AttributePlurality = a.AttributePlurality,
+                        Type = a.Type,
+                        ClassName = a.ClassName
+                    }).ToList()
+                };
+
+                result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
+            }
+
+            // if there's an External Id attribute recommendation from the connector, use that
+            var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
+            if (attribute != null)
+                attribute.IsExternalId = true;
+
+            if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
+            {
+                var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
+                if (secondaryExternalIdAttribute != null)
+                    secondaryExternalIdAttribute.IsSecondaryExternalId = true;
+                else
+                    Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
+            }
+
+            connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
+        }
+
+        result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
+        result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
+
+        await UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey, activity);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+
+        return result;
+    }
     #endregion
 
     #region Connected System Hierarchy
@@ -1022,6 +1253,58 @@ public class ConnectedSystemServer
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Updates a Connected System Object Type (initiated by API key).
+    /// </summary>
+    /// <param name="objectType">The object type to update.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
+    public async Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType, ApiKey initiatedByApiKey)
+    {
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+
+        Log.Debug("UpdateObjectTypeAsync() called for {ObjectType} (API key initiated)", objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = objectType.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        await Application.Repository.ConnectedSystems.UpdateObjectTypeAsync(objectType);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates a Connected System Attribute (initiated by API key).
+    /// </summary>
+    /// <param name="attribute">The attribute to update.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
+    public async Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute, ApiKey initiatedByApiKey)
+    {
+        if (attribute == null)
+            throw new ArgumentNullException(nameof(attribute));
+
+        Log.Debug("UpdateAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+
+        var activity = new Activity
+        {
+            TargetName = attribute.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
     #endregion
 
     #region Connected System Objects
@@ -1064,9 +1347,10 @@ public class ConnectedSystemServer
         // We just need to associate the change with the execution item.
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
-        // Clear the navigation property to the deleted CSO to prevent FK constraint violations.
+        // Clear the navigation property and FK to the deleted CSO to prevent FK constraint violations.
         // The CSO is now deleted, so we cannot maintain a reference to it.
         activityRunProfileExecutionItem.ConnectedSystemObject = null;
+        activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
     }
     
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -1246,13 +1530,17 @@ public class ConnectedSystemServer
     {
         // bulk persist csos creates
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
-        
+
         // add a Change Object to the relevant Activity Run Profile Execution Item for each cso.
         // they will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
                                                   throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+
+            // Explicitly set the FK now that the CSO has been persisted and has an ID.
+            // This ensures the FK is properly tracked when the execution item is saved later.
+            activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
             AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem);
         }
@@ -1275,12 +1563,15 @@ public class ConnectedSystemServer
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
                                                   throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
-            
+
+            // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
+            activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+
             ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
         }
-        
+
         // bulk persist csos updates
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
     }
@@ -1345,6 +1636,7 @@ public class ConnectedSystemServer
 
         // make sure the CSO is linked to the activity run profile execution item
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
 
         // persist new attribute values from addition list and create change object
         foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
@@ -1597,6 +1889,30 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Creates a new sync rule mapping (initiated by API key).
+    /// </summary>
+    public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Updates an existing sync rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to update.</param>
@@ -1647,6 +1963,32 @@ public class ConnectedSystemServer
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Deletes a Sync Rule Mapping (initiated by API key).
+    /// </summary>
+    /// <param name="mapping">The mapping to delete.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey)
+    {
+        if (mapping == null)
+            throw new ArgumentNullException(nameof(mapping));
+
+        Log.Debug("DeleteSyncRuleMappingAsync() called for mapping {Id} (API key initiated)", mapping.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"Mapping to {targetName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
     #endregion
 
     #region Connected System Run Profiles
@@ -1672,6 +2014,32 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
 
         // now the run profile has been persisted, associated it with the activity and complete it.
+        activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates a Connected System Run Profile (initiated by API key).
+    /// </summary>
+    public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
+    {
+        if (connectedSystemRunProfile == null)
+            throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
+        if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
+            throw new ArgumentException("Run profile is not valid for the Connector!");
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystemRunProfile.Name,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+
         activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -1808,6 +2176,26 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Deletes multiple Pending Export objects in a single batch operation.
+    /// Used to efficiently remove confirmed pending exports during sync.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to delete.</param>
+    public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        await Application.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExports);
+    }
+
+    /// <summary>
+    /// Updates multiple Pending Export objects in a single batch operation.
+    /// Used to efficiently update pending exports during sync.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to update.</param>
+    public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
+    }
+
+    /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
@@ -1940,6 +2328,71 @@ public class ConnectedSystemServer
         return true;
     }
 
+    /// <summary>
+    /// Creates or updates a Sync Rule (initiated by API key).
+    /// </summary>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null)
+    {
+        if (syncRule == null)
+            throw new NullReferenceException(nameof(syncRule));
+
+        Log.Verbose($"CreateOrUpdateSyncRuleAsync() called for: {syncRule} (API key initiated)");
+
+        if (!syncRule.IsValid())
+            return false;
+
+        if (syncRule.Direction == SyncRuleDirection.Import)
+        {
+            syncRule.ProvisionToConnectedSystem = null;
+
+            if (syncRule.ConnectedSystemId > 0)
+            {
+                var connectedSystem = syncRule.ConnectedSystem ??
+                    await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId);
+
+                if (connectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
+                {
+                    if (syncRule.ObjectMatchingRules.Count > 0)
+                    {
+                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from sync rule {Id} " +
+                            "because Connected System {CsId} is in Simple Mode",
+                            syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
+                        syncRule.ObjectMatchingRules.Clear();
+                    }
+                }
+            }
+        }
+        else
+        {
+            syncRule.ObjectMatchingRules.Clear();
+            syncRule.ProjectToMetaverse = null;
+        }
+
+        var activity = new Activity
+        {
+            TargetName = syncRule.Name,
+            TargetType = ActivityTargetType.SyncRule,
+            ParentActivityId = parentActivity?.Id
+        };
+
+        if (syncRule.Id == 0)
+        {
+            activity.TargetOperationType = ActivityTargetOperationType.Create;
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
+        }
+        else
+        {
+            activity.TargetOperationType = ActivityTargetOperationType.Update;
+            syncRule.LastUpdated = DateTime.UtcNow;
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+        }
+
+        await Application.Activities.CompleteActivityAsync(activity);
+        return true;
+    }
+
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
     {
         // every crud operation must be tracked via an Activity
@@ -1968,6 +2421,22 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Create
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates a new object matching rule (initiated by API key).
+    /// </summary>
+    public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }

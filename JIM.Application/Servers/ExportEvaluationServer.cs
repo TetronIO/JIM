@@ -594,9 +594,11 @@ public class ExportEvaluationServer
             CreatedAt = DateTime.UtcNow
         };
 
+        // Save immediately - batching causes memory pressure with large datasets (5000+ objects)
+        // which leads to worse performance than individual saves due to GC overhead
         await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
 
-        Log.Information("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes",
+        Log.Debug("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes",
             changeType, pendingExport.Id, mvo.Id, exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(), attributeChanges.Count);
 
         return pendingExport;
@@ -684,6 +686,9 @@ public class ExportEvaluationServer
 
                         if (result != null)
                         {
+                            // Note: We only set AttributeId here (not the Attribute navigation property)
+                            // to avoid EF Core change tracking overhead during batch evaluation.
+                            // The Attribute is loaded via Include when reading pending exports.
                             var change = new PendingExportAttributeValueChange
                             {
                                 Id = Guid.NewGuid(),
@@ -745,6 +750,9 @@ public class ExportEvaluationServer
                 if (mvoValue == null)
                     continue;
 
+                // Note: We only set AttributeId here (not the Attribute navigation property)
+                // to avoid EF Core change tracking overhead during batch evaluation.
+                // The Attribute is loaded via Include when reading pending exports.
                 var attributeChange = new PendingExportAttributeValueChange
                 {
                     Id = Guid.NewGuid(),

@@ -76,7 +76,8 @@ function Invoke-SyncSequence {
     param(
         [Parameter(Mandatory=$true)]
         [hashtable]$Config,
-        [switch]$ShowProgress
+        [switch]$ShowProgress,
+        [switch]$ValidateActivityStatus
     )
 
     $results = @{
@@ -88,16 +89,25 @@ function Invoke-SyncSequence {
     if ($ShowProgress) { Write-Host "  [1/5] CSV Full Import..." -ForegroundColor DarkGray }
     $importResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVImportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "CSV Full Import"; ActivityId = $importResult.activityId }
+    if ($ValidateActivityStatus) {
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Full Import"
+    }
 
     # Step 2: CSV Delta Sync
     if ($ShowProgress) { Write-Host "  [2/5] CSV Delta Sync..." -ForegroundColor DarkGray }
     $syncResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVDeltaSyncProfileId -Wait -PassThru
     $results.Steps += @{ Name = "CSV Delta Sync"; ActivityId = $syncResult.activityId }
+    if ($ValidateActivityStatus) {
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "CSV Delta Sync"
+    }
 
     # Step 3: LDAP Export
     if ($ShowProgress) { Write-Host "  [3/5] LDAP Export..." -ForegroundColor DarkGray }
     $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Export"; ActivityId = $exportResult.activityId }
+    if ($ValidateActivityStatus) {
+        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export"
+    }
 
     # Wait for AD replication
     if ($ShowProgress) { Write-Host "  Waiting 5s for AD replication..." -ForegroundColor DarkGray }
@@ -107,11 +117,17 @@ function Invoke-SyncSequence {
     if ($ShowProgress) { Write-Host "  [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
     $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaImportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Delta Import"; ActivityId = $confirmImportResult.activityId }
+    if ($ValidateActivityStatus) {
+        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "LDAP Delta Import"
+    }
 
     # Step 5: LDAP Delta Sync
     if ($ShowProgress) { Write-Host "  [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray }
     $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaSyncProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Delta Sync"; ActivityId = $confirmSyncResult.activityId }
+    if ($ValidateActivityStatus) {
+        Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "LDAP Delta Sync"
+    }
 
     return $results
 }
@@ -144,19 +160,25 @@ try {
     }
 
     # IMPORTANT: For fully repeatable tests, JIM's database should be reset between runs.
-    # Run 'jim-reset' before running tests, or use:
-    #   docker compose -f docker-compose.yml down -v && jim-stack
-    # This cleans up MVOs, CSOs, and pending exports from previous test runs.
+    # Invoke-IntegrationTests.ps1 does this automatically in Step 0 (Reset Environment).
+    # For manual runs: use 'jim-reset' or 'docker compose down -v && jim-stack'
 
     # Reset CSV to baseline state before running tests
-    # This ensures test data is in a known state regardless of previous test runs
+    # This ensures test data is in a known state regardless of previous test runs.
+    # NOTE: This is necessary even after database reset because CSV files persist
+    # on the host filesystem and are mounted into containers.
     Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
     & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
     Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
     # Clean up test-specific AD users from previous test runs
-    # Only delete test.joiner and test.reconnect - NOT the baseline users (bob.smith1, etc.)
-    # Baseline users are created by Populate-SambaAD.ps1 and are needed for Mover tests
+    # NOTE: This is necessary because:
+    # 1. Samba AD persists in a Docker volume (not reset by database volume deletion)
+    # 2. Populate-SambaAD.ps1 creates baseline users before database reset occurs
+    # 3. These test users (test.joiner, test.reconnect) are created by scenario tests
+    #
+    # We only delete test-specific users - NOT baseline users (populated by Populate-SambaAD.ps1)
+    # Baseline users are needed for validation and re-runs.
     Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
     $testUsers = @("test.joiner", "test.reconnect")
     $deletedCount = 0
@@ -193,16 +215,18 @@ try {
 
     # Establish baseline state: Import existing AD structure (OUs, users, groups)
     # This is critical so JIM knows what already exists in AD before applying business rules
+    # NOTE: Full Import is required first to establish the USN watermark (persisted connector data)
+    # that Delta Import needs. Without this, Delta Import fails with "No persisted connector data available".
     Write-Host ""
     Write-Host "Establishing baseline state from Active Directory..." -ForegroundColor Gray
-    Write-Host "  Importing existing OUs, users, and groups from AD..." -ForegroundColor DarkGray
-    $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
-    Write-Host "  ✓ LDAP baseline import completed (Activity: $($baselineImportResult.activityId))" -ForegroundColor Green
+    Write-Host "  Running Full Import to establish connector baseline..." -ForegroundColor DarkGray
+    $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $baselineImportResult.activityId -Name "LDAP Full Import (baseline)"
 
     # Run Delta Sync to process baseline imports and establish MVOs for existing AD objects
     Write-Host "  Processing baseline imports..." -ForegroundColor DarkGray
     $baselineSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
-    Write-Host "  ✓ LDAP baseline sync completed (Activity: $($baselineSyncResult.activityId))" -ForegroundColor Green
+    Assert-ActivitySuccess -ActivityId $baselineSyncResult.activityId -Name "LDAP Delta Sync (baseline)"
     Write-Host "✓ Baseline state established" -ForegroundColor Green
 
     $stepTimings["0. Setup"] = (Get-Date) - $step0Start
@@ -237,20 +261,17 @@ try {
         # Trigger CSV Import
         Write-Host "Triggering CSV import..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
-
-        Write-Host "  ✓ CSV import completed (Activity: $($importResult.activityId))" -ForegroundColor Green
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Joiner)"
 
         # Trigger Full Sync (evaluates sync rules, creates MVOs and pending exports)
         Write-Host "Triggering Full Sync..." -ForegroundColor Gray
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
-
-        Write-Host "  ✓ Full Sync completed (Activity: $($syncResult.activityId))" -ForegroundColor Green
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (Joiner)"
 
         # Trigger LDAP Export
         Write-Host "Triggering LDAP export..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-
-        Write-Host "  ✓ LDAP export completed (Activity: $($exportResult.activityId))" -ForegroundColor Green
+        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)"
 
         # Wait for AD replication (local AD should be fast, but needs time to process)
         Write-Host "Waiting 5 seconds for AD replication..." -ForegroundColor Gray
@@ -259,14 +280,12 @@ try {
         # Confirming Import - import the changes we just exported to LDAP
         Write-Host "Triggering LDAP delta import (confirming export)..." -ForegroundColor Gray
         $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
-
-        Write-Host "  ✓ LDAP delta import completed (Activity: $($confirmImportResult.activityId))" -ForegroundColor Green
+        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "LDAP Delta Import (Joiner confirm)"
 
         # Delta Sync - synchronise the confirmed imports
         Write-Host "Triggering LDAP delta sync..." -ForegroundColor Gray
         $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
-
-        Write-Host "  ✓ LDAP delta sync completed (Activity: $($confirmSyncResult.activityId))" -ForegroundColor Green
+        Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "LDAP Delta Sync (Joiner confirm)"
 
         # Validate user exists in AD
         Write-Host "Validating user in Samba AD..." -ForegroundColor Gray
@@ -326,7 +345,7 @@ try {
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
-        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate title change
@@ -392,7 +411,7 @@ try {
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
-        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate rename in AD
@@ -483,7 +502,7 @@ try {
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
-        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate move in AD
@@ -540,7 +559,7 @@ try {
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
-        Invoke-SyncSequence -Config $config -ShowProgress | Out-Null
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
         # Validate user state in AD
@@ -598,20 +617,9 @@ try {
         Add-Content -Path $csvPath -Value $csvLine
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-        # Initial sync - uses Full Sync to create the user (first-time provisioning)
-        Write-Host "  Initial sync (with Full Sync for first-time provisioning):" -ForegroundColor Gray
-        Write-Host "    [1/5] CSV Full Import..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-        Write-Host "    [2/5] CSV Full Sync..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait | Out-Null
-        Write-Host "    [3/5] LDAP Export..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-        Write-Host "    Waiting 5s for AD replication..." -ForegroundColor DarkGray
-        Start-Sleep -Seconds 5
-        Write-Host "    [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-        Write-Host "    [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray
-        Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
+        # Initial sync - uses Delta Sync for efficiency (baseline already established)
+        Write-Host "  Initial sync (provisioning new user):" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
         # Verify user was created in AD
@@ -635,10 +643,13 @@ try {
             $csvContent | Set-Content $csvPath
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
+            # Only need CSV import/sync for removal - no LDAP export needed
             Write-Host "    [1/2] CSV Full Import..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
+            $removalImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $removalImportResult.activityId -Name "CSV Import (Reconnection removal)"
             Write-Host "    [2/2] CSV Delta Sync (marks CSO obsolete)..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
+            $removalSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $removalSyncResult.activityId -Name "CSV Delta Sync (Reconnection removal)"
             Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
 
             # Verify user still exists in AD (grace period should prevent deletion)
@@ -655,16 +666,7 @@ try {
             Add-Content -Path $csvPath -Value $csvLine
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
-            Write-Host "    [1/5] CSV Full Import..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait | Out-Null
-            Write-Host "    [2/5] CSV Delta Sync (reconnects CSO)..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait | Out-Null
-            Write-Host "    [3/5] LDAP Export..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait | Out-Null
-            Write-Host "    [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait | Out-Null
-            Write-Host "    [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait | Out-Null
+            Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
 
             # Verify user still exists (reconnection should preserve AD account)

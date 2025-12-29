@@ -1,11 +1,14 @@
 ﻿using JIM.Models.Core;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 namespace JIM.Models.Activities;
 
 /// <summary>
 /// Enables all activities being performed in JIM, whether user or system initiated to be tracked and logged.
-/// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being run or about to be run, then the relevant page can filter for
-/// those activities, and the same for say metaverse object updates to see when a group membership was updated, or a user created, or sync rules changed, etc.
+/// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being
+/// run or about to be run, then the relevant page can filter for
+/// those activities, and the same for say metaverse object updates to see when a group membership was updated, or a
+/// user created, or sync rules changed, etc.
 /// </summary>
 public class Activity
 {
@@ -20,18 +23,46 @@ public class Activity
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to get to a task for the activity will have an Executed time.
-    /// noticeably later than the created time for the Activity. This enables you to see what the overall, user-experienced activity completion time is,
+    /// Activities that are not executed in real-time, such as those initiated by JIM.Service processing a queue to get
+    /// to a task for the activity will have an Executed time.
+    /// noticeably later than the created time for the Activity. This enables you to see what the overall,
+    /// user-experienced activity completion time is,
     /// and the actual system execution time.
     /// </summary>
     public DateTime Executed { get; set; }
 
-    /// <summary>
-    /// A link to the Metaverse Object for a user if this activity was initiated by a person.
-    /// </summary>
-    public MetaverseObject? InitiatedBy { get; set; }
+    // -----------------------------------------------------------------------------------------------------------------
+    // Initiator tracking - all activities MUST be attributed to a security principal for audit compliance
+    // -----------------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The type of security principal that initiated this activity.
+    /// </summary>
+    public ActivityInitiatorType InitiatedByType { get; set; } = ActivityInitiatorType.NotSet;
+
+    /// <summary>
+    /// The unique identifier of the security principal (MetaverseObject or ApiKey) that initiated this activity.
+    /// Retained even if the principal is deleted to support audit investigations.
+    /// </summary>
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the security principal at the time of the activity.
+    /// Retained even if the principal is deleted to maintain audit trail readability.
+    /// </summary>
     public string? InitiatedByName { get; set; }
+
+    /// <summary>
+    /// Reference to the MetaverseObject if this activity was initiated by a user.
+    /// May be null if the user has been deleted or if initiated by an API key.
+    /// </summary>
+    public MetaverseObject? InitiatedByMetaverseObject { get; set; }
+
+    /// <summary>
+    /// Reference to the ApiKey if this activity was initiated via API key authentication.
+    /// May be null if the API key has been deleted or if initiated by a user.
+    /// </summary>
+    public ApiKey? InitiatedByApiKey { get; set; }
 
     public string? ErrorMessage { get; set; }
 
@@ -39,7 +70,8 @@ public class Activity
 
     /// <summary>
     /// When the activity is complete, a value for how long the activity took to complete should be stored here.
-    /// This may be a noticeably smaller value than the total activity time, as some activities take a while before they are executed, i.e. those processed by JIM.Service which
+    /// This may be a noticeably smaller value than the total activity time, as some activities take a while before
+    /// they are executed, i.e. those processed by JIM.Service which
     /// employs a queue and may take time to get round to executing the task the activity is for.
     /// </summary>
     public TimeSpan? ExecutionTime { get; set; }
@@ -61,7 +93,8 @@ public class Activity
     public ActivityTargetOperationType TargetOperationType { get; set; }
 
     /// <summary>
-    /// The name of the target object. The name is copied here from the object to enable it make identifying it easier if/when the target object is deleted and cannot be referenced
+    /// The name of the target object. The name is copied here from the object to enable it make identifying it easier
+    /// if/when the target object is deleted and cannot be referenced
     /// any more. The value is not kept up to date with the target object, it's just a point in time copy.
     /// Note: Not all objects will have to support a name, so it's optional.
     /// </summary>
@@ -109,7 +142,8 @@ public class Activity
     //   of imported/exported object
 
     /// <summary>
-    /// If the activity TargetType is ConnectedSystemRunProfile, then these items will provide information on the objects affected by a sync run.
+    /// If the activity TargetType is ConnectedSystemRunProfile, then these items will provide information on the
+    /// objects affected by a sync run.
     /// </summary>
     public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; init; } = new();
 
@@ -129,8 +163,10 @@ public class Activity
     }
 
     /// <summary>
-    /// If you want to prepare ActivityRunProfileExecutionItems separate from the activity to be able to update the activity without creating a dependency on the item's dependencies
-    /// then use this method to bulk add them to this Activity. It will make sure the items are associated with the activity.
+    /// If you want to prepare ActivityRunProfileExecutionItems separate from the activity to be able to update the
+    /// activity without creating a dependency on the item's dependencies
+    /// then use this method to bulk add them to this Activity. It will make sure the items are associated with the
+    /// activity.
     /// </summary>
     public void AddRunProfileExecutionItems(List<ActivityRunProfileExecutionItem> runProfileExecutionItems)
     {
@@ -144,7 +180,8 @@ public class Activity
 
     /// <summary>
     /// Prepares a Run Profile Execution Item that relates to the Activity, but has not yet been added to it.
-    /// This enables items to be prepared, but a decision on whether to persist it or not can come later at the caller's discretion.
+    /// This enables items to be prepared, but a decision on whether to persist it or not can come later at the
+    /// caller's discretion.
     /// </summary>
     public ActivityRunProfileExecutionItem PrepareRunProfileExecutionItem()
     {

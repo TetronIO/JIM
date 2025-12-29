@@ -2,6 +2,7 @@
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Security;
 using JIM.Models.Utility;
 namespace JIM.Application.Servers;
 
@@ -15,26 +16,68 @@ public class ActivityServer
     }
 
     /// <summary>
-    /// Creates and persists an Activity, optionally attributing it to a user or API key.
+    /// Creates and persists an Activity, attributing it to a user (MetaverseObject).
+    /// All activities MUST be attributed to a security principal for audit compliance.
     /// </summary>
     /// <param name="activity">The Activity to create.</param>
-    /// <param name="initiatedBy">The MetaverseObject representing the user who initiated the action (null for API key auth).</param>
-    /// <param name="initiatedByName">Optional name to attribute the action to when initiatedBy is null (e.g., "API Key: MyKey").</param>
-    public async Task CreateActivityAsync(Activity activity, MetaverseObject? initiatedBy, string? initiatedByName = null)
+    /// <param name="initiatedBy">The MetaverseObject representing the user who initiated the action.</param>
+    public async Task CreateActivityAsync(Activity activity, MetaverseObject? initiatedBy)
     {
         activity.Status = ActivityStatus.InProgress;
         activity.Executed = DateTime.UtcNow;
 
         if (initiatedBy != null)
         {
-            activity.InitiatedBy = initiatedBy;
+            activity.InitiatedByType = ActivityInitiatorType.User;
+            activity.InitiatedById = initiatedBy.Id;
+            activity.InitiatedByMetaverseObject = initiatedBy;
             activity.InitiatedByName = initiatedBy.DisplayName;
         }
-        else if (initiatedByName != null)
-        {
-            // API key or system-initiated action - use the provided name
-            activity.InitiatedByName = initiatedByName;
-        }
+
+        ValidateActivity(activity);
+        await Application.Repository.Activity.CreateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates and persists an Activity, attributing it to an API key.
+    /// All activities MUST be attributed to a security principal for audit compliance.
+    /// </summary>
+    /// <param name="activity">The Activity to create.</param>
+    /// <param name="initiatedByApiKey">The ApiKey that initiated the action.</param>
+    public async Task CreateActivityAsync(Activity activity, ApiKey initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+
+        activity.Status = ActivityStatus.InProgress;
+        activity.Executed = DateTime.UtcNow;
+        activity.InitiatedByType = ActivityInitiatorType.ApiKey;
+        activity.InitiatedById = initiatedByApiKey.Id;
+        activity.InitiatedByApiKey = initiatedByApiKey;
+        activity.InitiatedByName = initiatedByApiKey.Name;
+
+        ValidateActivity(activity);
+        await Application.Repository.Activity.CreateActivityAsync(activity);
+    }
+
+    private void ValidateActivity(Activity activity)
+    {
+        // All activities MUST be attributed to a security principal for audit compliance.
+        // This is a critical requirement - no exceptions.
+        if (activity.InitiatedByType == ActivityInitiatorType.NotSet)
+            throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByType has not been set.");
+
+        if (activity.InitiatedById == null)
+            throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedById has not been set.");
+
+        if (string.IsNullOrWhiteSpace(activity.InitiatedByName))
+            throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByName has not been set.");
+
+        // Validate that the correct reference is set based on the initiator type
+        if (activity.InitiatedByType == ActivityInitiatorType.User && activity.InitiatedByMetaverseObject == null)
+            throw new InvalidOperationException("Activity initiated by a user must have InitiatedByMetaverseObject set.");
+
+        if (activity.InitiatedByType == ActivityInitiatorType.ApiKey && activity.InitiatedByApiKey == null)
+            throw new InvalidOperationException("Activity initiated by an API key must have InitiatedByApiKey set.");
 
         if (activity.TargetType == ActivityTargetType.ConnectedSystem)
         {
@@ -45,8 +88,6 @@ public class ActivityServer
                 activity.TargetOperationType != ActivityTargetOperationType.Delete)
                 throw new InvalidDataException("Activity.ConnectedSystemId has not been set and must be for UPDATE operations. Cannot continue.");
         }
-
-        await Application.Repository.Activity.CreateActivityAsync(activity);
     }
 
     public async Task CompleteActivityAsync(Activity activity)

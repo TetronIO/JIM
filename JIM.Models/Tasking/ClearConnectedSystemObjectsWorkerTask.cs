@@ -1,4 +1,6 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
 public class ClearConnectedSystemObjectsWorkerTask : WorkerTask
@@ -21,10 +23,24 @@ public class ClearConnectedSystemObjectsWorkerTask : WorkerTask
     /// <summary>
     /// When a clear connected system objects task is triggered by a user, this overload should be used to attribute the action to the user.
     /// </summary>
-    public ClearConnectedSystemObjectsWorkerTask(int connectedSystemId, MetaverseObject initiatingBy)
+    public ClearConnectedSystemObjectsWorkerTask(int connectedSystemId, MetaverseObject initiatedBy)
     {
         ConnectedSystemId = connectedSystemId;
-        InitiatedBy = initiatingBy;
-        InitiatedByName = initiatingBy.DisplayName;
+        InitiatedByType = ActivityInitiatorType.User;
+        InitiatedById = initiatedBy.Id;
+        InitiatedByMetaverseObject = initiatedBy;
+        InitiatedByName = initiatedBy.DisplayName;
+    }
+
+    /// <summary>
+    /// When a clear connected system objects task is triggered by an API key, this overload should be used to attribute the action to the API key.
+    /// </summary>
+    public ClearConnectedSystemObjectsWorkerTask(int connectedSystemId, ApiKey apiKey)
+    {
+        ConnectedSystemId = connectedSystemId;
+        InitiatedByType = ActivityInitiatorType.ApiKey;
+        InitiatedById = apiKey.Id;
+        InitiatedByApiKey = apiKey;
+        InitiatedByName = apiKey.Name;
     }
 }

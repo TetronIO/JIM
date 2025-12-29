@@ -200,10 +200,15 @@ public class FullSyncTests
         Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER).IntValue,
             Is.EqualTo(999), "Expected CSO to have the updated employee number.");
 
-        // setup mock to handle pending export deletion
+        // setup mock to handle pending export deletion (single and batch)
         MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
             (PendingExport entity) => {
                 PendingExportsData.Remove(entity);
+            });
+        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
+            (IEnumerable<PendingExport> entities) => {
+                foreach (var entity in entities.ToList())
+                    PendingExportsData.Remove(entity);
             });
 
         // run full sync
@@ -307,6 +312,13 @@ public class FullSyncTests
                 deleteCallCount++;
                 PendingExportsData.Remove(entity);
             });
+        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
+            (IEnumerable<PendingExport> entities) => {
+                var list = entities.ToList();
+                deleteCallCount += list.Count;
+                foreach (var entity in list)
+                    PendingExportsData.Remove(entity);
+            });
 
         // run full sync
         var activity = ActivitiesData.First();
@@ -384,9 +396,14 @@ public class FullSyncTests
         // verify setup
         Assert.That(pendingExport.ErrorCount, Is.EqualTo(2), "Expected ErrorCount to be 2 before sync.");
 
-        // setup mock
+        // setup mock (single and batch operations)
         MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
             (PendingExport entity) => PendingExportsData.Remove(entity));
+        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
+            (IEnumerable<PendingExport> entities) => {
+                foreach (var entity in entities.ToList())
+                    PendingExportsData.Remove(entity);
+            });
 
         // run full sync
         var activity = ActivitiesData.First();

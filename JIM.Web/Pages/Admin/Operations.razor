@@ -69,15 +69,19 @@
         <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
         <MudTd DataLabel="Created">@context.Timestamp</MudTd>
         <MudTd DataLabel="Initiated By">
-            @if (context.InitiatedBy != null)
+            @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
             {
                 <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.InitiatedBy)">@Utilities.GetMetaverseObjectHrefText(context.InitiatedBy)</MudLink>
+                <span>@context.InitiatedByName</span>
             }
-            else
+            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey)
             {
                 <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                <span>API Key</span>
+                <span>@context.InitiatedByName</span>
+            }
+            else if (!string.IsNullOrEmpty(context.InitiatedByName))
+            {
+                <span>@context.InitiatedByName</span>
             }
         </MudTd>
     </RowTemplate>

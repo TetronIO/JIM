@@ -1,4 +1,5 @@
 ﻿using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
@@ -49,11 +50,12 @@ public class TaskingRepository : ITaskingRepository
         return await Repository.Database.WorkerTasks.
             AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(st => st.Activity).
-            Include(st => st.InitiatedBy).
+            Include(st => st.InitiatedByMetaverseObject).
             ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
             ThenInclude(av => av.Attribute).
-            Include(st => st.InitiatedBy).
+            Include(st => st.InitiatedByMetaverseObject).
             ThenInclude(ib => ib!.Type).
+            Include(st => st.InitiatedByApiKey).
             SingleOrDefaultAsync(st => st.Id == id);
     }
 
@@ -61,8 +63,9 @@ public class TaskingRepository : ITaskingRepository
     {
         return await Repository.Database.WorkerTasks
             .Include(st => st.Activity)
-            .Include(st => st.InitiatedBy)
+            .Include(st => st.InitiatedByMetaverseObject)
             .ThenInclude(ib => ib!.Type)
+            .Include(st => st.InitiatedByApiKey)
             .ToListAsync();
     }
 
@@ -72,11 +75,12 @@ public class TaskingRepository : ITaskingRepository
         var workerTaskHeaders = new List<WorkerTaskHeader>();
         var workerTasks = await Repository.Database.WorkerTasks.
             AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
-            Include(st => st.InitiatedBy).
+            Include(st => st.InitiatedByMetaverseObject).
             ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
             ThenInclude(av => av.Attribute).
-            Include(st => st.InitiatedBy).
+            Include(st => st.InitiatedByMetaverseObject).
             ThenInclude(ib => ib!.Type).
+            Include(st => st.InitiatedByApiKey).
             OrderByDescending(q => q.Timestamp).ToListAsync();
 
         foreach (var workerTask in workerTasks)
@@ -88,7 +92,9 @@ public class TaskingRepository : ITaskingRepository
                 Timestamp = workerTask.Timestamp,
                 Name = await GetWorkerHeaderNameAsync(workerTask),
                 Type = GetWorkerTaskType(workerTask),
-                InitiatedBy = workerTask.InitiatedBy
+                InitiatedByType = workerTask.InitiatedByType,
+                InitiatedById = workerTask.InitiatedById,
+                InitiatedByName = workerTask.InitiatedByName
             });
         }
         return workerTaskHeaders;
@@ -109,9 +115,10 @@ public class TaskingRepository : ITaskingRepository
         foreach (var task in await Repository.Database.WorkerTasks
                      .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
                      .Include(st => st.Activity)
-                     .Include(st => st.InitiatedBy)
+                     .Include(st => st.InitiatedByMetaverseObject)
                      .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                      .ThenInclude(av => av.Attribute)
+                     .Include(st => st.InitiatedByApiKey)
                      .Where(st => st.Status == WorkerTaskStatus.Queued)
                      .OrderBy(st => st.Timestamp).ToListAsync())
         {
