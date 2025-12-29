@@ -83,11 +83,31 @@ foreach ($ou in $baseOus) {
     }
 }
 
-# Department OUs - these match the departments in Test-Helpers.ps1 New-TestUser function
-# Required for DN expression: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=..."
+# Create the Borton Corp base OU - this is the OU that will be selected in JIM for partition/container testing
+# Department OUs will be created dynamically by the LDAP connector when provisioning users
+# (enabled by the "Create containers as needed?" connector setting)
+Write-Host "  Creating Borton Corp base OU..." -ForegroundColor Gray
+$result = docker exec $container samba-tool ou create "OU=Borton Corp,$domainDN" 2>&1
+if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
+    Write-Host "    Warning: Failed to create OU 'Borton Corp': $result" -ForegroundColor Yellow
+}
+else {
+    Write-Host "    ✓ OU created: Borton Corp" -ForegroundColor Green
+}
+
+# Note: Department OUs (Finance, IT, Marketing, etc.) are no longer pre-created here.
+# The LDAP Connector's "Create containers as needed?" setting will automatically create
+# OUs under /Borton Corp/ when provisioning users, e.g.:
+#   OU=Finance,OU=Borton Corp,DC=testdomain,DC=local
+#   OU=IT,OU=Borton Corp,DC=testdomain,DC=local
+# This tests the container creation functionality and matches real-world use cases
+# where department OUs may not exist initially.
+
+# Legacy department OUs at root level (kept for backward compatibility with any existing tests)
+# These will be removed in a future cleanup once all tests use the /Borton Corp/{Department} structure
 $departmentOus = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
                    "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
-Write-Host "  Creating department OUs for user placement..." -ForegroundColor Gray
+Write-Host "  Creating legacy department OUs at root level..." -ForegroundColor Gray
 foreach ($deptOu in $departmentOus) {
     $result = docker exec $container samba-tool ou create "OU=$deptOu,$domainDN" 2>&1
     if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
