@@ -426,7 +426,7 @@ public class ExportExecutionServer
                 exportsToUpdate.Add(export);
                 result.FailedCount++;
 
-                // Capture export data for activity tracking
+                // Capture export data for activity tracking (before any state changes)
                 result.ProcessedExportItems.Add(new ProcessedExportItem
                 {
                     ChangeType = export.ChangeType,
@@ -439,7 +439,7 @@ public class ExportExecutionServer
                 continue;
             }
 
-            // Capture export data for activity tracking
+            // Capture export data for activity tracking (before deletion)
             result.ProcessedExportItems.Add(new ProcessedExportItem
             {
                 ChangeType = export.ChangeType,

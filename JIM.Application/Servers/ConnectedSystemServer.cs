@@ -1347,10 +1347,16 @@ public class ConnectedSystemServer
         // We just need to associate the change with the execution item.
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
+<<<<<<< HEAD
         // Clear the navigation property and FK to the deleted CSO to prevent FK constraint violations.
         // The CSO is now deleted, so we cannot maintain a reference to it.
         activityRunProfileExecutionItem.ConnectedSystemObject = null;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
+=======
+        // Clear the navigation property to the deleted CSO to prevent FK constraint violations.
+        // The CSO is now deleted, so we cannot maintain a reference to it.
+        activityRunProfileExecutionItem.ConnectedSystemObject = null;
+>>>>>>> origin/main
     }
     
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
