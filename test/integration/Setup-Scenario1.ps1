@@ -92,6 +92,17 @@ catch {
 }
 
 # Step 2b: Clean up existing configuration from previous runs
+# NOTE: This cleanup is only needed when:
+# 1. Running Setup-Scenario1.ps1 manually during development
+# 2. Running with Invoke-IntegrationTests.ps1 -ScenariosOnly (skips database reset)
+# 3. Re-running setup without tearing down containers
+#
+# When Invoke-IntegrationTests.ps1 runs normally (default), it does:
+#   docker compose down -v (Step 0: Reset Environment)
+# This deletes the database volume, so there are no Connected Systems to clean up.
+#
+# This cleanup is idempotent and fast (single API call), so it's safe to keep
+# for developer convenience during iterative testing workflows.
 Write-TestStep "Step 2b" "Cleaning up existing JIM configuration"
 
 try {

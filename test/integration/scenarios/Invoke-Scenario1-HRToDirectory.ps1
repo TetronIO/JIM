@@ -160,19 +160,25 @@ try {
     }
 
     # IMPORTANT: For fully repeatable tests, JIM's database should be reset between runs.
-    # Run 'jim-reset' before running tests, or use:
-    #   docker compose -f docker-compose.yml down -v && jim-stack
-    # This cleans up MVOs, CSOs, and pending exports from previous test runs.
+    # Invoke-IntegrationTests.ps1 does this automatically in Step 0 (Reset Environment).
+    # For manual runs: use 'jim-reset' or 'docker compose down -v && jim-stack'
 
     # Reset CSV to baseline state before running tests
-    # This ensures test data is in a known state regardless of previous test runs
+    # This ensures test data is in a known state regardless of previous test runs.
+    # NOTE: This is necessary even after database reset because CSV files persist
+    # on the host filesystem and are mounted into containers.
     Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
     & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
     Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
     # Clean up test-specific AD users from previous test runs
-    # Only delete test.joiner and test.reconnect - NOT the baseline users (bob.smith1, etc.)
-    # Baseline users are created by Populate-SambaAD.ps1 and are needed for Mover tests
+    # NOTE: This is necessary because:
+    # 1. Samba AD persists in a Docker volume (not reset by database volume deletion)
+    # 2. Populate-SambaAD.ps1 creates baseline users before database reset occurs
+    # 3. These test users (test.joiner, test.reconnect) are created by scenario tests
+    #
+    # We only delete test-specific users - NOT baseline users (populated by Populate-SambaAD.ps1)
+    # Baseline users are needed for validation and re-runs.
     Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
     $testUsers = @("test.joiner", "test.reconnect")
     $deletedCount = 0
