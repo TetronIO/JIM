@@ -183,7 +183,7 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Internal Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.Id</MudLink></MudTd>
-                <MudTd DataLabel="External Id">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
+                <MudTd DataLabel="External Id" class="jim-text-code">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
                 <MudTd DataLabel="Change Type">

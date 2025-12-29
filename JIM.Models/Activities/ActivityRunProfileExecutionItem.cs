@@ -29,6 +29,11 @@ public class ActivityRunProfileExecutionItem
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
     /// <summary>
+    /// Foreign key for the ConnectedSystemObject navigation property.
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
     /// If this was an import operation, what changes, if any were made to the Connected System Object in question?
     /// This needs populating for update and delete scenarios.
     /// </summary>
@@ -46,8 +51,8 @@ public class ActivityRunProfileExecutionItem
     // - individual error items with detailed error info and json snapshot of exported/imported object
 
     /// <summary>
-    /// If settings allow during run profile execution, a JSON representation of the data imported, or exported can be accessed
-    /// here for investigative purposes in the event of an error.
+    /// If settings allow during run profile execution, a JSON representation of the data imported, or exported can be
+    /// accessed ere for investigative purposes in the event of an error.
     /// </summary>
     public string? DataSnapshot { get; set; }
 

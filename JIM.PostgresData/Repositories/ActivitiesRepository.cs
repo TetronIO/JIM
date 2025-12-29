@@ -174,12 +174,13 @@ public class ActivityRepository : IActivityRepository
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
         // Materialize the entities first, then project to DTO in memory
         var entities = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
+
         var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
         {
             Id = i.Id,
             ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName(),
             DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue,
-            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type.Name,
+            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name,
             ErrorType = i.ErrorType,
             ObjectChangeType = i.ObjectChangeType
         }).ToList();

@@ -1347,9 +1347,10 @@ public class ConnectedSystemServer
         // We just need to associate the change with the execution item.
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
-        // Clear the navigation property to the deleted CSO to prevent FK constraint violations.
+        // Clear the navigation property and FK to the deleted CSO to prevent FK constraint violations.
         // The CSO is now deleted, so we cannot maintain a reference to it.
         activityRunProfileExecutionItem.ConnectedSystemObject = null;
+        activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
     }
     
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -1529,13 +1530,17 @@ public class ConnectedSystemServer
     {
         // bulk persist csos creates
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
-        
+
         // add a Change Object to the relevant Activity Run Profile Execution Item for each cso.
         // they will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
                                                   throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+
+            // Explicitly set the FK now that the CSO has been persisted and has an ID.
+            // This ensures the FK is properly tracked when the execution item is saved later.
+            activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
             AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem);
         }
@@ -1558,12 +1563,15 @@ public class ConnectedSystemServer
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ?? 
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
                                                   throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
-            
+
+            // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
+            activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+
             ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
         }
-        
+
         // bulk persist csos updates
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
     }
@@ -1628,6 +1636,7 @@ public class ConnectedSystemServer
 
         // make sure the CSO is linked to the activity run profile execution item
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
 
         // persist new attribute values from addition list and create change object
         foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)

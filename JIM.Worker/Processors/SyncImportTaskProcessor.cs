@@ -325,6 +325,7 @@ public class SyncImportTaskProcessor
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
+        activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
         // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
@@ -413,6 +414,7 @@ public class SyncImportTaskProcessor
                     {
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
@@ -461,6 +463,7 @@ public class SyncImportTaskProcessor
                     // existing connected system object - update from import object if necessary
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                     activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                    activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
                     connectedSystemObject.LastUpdated = DateTime.UtcNow;
                     connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
