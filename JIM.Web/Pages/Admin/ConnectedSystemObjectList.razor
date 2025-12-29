@@ -225,7 +225,14 @@
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         var task = new ClearConnectedSystemObjectsWorkerTask(Id, user);
-        await Jim.Tasking.CreateWorkerTaskAsync(task);
+        var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
+
+        if (!result.Success)
+        {
+            Snackbar.Add(result.ErrorMessage ?? "Failed to create task.", Severity.Error);
+            return;
+        }
+
         Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
     }
 }

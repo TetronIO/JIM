@@ -8,6 +8,7 @@ using JIM.Models.Security;
 using JIM.Models.Staging;
 using Serilog;
 using System.Diagnostics;
+
 namespace JIM.Application.Servers;
 
 internal class SeedingServer
@@ -582,6 +583,174 @@ internal class SeedingServer
 
         stopwatch.Stop();
         Log.Information($"SyncBuiltInConnectorDefinitionsAsync: Completed in: {stopwatch.Elapsed}");
+    }
+
+    /// <summary>
+    /// Seeds and synchronises service settings from environment variables.
+    /// This should be called on every application startup to ensure settings are available.
+    /// Read-only settings (from environment) are updated; user-modified settings are preserved.
+    /// </summary>
+    internal async Task SyncServiceSettingsAsync()
+    {
+        var stopwatch = new Stopwatch();
+        stopwatch.Start();
+        Log.Information("SyncServiceSettingsAsync: Starting service settings synchronisation...");
+
+        // SSO Settings (read-only, from environment variables)
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoAuthority,
+            DisplayName = "SSO authority",
+            Description = "The OIDC authority URL for single sign-on authentication.",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority),
+            Value = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority),
+            IsReadOnly = true,
+            IsSecret = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoClientId,
+            DisplayName = "SSO client ID",
+            Description = "The OIDC client identifier for JIM.",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId),
+            Value = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId),
+            IsReadOnly = true,
+            IsSecret = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoSecret,
+            DisplayName = "SSO secret",
+            Description = "The OIDC client secret for JIM.",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = null, // Never store secrets as defaults
+            Value = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret),
+            IsReadOnly = true,
+            IsSecret = true
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoApiScope,
+            DisplayName = "SSO API scope",
+            Description = "The OIDC API scope required for accessing JIM.",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope),
+            Value = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope),
+            IsReadOnly = true,
+            IsSecret = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoClaimType,
+            DisplayName = "SSO claim type",
+            Description = "The claim type used to identify the user in SSO tokens.",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType),
+            Value = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType),
+            IsReadOnly = true,
+            IsSecret = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoMvAttribute,
+            DisplayName = "SSO Metaverse attribute",
+            Description = "The Metaverse attribute used to match SSO claims to JIM users.",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute),
+            Value = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute),
+            IsReadOnly = true,
+            IsSecret = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoUniqueIdentifierClaimType,
+            DisplayName = "SSO unique identifier claim type",
+            Description = "The claim type containing the unique identifier for SSO users (e.g., 'sub' or 'oid').",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = "sub",
+            IsReadOnly = true,
+            IsSecret = false
+        });
+
+        // SSO Settings (configurable)
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SsoEnableLogOut,
+            DisplayName = "SSO enable log-out",
+            Description = "When enabled, users can log out of JIM and be redirected to the SSO provider's logout endpoint.",
+            Category = ServiceSettingCategory.SSO,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false,
+            IsSecret = false
+        });
+
+        // Synchronisation Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.PartitionValidationMode,
+            DisplayName = "Run profile partition validation",
+            Description = "Controls how JIM behaves when a run profile is executed for a Connected System that supports partitions but has none selected. 'Error' blocks execution; 'Warning' allows execution but logs a warning.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Enum,
+            DefaultValue = PartitionValidationMode.Error.ToString(),
+            EnumTypeName = typeof(PartitionValidationMode).FullName,
+            IsReadOnly = false,
+            IsSecret = false
+        });
+
+        // History Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.HistoryRetentionPeriod,
+            DisplayName = "History retention period",
+            Description = "The duration for which activity and audit history is retained. Format: d.hh:mm:ss (e.g., '30.00:00:00' for 30 days).",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "30.00:00:00", // 30 days
+            IsReadOnly = false,
+            IsSecret = false
+        });
+
+        // Maintenance Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.MaintenanceMode,
+            DisplayName = "Maintenance mode",
+            Description = "When enabled, JIM enters maintenance mode. Background jobs and synchronisation tasks are paused.",
+            Category = ServiceSettingCategory.Maintenance,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "false",
+            IsReadOnly = false,
+            IsSecret = false
+        });
+
+        stopwatch.Stop();
+        Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
+    }
+
+    /// <summary>
+    /// Seeds a single service setting. Creates if it doesn't exist, updates read-only settings from environment.
+    /// </summary>
+    private async Task SeedSettingAsync(ServiceSetting setting)
+    {
+        await Application.ServiceSettings.CreateOrUpdateSettingAsync(setting);
+        Log.Verbose($"SeedSettingAsync: Processed setting '{setting.Key}'");
     }
 
     /// <summary>

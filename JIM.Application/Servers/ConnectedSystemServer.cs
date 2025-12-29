@@ -634,7 +634,7 @@ public class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
-            await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
         }
@@ -651,7 +651,7 @@ public class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
-            await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
         }

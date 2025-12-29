@@ -1,0 +1,227 @@
+@page "/admin/settings"
+@attribute [Authorize(Roles = "Administrator")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Web
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Service Settings</PageTitle>
+<MudText Typo="Typo.h4">Service Settings</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    Configure service-wide settings. Read-only settings are defined by environment variables and cannot be modified here.
+</MudText>
+
+<MudTable Items="@_filteredSettings" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
+    Filter="new Func<ServiceSetting, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading"
+    GroupBy="@_groupDefinition" Dense="true">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Settings</MudText>
+        <MudSpacer />
+        <MudCheckBox @bind-Value="_showOverriddenOnly" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
+        <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
+            AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
+    </ToolBarContent>
+    <ColGroup>
+        <col style="width: 80px;" />
+        <col />
+        <col style="width: 300px;" />
+        <col style="width: 150px;" />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh>Actions</MudTh>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<ServiceSetting, object>(x => x.DisplayName)">
+                <MudText Typo="Typo.button">Setting</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Value</MudText>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Status</MudText>
+        </MudTh>
+    </HeaderContent>
+    <GroupHeaderTemplate>
+        <MudTh Class="mud-table-cell-custom-group" colspan="4">
+            <MudText Typo="Typo.button">@context.GroupName</MudText>
+        </MudTh>
+    </GroupHeaderTemplate>
+    <RowTemplate>
+        <MudTd>
+            @if (!context.IsReadOnly)
+            {
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit</MudMenuItem>
+                    @if (context.IsOverridden)
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt" OnClick="_ => HandleRevertAsync(context)">Revert to Default</MudMenuItem>
+                    }
+                </MudMenu>
+            }
+        </MudTd>
+        <MudTd DataLabel="Setting">
+            <MudText Typo="Typo.body1">@context.DisplayName</MudText>
+            @if (!string.IsNullOrEmpty(context.Description))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Description</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Value">
+            @if (context.IsSecret)
+            {
+                @if (_revealedSecrets.Contains(context.Key))
+                {
+                    <span class="jim-text-code">@(context.GetEffectiveValue() ?? "(not set)")</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" OnClick="() => HideSecret(context.Key)" />
+                }
+                else
+                {
+                    <span class="jim-text-code">********</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="() => RevealSecret(context.Key)" />
+                }
+            }
+            else
+            {
+                <span class="jim-text-code">@(context.GetEffectiveValue() ?? "(not set)")</span>
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            @if (context.IsReadOnly)
+            {
+                <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
+            }
+            else if (context.IsOverridden)
+            {
+                <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No settings found.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<ServiceSetting> _settings = new();
+    private List<ServiceSetting> _filteredSettings = new();
+    private string _searchString = string.Empty;
+    private bool _showOverriddenOnly;
+    private bool _loading = true;
+    private HashSet<string> _revealedSecrets = new();
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private readonly List<BreadcrumbItem> _breadcrumbs =
+    [
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Service Settings", href: null, disabled: true)
+    ];
+
+    private TableGroupDefinition<ServiceSetting> _groupDefinition = new()
+    {
+        GroupName = "Category",
+        Selector = (e) => e.Category.ToString()
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSettingsAsync();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        _loading = true;
+        _settings = await Jim.ServiceSettings.GetAllSettingsAsync();
+        UpdateFilteredSettings();
+        _loading = false;
+    }
+
+    private void UpdateFilteredSettings()
+    {
+        _filteredSettings = _settings
+            .Where(s => !_showOverriddenOnly || s.IsOverridden)
+            .Where(s => FilterFunc(s))
+            .ToList();
+    }
+
+    private bool FilterFunc(ServiceSetting setting)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+        if (setting.DisplayName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (setting.Description?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        if (setting.Key.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    private void RevealSecret(string key)
+    {
+        _revealedSecrets.Add(key);
+    }
+
+    private void HideSecret(string key)
+    {
+        _revealedSecrets.Remove(key);
+    }
+
+    private async Task ShowEditDialog(ServiceSetting setting)
+    {
+        var parameters = new DialogParameters<EditSettingDialog>
+        {
+            { x => x.Setting, setting }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<EditSettingDialog>($"Edit {setting.DisplayName}", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string newValue })
+        {
+            try
+            {
+                var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+                await Jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user);
+                await LoadSettingsAsync();
+                Snackbar.Add($"Setting '{setting.DisplayName}' updated.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to update setting: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task HandleRevertAsync(ServiceSetting setting)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Revert to Default",
+            $"Are you sure you want to revert '{setting.DisplayName}' to its default value?",
+            yesText: "Revert", cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            try
+            {
+                var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+                await Jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user);
+                await LoadSettingsAsync();
+                Snackbar.Add($"Setting '{setting.DisplayName}' reverted to default.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to revert setting: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

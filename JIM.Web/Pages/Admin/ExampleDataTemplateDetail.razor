@@ -242,7 +242,14 @@
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         _task = new DataGenerationTemplateWorkerTask(_template.Id, user);
-        await Jim.Tasking.CreateWorkerTaskAsync(_task);
+        var result = await Jim.Tasking.CreateWorkerTaskAsync(_task);
+
+        if (!result.Success)
+        {
+            _isExecuting = false;
+            // Error would be shown elsewhere, but this task type shouldn't have validation errors
+            return;
+        }
 
         // Set status to queued immediately so UI reflects the state
         _status = WorkerTaskStatus.Queued;

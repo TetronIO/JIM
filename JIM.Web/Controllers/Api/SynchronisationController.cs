@@ -914,7 +914,12 @@ public class SynchronisationController(
             workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, apiKey);
         }
 
-        await _application.Tasking.CreateWorkerTaskAsync(workerTask);
+        var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+        {
+            _logger.LogWarning("Run profile execution blocked: {Error}", result.ErrorMessage);
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Validation failed."));
+        }
 
         _logger.LogInformation("Run profile execution queued: ConnectedSystem={SystemId}, RunProfile={ProfileId}, TaskId={TaskId}, ActivityId={ActivityId}",
             connectedSystemId, runProfileId, workerTask.Id, workerTask.Activity?.Id);
@@ -923,7 +928,8 @@ public class SynchronisationController(
         {
             ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
             TaskId = workerTask.Id,
-            Message = $"Run profile '{runProfile.Name}' has been queued for execution."
+            Message = $"Run profile '{runProfile.Name}' has been queued for execution.",
+            Warnings = result.Warnings
         };
 
         return Accepted(response);
