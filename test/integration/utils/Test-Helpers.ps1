@@ -307,10 +307,21 @@ function New-TestUser {
     $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")
 
     # Calculate unique first/last name combination based on index
-    # Use modulo to cycle through all combinations
-    $combinationIndex = $Index % $totalCombinations
-    $firstNameIndex = $combinationIndex % $firstNames.Count
-    $lastNameIndex = [int][Math]::Floor($combinationIndex / $firstNames.Count) % $lastNames.Count
+    # Use a distribution that spreads names across both first and last name pools
+    # to avoid all users having the same surname for small datasets.
+    #
+    # Strategy: Use prime-based stepping to distribute names more evenly.
+    # This ensures that even for small datasets (e.g., 100 users), we get
+    # a good mix of different first AND last names.
+    $firstNameCount = $firstNames.Count
+    $lastNameCount = $lastNames.Count
+
+    # Use index directly for first name (cycling through all first names)
+    $firstNameIndex = $Index % $firstNameCount
+
+    # Use a prime multiplier for last name to spread across the last name pool
+    # Prime 97 ensures good distribution and avoids patterns
+    $lastNameIndex = ($Index * 97) % $lastNameCount
 
     $firstName = $firstNames[$firstNameIndex]
     $lastName = $lastNames[$lastNameIndex]
