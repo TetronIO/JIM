@@ -317,14 +317,27 @@ internal class LdapConnectorImport
         var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
         var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
         {
-            // Make paging non-critical so it works with Samba AD and other servers that may not support paging
+            // Make paging non-critical so servers that don't support paging can ignore it
             IsCritical = false
         };
         if (lastRunsCookie is { Length: > 0 })
             pageResultRequestControl.Cookie = lastRunsCookie;
 
         searchRequest.Controls.Add(pageResultRequestControl);
-        var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+
+        SearchResponse searchResponse;
+        try
+        {
+            searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+        }
+        catch (DirectoryOperationException ex) when (lastRunsCookie is { Length: > 0 } &&
+            ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))
+        {
+            // Server returned a cookie on first page but doesn't actually support paging (e.g., Samba AD)
+            // Retry without paging control - results should have already been returned on first page
+            _logger.Warning("GetFisoResults: Server rejected paging cookie, assuming all results were returned on first page. Error: {Message}", ex.Message);
+            return;
+        }
 
         // if there's more results, keep track of the paging cookie so we can keep requesting subsequent pages
         if (searchResponse.Controls != null && searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl && pageResultResponseControl.Cookie.Length > 0)
@@ -373,7 +386,7 @@ internal class LdapConnectorImport
         var searchRequest = new SearchRequest(container.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
         var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
         {
-            // Make paging non-critical so it works with Samba AD and other servers that may not support paging
+            // Make paging non-critical so servers that don't support paging can ignore it
             IsCritical = false
         };
         if (lastRunsCookie is { Length: > 0 })
@@ -381,7 +394,19 @@ internal class LdapConnectorImport
 
         searchRequest.Controls.Add(pageResultRequestControl);
 
-        var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+        SearchResponse searchResponse;
+        try
+        {
+            searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+        }
+        catch (DirectoryOperationException ex) when (lastRunsCookie is { Length: > 0 } &&
+            ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))
+        {
+            // Server returned a cookie on first page but doesn't actually support paging (e.g., Samba AD)
+            // Retry without paging control - results should have already been returned on first page
+            _logger.Warning("GetDeltaResultsUsingUsn: Server rejected paging cookie, assuming all results were returned on first page. Error: {Message}", ex.Message);
+            return;
+        }
 
         // Handle pagination
         if (searchResponse.Controls != null &&
