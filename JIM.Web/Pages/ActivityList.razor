@@ -117,21 +117,36 @@
     private string _pageTitle = "Activity";
     private string _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
     private List<BreadcrumbItem> _breadcrumbs = new();
+    private string _currentPath = "";
 
     protected override async Task OnInitializedAsync()
     {
         NavManager.LocationChanged += OnLocationChanged;
+        _currentPath = GetPathWithoutQuery(NavManager.Uri);
         await UpdatePageStateAsync();
     }
 
     private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
+        // Check if this is just a query string change (e.g., pagination update)
+        // If so, don't reload the table as it's already being handled by ServerReload
+        var newPath = GetPathWithoutQuery(e.Location);
+        if (newPath == _currentPath)
+            return;
+
+        _currentPath = newPath;
         await UpdatePageStateAsync();
         await InvokeAsync(StateHasChanged);
 
-        // Reload the table data when location changes
+        // Reload the table data when the actual path changes (e.g., /activity to /activity/mine)
         if (_table != null)
             await _table.ReloadServerData();
+    }
+
+    private static string GetPathWithoutQuery(string uri)
+    {
+        var questionMarkIndex = uri.IndexOf('?');
+        return questionMarkIndex >= 0 ? uri[..questionMarkIndex] : uri;
     }
 
     private async Task UpdatePageStateAsync()
@@ -176,6 +191,9 @@
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
+            // Update URL with current page (without triggering navigation/reload)
+            UpdateUrlWithPage(page);
+
             var result = await Jim.Activities.GetActivitiesAsync(
                 page,
                 state.PageSize,
@@ -195,6 +213,18 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    private void UpdateUrlWithPage(int page)
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var baseUrl = uri.GetLeftPart(UriPartial.Path);
+
+        // Only add ?p= if not on page 1
+        var newUrl = page > 1 ? $"{baseUrl}?p={page}" : baseUrl;
+
+        // Update URL without navigation (replace current history entry)
+        NavManager.NavigateTo(newUrl, replace: true);
     }
 
     private void OnSearch(string text)
