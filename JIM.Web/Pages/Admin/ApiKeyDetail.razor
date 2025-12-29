@@ -21,7 +21,7 @@
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">ID:</MudText>
-                <MudText Class="mud-text-secondary">@_apiKey.Id</MudText>
+                <MudText Class="mud-text-secondary jim-text-code">@_apiKey.Id</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
@@ -31,18 +31,18 @@
 
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Key Prefix:</MudText>
-                <MudText Class="mud-text-secondary mud-text-code">@_apiKey.KeyPrefix...</MudText>
+                <MudText Class="mud-text-secondary jim-text-code">@_apiKey.KeyPrefix...</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Status:</MudText>
+                <MudText Typo="Typo.button">Status:</MudText><br />
                 @if (_apiKey.IsEnabled)
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ml-0">Enabled</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Class="ml-0">Enabled</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-0">Disabled</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Class="ml-0">Disabled</MudChip>
                 }
             </MudItem>
 
@@ -57,7 +57,7 @@
                 {
                     @if (_apiKey.ExpiresAt.Value < DateTime.UtcNow)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-0">Expired (@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate())</MudChip>
+                        <br /><MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ml-0">Expired (@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate())</MudChip>
                     }
                     else
                     {
@@ -78,7 +78,7 @@
                         @_apiKey.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()
                         @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
                         {
-                            <span> from @_apiKey.LastUsedFromIp</span>
+                            <span> from <span class="jim-text-code">@_apiKey.LastUsedFromIp</span></span>
                         }
                     </MudText>
                 }
@@ -89,12 +89,12 @@
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Roles:</MudText>
+                <MudText Typo="Typo.button">Roles:</MudText><br />
                 @if (_apiKey.Roles.Count > 0)
                 {
                     @foreach (var role in _apiKey.Roles)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
                     }
                 }
                 else
@@ -106,8 +106,8 @@
             @if (_apiKey.IsInfrastructureKey)
             {
                 <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button">Type:</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure Key</MudChip>
+                    <MudText Typo="Typo.button">Type:</MudText><br />
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure Key</MudChip>
                 </MudItem>
             }
 

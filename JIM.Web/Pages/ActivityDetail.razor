@@ -21,7 +21,7 @@
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">ID:</MudText>
-                <MudText Class="mud-text-secondary">@_activity.Id</MudText>
+                <MudText Class="mud-text-secondary jim-text-code">@_activity.Id</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
@@ -107,7 +107,7 @@
             </MudItem>
         </MudGrid>
     </MudPaper>
-    
+
     @if (!string.IsNullOrEmpty(_activity.ErrorMessage) || !string.IsNullOrEmpty(_activity.ErrorStackTrace))
     {
         <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">

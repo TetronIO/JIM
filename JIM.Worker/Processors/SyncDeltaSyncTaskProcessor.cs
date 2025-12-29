@@ -383,6 +383,15 @@ public class SyncDeltaSyncTaskProcessor
                     pendingExport.AttributeValueChanges.Remove(successfulChange);
                 }
 
+                // If this was a Create operation and it partially succeeded, the object now exists.
+                // Change to Update so subsequent export attempts update the existing object
+                // rather than trying to create it again (which would fail without DN).
+                if (pendingExport.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Create)
+                {
+                    Log.Information($"ProcessPendingExport: Changing pending export {pendingExport.Id} from Create to Update (object was created, updating remaining attributes).");
+                    pendingExport.ChangeType = JIM.Models.Transactional.PendingExportChangeType.Update;
+                }
+
                 // increment error count and update status
                 pendingExport.ErrorCount++;
                 pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
