@@ -217,7 +217,7 @@ public class Worker : BackgroundService
                                                         }
                                                         case ConnectedSystemRunType.Export:
                                                         {
-                                                            var syncExportTaskProcessor = new SyncExportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncExportTaskProcessor = new SyncExportTaskProcessor(taskJim, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }

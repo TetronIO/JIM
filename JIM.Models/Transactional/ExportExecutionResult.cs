@@ -59,6 +59,12 @@ public class ExportExecutionResult
     /// This is captured before pending exports are deleted, allowing execution item creation.
     /// </summary>
     public List<ProcessedExportItem> ProcessedExportItems { get; set; } = [];
+
+    /// <summary>
+    /// DNs of containers (OUs) that were created during this export session.
+    /// Used by JIM to auto-select newly created containers in the hierarchy.
+    /// </summary>
+    public List<string> CreatedContainerDns { get; set; } = [];
 }
 
 /// <summary>

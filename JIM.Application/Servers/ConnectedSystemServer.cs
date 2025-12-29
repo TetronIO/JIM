@@ -1156,6 +1156,299 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
+    /// <summary>
+    /// Import the hierarchy (partitions and containers) from the connected system (initiated by API key).
+    /// </summary>
+    /// <param name="connectedSystem">The connected system to import hierarchy for.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated this operation.</param>
+    public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+
+        // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportHierarchy,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        List<ConnectorPartition> partitions;
+        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
+        {
+            partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+            if (partitions.Count == 0)
+            {
+                // todo: report to the user we attempted to retrieve partitions, but got none back
+            }
+        }
+        else
+        {
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+        }
+
+        // this point could potentially be a good point to check for data-loss if persisted and return a report object
+        // that the user could decide whether or not to take action against, i.e. cancel or persist.
+
+        connectedSystem.Partitions = new List<ConnectedSystemPartition>(); // super destructive at this point. this is for mvp only. this causes all user partition/OU selections to be lost!
+        foreach (var partition in partitions)
+        {
+            connectedSystem.Partitions.Add(new ConnectedSystemPartition
+            {
+                Name = partition.Name,
+                ExternalId = partition.Id,
+                Containers = partition.Containers.Select(BuildConnectedSystemContainerTree).ToHashSet()
+            });
+        }
+
+        // for now though, we will just persist and let the user select containers later
+        // pass in this user-initiated activity, so that sub-operations can be associated with it, i.e. the partition persisting operation
+        await UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey, activity);
+
+        // finish the activity
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Adds newly created containers to the hierarchy and auto-selects them if their parent is selected.
+    /// This method queries LDAP to verify containers exist before adding them.
+    /// </summary>
+    /// <param name="connectedSystem">The connected system to update.</param>
+    /// <param name="createdContainerDns">List of container DNs that were created during export.</param>
+    /// <param name="initiatedByApiKey">Optional API key that initiated this operation.</param>
+    /// <param name="initiatedByUser">Optional user that initiated this operation.</param>
+    public async Task RefreshAndAutoSelectContainersAsync(
+        ConnectedSystem connectedSystem,
+        IReadOnlyList<string> createdContainerDns,
+        ApiKey? initiatedByApiKey = null,
+        MetaverseObject? initiatedByUser = null)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        if (createdContainerDns.Count == 0)
+            return;
+
+        Log.Information("RefreshAndAutoSelectContainersAsync: Processing {Count} created container(s) for system {SystemName}",
+            createdContainerDns.Count, connectedSystem.Name);
+
+        // Create activity for tracking
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystem.Id,
+            Message = $"Auto-selecting {createdContainerDns.Count} container(s) created during export"
+        };
+
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedByUser);
+
+        var containersAdded = 0;
+
+        foreach (var containerDn in createdContainerDns)
+        {
+            try
+            {
+                // Query LDAP to verify the container exists
+                if (!await VerifyContainerExistsInLdapAsync(connectedSystem, containerDn))
+                {
+                    Log.Warning("RefreshAndAutoSelectContainersAsync: Container {ContainerDn} not found in LDAP, skipping", containerDn);
+                    continue;
+                }
+
+                // Find which partition this container belongs to
+                var partition = FindPartitionForContainer(connectedSystem, containerDn);
+                if (partition == null)
+                {
+                    Log.Warning("RefreshAndAutoSelectContainersAsync: Could not find partition for container {ContainerDn}", containerDn);
+                    continue;
+                }
+
+                // Check if container already exists in hierarchy
+                if (partition.Containers != null && FindContainerByExternalId(partition.Containers, containerDn) != null)
+                {
+                    Log.Debug("RefreshAndAutoSelectContainersAsync: Container {ContainerDn} already exists in hierarchy", containerDn);
+                    continue;
+                }
+
+                // Find the parent container
+                var parentDn = GetParentDn(containerDn);
+                var parentContainer = parentDn != null && partition.Containers != null
+                    ? FindContainerByExternalId(partition.Containers, parentDn)
+                    : null;
+
+                // Only auto-select if parent is selected (or if it's a top-level container in a selected partition)
+                var shouldSelect = parentContainer?.Selected == true || (parentContainer == null && partition.Selected);
+
+                // Create the new container
+                var containerName = ExtractContainerName(containerDn);
+                var newContainer = new ConnectedSystemContainer
+                {
+                    ExternalId = containerDn,
+                    Name = containerName,
+                    Selected = shouldSelect,
+                    Partition = partition
+                };
+
+                if (parentContainer != null)
+                {
+                    parentContainer.AddChildContainer(newContainer);
+                }
+                else
+                {
+                    // Top-level container in partition
+                    partition.Containers ??= new HashSet<ConnectedSystemContainer>();
+                    partition.Containers.Add(newContainer);
+                }
+
+                containersAdded++;
+                Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerDn}, Selected: {Selected}",
+                    containerDn, shouldSelect);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "RefreshAndAutoSelectContainersAsync: Error processing container {ContainerDn}", containerDn);
+            }
+        }
+
+        if (containersAdded > 0)
+        {
+            // Persist the changes
+            if (initiatedByApiKey != null)
+                await UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey, activity);
+            else
+                await UpdateConnectedSystemAsync(connectedSystem, initiatedByUser, activity);
+
+            activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+        }
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Verifies that a container exists in LDAP before adding it to the hierarchy.
+    /// </summary>
+    private async Task<bool> VerifyContainerExistsInLdapAsync(ConnectedSystem connectedSystem, string containerDn)
+    {
+        if (connectedSystem.ConnectorDefinition.Name != Connectors.ConnectorConstants.LdapConnectorName)
+        {
+            Log.Warning("VerifyContainerExistsInLdapAsync: Container verification only supported for LDAP connector");
+            return true; // Assume exists for non-LDAP connectors
+        }
+
+        try
+        {
+            using var connector = new LdapConnector();
+            connector.OpenImportConnection(connectedSystem.SettingValues, Log.Logger);
+
+            try
+            {
+                // Use the LDAP connector to check if the container exists
+                // This is a simple approach - we attempt to get partitions and check if the container is in any of them
+                // A more efficient approach would be to add a dedicated method to check container existence
+                var partitions = await connector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+
+                foreach (var partition in partitions)
+                {
+                    if (ContainerExistsInHierarchy(partition.Containers, containerDn))
+                        return true;
+                }
+
+                // Container not found in any partition - this might happen due to replication lag
+                return false;
+            }
+            finally
+            {
+                connector.CloseImportConnection();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "VerifyContainerExistsInLdapAsync: Error verifying container {ContainerDn}", containerDn);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if a container exists anywhere in a container hierarchy.
+    /// </summary>
+    private static bool ContainerExistsInHierarchy(IEnumerable<ConnectorContainer> containers, string containerDn)
+    {
+        foreach (var container in containers)
+        {
+            if (container.Id.Equals(containerDn, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (container.ChildContainers.Count > 0 && ContainerExistsInHierarchy(container.ChildContainers, containerDn))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Finds the partition that a container DN belongs to based on the DN suffix.
+    /// </summary>
+    private static ConnectedSystemPartition? FindPartitionForContainer(ConnectedSystem connectedSystem, string containerDn)
+    {
+        // Container DN should end with the partition's external ID (which is the partition DN for LDAP)
+        return connectedSystem.Partitions?.FirstOrDefault(p =>
+            containerDn.EndsWith(p.ExternalId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Recursively searches for a container by its external ID (DN) in a container hierarchy.
+    /// </summary>
+    private static ConnectedSystemContainer? FindContainerByExternalId(IEnumerable<ConnectedSystemContainer> containers, string externalId)
+    {
+        foreach (var container in containers)
+        {
+            if (container.ExternalId.Equals(externalId, StringComparison.OrdinalIgnoreCase))
+                return container;
+
+            var found = FindContainerByExternalId(container.ChildContainers, externalId);
+            if (found != null)
+                return found;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the parent DN from a container DN.
+    /// </summary>
+    private static string? GetParentDn(string containerDn)
+    {
+        // Find the first comma (which separates the RDN from the parent DN)
+        var commaIndex = containerDn.IndexOf(',');
+        if (commaIndex == -1 || commaIndex == containerDn.Length - 1)
+            return null;
+
+        return containerDn.Substring(commaIndex + 1);
+    }
+
+    /// <summary>
+    /// Extracts the container name from a DN.
+    /// </summary>
+    private static string ExtractContainerName(string containerDn)
+    {
+        // The name is the value of the first RDN component
+        var commaIndex = containerDn.IndexOf(',');
+        var rdn = commaIndex > 0 ? containerDn.Substring(0, commaIndex) : containerDn;
+
+        // Extract value after = sign (e.g., "OU=Sales" -> "Sales")
+        var equalsIndex = rdn.IndexOf('=');
+        return equalsIndex > 0 && equalsIndex < rdn.Length - 1
+            ? rdn.Substring(equalsIndex + 1)
+            : rdn;
+    }
+
     private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
     {
         var connectedSystemContainer = new ConnectedSystemContainer

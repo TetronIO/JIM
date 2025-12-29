@@ -315,7 +315,11 @@ internal class LdapConnectorImport
         var queryAttributes = attributes.Distinct().ToArray();
 
         var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
-        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize);
+        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
+        {
+            // Make paging non-critical so it works with Samba AD and other servers that may not support paging
+            IsCritical = false
+        };
         if (lastRunsCookie is { Length: > 0 })
             pageResultRequestControl.Cookie = lastRunsCookie;
 
@@ -367,7 +371,11 @@ internal class LdapConnectorImport
         var queryAttributes = attributes.Distinct().ToArray();
 
         var searchRequest = new SearchRequest(container.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
-        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize);
+        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
+        {
+            // Make paging non-critical so it works with Samba AD and other servers that may not support paging
+            IsCritical = false
+        };
         if (lastRunsCookie is { Length: > 0 })
             pageResultRequestControl.Cookie = lastRunsCookie;
 

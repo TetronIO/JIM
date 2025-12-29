@@ -22,6 +22,15 @@ internal class LdapConnectorExport
     // Cache of containers we've already created or verified exist during this export session
     private readonly HashSet<string> _verifiedContainers = new(StringComparer.OrdinalIgnoreCase);
 
+    // Track containers created during this export session (for auto-selection in JIM)
+    private readonly List<string> _createdContainerDns = new();
+
+    /// <summary>
+    /// Gets the list of container DNs that were created during this export session.
+    /// Used by JIM to auto-select newly created containers in the hierarchy.
+    /// </summary>
+    internal IReadOnlyList<string> CreatedContainerDns => _createdContainerDns.AsReadOnly();
+
     internal LdapConnectorExport(
         LdapConnection connection,
         IList<ConnectedSystemSettingValue> settings,
@@ -711,6 +720,9 @@ internal class LdapConnectorExport
         {
             throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
         }
+
+        // Track the created container for auto-selection
+        _createdContainerDns.Add(containerDn);
 
         _logger.Information("LdapConnectorExport.CreateContainer: Successfully created container '{ContainerDn}'", containerDn);
     }

@@ -360,6 +360,15 @@ public class ExportExecutionServer
                         result.DeferredCount++;
                     }
                 }
+
+                // Capture created containers before closing connection
+                if (connector is IConnectorContainerCreation containerCreator &&
+                    containerCreator.CreatedContainerDns.Count > 0)
+                {
+                    result.CreatedContainerDns.AddRange(containerCreator.CreatedContainerDns);
+                    Log.Information("ExecuteUsingCallsWithBatchingAsync: Captured {Count} created container(s) for auto-selection",
+                        containerCreator.CreatedContainerDns.Count);
+                }
             }
             finally
             {

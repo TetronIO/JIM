@@ -702,7 +702,12 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
+            // Call the appropriate overload based on authentication method
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, apiKey);
+            else
+                await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
 
             _logger.LogInformation("Hierarchy imported for connected system: {Id} ({Name}), {Count} partitions",
                 connectedSystemId, connectedSystem.Name, connectedSystem.Partitions?.Count ?? 0);

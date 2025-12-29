@@ -342,13 +342,20 @@ try {
     $partitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id
 
     if ($partitions -and $partitions.Count -gt 0) {
-        Write-Host "  Found $($partitions.Count) partition(s)" -ForegroundColor Gray
+        Write-Host "  Found $($partitions.Count) partition(s):" -ForegroundColor Gray
+        foreach ($p in $partitions) {
+            Write-Host "    - Name: '$($p.name)', ExternalId: '$($p.externalId)', Selected: $($p.selected)" -ForegroundColor Gray
+        }
 
-        # Find the testdomain.local partition (DC=testdomain,DC=local)
-        $domainPartition = $partitions | Where-Object { $_.name -match "testdomain" -or $_.distinguishedName -match "DC=testdomain" } | Select-Object -First 1
+        # Find the main domain partition (DC=testdomain,DC=local)
+        # Note: API returns 'name' (display name) and 'externalId' (distinguished name)
+        # We need the exact domain partition, not ForestDnsZones or DomainDnsZones
+        $domainPartition = $partitions | Where-Object {
+            $_.name -eq "DC=testdomain,DC=local" -or $_.externalId -eq "DC=testdomain,DC=local"
+        } | Select-Object -First 1
 
         if ($domainPartition) {
-            Write-Host "  Selecting partition: $($domainPartition.name)" -ForegroundColor Gray
+            Write-Host "  Selecting partition: $($domainPartition.name) (ID: $($domainPartition.id))" -ForegroundColor Gray
             Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $domainPartition.id -Selected $true | Out-Null
             Write-Host "  ✓ Partition selected: $($domainPartition.name)" -ForegroundColor Green
 
@@ -357,22 +364,33 @@ try {
             $bortonCorpContainer = $null
 
             # Helper function to search containers recursively
+            # Note: API returns camelCase JSON, so use 'childContainers' for nested containers
             function Find-Container {
                 param($Containers, $Name)
                 foreach ($container in $Containers) {
                     if ($container.name -eq $Name) {
                         return $container
                     }
-                    if ($container.containers) {
-                        $found = Find-Container -Containers $container.containers -Name $Name
+                    # Child containers are in the 'childContainers' property (camelCase from API)
+                    if ($container.childContainers) {
+                        $found = Find-Container -Containers $container.childContainers -Name $Name
                         if ($found) { return $found }
                     }
                 }
                 return $null
             }
 
+            # Partition's top-level containers are in the 'containers' property
+            Write-Host "  Looking for containers in partition..." -ForegroundColor Gray
             if ($domainPartition.containers) {
+                Write-Host "    Found $($domainPartition.containers.Count) top-level container(s):" -ForegroundColor Gray
+                foreach ($c in $domainPartition.containers) {
+                    Write-Host "      - Name: '$($c.name)', ID: $($c.id), Selected: $($c.selected)" -ForegroundColor Gray
+                }
                 $bortonCorpContainer = Find-Container -Containers $domainPartition.containers -Name "Borton Corp"
+            }
+            else {
+                Write-Host "    No containers found in partition (containers property is null/empty)" -ForegroundColor Yellow
             }
 
             if ($bortonCorpContainer) {
@@ -387,6 +405,9 @@ try {
                 Write-Host "    Available top-level containers:" -ForegroundColor Gray
                 if ($domainPartition.containers) {
                     $domainPartition.containers | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
+                }
+                else {
+                    Write-Host "      (none)" -ForegroundColor Gray
                 }
                 Write-Host "    Ensure Populate-SambaAD.ps1 has been run to create the Borton Corp OU" -ForegroundColor Yellow
             }

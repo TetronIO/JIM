@@ -1,9 +1,12 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
+using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Serilog;
 
@@ -22,13 +25,15 @@ public class SyncExportTaskProcessor
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly SyncRunMode _runMode;
+    private readonly MetaverseObject? _initiatedByMetaverseObject;
+    private readonly ApiKey? _initiatedByApiKey;
 
     public SyncExportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
-        Activity activity,
+        WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync)
     {
@@ -36,9 +41,11 @@ public class SyncExportTaskProcessor
         _connector = connector;
         _connectedSystem = connectedSystem;
         _runProfile = runProfile;
-        _activity = activity;
+        _activity = workerTask.Activity;
         _cancellationTokenSource = cancellationTokenSource;
         _runMode = runMode;
+        _initiatedByMetaverseObject = workerTask.InitiatedByMetaverseObject;
+        _initiatedByApiKey = workerTask.InitiatedByApiKey;
     }
 
     /// <summary>
@@ -119,6 +126,26 @@ public class SyncExportTaskProcessor
 
             // Update activity with final results
             await ProcessExportResultAsync(result);
+
+            // Auto-select any containers created during export
+            if (result.CreatedContainerDns.Count > 0)
+            {
+                Log.Information("PerformExportAsync: Export created {Count} new container(s), triggering auto-selection",
+                    result.CreatedContainerDns.Count);
+
+                await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                    $"Auto-selecting {result.CreatedContainerDns.Count} container(s) created during export");
+
+                await _jim.ConnectedSystems.RefreshAndAutoSelectContainersAsync(
+                    _connectedSystem,
+                    result.CreatedContainerDns,
+                    _initiatedByApiKey,
+                    _initiatedByMetaverseObject);
+
+                // Update completion message to include container count
+                var updatedMessage = $"{_activity.Message} | {result.CreatedContainerDns.Count} container(s) auto-selected";
+                await _jim.Activities.UpdateActivityMessageAsync(_activity, updatedMessage);
+            }
 
             exportSpan.SetSuccess();
         }
