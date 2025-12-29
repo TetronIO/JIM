@@ -121,3 +121,77 @@ public enum CertificateSourceType
     /// </summary>
     FilePath = 1
 }
+
+/// <summary>
+/// Categories for service settings in the admin UI.
+/// </summary>
+public enum ServiceSettingCategory
+{
+    /// <summary>
+    /// Single Sign-On related settings.
+    /// </summary>
+    SSO = 0,
+
+    /// <summary>
+    /// Synchronisation and connector settings.
+    /// </summary>
+    Synchronisation = 1,
+
+    /// <summary>
+    /// Maintenance and operational settings.
+    /// </summary>
+    Maintenance = 2,
+
+    /// <summary>
+    /// History and audit retention settings.
+    /// </summary>
+    History = 3
+}
+
+/// <summary>
+/// Data types for service settings.
+/// </summary>
+public enum ServiceSettingValueType
+{
+    /// <summary>
+    /// Plain text string value.
+    /// </summary>
+    String = 0,
+
+    /// <summary>
+    /// Boolean true/false value.
+    /// </summary>
+    Boolean = 1,
+
+    /// <summary>
+    /// Integer numeric value.
+    /// </summary>
+    Integer = 2,
+
+    /// <summary>
+    /// Time span duration value.
+    /// </summary>
+    TimeSpan = 3,
+
+    /// <summary>
+    /// Enumeration value - requires EnumTypeName to be set.
+    /// </summary>
+    Enum = 4
+}
+
+/// <summary>
+/// Determines how JIM handles run profile execution when no partitions/containers are selected.
+/// </summary>
+public enum PartitionValidationMode
+{
+    /// <summary>
+    /// Execution is blocked with an error. The run profile will not execute.
+    /// This is the default and recommended setting.
+    /// </summary>
+    Error = 0,
+
+    /// <summary>
+    /// A warning is returned but execution proceeds (may return 0 objects).
+    /// </summary>
+    Warning = 1
+}

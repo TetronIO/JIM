@@ -21,5 +21,9 @@ public enum ActivityTargetOperationType
     /// <summary>
     /// Relates to Connected Systems.
     /// </summary>
-    ImportSchema = 7
+    ImportSchema = 7,
+    /// <summary>
+    /// Reverts a Service Setting to its default value.
+    /// </summary>
+    Revert = 8
 }

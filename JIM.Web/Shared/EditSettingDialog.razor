@@ -1,0 +1,101 @@
+@using JIM.Models.Core
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Setting?.Description</MudText>
+
+            @if (Setting != null)
+            {
+                @switch (Setting.ValueType)
+                {
+                    case ServiceSettingValueType.Boolean:
+                        <MudSelect T="string" @bind-Value="_value" Label="Value" Variant="Variant.Outlined">
+                            <MudSelectItem Value="@("true")">True</MudSelectItem>
+                            <MudSelectItem Value="@("false")">False</MudSelectItem>
+                        </MudSelect>
+                        break;
+
+                    case ServiceSettingValueType.Enum:
+                        <MudSelect T="string" @bind-Value="_value" Label="Value" Variant="Variant.Outlined">
+                            @foreach (var enumValue in GetEnumValues())
+                            {
+                                <MudSelectItem Value="@enumValue">@enumValue</MudSelectItem>
+                            }
+                        </MudSelect>
+                        break;
+
+                    case ServiceSettingValueType.Integer:
+                        <MudNumericField T="int?" @bind-Value="_intValue" Label="Value" Variant="Variant.Outlined" />
+                        break;
+
+                    case ServiceSettingValueType.TimeSpan:
+                        <MudTextField @bind-Value="_value" Label="Value (format: d.hh:mm:ss)" Variant="Variant.Outlined"
+                            HelperText="Example: 30.00:00:00 for 30 days" />
+                        break;
+
+                    default:
+                        <MudTextField @bind-Value="_value" Label="Value" Variant="Variant.Outlined"
+                            InputType="@(Setting.IsSecret ? InputType.Password : InputType.Text)" />
+                        break;
+                }
+
+                @if (!string.IsNullOrEmpty(Setting.DefaultValue))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Default: @Setting.DefaultValue</MudText>
+                }
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public ServiceSetting? Setting { get; set; }
+
+    private string? _value;
+    private int? _intValue;
+
+    protected override void OnInitialized()
+    {
+        if (Setting != null)
+        {
+            _value = Setting.GetEffectiveValue();
+            if (Setting.ValueType == ServiceSettingValueType.Integer && int.TryParse(_value, out var intVal))
+            {
+                _intValue = intVal;
+            }
+        }
+    }
+
+    private IEnumerable<string> GetEnumValues()
+    {
+        if (Setting?.EnumTypeName == null)
+            return Enumerable.Empty<string>();
+
+        // Handle known enum types
+        if (Setting.EnumTypeName == typeof(PartitionValidationMode).FullName)
+        {
+            return Enum.GetNames<PartitionValidationMode>();
+        }
+
+        return Enumerable.Empty<string>();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        var result = Setting?.ValueType == ServiceSettingValueType.Integer
+            ? _intValue?.ToString()
+            : _value;
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+}

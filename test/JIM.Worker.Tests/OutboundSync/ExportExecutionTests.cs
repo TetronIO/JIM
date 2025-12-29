@@ -677,6 +677,148 @@ public class ExportExecutionTests
         Assert.That(pendingExport.ConnectedSystemObject?.Id, Is.EqualTo(cso.Id));
     }
 
+    #region Created Container Tracking Tests
+
+    /// <summary>
+    /// Tests that created container DNs are captured from connectors that implement IConnectorContainerCreation.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WithContainerCreation_CapturesCreatedContainerDnsAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Add,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Test User",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Mock connector that implements IConnector, IConnectorExportUsingCalls, and IConnectorContainerCreation
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        var mockContainerCreation = mockConnector.As<IConnectorContainerCreation>();
+
+        mockConnector.Setup(c => c.Name).Returns("Test Container Creation Connector");
+        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
+            .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+
+        // Simulate that the connector created two OUs during export
+        var createdContainers = new List<string>
+        {
+            "OU=Sales,OU=Borton Corp,DC=testdomain,DC=local",
+            "OU=Marketing,OU=Borton Corp,DC=testdomain,DC=local"
+        };
+        mockContainerCreation.Setup(c => c.CreatedContainerDns)
+            .Returns(createdContainers.AsReadOnly());
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(1), "Export should have succeeded");
+        Assert.That(result.CreatedContainerDns.Count, Is.EqualTo(2), "Should have captured 2 created containers");
+        Assert.That(result.CreatedContainerDns, Does.Contain("OU=Sales,OU=Borton Corp,DC=testdomain,DC=local"));
+        Assert.That(result.CreatedContainerDns, Does.Contain("OU=Marketing,OU=Borton Corp,DC=testdomain,DC=local"));
+    }
+
+    /// <summary>
+    /// Tests that when a connector doesn't implement IConnectorContainerCreation, CreatedContainerDns remains empty.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WithoutContainerCreation_CreatedContainerDnsIsEmptyAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Mock connector that only implements IConnector and IConnectorExportUsingCalls (not IConnectorContainerCreation)
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+
+        mockConnector.Setup(c => c.Name).Returns("Test Regular Connector");
+        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
+            .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(1), "Export should have succeeded");
+        Assert.That(result.CreatedContainerDns, Is.Empty, "CreatedContainerDns should be empty when connector doesn't support container creation");
+    }
+
+    #endregion
+
     #region Provisioning Flow End-to-End Tests
 
     /// <summary>

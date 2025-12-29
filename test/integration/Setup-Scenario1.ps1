@@ -329,7 +329,105 @@ else {
     }
 }
 
-# Note: Department OUs are no longer pre-created here. The LDAP Connector's
+# Step 6a: Import LDAP Hierarchy and Select Containers
+Write-TestStep "Step 6a" "Importing LDAP hierarchy and selecting Borton Corp container"
+
+try {
+    # Import the partition/container hierarchy from LDAP
+    # This retrieves naming contexts (partitions) and OUs (containers) from Samba AD
+    Write-Host "  Importing LDAP hierarchy..." -ForegroundColor Gray
+    $ldapSystemWithHierarchy = Import-JIMConnectedSystemHierarchy -Id $ldapSystem.id -PassThru
+
+    # Get the partitions
+    $partitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id
+
+    if ($partitions -and $partitions.Count -gt 0) {
+        Write-Host "  Found $($partitions.Count) partition(s):" -ForegroundColor Gray
+        foreach ($p in $partitions) {
+            Write-Host "    - Name: '$($p.name)', ExternalId: '$($p.externalId)', Selected: $($p.selected)" -ForegroundColor Gray
+        }
+
+        # Find the main domain partition (DC=testdomain,DC=local)
+        # Note: API returns 'name' (display name) and 'externalId' (distinguished name)
+        # We need the exact domain partition, not ForestDnsZones or DomainDnsZones
+        $domainPartition = $partitions | Where-Object {
+            $_.name -eq "DC=testdomain,DC=local" -or $_.externalId -eq "DC=testdomain,DC=local"
+        } | Select-Object -First 1
+
+        if ($domainPartition) {
+            Write-Host "  Selecting partition: $($domainPartition.name) (ID: $($domainPartition.id))" -ForegroundColor Gray
+            Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $domainPartition.id -Selected $true | Out-Null
+            Write-Host "  ✓ Partition selected: $($domainPartition.name)" -ForegroundColor Green
+
+            # Find and select the "Borton Corp" container within this partition
+            # The hierarchy structure is: partition -> containers (nested)
+            $bortonCorpContainer = $null
+
+            # Helper function to search containers recursively
+            # Note: API returns camelCase JSON, so use 'childContainers' for nested containers
+            function Find-Container {
+                param($Containers, $Name)
+                foreach ($container in $Containers) {
+                    if ($container.name -eq $Name) {
+                        return $container
+                    }
+                    # Child containers are in the 'childContainers' property (camelCase from API)
+                    if ($container.childContainers) {
+                        $found = Find-Container -Containers $container.childContainers -Name $Name
+                        if ($found) { return $found }
+                    }
+                }
+                return $null
+            }
+
+            # Partition's top-level containers are in the 'containers' property
+            Write-Host "  Looking for containers in partition..." -ForegroundColor Gray
+            if ($domainPartition.containers) {
+                Write-Host "    Found $($domainPartition.containers.Count) top-level container(s):" -ForegroundColor Gray
+                foreach ($c in $domainPartition.containers) {
+                    Write-Host "      - Name: '$($c.name)', ID: $($c.id), Selected: $($c.selected)" -ForegroundColor Gray
+                }
+                $bortonCorpContainer = Find-Container -Containers $domainPartition.containers -Name "Borton Corp"
+            }
+            else {
+                Write-Host "    No containers found in partition (containers property is null/empty)" -ForegroundColor Yellow
+            }
+
+            if ($bortonCorpContainer) {
+                Write-Host "  Selecting container: Borton Corp (ID: $($bortonCorpContainer.id))" -ForegroundColor Gray
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $bortonCorpContainer.id -Selected $true | Out-Null
+                Write-Host "  ✓ Container selected: Borton Corp" -ForegroundColor Green
+                Write-Host "    Users will be provisioned under: OU=Borton Corp,DC=testdomain,DC=local" -ForegroundColor DarkGray
+                Write-Host "    Department OUs will be auto-created: OU={Dept},OU=Borton Corp,DC=testdomain,DC=local" -ForegroundColor DarkGray
+            }
+            else {
+                Write-Host "  ⚠ 'Borton Corp' container not found in hierarchy" -ForegroundColor Yellow
+                Write-Host "    Available top-level containers:" -ForegroundColor Gray
+                if ($domainPartition.containers) {
+                    $domainPartition.containers | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
+                }
+                else {
+                    Write-Host "      (none)" -ForegroundColor Gray
+                }
+                Write-Host "    Ensure Populate-SambaAD.ps1 has been run to create the Borton Corp OU" -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Host "  ⚠ Could not find testdomain partition" -ForegroundColor Yellow
+            Write-Host "    Available partitions:" -ForegroundColor Gray
+            $partitions | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
+        }
+    }
+    else {
+        Write-Host "  ⚠ No partitions found in hierarchy" -ForegroundColor Yellow
+    }
+}
+catch {
+    Write-Host "  ⚠ Failed to import hierarchy or select containers: $_" -ForegroundColor Yellow
+    Write-Host "    This may affect LDAP import operations. Continuing with setup..." -ForegroundColor DarkYellow
+}
+
+# Note: Department OUs are no longer pre-created. The LDAP Connector's
 # "Create containers as needed?" setting (enabled above in Step 5) will
 # automatically create any required OUs during export when provisioning
 # users to department-based OUs. This tests the container creation functionality.
@@ -468,12 +566,16 @@ try {
         )
 
         # Expression-based mappings for computed values
-        # DN uses Department to place users in department OUs (created by Populate-SambaAD.ps1)
-        # This enables OU move testing when department changes
+        # DN uses Department to place users in department OUs under Borton Corp
+        # Structure: CN={Display Name},OU={Department},OU=Borton Corp,DC=testdomain,DC=local
+        # This enables:
+        #   1. OU move testing when department changes
+        #   2. Auto-creation of department OUs by the LDAP connector (when "Create containers as needed?" is enabled)
+        #   3. Partition/container selection testing (only Borton Corp is selected)
         $expressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=testdomain,DC=local"'
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Borton Corp,DC=testdomain,DC=local"'
             }
         )
 

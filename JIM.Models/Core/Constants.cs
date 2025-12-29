@@ -174,4 +174,30 @@ public static class Constants
     {
         public static string MetaverseObjectId => "jim_mvo_id";
     }
+
+    /// <summary>
+    /// Keys for service settings stored in the database.
+    /// Use dot notation for categorisation (e.g., "SSO.Authority").
+    /// </summary>
+    public static class SettingKeys
+    {
+        // SSO Settings (read-only, from environment)
+        public const string SsoAuthority = "SSO.Authority";
+        public const string SsoClientId = "SSO.ClientId";
+        public const string SsoSecret = "SSO.Secret";
+        public const string SsoApiScope = "SSO.ApiScope";
+        public const string SsoClaimType = "SSO.ClaimType";
+        public const string SsoMvAttribute = "SSO.MvAttribute";
+        public const string SsoUniqueIdentifierClaimType = "SSO.UniqueIdentifierClaimType";
+        public const string SsoEnableLogOut = "SSO.EnableLogOut";
+
+        // Synchronisation Settings
+        public const string PartitionValidationMode = "Sync.PartitionValidationMode";
+
+        // History Settings
+        public const string HistoryRetentionPeriod = "History.RetentionPeriod";
+
+        // Maintenance Settings
+        public const string MaintenanceMode = "Maintenance.IsEnabled";
+    }
 }

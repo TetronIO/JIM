@@ -79,4 +79,10 @@ public class RunProfileExecutionResponse
     /// Message describing the result.
     /// </summary>
     public string Message { get; set; } = null!;
+
+    /// <summary>
+    /// Any warning messages about the execution (e.g., partition validation warnings).
+    /// Empty if no warnings.
+    /// </summary>
+    public List<string> Warnings { get; set; } = new();
 }

@@ -10,5 +10,6 @@ public enum ActivityTargetType
     MetaverseObject = 5,
     TrustedCertificate = 6,
     ObjectMatchingRule = 7,
-    MetaverseAttribute = 8
+    MetaverseAttribute = 8,
+    ServiceSetting = 9
 }

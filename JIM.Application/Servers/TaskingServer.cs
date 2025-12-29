@@ -1,4 +1,6 @@
-﻿using JIM.Models.Activities;
+using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 using Serilog;
@@ -48,10 +50,20 @@ namespace JIM.Application.Servers
             }
         }
 
-        public async Task CreateWorkerTaskAsync(WorkerTask workerTask)
+        public async Task<WorkerTaskCreationResult> CreateWorkerTaskAsync(WorkerTask workerTask)
         {
+            string? partitionWarning = null;
+
             if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
             {
+                // Validate partition selections for connectors that support partitions
+                var validationResult = await ValidatePartitionSelectionsAsync(synchronisationWorkerTask.ConnectedSystemId);
+                if (validationResult.HasError)
+                {
+                    return WorkerTaskCreationResult.Failed(validationResult.ErrorMessage!);
+                }
+                partitionWarning = validationResult.WarningMessage;
+
                 // every CRUD operation requires tracking with an activity...
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
@@ -121,6 +133,60 @@ namespace JIM.Application.Servers
             }
 
             await Application.Repository.Tasking.CreateWorkerTaskAsync(workerTask);
+
+            // Return result with any warnings
+            if (!string.IsNullOrEmpty(partitionWarning))
+            {
+                return WorkerTaskCreationResult.SucceededWithWarnings(workerTask.Id, partitionWarning);
+            }
+            return WorkerTaskCreationResult.Succeeded(workerTask.Id);
+        }
+
+        /// <summary>
+        /// Validates that a Connected System has the required partition/container selections.
+        /// </summary>
+        private async Task<PartitionValidationResult> ValidatePartitionSelectionsAsync(int connectedSystemId)
+        {
+            var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+            if (connectedSystem == null)
+            {
+                return PartitionValidationResult.Error("Connected System not found.");
+            }
+
+            // If the connector doesn't support partitions, or partitions are properly selected, no validation needed
+            if (connectedSystem.HasPartitionsOrContainersSelected())
+            {
+                return PartitionValidationResult.Valid();
+            }
+
+            // Connector supports partitions but none are selected - check the validation mode setting
+            var validationMode = await Application.ServiceSettings.GetPartitionValidationModeAsync();
+            var message = $"Connected System '{connectedSystem.Name}' supports partitions but no partitions or containers have been selected. " +
+                          "Import operations will return no objects. Please configure partition and container selections on the Connected System's Partitions & Containers tab.";
+
+            if (validationMode == PartitionValidationMode.Error)
+            {
+                Log.Warning("CreateWorkerTaskAsync: Blocking execution - {Message}", message);
+                return PartitionValidationResult.Error(message);
+            }
+
+            // Warning mode - allow execution but return warning
+            Log.Warning("CreateWorkerTaskAsync: Proceeding with warning - {Message}", message);
+            return PartitionValidationResult.Warning(message);
+        }
+
+        /// <summary>
+        /// Result of partition validation check.
+        /// </summary>
+        private class PartitionValidationResult
+        {
+            public bool HasError { get; private init; }
+            public string? ErrorMessage { get; private init; }
+            public string? WarningMessage { get; private init; }
+
+            public static PartitionValidationResult Valid() => new();
+            public static PartitionValidationResult Error(string message) => new() { HasError = true, ErrorMessage = message };
+            public static PartitionValidationResult Warning(string message) => new() { WarningMessage = message };
         }
 
         public async Task<WorkerTask?> GetNextWorkerTaskAsync()

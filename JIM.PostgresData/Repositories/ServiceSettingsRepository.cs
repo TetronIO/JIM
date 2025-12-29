@@ -58,4 +58,62 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
     {
         return await Repository.Database.ServiceSettings.AnyAsync();
     }
+
+    #region ServiceSetting (individual settings) methods
+
+    public async Task<ServiceSetting?> GetSettingAsync(string key)
+    {
+        return await Repository.Database.ServiceSettingItems.FindAsync(key);
+    }
+
+    public async Task<List<ServiceSetting>> GetAllSettingsAsync()
+    {
+        return await Repository.Database.ServiceSettingItems
+            .OrderBy(s => s.Category)
+            .ThenBy(s => s.DisplayName)
+            .ToListAsync();
+    }
+
+    public async Task<List<ServiceSetting>> GetSettingsByCategoryAsync(ServiceSettingCategory category)
+    {
+        return await Repository.Database.ServiceSettingItems
+            .Where(s => s.Category == category)
+            .OrderBy(s => s.DisplayName)
+            .ToListAsync();
+    }
+
+    public async Task<List<ServiceSetting>> GetOverriddenSettingsAsync()
+    {
+        return await Repository.Database.ServiceSettingItems
+            .Where(s => s.Value != null && s.Value != s.DefaultValue)
+            .OrderBy(s => s.Category)
+            .ThenBy(s => s.DisplayName)
+            .ToListAsync();
+    }
+
+    public async Task CreateSettingAsync(ServiceSetting setting)
+    {
+        Repository.Database.ServiceSettingItems.Add(setting);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdateSettingAsync(ServiceSetting setting)
+    {
+        var existingSetting = await Repository.Database.ServiceSettingItems.FindAsync(setting.Key);
+        if (existingSetting == null)
+        {
+            Log.Error("UpdateSettingAsync: Could not find ServiceSetting with key {Key} to update.", setting.Key);
+            return;
+        }
+
+        Repository.Database.Entry(existingSetting).CurrentValues.SetValues(setting);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task<bool> SettingExistsAsync(string key)
+    {
+        return await Repository.Database.ServiceSettingItems.AnyAsync(s => s.Key == key);
+    }
+
+    #endregion
 }

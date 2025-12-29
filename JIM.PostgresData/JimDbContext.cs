@@ -60,6 +60,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<Role> Roles { get; set; } = null!;
     public virtual DbSet<ApiKey> ApiKeys { get; set; } = null!;
     public virtual DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
+    public virtual DbSet<ServiceSetting> ServiceSettingItems { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRule> ObjectMatchingRules { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRuleSource> ObjectMatchingRuleSources { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRuleSourceParamValue> ObjectMatchingRuleSourceParamValues { get; set; } = null!;

@@ -188,7 +188,20 @@
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
         var task = new SynchronisationWorkerTask(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user);
-        await Jim.Tasking.CreateWorkerTaskAsync(task);
+        var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
+
+        if (!result.Success)
+        {
+            Snackbar.Add(result.ErrorMessage ?? "Failed to create task.", Severity.Error);
+            return;
+        }
+
+        // Show any warnings
+        foreach (var warning in result.Warnings)
+        {
+            Snackbar.Add(warning, Severity.Warning);
+        }
+
         Snackbar.Add("Synchronisation task added.", Severity.Success);
     }
 

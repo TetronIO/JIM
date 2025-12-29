@@ -8,12 +8,13 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorContainerCreation, IDisposable
 {
     private LdapConnection? _connection;
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
     private List<X509Certificate2>? _trustedCertificates;
+    private LdapConnectorExport? _currentExport;
 
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
@@ -336,15 +337,24 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_exportSettings == null)
             throw new InvalidOperationException("Export settings not available. Call OpenExportConnection() first.");
 
-        var export = new LdapConnectorExport(_connection, _exportSettings, Log.Logger);
-        return export.Execute(pendingExports);
+        _currentExport = new LdapConnectorExport(_connection, _exportSettings, Log.Logger);
+        return _currentExport.Execute(pendingExports);
     }
 
     public void CloseExportConnection()
     {
         _exportSettings = null;
+        _currentExport = null;
         CloseImportConnection();
     }
+    #endregion
+
+    #region IConnectorContainerCreation members
+    /// <summary>
+    /// Gets the list of container DNs that were created during the current export session.
+    /// </summary>
+    public IReadOnlyList<string> CreatedContainerDns =>
+        _currentExport?.CreatedContainerDns ?? Array.Empty<string>();
     #endregion
 
     #region IConnectorCertificateAware members

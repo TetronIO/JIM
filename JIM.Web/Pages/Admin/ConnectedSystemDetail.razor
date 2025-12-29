@@ -672,6 +672,20 @@
                     </MudButton>
                 </MudAlert>
 
+                @if (_connectedSystem.Partitions is { Count: > 0 } && !_connectedSystem.HasPartitionsOrContainersSelected())
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mt-5">
+                        <MudText>
+                            <strong>No partitions or containers have been selected.</strong> You must select at least one partition
+                            @if (_connectedSystem.ConnectorDefinition.SupportsPartitionContainers)
+                            {
+                                <text> and at least one container within that partition</text>
+                            }
+                            before you can configure object matching rules or create run profiles.
+                        </MudText>
+                    </MudAlert>
+                }
+
                 @if (_connectedSystem.Partitions is { Count: > 0 })
                 {
                     <MudText Class="mt-5">Select which @_partitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
@@ -735,7 +749,7 @@
             </MudTabPanel>
         }
 
-        <MudTabPanel Text="Object Matching" Disabled="@AreSettingDependentTabsDisabled()">
+        <MudTabPanel Text="Object Matching" Disabled="@IsObjectMatchingTabDisabled()">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
                 <div>
                     <MudText Typo="Typo.body1">
@@ -1962,7 +1976,31 @@
         if (_connectedSystem == null)
             return true;
 
-        return _connectedSystem.ConnectorDefinition.SupportsPartitions && (_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0);
+        // Disable if settings are invalid
+        if (!_connectedSystem.SettingValuesValid)
+            return true;
+
+        // Disable if the connector supports partitions but none are selected (with containers if applicable)
+        if (_connectedSystem.ConnectorDefinition.SupportsPartitions)
+            return !_connectedSystem.HasPartitionsOrContainersSelected();
+
+        return false;
+    }
+
+    private bool IsObjectMatchingTabDisabled()
+    {
+        if (_connectedSystem == null)
+            return true;
+
+        // Disable if settings are invalid
+        if (!_connectedSystem.SettingValuesValid)
+            return true;
+
+        // Disable if the connector supports partitions but none are selected (with containers if applicable)
+        if (_connectedSystem.ConnectorDefinition.SupportsPartitions)
+            return !_connectedSystem.HasPartitionsOrContainersSelected();
+
+        return false;
     }
 
     private string? ValidateRunType(ConnectedSystemRunType runType)
