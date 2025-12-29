@@ -19,7 +19,7 @@
     @_pageDescription
 </MudText>
 
-<MudTable @ref="_table" T="Activity" ServerData="ServerReload" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+<MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
     Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
     LoadingProgressColor="Color.Primary">
     <ToolBarContent>
@@ -118,20 +118,40 @@
     private string _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
     private List<BreadcrumbItem> _breadcrumbs = new();
     private string _currentPath = "";
+    private int _currentPage;
 
     protected override async Task OnInitializedAsync()
     {
         NavManager.LocationChanged += OnLocationChanged;
         _currentPath = GetPathWithoutQuery(NavManager.Uri);
+        _currentPage = GetPageFromUrl() - 1; // MudTable uses 0-indexed pages
         await UpdatePageStateAsync();
+    }
+
+    private int GetPageFromUrl()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var pageStr = query["p"];
+        if (int.TryParse(pageStr, out var page) && page > 0)
+            return page;
+        return 1; // Default to page 1
     }
 
     private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
+        var newPath = GetPathWithoutQuery(e.Location);
+
         // Check if this is just a query string change (e.g., pagination update)
         // If so, don't reload the table as it's already being handled by ServerReload
-        var newPath = GetPathWithoutQuery(e.Location);
         if (newPath == _currentPath)
+            return;
+
+        // Check if we're navigating away from the activity list pages entirely
+        // If so, don't do any work - the component is being disposed
+        var isActivityListPage = newPath.EndsWith("/activity", StringComparison.OrdinalIgnoreCase) ||
+                                 newPath.EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
+        if (!isActivityListPage)
             return;
 
         _currentPath = newPath;
@@ -235,7 +255,12 @@
 
     private void HandleRowClick(TableRowClickEventArgs<Activity> args)
     {
-        if (args.Item != null)
-            NavManager.NavigateTo($"/activity/{args.Item.Id}");
+        // Prevent navigation while data is loading to avoid concurrent EF operations
+        if (_loading || args.Item == null)
+            return;
+
+        // Navigate using absolute path to ensure no query params are carried over
+        var uri = NavManager.ToAbsoluteUri($"/activity/{args.Item.Id}");
+        NavManager.NavigateTo(uri.AbsolutePath);
     }
 }
