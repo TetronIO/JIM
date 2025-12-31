@@ -37,6 +37,11 @@ public class PendingExport
     /// </summary>
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
+    /// <summary>
+    /// Foreign key for ConnectedSystemObject. Explicit FK ensures EF Core persists the relationship correctly.
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
     public PendingExportChangeType ChangeType { get; set; }
 
     public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = new();

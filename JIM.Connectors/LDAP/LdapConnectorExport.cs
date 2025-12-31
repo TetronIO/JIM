@@ -536,11 +536,56 @@ internal class LdapConnectorExport
     private static string? GetDistinguishedNameForUpdate(PendingExport pendingExport)
     {
         // For update/delete operations, use the CSO's secondary external ID (which is the DN for LDAP)
-        if (pendingExport.ConnectedSystemObject?.SecondaryExternalIdAttributeValue?.StringValue != null)
-            return pendingExport.ConnectedSystemObject.SecondaryExternalIdAttributeValue.StringValue;
+        var cso = pendingExport.ConnectedSystemObject;
+        if (cso != null)
+        {
+            Log.Verbose("GetDistinguishedNameForUpdate: CSO {CsoId} - SecondaryExternalIdAttributeId={SecondaryAttrId}, AttributeValues.Count={AttrCount}",
+                cso.Id, cso.SecondaryExternalIdAttributeId, cso.AttributeValues?.Count ?? 0);
+
+            if (cso.SecondaryExternalIdAttributeId.HasValue && cso.AttributeValues != null)
+            {
+                var matchingAttrValues = cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value)
+                    .ToList();
+
+                Log.Verbose("GetDistinguishedNameForUpdate: Found {Count} attribute value(s) matching SecondaryExternalIdAttributeId {AttrId}",
+                    matchingAttrValues.Count, cso.SecondaryExternalIdAttributeId.Value);
+
+                foreach (var av in matchingAttrValues)
+                {
+                    Log.Verbose("GetDistinguishedNameForUpdate: AttrValue Id={Id}, AttributeId={AttrId}, StringValue='{StringValue}'",
+                        av.Id, av.AttributeId, av.StringValue);
+                }
+            }
+
+            if (cso.SecondaryExternalIdAttributeValue?.StringValue != null)
+            {
+                Log.Debug("GetDistinguishedNameForUpdate: Using CSO SecondaryExternalIdAttributeValue: '{DN}'",
+                    cso.SecondaryExternalIdAttributeValue.StringValue);
+                return cso.SecondaryExternalIdAttributeValue.StringValue;
+            }
+
+            Log.Debug("GetDistinguishedNameForUpdate: CSO {CsoId} has no SecondaryExternalIdAttributeValue, falling back to attribute changes",
+                cso.Id);
+        }
+        else
+        {
+            Log.Debug("GetDistinguishedNameForUpdate: PendingExport {ExportId} has no ConnectedSystemObject", pendingExport.Id);
+        }
 
         // Fallback: check attribute changes for DN
-        return GetDistinguishedNameForCreate(pendingExport);
+        var dnFromAttrChanges = GetDistinguishedNameForCreate(pendingExport);
+        if (dnFromAttrChanges != null)
+        {
+            Log.Debug("GetDistinguishedNameForUpdate: Using DN from attribute changes: '{DN}'", dnFromAttrChanges);
+        }
+        else
+        {
+            Log.Warning("GetDistinguishedNameForUpdate: No DN found for pending export {ExportId} - neither CSO secondary external ID nor attribute changes contain DN",
+                pendingExport.Id);
+        }
+
+        return dnFromAttrChanges;
     }
 
     private static string? GetObjectClass(PendingExport pendingExport)

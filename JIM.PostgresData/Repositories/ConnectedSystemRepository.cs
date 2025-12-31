@@ -419,16 +419,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // start building the query for all the CSOs for a particular system.
         // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
         // The MVO AttributeValues are needed during full sync to detect attribute changes and create PendingExports.
-        var query = Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues);
+        // IMPORTANT: We also include the MVO's Attribute navigation property so that expression-based
+        // mappings (like DN generation) can access attribute values by name during export evaluation.
+        IQueryable<ConnectedSystemObject> query;
 
-        // for optimum performance, do not include attributes
-        // if you need details from the attribute, get the schema upfront and then lookup the Attribute in the schema whilst in memory
-        // using the cso.AttributeValues[n].AttributeId accessor to look up against the schema.
         if (returnAttributes)
-            query.ThenInclude(av => av.Attribute);
+        {
+            // Include Attribute navigation property for both CSO and MVO AttributeValues
+            query = Repository.Database.ConnectedSystemObjects
+                .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute);
+        }
+        else
+        {
+            // Only include MVO Attribute navigation property (required for expression-based export mappings)
+            query = Repository.Database.ConnectedSystemObjects
+                .Include(cso => cso.AttributeValues)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute);
+        }
 
         // add the Connected System filter and order by Id for consistent pagination
         // Without ordering, Skip/Take can return inconsistent results across pages
@@ -543,6 +556,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Build the query for CSOs created or modified since the given timestamp.
         // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
         // The MVO AttributeValues are needed during sync to detect attribute changes and create PendingExports.
+        // IMPORTANT: We also include the MVO's Attribute navigation property so that expression-based
+        // mappings (like DN generation) can access attribute values by name during export evaluation.
         //
         // IMPORTANT: We check BOTH Created AND LastUpdated because:
         // - Created > watermark: Captures newly created CSOs that haven't been modified yet
@@ -553,6 +568,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
             .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
                           (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
@@ -655,7 +671,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
-        return await Repository.Database.ConnectedSystemObjects
+        var result = await Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
@@ -663,6 +679,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue));
+
+        if (result == null)
+        {
+            // Log details to help debug CSO lookup failures
+            Log.Verbose("GetConnectedSystemObjectByAttributeAsync: No CSO found for ConnectedSystemId={ConnectedSystemId}, AttributeId={AttributeId}, GuidValue={GuidValue}",
+                connectedSystemId, connectedSystemAttributeId, attributeValue);
+        }
+        else
+        {
+            Log.Verbose("GetConnectedSystemObjectByAttributeAsync: Found CSO {CsoId} for ConnectedSystemId={ConnectedSystemId}, AttributeId={AttributeId}, GuidValue={GuidValue}",
+                result.Id, connectedSystemId, connectedSystemAttributeId, attributeValue);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -674,6 +704,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         // External ID matching is case-sensitive to respect connected system identity
         return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .Include(cso => cso.MetaverseObject)
@@ -747,16 +779,42 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Updates a Connected System Object and explicitly adds new attribute values to the DbContext.
+    /// This is needed when adding attribute values to a CSO that was loaded without any (e.g., PendingProvisioning).
+    /// EF Core's change tracking may not automatically detect new items added to a loaded empty collection.
+    /// </summary>
+    public async Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
+    {
+        // Explicitly mark new attribute values as Added so they are persisted
+        foreach (var attrValue in newAttributeValues)
+        {
+            Log.Verbose("UpdateConnectedSystemObjectWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
+                connectedSystemObject.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
+            Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+        }
+
+        Repository.Database.ConnectedSystemObjects.Update(connectedSystemObject);
+        await Repository.Database.SaveChangesAsync();
+
+        // Verify the attribute values were saved
+        Log.Verbose("UpdateConnectedSystemObjectWithNewAttributeValuesAsync: Saved {Count} new attribute values for CSO {CsoId}",
+            newAttributeValues.Count, connectedSystemObject.Id);
+    }
+
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
-        // this is quite a weird way of querying. it's like this so that we can unit-test import synchronisation.
-        // if we could mock JimDbContext.ConnectedSystemObjectAttributeValues from the mocked ConnectedSystemObject DbSet, then we could
-        // use the more traditional (efficient?) query commented out below.
+        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
+        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
+        // as obsolete because their external ID wouldn't be in the import results.
+        //
+        // Note: this query structure is designed for unit-test mocking compatibility.
         return (await Repository.Database.ConnectedSystemObjects.Where(cso =>
                 cso.ConnectedSystemId == connectedSystemId &&
-                cso.Type.Id == connectedSystemObjectTypeId)
-            .SelectMany(q => 
-                q.AttributeValues.Where(av => 
+                cso.Type.Id == connectedSystemObjectTypeId &&
+                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            .SelectMany(q =>
+                q.AttributeValues.Where(av =>
                         av.Attribute.Type == AttributeDataType.Text &&
                         av.Attribute.IsExternalId &&
                         av.StringValue != null)
@@ -765,12 +823,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     
     public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
-
+        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
+        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
+        // as obsolete because their external ID wouldn't be in the import results.
         return await Repository.Database.ConnectedSystemObjects.Where(cso =>
                 cso.ConnectedSystemId == connectedSystemId &&
-                cso.Type.Id == connectedSystemObjectTypeId)
-            .SelectMany(q => 
-                q.AttributeValues.Where(av => 
+                cso.Type.Id == connectedSystemObjectTypeId &&
+                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            .SelectMany(q =>
+                q.AttributeValues.Where(av =>
                         av.Attribute.Type == AttributeDataType.Number &&
                         av.Attribute.IsExternalId &&
                         av.IntValue.HasValue)
@@ -779,11 +840,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
+        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
+        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
+        // as obsolete because their external ID wouldn't be in the import results.
         return await Repository.Database.ConnectedSystemObjects.Where(cso =>
                 cso.ConnectedSystemId == connectedSystemId &&
-                cso.Type.Id == connectedSystemObjectTypeId)
-            .SelectMany(q => 
-                q.AttributeValues.Where(av => 
+                cso.Type.Id == connectedSystemObjectTypeId &&
+                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            .SelectMany(q =>
+                q.AttributeValues.Where(av =>
                         av.Attribute.Type == AttributeDataType.Guid &&
                         av.Attribute.IsExternalId &&
                         av.GuidValue.HasValue)

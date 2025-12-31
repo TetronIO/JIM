@@ -62,6 +62,16 @@ public class PendingExportReconciliationService
         {
             var confirmed = IsAttributeChangeConfirmed(connectedSystemObject, attrChange);
 
+            // Verbose logging for detailed troubleshooting - shows all comparison details
+            Log.Verbose("ReconcileAsync: Comparing attribute {AttrName} (ChangeType: {ChangeType}) for CSO {CsoId}. " +
+                "Expected: '{ExpectedValue}', Found: '{ActualValue}', Confirmed: {Confirmed}",
+                attrChange.Attribute?.Name ?? "unknown",
+                attrChange.ChangeType,
+                connectedSystemObject.Id,
+                GetExpectedValueAsString(attrChange),
+                GetImportedValueAsString(connectedSystemObject, attrChange),
+                confirmed);
+
             if (confirmed)
             {
                 result.ConfirmedChanges.Add(attrChange);
@@ -78,17 +88,23 @@ public class PendingExportReconciliationService
                 // Capture what was imported for debugging
                 attrChange.LastImportedValue = GetImportedValueAsString(connectedSystemObject, attrChange);
 
+                var expectedValue = GetExpectedValueAsString(attrChange);
+
                 if (attrChange.Status == PendingExportAttributeChangeStatus.Failed)
                 {
                     result.FailedChanges.Add(attrChange);
-                    Log.Warning("ReconcileAsync: Attribute change {AttrChangeId} (Attr: {AttrName}) failed after {Attempts} attempts. Imported value: {ImportedValue}",
-                        attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount, attrChange.LastImportedValue);
+                    Log.Warning("ReconcileAsync: Attribute change {AttrChangeId} (Attr: {AttrName}) failed after {Attempts} attempts. " +
+                        "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
+                        attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
+                        expectedValue, attrChange.LastImportedValue);
                 }
                 else
                 {
                     result.RetryChanges.Add(attrChange);
-                    Log.Information("ReconcileAsync: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). Imported value: {ImportedValue}",
-                        attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount, attrChange.LastImportedValue);
+                    Log.Information("ReconcileAsync: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
+                        "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
+                        attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
+                        expectedValue, attrChange.LastImportedValue);
                 }
             }
         }
@@ -98,6 +114,10 @@ public class PendingExportReconciliationService
         {
             pendingExport.AttributeValueChanges.Remove(confirmed);
         }
+
+        // If this was a Create and the Secondary External ID attribute was confirmed, transition to Update
+        // This ensures remaining attribute changes are processed as updates, not creates
+        TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
 
         // If all attribute changes are confirmed/removed, delete the pending export
         // (Only delete if there are no pending, not confirmed, or failed changes left)
@@ -224,12 +244,65 @@ public class PendingExportReconciliationService
     }
 
     /// <summary>
+    /// Gets the expected (exported) value as a string for debugging purposes.
+    /// </summary>
+    private static string? GetExpectedValueAsString(PendingExportAttributeValueChange attrChange)
+    {
+        var attrType = attrChange.Attribute?.Type ?? AttributeDataType.NotSet;
+
+        return attrType switch
+        {
+            AttributeDataType.Text => attrChange.StringValue ?? "(null)",
+            AttributeDataType.Number => attrChange.IntValue?.ToString() ?? "(null)",
+            AttributeDataType.DateTime => attrChange.DateTimeValue?.ToString("O") ?? "(null)",
+            AttributeDataType.Reference => attrChange.UnresolvedReferenceValue ?? "(null)",
+            AttributeDataType.Binary => attrChange.ByteValue != null ? $"(binary, {attrChange.ByteValue.Length} bytes)" : "(null)",
+            _ => "(unknown type)"
+        };
+    }
+
+    /// <summary>
     /// Determines if an attribute change should be marked as Failed based on retry count.
     /// </summary>
     private static bool ShouldMarkAsFailed(PendingExportAttributeValueChange attrChange)
     {
         // ExportAttemptCount was already incremented during export, so compare directly
         return attrChange.ExportAttemptCount >= DefaultMaxRetries;
+    }
+
+    /// <summary>
+    /// If the pending export was a Create and the Secondary External ID attribute has been confirmed,
+    /// transition it to an Update. This is necessary because once an object is created, any remaining
+    /// unconfirmed attribute changes should be applied as updates, not as part of a create operation.
+    /// Connectors require the Secondary External ID (e.g., distinguishedName for LDAP) in the attribute
+    /// changes for Create operations, but once confirmed, it is removed. Without this transition, retry
+    /// attempts would fail because the connector cannot determine where to create the object.
+    /// </summary>
+    private static void TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(PendingExport pendingExport, PendingExportReconciliationResult result)
+    {
+        // Only applies to Create pending exports
+        if (pendingExport.ChangeType != PendingExportChangeType.Create)
+            return;
+
+        // Check if the Secondary External ID attribute was among the confirmed changes
+        var secondaryExternalIdWasConfirmed = result.ConfirmedChanges.Any(ac =>
+            ac.Attribute?.IsSecondaryExternalId == true);
+
+        if (!secondaryExternalIdWasConfirmed)
+            return;
+
+        // The object was successfully created (Secondary External ID confirmed), but there are remaining
+        // attribute changes that weren't confirmed. Transition to Update so these can be applied as modifications.
+        if (pendingExport.AttributeValueChanges.Count > 0)
+        {
+            var confirmedAttrName = result.ConfirmedChanges
+                .FirstOrDefault(ac => ac.Attribute?.IsSecondaryExternalId == true)?.Attribute?.Name ?? "unknown";
+
+            pendingExport.ChangeType = PendingExportChangeType.Update;
+            Log.Information("ReconcileAsync: Transitioned pending export {ExportId} from Create to Update. " +
+                "Secondary External ID attribute '{AttributeName}' was confirmed but {RemainingCount} attribute changes remain.",
+                pendingExport.Id, confirmedAttrName, pendingExport.AttributeValueChanges.Count);
+        }
     }
 
     /// <summary>

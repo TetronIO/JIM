@@ -460,6 +460,15 @@ public class SyncImportTaskProcessor
                             importObject.ObjectType, connectedSystemObject.Id);
                     }
 
+                    // Transition PendingProvisioning CSOs to Normal status now that import confirms they exist
+                    // in the connected system. This is essential for proper reconciliation and subsequent lookups.
+                    if (connectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+                    {
+                        Log.Information("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in connected system.",
+                            connectedSystemObject.Id);
+                        connectedSystemObject.Status = ConnectedSystemObjectStatus.Normal;
+                    }
+
                     // existing connected system object - update from import object if necessary
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                     activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;

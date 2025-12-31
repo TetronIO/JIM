@@ -525,6 +525,7 @@ public class ExportExecutionServer
     private async Task UpdateCsoAfterSuccessfulExportAsync(ConnectedSystemObject cso, ExportResult? exportResult = null)
     {
         var needsUpdate = false;
+        var newAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
 
         // Update status from PendingProvisioning to Normal
         if (cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
@@ -550,6 +551,7 @@ public class ExportExecutionServer
                     AttributeId = cso.ExternalIdAttributeId
                 };
                 cso.AttributeValues.Add(externalIdAttrValue);
+                newAttributeValues.Add(externalIdAttrValue);
             }
 
             // Set the external ID value - try to parse as GUID first, then string
@@ -583,6 +585,7 @@ public class ExportExecutionServer
                     AttributeId = cso.SecondaryExternalIdAttributeId.Value
                 };
                 cso.AttributeValues.Add(secondaryExternalIdAttrValue);
+                newAttributeValues.Add(secondaryExternalIdAttrValue);
             }
 
             secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
@@ -593,7 +596,10 @@ public class ExportExecutionServer
 
         if (needsUpdate)
         {
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+            // Explicitly add new attribute values to ensure they are tracked by EF Core
+            // This handles the case where the CSO was loaded without attribute values (PendingProvisioning)
+            // and we're adding new values that need to be persisted
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(cso, newAttributeValues);
             Log.Information("UpdateCsoAfterSuccessfulExportAsync: Updated CSO {CsoId}", cso.Id);
         }
     }

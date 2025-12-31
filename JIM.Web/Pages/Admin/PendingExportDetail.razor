@@ -192,6 +192,7 @@
                             <HeaderContent>
                                 <MudTh>Attribute</MudTh>
                                 <MudTh>Change Type</MudTh>
+                                <MudTh>Status</MudTh>
                                 <MudTh>Value</MudTh>
                             </HeaderContent>
                             <RowTemplate>
@@ -199,6 +200,11 @@
                                 <MudTd DataLabel="Change Type">
                                     <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)" Size="Size.Small">
                                         @context.ChangeType
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Status">
+                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)" Size="Size.Small">
+                                        @context.Status.ToString().SplitOnCapitalLetters()
                                     </MudChip>
                                 </MudTd>
                                 <MudTd DataLabel="Value">@GetAttributeValue(context)</MudTd>
@@ -342,6 +348,18 @@ else
             PendingExportAttributeChangeType.Update => MudBlazor.Color.Info,
             PendingExportAttributeChangeType.Remove => MudBlazor.Color.Warning,
             PendingExportAttributeChangeType.RemoveAll => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default,
+        };
+    }
+
+    private static MudBlazor.Color GetAttributeChangeStatusColor(PendingExportAttributeChangeStatus status)
+    {
+        return status switch
+        {
+            PendingExportAttributeChangeStatus.Pending => MudBlazor.Color.Default,
+            PendingExportAttributeChangeStatus.ExportedPendingConfirmation => MudBlazor.Color.Info,
+            PendingExportAttributeChangeStatus.ExportedNotConfirmed => MudBlazor.Color.Warning,
+            PendingExportAttributeChangeStatus.Failed => MudBlazor.Color.Error,
             _ => MudBlazor.Color.Default,
         };
     }

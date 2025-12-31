@@ -226,6 +226,14 @@ public class JimDbContext : DbContext
             .HasForeignKey(pe => pe.SourceMetaverseObjectId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // PendingExport: relationship to Connected System Object
+        // Explicit FK configuration ensures the property is used instead of a shadow property
+        modelBuilder.Entity<PendingExport>()
+            .HasOne(pe => pe.ConnectedSystemObject)
+            .WithMany()
+            .HasForeignKey(pe => pe.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // DeferredReference: relationships for reference resolution
         modelBuilder.Entity<DeferredReference>()
             .HasOne(dr => dr.SourceCso)

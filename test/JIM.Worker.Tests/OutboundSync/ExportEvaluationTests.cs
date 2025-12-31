@@ -213,7 +213,7 @@ public class ExportEvaluationTests
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Count, Is.GreaterThan(0), "Expected delete PendingExport for Provisioned CSO");
         Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
-        Assert.That(result[0].ConnectedSystemObject?.Id, Is.EqualTo(provisionedCso.Id));
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(provisionedCso.Id));
     }
 
     /// <summary>
@@ -433,7 +433,7 @@ public class ExportEvaluationTests
         var pendingExport = result[0];
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
             "PendingExport should be a Create operation");
-        Assert.That(pendingExport.ConnectedSystemObject?.Id, Is.EqualTo(newCso.Id),
+        Assert.That(pendingExport.ConnectedSystemObjectId, Is.EqualTo(newCso.Id),
             "PendingExport should reference the newly created CSO");
     }
 
@@ -938,7 +938,7 @@ public class ExportEvaluationTests
         // Assert - Delete pending export should be created
         Assert.That(result, Has.Count.EqualTo(1), "Delete action should create a delete pending export");
         Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Pending export should be a Delete operation");
-        Assert.That(result[0].ConnectedSystemObject?.Id, Is.EqualTo(existingCso.Id), "Pending export should reference the CSO");
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(existingCso.Id), "Pending export should reference the CSO");
     }
 
     /// <summary>
@@ -1083,6 +1083,408 @@ public class ExportEvaluationTests
         // Assert - LastConnectorDisconnectedDate should be set
         Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null, "LastConnectorDisconnectedDate should be set when last connector disconnected");
         Assert.That(mvo.ConnectedSystemObjects, Has.Count.EqualTo(0), "MVO should have no connectors after disconnect");
+    }
+
+    #endregion
+
+    #region Create vs Update Attribute Inclusion Tests
+
+    /// <summary>
+    /// Tests that Create operations include ALL mapped attributes, not just changed ones.
+    /// This ensures new objects are fully provisioned with all their attribute values.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_ForCreateOperation_IncludesAllMappedAttributesAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        // Set up multiple MVO attribute values
+        var displayNameAttr = mvo.Type.Attributes.Single(a => a.Name == "Display Name");
+        var employeeIdAttr = mvo.Type.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        mvo.AttributeValues.Clear();
+        var displayNameValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameAttr,
+            AttributeId = displayNameAttr.Id,
+            StringValue = "Test User"
+        };
+        var employeeIdValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "E12345"
+        };
+        mvo.AttributeValues.Add(displayNameValue);
+        mvo.AttributeValues.Add(employeeIdValue);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Add target attributes
+        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1001,
+            ConnectedSystemObjectType = targetUserType,
+            Name = "displayName",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        var targetEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1002,
+            ConnectedSystemObjectType = targetUserType,
+            Name = "employeeID",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        targetUserType.Attributes.Add(targetDisplayNameAttr);
+        targetUserType.Attributes.Add(targetEmployeeIdAttr);
+
+        // Configure export rule with multiple mappings
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.AttributeFlowRules.Clear();
+
+        // Add mapping for displayName
+        var displayNameMapping = new SyncRuleMapping
+        {
+            Id = 2001,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id
+        };
+        displayNameMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 3001,
+            Order = 1,
+            MetaverseAttribute = displayNameAttr,
+            MetaverseAttributeId = displayNameAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(displayNameMapping);
+
+        // Add mapping for employeeID
+        var employeeIdMapping = new SyncRuleMapping
+        {
+            Id = 2002,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = targetEmployeeIdAttr.Id
+        };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 3002,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
+
+        // Ensure no CSO exists (so this will be a Create)
+        ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
+
+        // Track pending exports and CSOs created
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
+            .Callback((ConnectedSystemObject entity) =>
+            {
+                if (entity.Id == Guid.Empty) entity.Id = Guid.NewGuid();
+                ConnectedSystemObjectsData.Add(entity);
+            });
+
+        // Only pass ONE changed attribute (displayName), but both should be included for Create
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { displayNameValue };
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1), "Should create one pending export");
+        var pendingExport = result[0];
+
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+            "Should be a Create operation since no CSO exists");
+
+        // CRITICAL: For Create, ALL mapped attributes should be included, not just the changed one
+        Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(2),
+            "Create operation should include ALL mapped attributes (2), not just changed ones (1)");
+
+        var displayNameChange = pendingExport.AttributeValueChanges.FirstOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+        var employeeIdChange = pendingExport.AttributeValueChanges.FirstOrDefault(c => c.AttributeId == targetEmployeeIdAttr.Id);
+
+        Assert.That(displayNameChange, Is.Not.Null, "displayName attribute should be included");
+        Assert.That(displayNameChange!.StringValue, Is.EqualTo("Test User"));
+
+        Assert.That(employeeIdChange, Is.Not.Null, "employeeID attribute should be included (even though not in changedAttributes)");
+        Assert.That(employeeIdChange!.StringValue, Is.EqualTo("E12345"));
+    }
+
+    /// <summary>
+    /// Tests that Update operations include ONLY the changed attributes, not all mapped attributes.
+    /// This ensures updates are efficient and only modify what actually changed.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_ForUpdateOperation_IncludesOnlyChangedAttributesAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        // Set up multiple MVO attribute values
+        var displayNameAttr = mvo.Type.Attributes.Single(a => a.Name == "Display Name");
+        var employeeIdAttr = mvo.Type.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        mvo.AttributeValues.Clear();
+        var displayNameValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameAttr,
+            AttributeId = displayNameAttr.Id,
+            StringValue = "Updated User Name"
+        };
+        var employeeIdValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "E12345"
+        };
+        mvo.AttributeValues.Add(displayNameValue);
+        mvo.AttributeValues.Add(employeeIdValue);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Add target attributes
+        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1001,
+            ConnectedSystemObjectType = targetUserType,
+            Name = "displayName",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        var targetEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1002,
+            ConnectedSystemObjectType = targetUserType,
+            Name = "employeeID",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        targetUserType.Attributes.Add(targetDisplayNameAttr);
+        targetUserType.Attributes.Add(targetEmployeeIdAttr);
+
+        // Create an existing CSO (so this will be an Update, not Create)
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow.AddDays(-1),
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(existingCso);
+
+        // Configure export rule with multiple mappings
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.AttributeFlowRules.Clear();
+
+        // Add mapping for displayName
+        var displayNameMapping = new SyncRuleMapping
+        {
+            Id = 2001,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id
+        };
+        displayNameMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 3001,
+            Order = 1,
+            MetaverseAttribute = displayNameAttr,
+            MetaverseAttributeId = displayNameAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(displayNameMapping);
+
+        // Add mapping for employeeID
+        var employeeIdMapping = new SyncRuleMapping
+        {
+            Id = 2002,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = targetEmployeeIdAttr.Id
+        };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 3002,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
+
+        // Track pending exports created
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        // Only pass ONE changed attribute (displayName)
+        // For Update, only this one should be included
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { displayNameValue };
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1), "Should create one pending export");
+        var pendingExport = result[0];
+
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "Should be an Update operation since CSO exists");
+
+        // CRITICAL: For Update, ONLY the changed attribute should be included
+        Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(1),
+            "Update operation should include ONLY changed attributes (1), not all mapped ones (2)");
+
+        var displayNameChange = pendingExport.AttributeValueChanges.FirstOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+        var employeeIdChange = pendingExport.AttributeValueChanges.FirstOrDefault(c => c.AttributeId == targetEmployeeIdAttr.Id);
+
+        Assert.That(displayNameChange, Is.Not.Null, "displayName attribute should be included (it changed)");
+        Assert.That(displayNameChange!.StringValue, Is.EqualTo("Updated User Name"));
+
+        Assert.That(employeeIdChange, Is.Null, "employeeID attribute should NOT be included (it didn't change)");
+    }
+
+    /// <summary>
+    /// Tests that Update operations with NO changed attributes that have mappings
+    /// do not create a pending export.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_ForUpdateWithNoMappedChanges_DoesNotCreateExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // Create an existing CSO
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow.AddDays(-1),
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(existingCso);
+
+        // Configure export rule with a mapping for displayName
+        var displayNameAttr = mvo.Type.Attributes.Single(a => a.Name == "Display Name");
+        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1001,
+            ConnectedSystemObjectType = targetUserType,
+            Name = "displayName",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        targetUserType.Attributes.Add(targetDisplayNameAttr);
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.AttributeFlowRules.Clear();
+
+        // Add mapping for displayName only
+        var displayNameMapping = new SyncRuleMapping
+        {
+            Id = 2001,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id
+        };
+        displayNameMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 3001,
+            Order = 1,
+            MetaverseAttribute = displayNameAttr,
+            MetaverseAttributeId = displayNameAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(displayNameMapping);
+
+        // Track pending exports created
+        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
+            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
+
+        // Pass an attribute that is NOT mapped (Employee ID changed, but it's not in the export rule mappings)
+        var employeeIdAttr = mvo.Type.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var unmappedChangedValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "NewEmployeeId"
+        };
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { unmappedChangedValue };
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert - No pending export should be created for Update with no mapped attribute changes
+        Assert.That(result, Has.Count.EqualTo(0),
+            "No pending export should be created when changed attributes don't have export mappings");
     }
 
     #endregion

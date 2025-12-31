@@ -327,6 +327,12 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile);
     public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
     public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+
+    /// <summary>
+    /// Updates a Connected System Object and explicitly adds new attribute values to the DbContext.
+    /// This is needed when adding attribute values to a CSO that was loaded without any (e.g., PendingProvisioning).
+    /// </summary>
+    public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues);
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
     public Task UpdateSyncRuleAsync(SyncRule syncRule);
 

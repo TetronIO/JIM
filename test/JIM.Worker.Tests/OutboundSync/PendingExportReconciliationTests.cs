@@ -626,6 +626,186 @@ public class PendingExportReconciliationTests
 
     #endregion
 
+    #region Create to Update Transition Tests
+
+    /// <summary>
+    /// Tests that a Create pending export transitions to Update when the Secondary External ID attribute
+    /// is confirmed but other attribute changes remain. This is critical for retry scenarios where the
+    /// object was successfully created (Secondary External ID confirmed) but some attributes weren't
+    /// applied correctly. Without this transition, retries would fail because connectors require the
+    /// Secondary External ID in attribute changes for Create operations.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_CreateWithSecondaryExternalIdConfirmed_TransitionsToUpdateAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.Exported);
+        pendingExport.ChangeType = PendingExportChangeType.Create; // This is a Create operation
+
+        // Add Secondary External ID attribute (e.g., distinguishedName for LDAP systems)
+        var secondaryExtIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 999,
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = TargetUserType,
+            IsSecondaryExternalId = true
+        };
+        TargetUserType.Attributes.Add(secondaryExtIdAttr);
+
+        // Secondary External ID attribute change - will be confirmed
+        var secondaryExtIdChange = CreateTestAttributeChange(pendingExport, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
+
+        // Other attribute change - will NOT be confirmed (simulating a retry scenario)
+        var displayNameChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
+
+        // Import confirms the Secondary External ID (object was created successfully)
+        AddCsoAttributeValue(cso, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
+        // But displayName doesn't match - needs retry
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Secondary External ID should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "DisplayName should need retry");
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "PendingExport should transition from Create to Update after Secondary External ID is confirmed");
+        Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1),
+            "Only the unconfirmed attribute change should remain");
+    }
+
+    /// <summary>
+    /// Tests that a Create pending export does NOT transition to Update when the Secondary External ID
+    /// is NOT confirmed.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_CreateWithSecondaryExternalIdNotConfirmed_RemainsCreateAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.Exported);
+        pendingExport.ChangeType = PendingExportChangeType.Create;
+
+        // Add Secondary External ID attribute
+        var secondaryExtIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 998,
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = TargetUserType,
+            IsSecondaryExternalId = true
+        };
+        TargetUserType.Attributes.Add(secondaryExtIdAttr);
+
+        // Secondary External ID attribute change - will NOT be confirmed
+        var secondaryExtIdChange = CreateTestAttributeChange(pendingExport, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
+
+        // Other attribute change - also won't be confirmed
+        var displayNameChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
+
+        // Nothing is on the CSO (object creation failed)
+        // Don't add any attribute values
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "Nothing should be confirmed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(2), "Both changes should need retry");
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+            "PendingExport should remain as Create when Secondary External ID is not confirmed");
+    }
+
+    /// <summary>
+    /// Tests that an Update pending export is not affected by the Create->Update transition logic.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_UpdateWithSecondaryExternalIdConfirmed_RemainsUpdateAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.Exported);
+        pendingExport.ChangeType = PendingExportChangeType.Update; // Already an Update
+
+        // Add Secondary External ID attribute
+        var secondaryExtIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 997,
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = TargetUserType,
+            IsSecondaryExternalId = true
+        };
+        TargetUserType.Attributes.Add(secondaryExtIdAttr);
+
+        // Secondary External ID attribute change (rename scenario) - will be confirmed
+        var secondaryExtIdChange = CreateTestAttributeChange(pendingExport, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
+
+        // Import confirms the Secondary External ID
+        AddCsoAttributeValue(cso, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Secondary External ID should be confirmed");
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "PendingExport should remain as Update");
+        Assert.That(result.PendingExportDeleted, Is.True,
+            "PendingExport should be deleted when all changes confirmed");
+    }
+
+    /// <summary>
+    /// Tests that a Create with only Secondary External ID confirmed (and no other changes) is deleted,
+    /// not transitioned.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_CreateWithOnlySecondaryExternalIdConfirmed_IsDeletedAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.Exported);
+        pendingExport.ChangeType = PendingExportChangeType.Create;
+
+        // Add Secondary External ID attribute
+        var secondaryExtIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 996,
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = TargetUserType,
+            IsSecondaryExternalId = true
+        };
+        TargetUserType.Attributes.Add(secondaryExtIdAttr);
+
+        // Only the Secondary External ID attribute change
+        var secondaryExtIdChange = CreateTestAttributeChange(pendingExport, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
+
+        // Import confirms the Secondary External ID
+        AddCsoAttributeValue(cso, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Secondary External ID should be confirmed");
+        Assert.That(result.PendingExportDeleted, Is.True,
+            "PendingExport should be deleted when all changes (just Secondary External ID) are confirmed");
+    }
+
+    #endregion
+
     #region Integer Value Tests
 
     /// <summary>

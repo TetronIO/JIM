@@ -377,11 +377,13 @@ public class ExportEvaluationServer
                 Log.Information("HandleOutboundDeprovisioningAsync: Creating delete PendingExport for CSO {CsoId} (OutboundDeprovisionAction=Delete)",
                     cso.Id);
 
+                // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
+                // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
                 var pendingExport = new PendingExport
                 {
                     Id = Guid.NewGuid(),
                     ConnectedSystemId = cso.ConnectedSystemId,
-                    ConnectedSystemObject = cso,
+                    ConnectedSystemObjectId = cso.Id,
                     ChangeType = PendingExportChangeType.Delete,
                     Status = PendingExportStatus.Pending,
                     SourceMetaverseObjectId = mvo.Id,
@@ -423,11 +425,13 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
+            // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
             var pendingExport = new PendingExport
             {
                 Id = Guid.NewGuid(),
                 ConnectedSystemId = cso.ConnectedSystemId,
-                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
                 ChangeType = PendingExportChangeType.Delete,
                 Status = PendingExportStatus.Pending,
                 SourceMetaverseObjectId = mvo.Id,
@@ -504,7 +508,7 @@ public class ExportEvaluationServer
         }
 
         // Create attribute value changes based on the export rule mappings
-        var attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes);
+        var attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType);
 
         if (attributeChanges.Count == 0 && changeType == PendingExportChangeType.Update)
         {
@@ -513,11 +517,13 @@ public class ExportEvaluationServer
             return null;
         }
 
+        // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
+        // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
-            ConnectedSystemObject = csoForExport,
+            ConnectedSystemObjectId = csoForExport?.Id,
             ChangeType = changeType,
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
@@ -573,7 +579,7 @@ public class ExportEvaluationServer
         }
 
         // Create attribute value changes based on the export rule mappings
-        var attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes);
+        var attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType);
 
         if (attributeChanges.Count == 0 && changeType == PendingExportChangeType.Update)
         {
@@ -582,11 +588,19 @@ public class ExportEvaluationServer
             return null;
         }
 
+        var csoId = csoForExport?.Id;
+        Log.Verbose("CreateOrUpdatePendingExportAsync: Creating pending export. csoForExport={CsoForExport}, csoId={CsoId}, changeType={ChangeType}",
+            csoForExport != null ? csoForExport.Id.ToString() : "null", csoId?.ToString() ?? "null", changeType);
+
+        // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
+        // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
+        // When both are set, EF Core's relationship fixup may use the navigation property's tracking state
+        // to determine the FK value, which can result in null FKs for entities loaded from different contexts.
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
-            ConnectedSystemObject = csoForExport,
+            ConnectedSystemObjectId = csoId,
             ChangeType = changeType,
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
@@ -598,8 +612,8 @@ public class ExportEvaluationServer
         // which leads to worse performance than individual saves due to GC overhead
         await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
 
-        Log.Debug("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes",
-            changeType, pendingExport.Id, mvo.Id, exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(), attributeChanges.Count);
+        Log.Debug("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes, CsoId={CsoId}",
+            changeType, pendingExport.Id, mvo.Id, exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(), attributeChanges.Count, pendingExport.ConnectedSystemObjectId);
 
         return pendingExport;
     }
@@ -620,15 +634,16 @@ public class ExportEvaluationServer
         var secondaryExternalIdAttribute = exportRule.ConnectedSystemObjectType.Attributes
             .FirstOrDefault(a => a.IsSecondaryExternalId);
 
+        // Only set FK properties, not navigation properties, to avoid EF Core change tracker conflicts.
+        // When both are set on a new entity, EF Core might try to track the related entity (MVO)
+        // which can cause issues if that entity is already tracked in a different state.
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
             TypeId = exportRule.ConnectedSystemObjectType.Id,
-            Type = exportRule.ConnectedSystemObjectType,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            MetaverseObject = mvo,
             MetaverseObjectId = mvo.Id,
             DateJoined = DateTime.UtcNow,
             Created = DateTime.UtcNow,
@@ -636,8 +651,10 @@ public class ExportEvaluationServer
             SecondaryExternalIdAttributeId = secondaryExternalIdAttribute?.Id
         };
 
-        // Add the CSO to the MVO's collection for navigation
-        mvo.ConnectedSystemObjects.Add(cso);
+        // Note: We don't add the CSO to the MVO's collection here because:
+        // 1. The MVO might be loaded with tracking, which could interfere with the save
+        // 2. The navigation collection is not needed for our purposes - we use the FK
+        // The relationship is established via MetaverseObjectId = mvo.Id
 
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
 
@@ -653,13 +670,17 @@ public class ExportEvaluationServer
     /// For export rules:
     /// - Sources[].MetaverseAttribute = the source MVO attribute
     /// - TargetConnectedSystemAttribute = the target CSO attribute
+    /// For Create operations: includes all mapped attributes (to provision the full object)
+    /// For Update operations: only includes attributes that actually changed
     /// </summary>
     private List<PendingExportAttributeValueChange> CreateAttributeValueChanges(
         MetaverseObject mvo,
         SyncRule exportRule,
-        List<MetaverseObjectAttributeValue> changedAttributes)
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        PendingExportChangeType changeType)
     {
         var changes = new List<PendingExportAttributeValueChange>();
+        var isCreateOperation = changeType == PendingExportChangeType.Create;
 
         foreach (var mapping in exportRule.AttributeFlowRules)
         {
@@ -675,14 +696,31 @@ public class ExportEvaluationServer
                 // Handle expression-based mappings
                 if (!string.IsNullOrWhiteSpace(source.Expression))
                 {
+                    // For Update operations with expressions, we need to check if any source attributes changed
+                    // For simplicity, always include expression results for Create, but for Update we include them
+                    // because expression results may depend on the changed attributes
+                    // TODO: Consider optimising by tracking which MVO attributes the expression depends on
+
                     try
                     {
                         // Build expression context with MVO attributes
                         var mvAttributes = BuildAttributeDictionary(mvo);
+
+                        Log.Debug("CreateAttributeValueChanges: Evaluating expression for MVO {MvoId}. " +
+                            "Expression: '{Expression}', Available attributes: [{Attributes}]",
+                            mvo.Id, source.Expression, string.Join(", ", mvAttributes.Keys));
+
                         var context = new ExpressionContext(mvAttributes, null);
 
                         // Evaluate the expression
                         var result = ExpressionEvaluator.Evaluate(source.Expression, context);
+
+                        if (result == null)
+                        {
+                            Log.Warning("CreateAttributeValueChanges: Expression '{Expression}' for MVO {MvoId} returned null. " +
+                                "Available attributes: [{Attributes}]",
+                                source.Expression, mvo.Id, string.Join(", ", mvAttributes.Keys));
+                        }
 
                         if (result != null)
                         {
@@ -743,9 +781,19 @@ public class ExportEvaluationServer
                 var changedValue = changedAttributes
                     .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
 
-                // For Create operations, include all mapped attributes, not just changed ones
-                var mvoValue = changedValue ?? mvo.AttributeValues
-                    .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+                MetaverseObjectAttributeValue? mvoValue;
+                if (isCreateOperation)
+                {
+                    // For Create operations, include all mapped attributes (not just changed ones)
+                    // to ensure the new object is fully provisioned
+                    mvoValue = changedValue ?? mvo.AttributeValues
+                        .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+                }
+                else
+                {
+                    // For Update operations, only include attributes that actually changed
+                    mvoValue = changedValue;
+                }
 
                 if (mvoValue == null)
                     continue;
@@ -808,12 +856,21 @@ public class ExportEvaluationServer
         var attributes = new Dictionary<string, object?>();
 
         if (mvo.Type == null)
+        {
+            Log.Warning("BuildAttributeDictionary: MVO {MvoId} has null Type, cannot build attribute dictionary", mvo.Id);
             return attributes;
+        }
 
         foreach (var attributeValue in mvo.AttributeValues)
         {
             if (attributeValue.Attribute == null)
+            {
+                // Log warning for diagnostic purposes - this indicates a missing Include or EF tracking issue
+                Log.Warning("BuildAttributeDictionary: MVO {MvoId} has attribute value with AttributeId={AttrId} but Attribute navigation property is null. " +
+                    "This will cause expression-based mappings to fail for this attribute.",
+                    mvo.Id, attributeValue.AttributeId);
                 continue;
+            }
 
             var attributeName = attributeValue.Attribute.Name;
 
