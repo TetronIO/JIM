@@ -147,6 +147,11 @@ JIM is approximately 94% complete towards MVP status with core identity synchron
 - Air-gapped deployment bundles with SHA256 checksums
 - PowerShell module auto-published to PSGallery
 
+**Testing:**
+- Unit tests for models, utilities, and API endpoints
+- Worker tests for synchronisation logic
+- Workflow tests for multi-step sync scenarios (import → sync → export → confirming import)
+
 **In Progress:**
 - Scheduler service for automated run profile execution (critical path for MVP)
 - Full RBAC model with additional roles

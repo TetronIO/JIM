@@ -1597,6 +1597,35 @@ pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
 
 ---
 
+## Workflow Tests vs Integration Tests
+
+For many debugging and development scenarios, **Workflow Tests** provide a faster alternative to full integration tests:
+
+| Aspect | Workflow Tests | Integration Tests |
+|--------|---------------|-------------------|
+| **Execution time** | Seconds | Minutes to hours |
+| **External dependencies** | None (in-memory DB, mock connectors) | Real systems (Samba AD, databases) |
+| **State inspection** | Snapshots after each step | Limited to logs and queries |
+| **Debugging** | Easy - run in IDE with breakpoints | Complex - Docker containers |
+| **Scale testing** | 1000+ objects in seconds | Depends on external system performance |
+| **Use case** | Logic debugging, regression testing | End-to-end validation, production readiness |
+
+**When to use Workflow Tests:**
+- Debugging sync logic issues (e.g., issue #234)
+- Testing multi-step scenarios (import → sync → export → confirming import)
+- Validating state transitions (CSO status changes, PendingExport reconciliation)
+- Fast iteration during development
+
+**When to use Integration Tests:**
+- Validating real connector behaviour (LDAP, CSV, database)
+- Testing with real external systems
+- Pre-release validation
+- Performance baseline measurement
+
+See [Developer Guide - Workflow Tests](DEVELOPER_GUIDE.md#workflow-tests) for details on writing and running workflow tests.
+
+---
+
 ## Related Documentation
 
 - [MVP Definition](MVP_DEFINITION.md) - Overall project status
@@ -1605,3 +1634,4 @@ pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
 - [GitHub Issue #170](https://github.com/TetronIO/JIM/issues/170) - SQL Database Connector (Phase 2 dependency)
 - [GitHub Issue #175](https://github.com/TetronIO/JIM/issues/175) - API Key Authentication (required for non-interactive testing)
 - [GitHub Issue #176](https://github.com/TetronIO/JIM/issues/176) - PowerShell Module (required for JIM configuration)
+- [GitHub Issue #238](https://github.com/TetronIO/JIM/issues/238) - Workflow Test Framework
