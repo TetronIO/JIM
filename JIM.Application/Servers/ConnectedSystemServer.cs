@@ -1504,10 +1504,11 @@ public class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = objectType.Name,
+            TargetName = objectType.ConnectedSystem?.Name ?? "Unknown",
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = objectType.ConnectedSystemId
+            ConnectedSystemId = objectType.ConnectedSystemId,
+            Message = $"Update object type: {objectType.Name}"
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -1542,7 +1543,8 @@ public class ConnectedSystemServer
             TargetName = attribute.ConnectedSystemObjectType?.ConnectedSystem?.Name ?? "Unknown",
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId
+            ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
+            Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -1565,10 +1567,11 @@ public class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = objectType.Name,
+            TargetName = objectType.ConnectedSystem?.Name ?? "Unknown",
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = objectType.ConnectedSystemId
+            ConnectedSystemId = objectType.ConnectedSystemId,
+            Message = $"Update object type: {objectType.Name}"
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -1594,7 +1597,8 @@ public class ConnectedSystemServer
             TargetName = attribute.ConnectedSystemObjectType?.ConnectedSystem?.Name ?? "Unknown",
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId
+            ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId,
+            Message = $"Update attribute: {attribute.ConnectedSystemObjectType?.Name}.{attribute.Name}"
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -2508,6 +2512,7 @@ public class ConnectedSystemServer
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
         {
+            TargetName = connectedSystemRunProfile.Name,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemRunProfileId = connectedSystemRunProfile.Id,
