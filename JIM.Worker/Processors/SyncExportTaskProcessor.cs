@@ -140,7 +140,8 @@ public class SyncExportTaskProcessor
                     _connectedSystem,
                     result.CreatedContainerDns,
                     _initiatedByApiKey,
-                    _initiatedByMetaverseObject);
+                    _initiatedByMetaverseObject,
+                    _activity);
 
                 // Update completion message to include container count
                 var updatedMessage = $"{_activity.Message} | {result.CreatedContainerDns.Count} container(s) auto-selected";

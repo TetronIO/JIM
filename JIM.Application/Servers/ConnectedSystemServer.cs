@@ -1220,11 +1220,13 @@ public class ConnectedSystemServer
     /// <param name="createdContainerDns">List of container DNs that were created during export.</param>
     /// <param name="initiatedByApiKey">Optional API key that initiated this operation.</param>
     /// <param name="initiatedByUser">Optional user that initiated this operation.</param>
+    /// <param name="parentActivity">Optional parent activity to link this operation to (e.g., the export activity).</param>
     public async Task RefreshAndAutoSelectContainersAsync(
         ConnectedSystem connectedSystem,
         IReadOnlyList<string> createdContainerDns,
         ApiKey? initiatedByApiKey = null,
-        MetaverseObject? initiatedByUser = null)
+        MetaverseObject? initiatedByUser = null,
+        Activity? parentActivity = null)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -1234,13 +1236,15 @@ public class ConnectedSystemServer
         Log.Information("RefreshAndAutoSelectContainersAsync: Processing {Count} created container(s) for system {SystemName}",
             createdContainerDns.Count, connectedSystem.Name);
 
-        // Create activity for tracking
+        // Create activity for tracking - link to parent activity if provided so this doesn't
+        // appear as a separate top-level activity in the Activity list
         var activity = new Activity
         {
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
+            ParentActivityId = parentActivity?.Id,
             Message = $"Auto-selecting {createdContainerDns.Count} container(s) created during export"
         };
 
