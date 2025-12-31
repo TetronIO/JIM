@@ -485,14 +485,15 @@ try {
         foreach ($attr in $csvUserType.attributes) {
             $csvAttrUpdates[$attr.id] = @{ selected = $true }
         }
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -AttributeUpdates $csvAttrUpdates | Out-Null
+        $csvResult = Set-JIMConnectedSystemAttribute -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -AttributeUpdates $csvAttrUpdates -PassThru -ErrorAction Stop
+        Write-Host "  ✓ Selected $($csvResult.updatedCount) CSV attributes" -ForegroundColor Green
 
         $ldapAttrUpdates = @{}
         foreach ($attr in $ldapUserType.attributes) {
             $ldapAttrUpdates[$attr.id] = @{ selected = $true }
         }
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeUpdates $ldapAttrUpdates | Out-Null
-        Write-Host "  ✓ Selected all attributes for CSV and LDAP object types" -ForegroundColor Green
+        $ldapResult = Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeUpdates $ldapAttrUpdates -PassThru -ErrorAction Stop
+        Write-Host "  ✓ Selected $($ldapResult.updatedCount) LDAP attributes" -ForegroundColor Green
 
         # Create Import sync rule (CSV -> Metaverse)
         $existingRules = Get-JIMSyncRule

@@ -138,9 +138,15 @@ function Set-JIMConnectedSystemAttribute {
                 Write-Verbose "Bulk updating $($AttributeUpdates.Count) attributes in Object Type: $ObjectTypeId"
 
                 try {
-                    # Convert the hashtable to the format expected by the API
+                    # Convert the hashtable to use string keys for JSON serialization
+                    # PowerShell's ConvertTo-Json doesn't support integer keys in hashtables
+                    $attributesWithStringKeys = @{}
+                    foreach ($key in $AttributeUpdates.Keys) {
+                        $attributesWithStringKeys[[string]$key] = $AttributeUpdates[$key]
+                    }
+
                     $body = @{
-                        attributes = $AttributeUpdates
+                        attributes = $attributesWithStringKeys
                     }
 
                     $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/object-types/$ObjectTypeId/attributes" -Method 'PUT' -Body $body
