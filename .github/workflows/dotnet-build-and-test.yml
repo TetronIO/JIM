@@ -1,4 +1,4 @@
-# This workflow will build a .NET project
+# This workflow will build a .NET project and run PowerShell Pester tests
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
 
 name: .NET Build & Test
@@ -26,5 +26,29 @@ jobs:
       run: dotnet restore JIM.sln
     - name: Build
       run: dotnet build JIM.sln --no-restore
-    - name: Test
+    - name: Test .NET
       run: dotnet test JIM.sln --no-build --verbosity normal
+
+    # PowerShell Pester Tests for the JIM PowerShell module
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        Set-PSRepository PSGallery -InstallationPolicy Trusted
+        Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
+    - name: Run Pester Tests
+      shell: pwsh
+      run: |
+        $config = New-PesterConfiguration
+        $config.Run.Path = "./JIM.PowerShell/JIM/Tests"
+        $config.Run.Exit = $true
+        $config.Output.Verbosity = "Detailed"
+        $config.TestResult.Enabled = $true
+        $config.TestResult.OutputPath = "./TestResults/pester-results.xml"
+        $config.TestResult.OutputFormat = "NUnitXml"
+        Invoke-Pester -Configuration $config
+    - name: Upload Pester Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: pester-test-results
+        path: ./TestResults/pester-results.xml
