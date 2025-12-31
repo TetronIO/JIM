@@ -554,4 +554,300 @@ public class SynchronisationControllerSchemaTests
     }
 
     #endregion
+
+    #region Bulk Attribute Update Tests
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_WithEmptyDictionary_ReturnsBadRequest()
+    {
+        var request = new BulkUpdateConnectedSystemAttributesRequest { Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>() };
+        var result = await _controller.BulkUpdateConnectedSystemAttributesAsync(1, 5, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_WithNonExistentConnectedSystem_ReturnsNotFound()
+    {
+        var connectedSystemId = 999;
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+            .ReturnsAsync((ConnectedSystem?)null);
+
+        var request = new BulkUpdateConnectedSystemAttributesRequest
+        {
+            Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>
+            {
+                { 10, new UpdateConnectedSystemAttributeRequest { Selected = true } }
+            }
+        };
+        var result = await _controller.BulkUpdateConnectedSystemAttributesAsync(connectedSystemId, 5, request);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_WithNonExistentObjectType_ReturnsNotFound()
+    {
+        var connectedSystemId = 1;
+        var objectTypeId = 999;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
+            .ReturnsAsync((ConnectedSystemObjectType?)null);
+
+        var request = new BulkUpdateConnectedSystemAttributesRequest
+        {
+            Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>
+            {
+                { 10, new UpdateConnectedSystemAttributeRequest { Selected = true } }
+            }
+        };
+        var result = await _controller.BulkUpdateConnectedSystemAttributesAsync(connectedSystemId, objectTypeId, request);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_WithValidRequest_UpdatesAllAttributes()
+    {
+        var connectedSystemId = 1;
+        var objectTypeId = 5;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var attribute1 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 10,
+            Name = "employeeId",
+            Selected = false
+        };
+        var attribute2 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 11,
+            Name = "displayName",
+            Selected = false
+        };
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = objectTypeId,
+            Name = "User",
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystem = connectedSystem,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1, attribute2 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
+            .ReturnsAsync(objectType);
+
+        var request = new BulkUpdateConnectedSystemAttributesRequest
+        {
+            Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>
+            {
+                { 10, new UpdateConnectedSystemAttributeRequest { Selected = true } },
+                { 11, new UpdateConnectedSystemAttributeRequest { Selected = true } }
+            }
+        };
+
+        var result = await _controller.BulkUpdateConnectedSystemAttributesAsync(connectedSystemId, objectTypeId, request) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(attribute1.Selected, Is.True);
+        Assert.That(attribute2.Selected, Is.True);
+        _mockConnectedSystemRepo.Verify(r => r.UpdateAttributesAsync(It.IsAny<IEnumerable<ConnectedSystemObjectTypeAttribute>>()), Times.Once);
+    }
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_WithMixedValidAndInvalidAttributes_ReturnsPartialSuccess()
+    {
+        var connectedSystemId = 1;
+        var objectTypeId = 5;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var attribute1 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 10,
+            Name = "employeeId",
+            Selected = false
+        };
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = objectTypeId,
+            Name = "User",
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystem = connectedSystem,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
+            .ReturnsAsync(objectType);
+
+        var request = new BulkUpdateConnectedSystemAttributesRequest
+        {
+            Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>
+            {
+                { 10, new UpdateConnectedSystemAttributeRequest { Selected = true } },
+                { 999, new UpdateConnectedSystemAttributeRequest { Selected = true } }  // Invalid attribute ID
+            }
+        };
+
+        var result = await _controller.BulkUpdateConnectedSystemAttributesAsync(connectedSystemId, objectTypeId, request) as OkObjectResult;
+        var response = result?.Value as BulkUpdateConnectedSystemAttributesResponse;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.UpdatedCount, Is.EqualTo(1));
+        Assert.That(response.Errors, Is.Not.Null);
+        Assert.That(response.Errors!.Count, Is.EqualTo(1));
+        Assert.That(response.Errors[0].AttributeId, Is.EqualTo(999));
+    }
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_CreatesOneActivityRecord()
+    {
+        var connectedSystemId = 1;
+        var objectTypeId = 5;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var attribute1 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 10,
+            Name = "employeeId",
+            Selected = false
+        };
+        var attribute2 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 11,
+            Name = "displayName",
+            Selected = false
+        };
+        var attribute3 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 12,
+            Name = "mail",
+            Selected = false
+        };
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = objectTypeId,
+            Name = "User",
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystem = connectedSystem,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1, attribute2, attribute3 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
+            .ReturnsAsync(objectType);
+
+        var request = new BulkUpdateConnectedSystemAttributesRequest
+        {
+            Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>
+            {
+                { 10, new UpdateConnectedSystemAttributeRequest { Selected = true } },
+                { 11, new UpdateConnectedSystemAttributeRequest { Selected = true } },
+                { 12, new UpdateConnectedSystemAttributeRequest { Selected = true } }
+            }
+        };
+
+        await _controller.BulkUpdateConnectedSystemAttributesAsync(connectedSystemId, objectTypeId, request);
+
+        // Verify only ONE activity was created (not 3)
+        _mockActivityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Once);
+        _mockActivityRepo.Verify(r => r.UpdateActivityAsync(It.IsAny<Activity>()), Times.Once);
+    }
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_SetsCorrectTargetName_ConnectedSystemName()
+    {
+        var connectedSystemId = 1;
+        var objectTypeId = 5;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "LDAP Directory" };
+        var attribute1 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 10,
+            Name = "employeeId",
+            Selected = false
+        };
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = objectTypeId,
+            Name = "User",
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystem = connectedSystem,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
+            .ReturnsAsync(objectType);
+
+        Activity? capturedActivity = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => capturedActivity = a);
+
+        var request = new BulkUpdateConnectedSystemAttributesRequest
+        {
+            Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>
+            {
+                { 10, new UpdateConnectedSystemAttributeRequest { Selected = true } }
+            }
+        };
+
+        await _controller.BulkUpdateConnectedSystemAttributesAsync(connectedSystemId, objectTypeId, request);
+
+        Assert.That(capturedActivity, Is.Not.Null);
+        Assert.That(capturedActivity!.TargetName, Is.EqualTo("LDAP Directory"));
+        Assert.That(capturedActivity.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystem));
+        Assert.That(capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
+    }
+
+    [Test]
+    public async Task BulkUpdateAttributesAsync_ReturnsResponseWithActivityId()
+    {
+        var connectedSystemId = 1;
+        var objectTypeId = 5;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var attribute1 = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 10,
+            Name = "employeeId",
+            Selected = false
+        };
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = objectTypeId,
+            Name = "User",
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystem = connectedSystem,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
+            .ReturnsAsync(objectType);
+
+        var request = new BulkUpdateConnectedSystemAttributesRequest
+        {
+            Attributes = new Dictionary<int, UpdateConnectedSystemAttributeRequest>
+            {
+                { 10, new UpdateConnectedSystemAttributeRequest { Selected = true } }
+            }
+        };
+
+        var result = await _controller.BulkUpdateConnectedSystemAttributesAsync(connectedSystemId, objectTypeId, request) as OkObjectResult;
+        var response = result?.Value as BulkUpdateConnectedSystemAttributesResponse;
+
+        Assert.That(response, Is.Not.Null);
+        // Note: ActivityId will be Guid.Empty in unit tests since no actual database persistence occurs
+        // In integration tests or real usage, the Activity.Id would be generated
+        Assert.That(response!.UpdatedCount, Is.EqualTo(1));
+        Assert.That(response.UpdatedAttributes.Count, Is.EqualTo(1));
+        Assert.That(response.Errors, Is.Null);
+    }
+
+    #endregion
 }

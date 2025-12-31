@@ -1539,7 +1539,7 @@ public class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = attribute.Name,
+            TargetName = attribute.ConnectedSystemObjectType?.ConnectedSystem?.Name ?? "Unknown",
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId
@@ -1591,7 +1591,7 @@ public class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = attribute.Name,
+            TargetName = attribute.ConnectedSystemObjectType?.ConnectedSystem?.Name ?? "Unknown",
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = attribute.ConnectedSystemObjectType?.ConnectedSystemId
@@ -1601,6 +1601,146 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Bulk updates multiple Connected System Attributes with a single parent activity.
+    /// </summary>
+    /// <param name="connectedSystem">The connected system containing the attributes.</param>
+    /// <param name="objectType">The object type containing the attributes.</param>
+    /// <param name="attributeUpdates">Dictionary of attribute IDs to update requests.</param>
+    /// <param name="initiatedBy">The user who initiated the update.</param>
+    /// <returns>Tuple containing the activity, updated attributes, and any errors.</returns>
+    public async Task<(Activity Activity, List<ConnectedSystemObjectTypeAttribute> Updated, List<(int AttributeId, string Error)> Errors)>
+        BulkUpdateAttributesAsync(
+            ConnectedSystem connectedSystem,
+            ConnectedSystemObjectType objectType,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            MetaverseObject? initiatedBy)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+        if (attributeUpdates == null)
+            throw new ArgumentNullException(nameof(attributeUpdates));
+
+        Log.Debug("BulkUpdateAttributesAsync() called for {Count} attributes on {ObjectType}", attributeUpdates.Count, objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystem.Id,
+            Message = $"Bulk update of {attributeUpdates.Count} attribute(s) on {objectType.Name}",
+            ObjectsToProcess = attributeUpdates.Count
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        var updated = new List<ConnectedSystemObjectTypeAttribute>();
+        var errors = new List<(int AttributeId, string Error)>();
+
+        foreach (var (attributeId, updates) in attributeUpdates)
+        {
+            var attribute = objectType.Attributes?.FirstOrDefault(a => a.Id == attributeId);
+            if (attribute == null)
+            {
+                errors.Add((attributeId, $"Attribute {attributeId} not found on object type {objectType.Name}"));
+                continue;
+            }
+
+            if (updates.Selected.HasValue)
+                attribute.Selected = updates.Selected.Value;
+            if (updates.IsExternalId.HasValue)
+                attribute.IsExternalId = updates.IsExternalId.Value;
+            if (updates.IsSecondaryExternalId.HasValue)
+                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+
+            updated.Add(attribute);
+            activity.ObjectsProcessed++;
+        }
+
+        if (updated.Count > 0)
+            await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
+
+        if (errors.Count > 0)
+            await Application.Activities.CompleteActivityWithWarningAsync(activity);
+        else
+            await Application.Activities.CompleteActivityAsync(activity);
+
+        return (activity, updated, errors);
+    }
+
+    /// <summary>
+    /// Bulk updates multiple Connected System Attributes with a single parent activity (initiated by API key).
+    /// </summary>
+    /// <param name="connectedSystem">The connected system containing the attributes.</param>
+    /// <param name="objectType">The object type containing the attributes.</param>
+    /// <param name="attributeUpdates">Dictionary of attribute IDs to update requests.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
+    /// <returns>Tuple containing the activity, updated attributes, and any errors.</returns>
+    public async Task<(Activity Activity, List<ConnectedSystemObjectTypeAttribute> Updated, List<(int AttributeId, string Error)> Errors)>
+        BulkUpdateAttributesAsync(
+            ConnectedSystem connectedSystem,
+            ConnectedSystemObjectType objectType,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId)> attributeUpdates,
+            ApiKey initiatedByApiKey)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+        if (attributeUpdates == null)
+            throw new ArgumentNullException(nameof(attributeUpdates));
+        if (initiatedByApiKey == null)
+            throw new ArgumentNullException(nameof(initiatedByApiKey));
+
+        Log.Debug("BulkUpdateAttributesAsync() called for {Count} attributes on {ObjectType} (API key initiated)", attributeUpdates.Count, objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystem.Id,
+            Message = $"Bulk update of {attributeUpdates.Count} attribute(s) on {objectType.Name}",
+            ObjectsToProcess = attributeUpdates.Count
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        var updated = new List<ConnectedSystemObjectTypeAttribute>();
+        var errors = new List<(int AttributeId, string Error)>();
+
+        foreach (var (attributeId, updates) in attributeUpdates)
+        {
+            var attribute = objectType.Attributes?.FirstOrDefault(a => a.Id == attributeId);
+            if (attribute == null)
+            {
+                errors.Add((attributeId, $"Attribute {attributeId} not found on object type {objectType.Name}"));
+                continue;
+            }
+
+            if (updates.Selected.HasValue)
+                attribute.Selected = updates.Selected.Value;
+            if (updates.IsExternalId.HasValue)
+                attribute.IsExternalId = updates.IsExternalId.Value;
+            if (updates.IsSecondaryExternalId.HasValue)
+                attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+
+            updated.Add(attribute);
+            activity.ObjectsProcessed++;
+        }
+
+        if (updated.Count > 0)
+            await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
+
+        if (errors.Count > 0)
+            await Application.Activities.CompleteActivityWithWarningAsync(activity);
+        else
+            await Application.Activities.CompleteActivityAsync(activity);
+
+        return (activity, updated, errors);
     }
     #endregion
 

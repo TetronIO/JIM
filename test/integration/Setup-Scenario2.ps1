@@ -496,12 +496,18 @@ try {
     }
 
     # Mark all attributes as selected for both systems
+    # Using bulk update API for efficiency - creates single Activity record instead of one per attribute
+    $sourceAttrUpdates = @{}
     foreach ($attr in $sourceUserType.attributes) {
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -AttributeId $attr.id -Selected $true | Out-Null
+        $sourceAttrUpdates[$attr.id] = @{ selected = $true }
     }
+    Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -AttributeUpdates $sourceAttrUpdates | Out-Null
+
+    $targetAttrUpdates = @{}
     foreach ($attr in $targetUserType.attributes) {
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -AttributeId $attr.id -Selected $true | Out-Null
+        $targetAttrUpdates[$attr.id] = @{ selected = $true }
     }
+    Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -AttributeUpdates $targetAttrUpdates | Out-Null
     Write-Host "  ✓ Selected all attributes for Source and Target" -ForegroundColor Green
 
     # Create Import sync rule (Source -> Metaverse)
