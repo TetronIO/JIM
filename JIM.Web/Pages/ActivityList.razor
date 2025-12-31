@@ -30,8 +30,8 @@
     </ToolBarContent>
     <HeaderContent>
         <MudTh>
-            <MudTableSortLabel SortLabel="type" T="Activity">
-                <MudText Typo="Typo.button">Type</MudText>
+            <MudTableSortLabel SortLabel="operation" T="Activity">
+                <MudText Typo="Typo.button">Operation</MudText>
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
@@ -40,8 +40,8 @@
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
-            <MudTableSortLabel SortLabel="operation" T="Activity">
-                <MudText Typo="Typo.button">Operation</MudText>
+            <MudTableSortLabel SortLabel="type" T="Activity">
+                <MudText Typo="Typo.button">Type</MudText>
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
@@ -66,9 +66,14 @@
         </MudTh>
     </HeaderContent>
     <RowTemplate Context="context">
-        <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Operation">
+            <MudChip T="string" Variant="Variant.Text"
+                Color="Helpers.GetActivityMudBlazorColorForOperation(context.TargetOperationType)">
+                @context.TargetOperationType.ToString().SplitOnCapitalLetters()
+            </MudChip>
+        </MudTd>
         <MudTd DataLabel="Target">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudTd>
-        <MudTd DataLabel="Operation">@context.TargetOperationType.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
         <MudTd DataLabel="Created">
             <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 @context.Created.ToLocalTime().ToRelativeTime()

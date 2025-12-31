@@ -343,10 +343,64 @@ See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Asp
 - Use MockQueryable for EF Core query testing
 - Aim for >70% code coverage on core logic
 
+### Worker Tests
+- Test synchronisation processors with mocked DbContext
+- Use `MockFileConnector` for file-based import scenarios
+- Located in `test/JIM.Worker.Tests/`
+
+### Workflow Tests
+Workflow tests sit between unit tests and integration tests - they test multi-step sync scenarios using real business logic but with mock connectors and in-memory database.
+
+**Key Components** (in `test/JIM.Workflow.Tests/`):
+- `WorkflowTestHarness`: Orchestrates multi-step test execution
+- `WorkflowStateSnapshot`: Captures MVO, CSO, and PendingExport state after each step
+- `MockCallConnector`: Call-based mock connector in `JIM.Connectors/Mock/`
+
+**Benefits**:
+- Fast execution (seconds vs minutes for integration tests)
+- State snapshots after each step for diagnostics
+- Reproducible scenarios with configurable fake data
+- No external dependencies (LDAP, AD, etc.)
+
+**Example**:
+```csharp
+[Test]
+public async Task ProvisioningWorkflow_CompleteCycle_SucceedsAsync()
+{
+    // Setup systems and sync rules
+    await SetUpProvisioningScenarioAsync(objectCount: 100);
+
+    // Execute import
+    _harness.GetConnector("HR").QueueImportObjects(GenerateUsers(100));
+    await _harness.ExecuteFullImportAsync("HR");
+    var afterImport = await _harness.TakeSnapshotAsync("After Import");
+
+    Assert.That(afterImport.GetCsos("HR").Count, Is.EqualTo(100));
+
+    // Execute sync and export evaluation
+    await _harness.ExecuteFullSyncAsync("HR");
+    await _harness.ExecuteExportEvaluationAsync("HR");
+    var afterExportEval = await _harness.TakeSnapshotAsync("After Export Eval");
+
+    // Verify PendingExports have CSO FKs
+    Assert.That(afterExportEval.GetPendingExportsWithNullCsoFk(), Is.Empty);
+}
+```
+
+**Running Workflow Tests**:
+```bash
+# Run all workflow tests
+dotnet test test/JIM.Workflow.Tests/
+
+# Run explicit tests (tests for known bugs)
+dotnet test --filter "TestCategory=Explicit"
+```
+
 ### Integration Tests
 - Test repository implementations against PostgreSQL
 - Use test containers or dedicated test database
 - Verify migrations work correctly
+- See [INTEGRATION_TESTING.md](INTEGRATION_TESTING.md) for setup instructions
 
 ### Naming Conventions
 ```csharp

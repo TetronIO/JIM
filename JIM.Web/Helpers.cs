@@ -143,6 +143,23 @@ public static class Helpers
         };
     }
 
+    public static Color GetActivityMudBlazorColorForOperation(ActivityTargetOperationType operation)
+    {
+        return operation switch
+        {
+            ActivityTargetOperationType.Create => Color.Success,
+            ActivityTargetOperationType.Delete => Color.Error,
+            ActivityTargetOperationType.Clear => Color.Error,
+            ActivityTargetOperationType.Update => Color.Info,
+            ActivityTargetOperationType.Read => Color.Default,
+            ActivityTargetOperationType.Execute => Color.Primary,
+            ActivityTargetOperationType.ImportHierarchy => Color.Primary,
+            ActivityTargetOperationType.ImportSchema => Color.Primary,
+            ActivityTargetOperationType.Revert => Color.Warning,
+            _ => Color.Default,
+        };
+    }
+
     public static Color GetRunItemMudBlazorColorForType(ObjectChangeType objectChangeType)
     {
         return objectChangeType switch
