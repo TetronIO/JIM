@@ -517,6 +517,13 @@ public class ExportEvaluationServer
             return null;
         }
 
+        // For provisioning (Create) scenarios, add the secondary external ID value to the CSO
+        // so the confirming import can find it by secondary external ID (e.g. distinguishedName)
+        if (changeType == PendingExportChangeType.Create && csoForExport != null)
+        {
+            await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule);
+        }
+
         // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
         // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
         var pendingExport = new PendingExport
@@ -586,6 +593,13 @@ public class ExportEvaluationServer
             Log.Debug("CreateOrUpdatePendingExportAsync: No attribute changes for MVO {MvoId} to system {SystemId}",
                 mvo.Id, exportRule.ConnectedSystemId);
             return null;
+        }
+
+        // For provisioning (Create) scenarios, add the secondary external ID value to the CSO
+        // so the confirming import can find it by secondary external ID (e.g. distinguishedName)
+        if (changeType == PendingExportChangeType.Create && csoForExport != null)
+        {
+            await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule);
         }
 
         var csoId = csoForExport?.Id;
@@ -662,6 +676,57 @@ public class ExportEvaluationServer
             cso.Id, mvo.Id, exportRule.ConnectedSystemId);
 
         return cso;
+    }
+
+    /// <summary>
+    /// Adds the secondary external ID value to a PendingProvisioning CSO so that confirming import
+    /// can find the CSO by secondary external ID (e.g. distinguishedName) when matching.
+    /// This is essential for the confirming import to match PendingProvisioning CSOs that don't yet
+    /// have a primary external ID (which is typically system-assigned, like objectGUID in AD).
+    /// </summary>
+    private async Task AddSecondaryExternalIdToCsoAsync(
+        ConnectedSystemObject cso,
+        List<PendingExportAttributeValueChange> attributeChanges,
+        SyncRule exportRule)
+    {
+        if (cso.SecondaryExternalIdAttributeId == null)
+        {
+            Log.Debug("AddSecondaryExternalIdToCsoAsync: CSO {CsoId} has no secondary external ID attribute configured",
+                cso.Id);
+            return;
+        }
+
+        // Find the secondary external ID value in the attribute changes
+        var secondaryIdChange = attributeChanges.FirstOrDefault(ac =>
+            ac.AttributeId == cso.SecondaryExternalIdAttributeId);
+
+        if (secondaryIdChange == null)
+        {
+            Log.Warning("AddSecondaryExternalIdToCsoAsync: No secondary external ID value found in attribute changes for CSO {CsoId}. " +
+                "Confirming import may not be able to match this CSO.",
+                cso.Id);
+            return;
+        }
+
+        // Create the attribute value on the CSO
+        var attributeValue = new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            AttributeId = secondaryIdChange.AttributeId,
+            StringValue = secondaryIdChange.StringValue,
+            IntValue = secondaryIdChange.IntValue,
+            DateTimeValue = secondaryIdChange.DateTimeValue,
+            ByteValue = secondaryIdChange.ByteValue
+        };
+
+        // Add to CSO and persist
+        cso.AttributeValues ??= new List<ConnectedSystemObjectAttributeValue>();
+        cso.AttributeValues.Add(attributeValue);
+
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+
+        Log.Information("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching",
+            secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown", cso.Id);
     }
 
     /// <summary>

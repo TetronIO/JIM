@@ -2004,7 +2004,9 @@ public class ConnectedSystemServer
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
+            // Use FirstOrDefault as multiple execution items may reference the same CSO (e.g., during confirming import
+            // when the same CSO could theoretically match multiple import objects by different identifiers)
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.FirstOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
                                                   throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
 
             // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.

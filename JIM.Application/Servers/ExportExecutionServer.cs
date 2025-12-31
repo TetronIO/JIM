@@ -527,13 +527,12 @@ public class ExportExecutionServer
         var needsUpdate = false;
         var newAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
 
-        // Update status from PendingProvisioning to Normal
-        if (cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
-        {
-            cso.Status = ConnectedSystemObjectStatus.Normal;
-            needsUpdate = true;
-            Log.Debug("UpdateCsoAfterSuccessfulExportAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal", cso.Id);
-        }
+        // Note: We do NOT transition CSO status from PendingProvisioning to Normal here.
+        // The CSO should remain PendingProvisioning until the confirming import verifies
+        // that the object actually exists in the target system. This allows the confirming
+        // import to match the CSO by secondary external ID (e.g., distinguishedName) since
+        // the primary external ID (e.g., objectGUID) is typically system-assigned and not
+        // known until the confirming import.
 
         // Populate external ID attribute if provided in the export result
         if (exportResult != null && !string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)

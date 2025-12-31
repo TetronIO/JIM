@@ -222,6 +222,11 @@ public class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             return;
 
+        // Get the IDs of CSOs that were already processed in this import run
+        // These should not be marked as obsolete even if their external ID isn't in the import (e.g., because their
+        // external ID was updated during import processing and the new value isn't in externalIdsImported)
+        var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
+
         // have any objects been deleted in the connected system since our last import?
         // get the connected system object type list for the ones the user has selected to manage
         foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
@@ -245,7 +250,7 @@ public class SyncImportTaskProcessor
 
                     // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
                 case AttributeDataType.Text:
@@ -263,7 +268,7 @@ public class SyncImportTaskProcessor
 
                     // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
                 case AttributeDataType.Guid:
@@ -281,7 +286,7 @@ public class SyncImportTaskProcessor
 
                     // obsolete the connected system objects no longer in the connected system for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated);
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
                 case AttributeDataType.NotSet:
@@ -303,7 +308,7 @@ public class SyncImportTaskProcessor
     /// <param name="connectedSystemAttributeId">The unique identifier for the attribute that represents the External ID in the current Connected System.</param>
     /// <param name="connectedSystemObjectsToBeUpdated">The cache of CSOs that have been updated as part of this import run.</param>
     /// <typeparam name="T">The type for the External ID attribute.</typeparam>
-    private async Task ObsoleteConnectedSystemObjectAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ObsoleteConnectedSystemObjectAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<Guid> processedCsoIds)
     {
         // find the cso
         var cso = connectedSystemObjectExternalId switch
@@ -317,6 +322,15 @@ public class SyncImportTaskProcessor
         if (cso == null)
         {
             Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{connectedSystemObjectExternalId}' not found. No work to do.");
+            return;
+        }
+
+        // Skip CSOs that were already processed in this import run (e.g., matched by secondary external ID)
+        // Their external ID may have been updated during import, so they appear as "not in import" by old ID
+        if (processedCsoIds.Contains(cso.Id))
+        {
+            Log.Debug("ObsoleteConnectedSystemObjectAsync: CSO {CsoId} was already processed in this import run. Skipping obsolete.",
+                cso.Id);
             return;
         }
 
@@ -475,7 +489,17 @@ public class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
                     connectedSystemObject.LastUpdated = DateTime.UtcNow;
-                    connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+
+                    // Only add if not already in the list (can happen if same CSO matches multiple import objects)
+                    if (!connectedSystemObjectsToBeUpdated.Any(cso => cso.Id == connectedSystemObject.Id))
+                    {
+                        connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+                    }
+                    else
+                    {
+                        Log.Warning("ProcessImportObjectsAsync: CSO {CsoId} was already matched by a previous import object. Skipping duplicate addition to update list.",
+                            connectedSystemObject.Id);
+                    }
                 }
             }
             catch (Exception e)
