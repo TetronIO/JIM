@@ -158,3 +158,116 @@ Describe 'Set-JIMConnectedSystem' {
         }
     }
 }
+
+Describe 'Set-JIMConnectedSystemAttribute' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMConnectedSystemAttribute
+        }
+
+        It 'Should have mandatory ConnectedSystemId parameter for both parameter sets' {
+            $param = $command.Parameters['ConnectedSystemId']
+            $mandatoryAttrs = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory
+            }
+            $mandatoryAttrs | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have mandatory ObjectTypeId parameter for both parameter sets' {
+            $param = $command.Parameters['ObjectTypeId']
+            $mandatoryAttrs = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory
+            }
+            $mandatoryAttrs | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have AttributeId parameter for Single parameter set' {
+            $param = $command.Parameters['AttributeId']
+            $paramAttr = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'Single'
+            }
+            $paramAttr | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have AttributeUpdates parameter for Bulk parameter set' {
+            $param = $command.Parameters['AttributeUpdates']
+            $paramAttr = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'Bulk'
+            }
+            $paramAttr | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Selected parameter' {
+            $command.Parameters['Selected'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have IsExternalId parameter' {
+            $command.Parameters['IsExternalId'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have IsSecondaryExternalId parameter' {
+            $command.Parameters['IsSecondaryExternalId'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a PassThru switch parameter' {
+            $command.Parameters['PassThru'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Single as the default parameter set' {
+            $command.DefaultParameterSet | Should -Be 'Single'
+        }
+
+        It 'Should have AttributeId with Id alias' {
+            $param = $command.Parameters['AttributeId']
+            $param.Aliases | Should -Contain 'Id'
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected (Single mode)' {
+            { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 1 -AttributeId 1 -Selected $true -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+
+        It 'Should throw when not connected (Bulk mode)' {
+            $updates = @{ 1 = @{ selected = $true } }
+            { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 1 -AttributeUpdates $updates -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Set-JIMConnectedSystemAttribute -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should document the Bulk parameter set in description' {
+            $help.Description.Text | Should -Match 'Bulk'
+        }
+    }
+}

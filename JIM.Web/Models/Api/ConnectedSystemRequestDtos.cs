@@ -110,6 +110,60 @@ public class UpdateConnectedSystemAttributeRequest
 }
 
 /// <summary>
+/// Request DTO for bulk updating multiple Connected System Attributes.
+/// </summary>
+public class BulkUpdateConnectedSystemAttributesRequest
+{
+    /// <summary>
+    /// Dictionary of attribute updates keyed by attribute ID.
+    /// </summary>
+    [Required]
+    public Dictionary<int, UpdateConnectedSystemAttributeRequest> Attributes { get; set; } = new();
+}
+
+/// <summary>
+/// Response from a bulk attribute update operation.
+/// </summary>
+public class BulkUpdateConnectedSystemAttributesResponse
+{
+    /// <summary>
+    /// The activity ID for the bulk update operation.
+    /// </summary>
+    public Guid ActivityId { get; set; }
+
+    /// <summary>
+    /// Number of attributes successfully updated.
+    /// </summary>
+    public int UpdatedCount { get; set; }
+
+    /// <summary>
+    /// List of updated attributes.
+    /// </summary>
+    public List<ConnectedSystemAttributeDto> UpdatedAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Any errors that occurred during the update. Null if no errors.
+    /// </summary>
+    public List<BulkUpdateAttributeError>? Errors { get; set; }
+}
+
+/// <summary>
+/// Error details for a failed attribute update in a bulk operation.
+/// </summary>
+public class BulkUpdateAttributeError
+{
+    /// <summary>
+    /// The ID of the attribute that failed to update.
+    /// </summary>
+    public int AttributeId { get; set; }
+
+    /// <summary>
+    /// The error message describing why the update failed.
+    /// </summary>
+    public string ErrorMessage { get; set; } = null!;
+}
+
+/// <summary>
 /// Request DTO for updating a Connected System Partition.
 /// </summary>
 public class UpdateConnectedSystemPartitionRequest

@@ -232,6 +232,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.Update(attribute);
         await Repository.Database.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// Batch updates multiple Connected System Attributes in a single transaction.
+    /// </summary>
+    public async Task UpdateAttributesAsync(IEnumerable<ConnectedSystemObjectTypeAttribute> attributes)
+    {
+        foreach (var attribute in attributes)
+        {
+            Repository.Database.Update(attribute);
+        }
+        await Repository.Database.SaveChangesAsync();
+    }
     #endregion
 
     #region Object Matching Rules

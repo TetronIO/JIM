@@ -480,12 +480,18 @@ try {
         }
 
         # Mark all CSV and LDAP attributes as selected (required for import/export)
+        # Using bulk update API for efficiency - creates single Activity record instead of one per attribute
+        $csvAttrUpdates = @{}
         foreach ($attr in $csvUserType.attributes) {
-            Set-JIMConnectedSystemAttribute -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -AttributeId $attr.id -Selected $true | Out-Null
+            $csvAttrUpdates[$attr.id] = @{ selected = $true }
         }
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -AttributeUpdates $csvAttrUpdates | Out-Null
+
+        $ldapAttrUpdates = @{}
         foreach ($attr in $ldapUserType.attributes) {
-            Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeId $attr.id -Selected $true | Out-Null
+            $ldapAttrUpdates[$attr.id] = @{ selected = $true }
         }
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeUpdates $ldapAttrUpdates | Out-Null
         Write-Host "  ✓ Selected all attributes for CSV and LDAP object types" -ForegroundColor Green
 
         # Create Import sync rule (CSV -> Metaverse)

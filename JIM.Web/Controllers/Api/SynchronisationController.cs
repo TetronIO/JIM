@@ -259,6 +259,85 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Bulk updates multiple Connected System Attributes in a single operation.
+    /// This creates a single Activity record for the entire batch operation, rather than
+    /// individual activities for each attribute update.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="objectTypeId">The unique identifier of the object type containing the attributes.</param>
+    /// <param name="request">Dictionary of attribute updates keyed by attribute ID.</param>
+    /// <returns>Response containing the activity ID, updated count, updated attributes, and any errors.</returns>
+    /// <response code="200">Attributes updated successfully (may include partial success with errors).</response>
+    /// <response code="400">Invalid request or empty attributes dictionary.</response>
+    /// <response code="404">Connected system or object type not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/attributes", Name = "BulkUpdateConnectedSystemAttributes")]
+    [ProducesResponseType(typeof(BulkUpdateConnectedSystemAttributesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> BulkUpdateConnectedSystemAttributesAsync(
+        int connectedSystemId,
+        int objectTypeId,
+        [FromBody] BulkUpdateConnectedSystemAttributesRequest request)
+    {
+        _logger.LogInformation("Bulk updating {Count} attributes for object type {ObjectTypeId} in connected system {SystemId}",
+            request.Attributes?.Count ?? 0, objectTypeId, connectedSystemId);
+
+        if (request.Attributes == null || request.Attributes.Count == 0)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest("Attributes dictionary cannot be null or empty."));
+        }
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for bulk attribute update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Verify connected system exists
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        // Get the object type with attributes
+        var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in connected system {connectedSystemId}."));
+
+        // Convert request DTOs to the format expected by the server
+        var attributeUpdates = request.Attributes.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (kvp.Value.Selected, kvp.Value.IsExternalId, kvp.Value.IsSecondaryExternalId)
+        );
+
+        // Get the current API key for Activity attribution if authenticated via API key
+        var apiKey = await GetCurrentApiKeyAsync();
+
+        // Call the bulk update method
+        var (activity, updated, errors) = apiKey != null
+            ? await _application.ConnectedSystems.BulkUpdateAttributesAsync(connectedSystem, objectType, attributeUpdates, apiKey)
+            : await _application.ConnectedSystems.BulkUpdateAttributesAsync(connectedSystem, objectType, attributeUpdates, initiatedBy);
+
+        _logger.LogInformation("Bulk update completed: {UpdatedCount} attributes updated, {ErrorCount} errors",
+            updated.Count, errors.Count);
+
+        // Build the response
+        var response = new BulkUpdateConnectedSystemAttributesResponse
+        {
+            ActivityId = activity.Id,
+            UpdatedCount = updated.Count,
+            UpdatedAttributes = updated.Select(ConnectedSystemAttributeDto.FromEntity).ToList(),
+            Errors = errors.Count > 0
+                ? errors.Select(e => new BulkUpdateAttributeError { AttributeId = e.AttributeId, ErrorMessage = e.Error }).ToList()
+                : null
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
     /// Gets a specific connected system object by ID.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the connected system.</param>

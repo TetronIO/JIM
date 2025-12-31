@@ -371,6 +371,12 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="attribute">The attribute to update.</param>
     Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute);
+
+    /// <summary>
+    /// Batch updates multiple Connected System Attributes in a single transaction.
+    /// </summary>
+    /// <param name="attributes">The attributes to update.</param>
+    Task UpdateAttributesAsync(IEnumerable<ConnectedSystemObjectTypeAttribute> attributes);
     #endregion
 
     #region Object Matching Rules
