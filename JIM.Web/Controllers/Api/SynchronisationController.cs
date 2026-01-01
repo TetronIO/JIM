@@ -246,6 +246,8 @@ public class SynchronisationController(
                 }
             }
             attribute.IsExternalId = true;
+            // External ID attributes must always be selected for sync operations to work
+            attribute.Selected = true;
         }
         else if (request.IsExternalId.HasValue)
         {
@@ -253,7 +255,12 @@ public class SynchronisationController(
         }
 
         if (request.IsSecondaryExternalId.HasValue)
+        {
             attribute.IsSecondaryExternalId = request.IsSecondaryExternalId.Value;
+            // Secondary External ID attributes must always be selected for sync operations to work
+            if (request.IsSecondaryExternalId.Value)
+                attribute.Selected = true;
+        }
 
         if (apiKey != null)
             await _application.ConnectedSystems.UpdateAttributeAsync(attribute, apiKey);

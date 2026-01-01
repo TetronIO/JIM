@@ -1685,10 +1685,20 @@ public class ConnectedSystemServer
                 attribute.Selected = updates.Selected.Value;
 
             if (updates.IsExternalId.HasValue)
+            {
                 attribute.IsExternalId = updates.IsExternalId.Value;
+                // External ID attributes must always be selected for sync operations to work
+                if (updates.IsExternalId.Value)
+                    attribute.Selected = true;
+            }
 
             if (updates.IsSecondaryExternalId.HasValue)
+            {
                 attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+                // Secondary External ID attributes must always be selected for sync operations to work
+                if (updates.IsSecondaryExternalId.Value)
+                    attribute.Selected = true;
+            }
 
             updated.Add(attribute);
             activity.ObjectsProcessed++;
@@ -1765,10 +1775,20 @@ public class ConnectedSystemServer
                 attribute.Selected = updates.Selected.Value;
 
             if (updates.IsExternalId.HasValue)
+            {
                 attribute.IsExternalId = updates.IsExternalId.Value;
+                // External ID attributes must always be selected for sync operations to work
+                if (updates.IsExternalId.Value)
+                    attribute.Selected = true;
+            }
 
             if (updates.IsSecondaryExternalId.HasValue)
+            {
                 attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+                // Secondary External ID attributes must always be selected for sync operations to work
+                if (updates.IsSecondaryExternalId.Value)
+                    attribute.Selected = true;
+            }
 
             updated.Add(attribute);
             activity.ObjectsProcessed++;
