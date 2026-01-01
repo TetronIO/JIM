@@ -922,11 +922,14 @@ public class ExportExecutionTests
     }
 
     /// <summary>
-    /// End-to-end test: When export succeeds, the CSO should transition from PendingProvisioning to Normal.
-    /// This validates the complete provisioning flow where a new object is successfully created in the target system.
+    /// End-to-end test: When export succeeds, the CSO should remain in PendingProvisioning status.
+    /// The transition to Normal only occurs during confirming import when the object is verified
+    /// to exist in the target system. This allows the confirming import to match the CSO by
+    /// secondary external ID (e.g., distinguishedName) since the primary external ID (e.g., objectGUID)
+    /// is typically system-assigned and not known until the confirming import.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_WhenExportSucceeds_CsoTransitionsToNormalAsync()
+    public async Task ExecuteExportsAsync_WhenExportSucceeds_CsoRemainsPendingProvisioningAsync()
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -1025,9 +1028,11 @@ public class ExportExecutionTests
         Assert.That(result.SuccessCount, Is.EqualTo(1), "Export should have succeeded");
         Assert.That(result.FailedCount, Is.EqualTo(0), "No exports should have failed");
 
-        // Assert - CSO should have transitioned to Normal status
-        Assert.That(pendingProvisioningCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal),
-            "CSO should transition from PendingProvisioning to Normal after successful export");
+        // Assert - CSO should remain in PendingProvisioning status
+        // The transition to Normal happens during confirming import, not during export execution.
+        // This allows the confirming import to match the CSO by secondary external ID.
+        Assert.That(pendingProvisioningCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            "CSO should remain in PendingProvisioning after export - transition to Normal happens during confirming import");
 
         // Assert - CSO should still be linked to MVO
         Assert.That(pendingProvisioningCso.MetaverseObjectId, Is.EqualTo(mvo.Id),
@@ -1035,7 +1040,7 @@ public class ExportExecutionTests
         Assert.That(pendingProvisioningCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned),
             "CSO JoinType should remain Provisioned");
 
-        // Assert - External ID attribute should be populated
+        // Assert - External ID attribute should be populated with the connector-returned value
         var externalIdAttrValue = pendingProvisioningCso.AttributeValues
             .FirstOrDefault(av => av.AttributeId == objectGuidAttr.Id);
         Assert.That(externalIdAttrValue, Is.Not.Null, "External ID attribute should be created");

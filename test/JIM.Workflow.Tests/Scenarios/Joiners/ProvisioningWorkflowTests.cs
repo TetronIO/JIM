@@ -65,28 +65,24 @@ public class ProvisioningWorkflowTests
         Assert.That(afterImport.GetCsos("HR").Count, Is.EqualTo(10),
             "Should have 10 CSOs in HR system after import");
 
-        // Act Step 2: Full sync to create MVOs
+        // Act Step 2: Full sync (also triggers export evaluation, creating MVOs, PendingExports, and PendingProvisioning CSOs)
         await _harness.ExecuteFullSyncAsync("HR");
         var afterSync = await _harness.TakeSnapshotAsync("After Full Sync");
 
-        // Assert Step 2: MVOs created
+        // Assert Step 2: MVOs created, export evaluation triggered
         Assert.That(afterSync.MvoCount, Is.EqualTo(10),
             "Should have 10 MVOs after sync");
 
-        // Act Step 3: Export evaluation (creates PendingExports and PendingProvisioning CSOs)
-        await _harness.ExecuteExportEvaluationAsync("HR");
-        var afterExportEval = await _harness.TakeSnapshotAsync("After Export Evaluation");
-
-        // Assert Step 3: PendingExports created with CSO FKs
-        Assert.That(afterExportEval.PendingExportCount, Is.EqualTo(10),
+        // PendingExports created with CSO FKs (export evaluation happens during sync)
+        Assert.That(afterSync.PendingExportCount, Is.EqualTo(10),
             "Should have 10 PendingExports for AD provisioning");
 
-        var pendingExportsWithNullCso = afterExportEval.GetPendingExportsWithNullCsoFk();
+        var pendingExportsWithNullCso = afterSync.GetPendingExportsWithNullCsoFk();
         Assert.That(pendingExportsWithNullCso, Is.Empty,
             $"All PendingExports should have CSO FK set. Found {pendingExportsWithNullCso.Count} with NULL CSO FK.");
 
         // Verify PendingProvisioning CSOs created
-        var pendingProvisioningCsos = afterExportEval.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning);
+        var pendingProvisioningCsos = afterSync.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning);
         Assert.That(pendingProvisioningCsos.Count, Is.EqualTo(10),
             "Should have 10 PendingProvisioning CSOs in AD system");
 
@@ -109,12 +105,28 @@ public class ProvisioningWorkflowTests
         await _harness.ExecuteConfirmingImportAsync("AD");
         var afterConfirmingImport = await _harness.TakeSnapshotAsync("After Confirming Import");
 
+        // Debug: Show what CSOs exist after confirming import
+        Console.WriteLine("=== After Confirming Import ===");
+        var allAdCsos = afterConfirmingImport.GetCsos("AD");
+        Console.WriteLine($"Total AD CSOs: {allAdCsos.Count}");
+        foreach (var cso in allAdCsos.Take(5))
+        {
+            Console.WriteLine($"  CSO {cso.Id}: Status={cso.Status}");
+        }
+
         // Assert Step 5: CSOs transitioned to Normal, PendingExports reconciled
         var stillPendingProvisioning = afterConfirmingImport.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning);
+        Console.WriteLine($"Still PendingProvisioning: {stillPendingProvisioning.Count}");
+
+        var normalCsos = afterConfirmingImport.GetCsos("AD").Where(c => c.Status == ConnectedSystemObjectStatus.Normal).ToList();
+        Console.WriteLine($"Normal CSOs: {normalCsos.Count}");
+
+        var obsoleteCsos = afterConfirmingImport.GetCsos("AD").Where(c => c.Status == ConnectedSystemObjectStatus.Obsolete).ToList();
+        Console.WriteLine($"Obsolete CSOs: {obsoleteCsos.Count}");
+
         Assert.That(stillPendingProvisioning, Is.Empty,
             $"All CSOs should be Normal after confirming import. Found {stillPendingProvisioning.Count} still PendingProvisioning.");
 
-        var normalCsos = afterConfirmingImport.GetCsos("AD").Where(c => c.Status == ConnectedSystemObjectStatus.Normal).ToList();
         Assert.That(normalCsos.Count, Is.EqualTo(10),
             "Should have 10 Normal CSOs in AD system after confirming import");
 
@@ -148,26 +160,22 @@ public class ProvisioningWorkflowTests
         Assert.That(afterImport.GetCsos("HR").Count, Is.EqualTo(objectCount),
             $"Should have {objectCount} CSOs in HR system");
 
-        // Act Step 2: Full sync
+        // Act Step 2: Full sync (also triggers export evaluation)
         await _harness.ExecuteFullSyncAsync("HR");
         var afterSync = await _harness.TakeSnapshotAsync("After Full Sync");
 
         Assert.That(afterSync.MvoCount, Is.EqualTo(objectCount),
             $"Should have {objectCount} MVOs");
 
-        // Act Step 3: Export evaluation - THIS IS WHERE ISSUE #234 SYMPTOMS APPEAR
-        await _harness.ExecuteExportEvaluationAsync("HR");
-        var afterExportEval = await _harness.TakeSnapshotAsync("After Export Evaluation");
-
-        // KEY ASSERTION FOR ISSUE #234
-        var pendingExportsWithNullCso = afterExportEval.GetPendingExportsWithNullCsoFk();
+        // KEY ASSERTION FOR ISSUE #234: All PendingExports should have CSO FK
+        var pendingExportsWithNullCso = afterSync.GetPendingExportsWithNullCsoFk();
 
         if (pendingExportsWithNullCso.Count > 0)
         {
             Console.WriteLine($"=== ISSUE #234 REPRODUCED ===");
             Console.WriteLine($"Found {pendingExportsWithNullCso.Count} PendingExports with NULL CSO FK");
-            Console.WriteLine($"Total PendingExports: {afterExportEval.PendingExportCount}");
-            Console.WriteLine($"PendingProvisioning CSOs: {afterExportEval.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning).Count}");
+            Console.WriteLine($"Total PendingExports: {afterSync.PendingExportCount}");
+            Console.WriteLine($"PendingProvisioning CSOs: {afterSync.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning).Count}");
 
             // Print first few for debugging
             foreach (var pe in pendingExportsWithNullCso.Take(5))
@@ -177,10 +185,10 @@ public class ProvisioningWorkflowTests
         }
 
         Assert.That(pendingExportsWithNullCso, Is.Empty,
-            $"ISSUE #234: {pendingExportsWithNullCso.Count} of {afterExportEval.PendingExportCount} PendingExports have NULL CSO FK");
+            $"ISSUE #234: {pendingExportsWithNullCso.Count} of {afterSync.PendingExportCount} PendingExports have NULL CSO FK");
 
         // Verify all PendingProvisioning CSOs were created
-        var pendingProvisioningCsos = afterExportEval.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning);
+        var pendingProvisioningCsos = afterSync.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning);
         Assert.That(pendingProvisioningCsos.Count, Is.EqualTo(objectCount),
             $"Should have {objectCount} PendingProvisioning CSOs");
     }
@@ -202,13 +210,12 @@ public class ProvisioningWorkflowTests
         // Arrange
         await SetUpProvisioningScenarioAsync(objectCount);
 
-        // Import, sync, export eval
+        // Import and sync (sync includes export evaluation)
         var sourceConnector = _harness.GetConnector("HR");
         sourceConnector.QueueImportObjects(GenerateSourceUsers(objectCount));
 
         await _harness.ExecuteFullImportAsync("HR");
         await _harness.ExecuteFullSyncAsync("HR");
-        await _harness.ExecuteExportEvaluationAsync("HR");
 
         var beforeExport = await _harness.TakeSnapshotAsync("Before Export");
 
@@ -272,7 +279,7 @@ public class ProvisioningWorkflowTests
         Assert.That(s1.GetCsos("AD").Count, Is.EqualTo(0), "No AD CSOs before sync");
         Assert.That(s1.MvoCount, Is.EqualTo(0), "No MVOs before sync");
 
-        // Step 2: Sync
+        // Step 2: Sync (includes export evaluation in the sync processor)
         await _harness.ExecuteFullSyncAsync("HR");
         var s2 = await _harness.TakeSnapshotAsync("Step 2: After Sync");
 
@@ -282,28 +289,35 @@ public class ProvisioningWorkflowTests
         Console.WriteLine($"MVOs: {s2.MvoCount}");
         Console.WriteLine($"PendingExports: {s2.PendingExportCount}");
 
+        // Note: Full sync includes export evaluation, so AD CSOs and PendingExports are created during sync
         Assert.That(s2.MvoCount, Is.EqualTo(objectCount), "MVOs created by sync");
-        Assert.That(s2.GetCsos("AD").Count, Is.EqualTo(0), "No AD CSOs until export eval");
+        Assert.That(s2.GetCsos("AD").Count, Is.EqualTo(objectCount), "AD CSOs created during sync (export evaluation)");
+        Assert.That(s2.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning).Count, Is.EqualTo(objectCount));
+        Assert.That(s2.PendingExportCount, Is.EqualTo(objectCount));
+        Assert.That(s2.GetPendingExportsWithNullCsoFk(), Is.Empty, "All PendingExports should have CSO FK");
 
-        // Step 3: Export Evaluation
-        await _harness.ExecuteExportEvaluationAsync("HR");
-        var s3 = await _harness.TakeSnapshotAsync("Step 3: After Export Eval");
+        // Verify secondary external IDs are populated on PendingProvisioning CSOs (issue #234 fix)
+        var adCsos = await _harness.DbContext.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystem.Name == "AD")
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .ToListAsync();
 
-        Console.WriteLine("=== Step 3: After Export Eval ===");
-        Console.WriteLine($"HR CSOs: {s3.GetCsos("HR").Count}");
-        Console.WriteLine($"AD CSOs: {s3.GetCsos("AD").Count}");
-        Console.WriteLine($"  PendingProvisioning: {s3.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning).Count}");
-        Console.WriteLine($"MVOs: {s3.MvoCount}");
-        Console.WriteLine($"PendingExports: {s3.PendingExportCount}");
-        Console.WriteLine($"  With NULL CSO FK: {s3.GetPendingExportsWithNullCsoFk().Count}");
+        Console.WriteLine("AD CSO attribute values check:");
+        var csosWithDn = 0;
+        foreach (var cso in adCsos)
+        {
+            var attrCount = cso.AttributeValues?.Count ?? 0;
+            var dn = cso.AttributeValues?.FirstOrDefault(av => av.Attribute?.Name == "distinguishedName")?.StringValue;
+            Console.WriteLine($"  CSO {cso.Id}: Status={cso.Status}, AttrCount={attrCount}, DN={dn ?? "NONE"}");
+            if (!string.IsNullOrEmpty(dn)) csosWithDn++;
+        }
 
-        Assert.That(s3.GetCsos("AD").Count, Is.EqualTo(objectCount), "AD CSOs created for provisioning");
-        Assert.That(s3.GetCsosWithStatus(ConnectedSystemObjectStatus.PendingProvisioning).Count, Is.EqualTo(objectCount));
-        Assert.That(s3.PendingExportCount, Is.EqualTo(objectCount));
-        Assert.That(s3.GetPendingExportsWithNullCsoFk(), Is.Empty, "All PendingExports should have CSO FK");
+        Assert.That(csosWithDn, Is.EqualTo(objectCount),
+            $"All {objectCount} PendingProvisioning CSOs should have secondary external ID (distinguishedName). Found {csosWithDn}.");
 
         // Print detailed PendingExport info
-        foreach (var pe in s3.PendingExports)
+        foreach (var pe in s2.PendingExports)
         {
             Console.WriteLine($"  PE {pe.Id}: CsoId={pe.ConnectedSystemObjectId}, ChangeType={pe.ChangeType}");
         }
@@ -348,14 +362,16 @@ public class ProvisioningWorkflowTests
         var mvEmployeeId = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "employeeId");
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
 
-        // Create import sync rule (HR → MV)
+        // Create import sync rule (HR → MV) with attribute flows
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
             "User",
             personType,
             SyncRuleDirection.Import,
-            r => r.WithProjection());
+            r => r
+                .WithProjection()
+                .WithAttributeFlow(mvDisplayName, hrDisplayName));
 
         // Create export sync rule (MV → AD) with provisioning enabled
         await _harness.CreateSyncRuleAsync(
@@ -367,7 +383,7 @@ public class ProvisioningWorkflowTests
             r => r
                 .WithProvisioning()
                 .WithAttributeFlow(mvDisplayName, adCn)
-                .WithExpressionFlow("\"CN=\" + displayName + \",OU=Users,DC=test,DC=local\"", adDn));
+                .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
     }
 
     private List<ConnectedSystemImportObject> GenerateSourceUsers(int count)
