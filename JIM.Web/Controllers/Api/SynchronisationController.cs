@@ -213,12 +213,12 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of connected system {connectedSystemId}."));
         }
 
-        // Validate: Cannot unselect a locked attribute (External ID or Secondary External ID)
+        // Validate: Cannot unselect a locked attribute (connector-recommended External ID or Secondary External ID)
         if (request.Selected.HasValue && !request.Selected.Value && attribute.SelectionLocked)
         {
             _logger.LogWarning("Attempted to unselect locked attribute {AttributeId} ({Name})", attributeId, attribute.Name);
             return BadRequest(ApiErrorResponse.BadRequest(
-                $"Cannot unselect attribute '{attribute.Name}' because it is an External ID or Secondary External ID attribute. " +
+                $"Cannot unselect attribute '{attribute.Name}' because it is a connector-recommended External ID or Secondary External ID attribute. " +
                 "These attributes must remain selected to ensure sync operations function correctly."));
         }
 
@@ -239,8 +239,6 @@ public class SynchronisationController(
                 foreach (var attr in objectType.Attributes.Where(a => a.IsExternalId && a.Id != attributeId))
                 {
                     attr.IsExternalId = false;
-                    // When clearing external ID, also unlock selection (it's no longer required to be selected)
-                    attr.SelectionLocked = false;
                     if (apiKey != null)
                         await _application.ConnectedSystems.UpdateAttributeAsync(attr, apiKey);
                     else
@@ -248,32 +246,14 @@ public class SynchronisationController(
                 }
             }
             attribute.IsExternalId = true;
-            attribute.Selected = true;
-            attribute.SelectionLocked = true;
         }
         else if (request.IsExternalId.HasValue)
         {
             attribute.IsExternalId = request.IsExternalId.Value;
-            // If clearing external ID status, also unlock selection
-            if (!request.IsExternalId.Value && !attribute.IsSecondaryExternalId)
-                attribute.SelectionLocked = false;
         }
 
         if (request.IsSecondaryExternalId.HasValue)
-        {
             attribute.IsSecondaryExternalId = request.IsSecondaryExternalId.Value;
-            // If setting as secondary external ID, also select and lock
-            if (request.IsSecondaryExternalId.Value)
-            {
-                attribute.Selected = true;
-                attribute.SelectionLocked = true;
-            }
-            // If clearing secondary external ID status and not a primary external ID, unlock selection
-            else if (!attribute.IsExternalId)
-            {
-                attribute.SelectionLocked = false;
-            }
-        }
 
         if (apiKey != null)
             await _application.ConnectedSystems.UpdateAttributeAsync(attribute, apiKey);
