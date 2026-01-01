@@ -1793,7 +1793,50 @@ public class ConnectedSystemServer
         activityRunProfileExecutionItem.ConnectedSystemObject = null;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
     }
-    
+
+    /// <summary>
+    /// Batch deletes multiple Connected System Objects and their attribute values.
+    /// This is more efficient than calling DeleteConnectedSystemObjectAsync in a loop.
+    /// </summary>
+    public async Task DeleteConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
+    {
+        if (connectedSystemObjects.Count != activityRunProfileExecutionItems.Count)
+            throw new ArgumentException("CSO count must match execution item count");
+
+        // Capture external ID values before deletion
+        var externalIdValues = connectedSystemObjects
+            .Select(cso => cso.ExternalIdAttributeValue?.ToString())
+            .ToList();
+
+        // Batch delete from database
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
+
+        // Create change objects for each deletion
+        for (int i = 0; i < connectedSystemObjects.Count; i++)
+        {
+            var cso = connectedSystemObjects[i];
+            var executionItem = activityRunProfileExecutionItems[i];
+            var externalIdValue = externalIdValues[i];
+
+            var change = new ConnectedSystemObjectChange
+            {
+                ConnectedSystemId = cso.ConnectedSystemId,
+                ChangeType = ObjectChangeType.Delete,
+                ChangeTime = DateTime.UtcNow,
+                DeletedObjectType = cso.Type,
+                ActivityRunProfileExecutionItem = executionItem
+            };
+
+            executionItem.ConnectedSystemObjectChange = change;
+            executionItem.ConnectedSystemObject = null;
+            executionItem.ConnectedSystemObjectId = null;
+        }
+
+        Log.Debug("DeleteConnectedSystemObjectsAsync: Batch deleted {Count} CSOs", connectedSystemObjects.Count);
+    }
+
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, connectedSystemObjectTypeId);

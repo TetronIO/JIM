@@ -298,7 +298,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.ConnectedSystemObjects.Remove(connectedSystemObject);
         await Repository.Database.SaveChangesAsync();
     }
-    
+
+    public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    {
+        Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     /// <summary>
     /// Retrieves a page's worth of Connected System Object Headers for a specific system, with sort and range properties.
     /// This has a max page size of 100 objects.

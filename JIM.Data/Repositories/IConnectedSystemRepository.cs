@@ -338,6 +338,7 @@ public interface IConnectedSystemRepository
 
 
     public Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
+    public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
     public Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
     public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
     public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
