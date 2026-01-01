@@ -1014,6 +1014,7 @@ function Get-ADUser {
 4. **Cleanup**: Leave systems in known state after test
 5. **Documentation**: Clear parameter descriptions and examples
 6. **Assertions**: Use helper functions for consistent assertion messages
+7. **Selective Attribute Selection**: Only select attributes that are actually needed for sync flows (see below)
 
 ### Development Guidelines
 
@@ -1053,6 +1054,55 @@ The scenario is now blocked by a different issue (LDAP connector object type mat
 - **External systems only**: Querying Samba AD, test databases, or other external systems being tested
 - **Verification queries**: Read-only queries to verify JIM's internal state (not for setup/teardown)
 - **Emergency debugging**: Temporary diagnostic queries during development (never committed)
+
+#### Selective Attribute Selection
+
+**BEST PRACTICE**: Integration test setup scripts should only select the attributes that are actually needed for sync flows, rather than selecting all available attributes from the imported schema.
+
+**Rationale** (see [GitHub Issue #227](https://github.com/TetronIO/JIM/issues/227)):
+- More representative of real-world ILM configurations
+- Reduces unnecessary attribute metadata being loaded and stored
+- Improves test performance by processing fewer attributes
+- Better simulates how production administrators configure systems
+
+**Implementation**:
+
+Instead of selecting all attributes:
+```powershell
+# ❌ Don't do this - selects all attributes
+$ldapAttrUpdates = @{}
+foreach ($attr in $ldapUserType.attributes) {
+    $ldapAttrUpdates[$attr.id] = @{ selected = $true }
+}
+```
+
+Select only the attributes needed for your sync rules:
+```powershell
+# ✅ Do this - select only required attributes
+$requiredLdapAttributes = @(
+    'sAMAccountName',     # Account Name - required anchor
+    'givenName',          # First Name
+    'sn',                 # Last Name (surname)
+    'displayName',        # Display Name
+    'cn',                 # Common Name
+    'mail',               # Email
+    'userPrincipalName',  # UPN
+    'title',              # Job Title
+    'department',         # Department
+    'distinguishedName'   # DN - required for LDAP provisioning
+)
+
+$ldapAttrUpdates = @{}
+foreach ($attr in $ldapUserType.attributes) {
+    if ($requiredLdapAttributes -contains $attr.name) {
+        $ldapAttrUpdates[$attr.id] = @{ selected = $true }
+    }
+}
+```
+
+**Current Implementation**:
+- **Scenario 1 (HR to AD)**: Selects 10 LDAP attributes for export (sAMAccountName, givenName, sn, displayName, cn, mail, userPrincipalName, title, department, distinguishedName)
+- **Scenario 2 (Directory Sync)**: Selects 11 LDAP attributes for bidirectional sync (adds telephoneNumber for Phone attribute)
 
 ---
 

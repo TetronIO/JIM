@@ -479,7 +479,7 @@ try {
             Write-Host "  ⚠ Could not find 'employeeId' attribute in CSV object type" -ForegroundColor Yellow
         }
 
-        # Mark all CSV and LDAP attributes as selected (required for import/export)
+        # Mark all CSV attributes as selected (required for import)
         # Using bulk update API for efficiency - creates single Activity record instead of one per attribute
         $csvAttrUpdates = @{}
         foreach ($attr in $csvUserType.attributes) {
@@ -488,12 +488,32 @@ try {
         $csvResult = Set-JIMConnectedSystemAttribute -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id -AttributeUpdates $csvAttrUpdates -PassThru -ErrorAction Stop
         Write-Host "  ✓ Selected $($csvResult.updatedCount) CSV attributes" -ForegroundColor Green
 
+        # Select only the LDAP attributes needed for export flows
+        # This is more representative of real-world ILM configuration where administrators
+        # only import/export the attributes they actually need, rather than the entire schema.
+        # See: https://github.com/TetronIO/JIM/issues/227
+        $requiredLdapAttributes = @(
+            'sAMAccountName',     # Account Name - required anchor
+            'givenName',          # First Name
+            'sn',                 # Last Name (surname)
+            'displayName',        # Display Name
+            'cn',                 # Common Name (also mapped from Display Name)
+            'mail',               # Email
+            'userPrincipalName',  # UPN (also mapped from Email)
+            'title',              # Job Title
+            'department',         # Department
+            'distinguishedName'   # DN - required for LDAP provisioning
+        )
+
         $ldapAttrUpdates = @{}
         foreach ($attr in $ldapUserType.attributes) {
-            $ldapAttrUpdates[$attr.id] = @{ selected = $true }
+            if ($requiredLdapAttributes -contains $attr.name) {
+                $ldapAttrUpdates[$attr.id] = @{ selected = $true }
+            }
         }
         $ldapResult = Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeUpdates $ldapAttrUpdates -PassThru -ErrorAction Stop
-        Write-Host "  ✓ Selected $($ldapResult.updatedCount) LDAP attributes" -ForegroundColor Green
+        Write-Host "  ✓ Selected $($ldapResult.updatedCount) LDAP attributes (minimal set for export)" -ForegroundColor Green
+        Write-Host "    Attributes: $($requiredLdapAttributes -join ', ')" -ForegroundColor DarkGray
 
         # Create Import sync rule (CSV -> Metaverse)
         $existingRules = Get-JIMSyncRule
