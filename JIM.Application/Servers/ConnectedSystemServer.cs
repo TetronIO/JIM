@@ -925,16 +925,26 @@ public class ConnectedSystemServer
             }
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
+            // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
             var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
             if (attribute != null)
+            {
                 attribute.IsExternalId = true;
+                attribute.Selected = true;
+                attribute.SelectionLocked = true;
+            }
 
             // if the connector supports it (requires it), take the secondary external id from the schema and mark the attribute as such
+            // Secondary External ID attributes are also automatically selected and locked.
             if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
             {
                 var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
                 if (secondaryExternalIdAttribute != null)
+                {
                     secondaryExternalIdAttribute.IsSecondaryExternalId = true;
+                    secondaryExternalIdAttribute.Selected = true;
+                    secondaryExternalIdAttribute.SelectionLocked = true;
+                }
                 else
                     Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
             }
@@ -1068,15 +1078,25 @@ public class ConnectedSystemServer
             }
 
             // if there's an External Id attribute recommendation from the connector, use that
+            // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
             var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
             if (attribute != null)
+            {
                 attribute.IsExternalId = true;
+                attribute.Selected = true;
+                attribute.SelectionLocked = true;
+            }
 
+            // Secondary External ID attributes are also automatically selected and locked.
             if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
             {
                 var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
                 if (secondaryExternalIdAttribute != null)
+                {
                     secondaryExternalIdAttribute.IsSecondaryExternalId = true;
+                    secondaryExternalIdAttribute.Selected = true;
+                    secondaryExternalIdAttribute.SelectionLocked = true;
+                }
                 else
                     Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
             }
@@ -1654,12 +1674,45 @@ public class ConnectedSystemServer
                 continue;
             }
 
+            // Validate: Cannot unselect a locked attribute (External ID or Secondary External ID)
+            if (updates.Selected.HasValue && !updates.Selected.Value && attribute.SelectionLocked)
+            {
+                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is an External ID or Secondary External ID attribute. These attributes must remain selected."));
+                continue;
+            }
+
             if (updates.Selected.HasValue)
                 attribute.Selected = updates.Selected.Value;
+
+            // Handle IsExternalId changes - also update Selected and SelectionLocked
             if (updates.IsExternalId.HasValue)
+            {
                 attribute.IsExternalId = updates.IsExternalId.Value;
+                if (updates.IsExternalId.Value)
+                {
+                    attribute.Selected = true;
+                    attribute.SelectionLocked = true;
+                }
+                else if (!attribute.IsSecondaryExternalId)
+                {
+                    attribute.SelectionLocked = false;
+                }
+            }
+
+            // Handle IsSecondaryExternalId changes - also update Selected and SelectionLocked
             if (updates.IsSecondaryExternalId.HasValue)
+            {
                 attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+                if (updates.IsSecondaryExternalId.Value)
+                {
+                    attribute.Selected = true;
+                    attribute.SelectionLocked = true;
+                }
+                else if (!attribute.IsExternalId)
+                {
+                    attribute.SelectionLocked = false;
+                }
+            }
 
             updated.Add(attribute);
             activity.ObjectsProcessed++;
@@ -1725,12 +1778,45 @@ public class ConnectedSystemServer
                 continue;
             }
 
+            // Validate: Cannot unselect a locked attribute (External ID or Secondary External ID)
+            if (updates.Selected.HasValue && !updates.Selected.Value && attribute.SelectionLocked)
+            {
+                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is an External ID or Secondary External ID attribute. These attributes must remain selected."));
+                continue;
+            }
+
             if (updates.Selected.HasValue)
                 attribute.Selected = updates.Selected.Value;
+
+            // Handle IsExternalId changes - also update Selected and SelectionLocked
             if (updates.IsExternalId.HasValue)
+            {
                 attribute.IsExternalId = updates.IsExternalId.Value;
+                if (updates.IsExternalId.Value)
+                {
+                    attribute.Selected = true;
+                    attribute.SelectionLocked = true;
+                }
+                else if (!attribute.IsSecondaryExternalId)
+                {
+                    attribute.SelectionLocked = false;
+                }
+            }
+
+            // Handle IsSecondaryExternalId changes - also update Selected and SelectionLocked
             if (updates.IsSecondaryExternalId.HasValue)
+            {
                 attribute.IsSecondaryExternalId = updates.IsSecondaryExternalId.Value;
+                if (updates.IsSecondaryExternalId.Value)
+                {
+                    attribute.Selected = true;
+                    attribute.SelectionLocked = true;
+                }
+                else if (!attribute.IsExternalId)
+                {
+                    attribute.SelectionLocked = false;
+                }
+            }
 
             updated.Add(attribute);
             activity.ObjectsProcessed++;

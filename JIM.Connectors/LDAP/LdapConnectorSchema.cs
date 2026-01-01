@@ -20,7 +20,7 @@ internal class LdapConnectorSchema
 
     internal async Task<ConnectorSchema> GetSchemaAsync()
     {
-        return await Task.Run(() => 
+        return await Task.Run(() =>
         {
             // get the DN for the schema partition
             var schemaNamingContext = GetSchemaNamingContext();
@@ -49,14 +49,14 @@ internal class LdapConnectorSchema
                 if (AddObjectTypeAttributes(objectType))
                 {
                     // make a recommendation on what unique identifier attribute(s) to use
-                    // for AD/ADLDS:
+                    // for AD/AD LDS:
                     var objectGuidSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("objectguid", StringComparison.OrdinalIgnoreCase));
                     objectType.RecommendedExternalIdAttribute = objectGuidSchemaAttribute;
 
                     // say what the secondary external identifier needs to be for LDAP systems
                     var dnSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("distinguishedname", StringComparison.OrdinalIgnoreCase));
                     objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
-                        
+
                     // override the object type for distinguishedName, we want to handle it as a string, not a reference type
                     // we do this as a DN attribute on an object cannot be a reference to itself. that would make no sense.
                     dnSchemaAttribute.Type = AttributeDataType.Text;
@@ -113,9 +113,9 @@ internal class LdapConnectorSchema
     /// </summary>
     private void GetObjectClassAttributesRecursively(SearchResultEntry objectClassEntry, ConnectorSchemaObjectType objectType)
     {
-        var objectClassName = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname") ?? 
+        var objectClassName = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname") ??
                               throw new Exception($"No ldapdisplayname value on {objectClassEntry.DistinguishedName}");
-            
+
         if (objectClassEntry.Attributes.Contains("maycontain"))
             foreach (string attributeName in objectClassEntry.Attributes["maycontain"].GetValues(typeof(string)))
                 if (objectType.Attributes.All(q => q.Name != attributeName))
@@ -144,19 +144,19 @@ internal class LdapConnectorSchema
         {
             foreach (var auxiliaryClass in auxiliaryClasses)
             {
-                var auxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={auxiliaryClass})") ?? 
+                var auxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={auxiliaryClass})") ??
                                           throw new Exception($"Couldn't find auxiliary class entry: {auxiliaryClass}");
 
                 GetObjectClassAttributesRecursively(auxiliaryClassEntry, objectType);
             }
         }
 
-        if (systemAuxiliaryClasses == null) 
+        if (systemAuxiliaryClasses == null)
             return;
-            
+
         foreach (var systemAuxiliaryClass in systemAuxiliaryClasses)
         {
-            var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={systemAuxiliaryClass})") ?? 
+            var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={systemAuxiliaryClass})") ??
                                             throw new Exception($"Couldn't find auxiliary class entry: {systemAuxiliaryClass}");
 
             GetObjectClassAttributesRecursively(systemAuxiliaryClassEntry, objectType);
@@ -165,12 +165,12 @@ internal class LdapConnectorSchema
 
     private ConnectorSchemaAttribute GetSchemaAttribute(string attributeName, string objectClass, bool required)
     {
-        var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={attributeName})") ?? 
+        var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={attributeName})") ??
                              throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
 
         var description = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "description");
         var adminDescription = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "admindescription");
-            
+
         // isSingleValued comes back as TRUE/FALSE string
         // if we can't convert to a bool, assume it's single-valued
         var isSingleValuedRawValue = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "issinglevalued");
@@ -209,7 +209,7 @@ internal class LdapConnectorSchema
         if (!string.IsNullOrEmpty(description))
             attribute.Description = description;
         else if (!string.IsNullOrEmpty(adminDescription))
-            attribute.Description = adminDescription;            
+            attribute.Description = adminDescription;
 
         return attribute;
     }
