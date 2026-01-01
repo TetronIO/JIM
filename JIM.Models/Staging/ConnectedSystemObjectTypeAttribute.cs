@@ -41,6 +41,13 @@ public class ConnectedSystemObjectTypeAttribute
     /// </summary>
     public bool IsSecondaryExternalId { get; set; }
 
+    /// <summary>
+    /// Indicates if this attribute's selection state is locked and cannot be changed by administrators.
+    /// This is automatically set to true for External ID and Secondary External ID attributes to ensure
+    /// the system always has the required anchor attributes available for sync operations.
+    /// </summary>
+    public bool SelectionLocked { get; set; }
+
     public override string ToString()
     {
         return Name;

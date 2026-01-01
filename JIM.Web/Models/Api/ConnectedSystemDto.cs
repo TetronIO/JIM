@@ -102,6 +102,12 @@ public class ConnectedSystemAttributeDto
     public bool IsExternalId { get; set; }
     public bool IsSecondaryExternalId { get; set; }
 
+    /// <summary>
+    /// Indicates if this attribute's selection state is locked and cannot be changed.
+    /// This is true for External ID and Secondary External ID attributes.
+    /// </summary>
+    public bool SelectionLocked { get; set; }
+
     public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
     {
         return new ConnectedSystemAttributeDto
@@ -115,7 +121,8 @@ public class ConnectedSystemAttributeDto
             AttributePlurality = entity.AttributePlurality.ToString(),
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
-            IsSecondaryExternalId = entity.IsSecondaryExternalId
+            IsSecondaryExternalId = entity.IsSecondaryExternalId,
+            SelectionLocked = entity.SelectionLocked
         };
     }
 }

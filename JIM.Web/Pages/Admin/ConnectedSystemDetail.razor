@@ -561,10 +561,30 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Selected">
-                                <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary"></MudSwitch>
+                                @if (context.IsExternalId || context.IsSecondaryExternalId)
+                                {
+                                    <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly.">
+                                        <MudSwitch Value="@context.Selected" Color="@Color.Primary" Disabled="true" />
+                                    </MudTooltip>
+                                }
+                                else
+                                {
+                                    <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary" />
+                                }
                             </MudTd>
                             <MudTd DataLabel="External ID">
-                                @(context.IsExternalId ? "Yes" : "-")
+                                @if (context.IsExternalId)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                                }
+                                else if (context.IsSecondaryExternalId)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
                             </MudTd>
                             <MudTd DataLabel="Name">@context.Name</MudTd>
                             @if (_selectedObjectTypeHasClasses)

@@ -495,20 +495,42 @@ try {
         Write-Host "  ✓ Set 'sAMAccountName' as External ID for Target" -ForegroundColor Green
     }
 
-    # Mark all attributes as selected for both systems
+    # Select only the LDAP attributes needed for bidirectional sync flows
+    # This is more representative of real-world ILM configuration where administrators
+    # only import/export the attributes they actually need, rather than the entire schema.
+    # See: https://github.com/TetronIO/JIM/issues/227
+    $requiredLdapAttributes = @(
+        'sAMAccountName',     # Account Name - required anchor
+        'givenName',          # First Name
+        'sn',                 # Last Name (surname)
+        'displayName',        # Display Name
+        'cn',                 # Common Name (also mapped from Display Name)
+        'mail',               # Email
+        'userPrincipalName',  # UPN (also mapped from Email)
+        'title',              # Job Title
+        'department',         # Department
+        'telephoneNumber',    # Phone
+        'distinguishedName'   # DN - required for LDAP provisioning
+    )
+
     # Using bulk update API for efficiency - creates single Activity record instead of one per attribute
     $sourceAttrUpdates = @{}
     foreach ($attr in $sourceUserType.attributes) {
-        $sourceAttrUpdates[$attr.id] = @{ selected = $true }
+        if ($requiredLdapAttributes -contains $attr.name) {
+            $sourceAttrUpdates[$attr.id] = @{ selected = $true }
+        }
     }
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -AttributeUpdates $sourceAttrUpdates | Out-Null
 
     $targetAttrUpdates = @{}
     foreach ($attr in $targetUserType.attributes) {
-        $targetAttrUpdates[$attr.id] = @{ selected = $true }
+        if ($requiredLdapAttributes -contains $attr.name) {
+            $targetAttrUpdates[$attr.id] = @{ selected = $true }
+        }
     }
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -AttributeUpdates $targetAttrUpdates | Out-Null
-    Write-Host "  ✓ Selected all attributes for Source and Target" -ForegroundColor Green
+    Write-Host "  ✓ Selected $($sourceAttrUpdates.Count) attributes for Source and Target (minimal set for sync)" -ForegroundColor Green
+    Write-Host "    Attributes: $($requiredLdapAttributes -join ', ')" -ForegroundColor DarkGray
 
     # Create Import sync rule (Source -> Metaverse)
     $existingRules = Get-JIMSyncRule

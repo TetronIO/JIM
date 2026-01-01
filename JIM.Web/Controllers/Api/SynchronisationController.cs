@@ -213,6 +213,16 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of connected system {connectedSystemId}."));
         }
 
+        // Validate: Cannot unselect an External ID or Secondary External ID attribute
+        if (request.Selected.HasValue && !request.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
+        {
+            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+            _logger.LogWarning("Attempted to unselect {IdType} attribute {AttributeId} ({Name})", idType, attributeId, attribute.Name);
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. " +
+                "These attributes must remain selected to ensure sync operations function correctly."));
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
@@ -237,6 +247,8 @@ public class SynchronisationController(
                 }
             }
             attribute.IsExternalId = true;
+            // External ID attributes must always be selected for sync operations to work
+            attribute.Selected = true;
         }
         else if (request.IsExternalId.HasValue)
         {
@@ -244,7 +256,12 @@ public class SynchronisationController(
         }
 
         if (request.IsSecondaryExternalId.HasValue)
+        {
             attribute.IsSecondaryExternalId = request.IsSecondaryExternalId.Value;
+            // Secondary External ID attributes must always be selected for sync operations to work
+            if (request.IsSecondaryExternalId.Value)
+                attribute.Selected = true;
+        }
 
         if (apiKey != null)
             await _application.ConnectedSystems.UpdateAttributeAsync(attribute, apiKey);
