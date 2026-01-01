@@ -171,9 +171,11 @@ public class SyncImportTaskProcessor
         }
 
         // process deletions
+        // note: only run deletion detection for Full Imports, not Delta Imports
+        // Delta Imports only return changed objects, so absence doesn't mean deletion
         // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
-        if (totalObjectsImported > 0)
+        if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
         {
             // TODO: find out why this caused CSOs to be persisted early, and why this conflicts with later create CSOs statement
             await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
