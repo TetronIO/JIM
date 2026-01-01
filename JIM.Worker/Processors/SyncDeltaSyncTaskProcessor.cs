@@ -324,7 +324,8 @@ public class SyncDeltaSyncTaskProcessor
 
         Log.Verbose($"ProcessPendingExport: Found {pendingExportsForThisCso.Count} pending export(s) for CSO {connectedSystemObject.Id}.");
 
-        foreach (var pendingExport in pendingExportsForThisCso)
+        // Create a copy to iterate over, since we may remove items from the original list during processing
+        foreach (var pendingExport in pendingExportsForThisCso.ToList())
         {
             // track which attribute changes succeeded and which failed
             var successfulChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();

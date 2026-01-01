@@ -112,7 +112,11 @@ public class SyncImportTaskProcessor
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
 
-                    if (result.PersistedConnectorData != _connectedSystem.PersistedConnectorData)
+                    // Only update persisted connector data if the connector explicitly returns a new non-null value.
+                    // A null value means "no change" (e.g., subsequent pagination pages), not "clear the data".
+                    // This is important for delta imports where the watermark (USN) is set on the first page
+                    // and should be preserved across all pages.
+                    if (result.PersistedConnectorData != null && result.PersistedConnectorData != _connectedSystem.PersistedConnectorData)
                     {
                         // the connector wants to persist some data between sync runs. update the connected system with the new value
                         Log.Debug($"ExecuteAsync: updating persisted connector data. old value: '{_connectedSystem.PersistedConnectorData}', new value: '{result.PersistedConnectorData}'");
