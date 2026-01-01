@@ -39,6 +39,9 @@ public class SyncDeltaSyncTaskProcessor
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
+    // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
+    private readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
+
     public SyncDeltaSyncTaskProcessor(
         JimApplication jimApplication,
         ConnectedSystem connectedSystem,
@@ -176,6 +179,9 @@ public class SyncDeltaSyncTaskProcessor
 
             // batch process pending export confirmations (deletes and updates)
             await FlushPendingExportOperationsAsync();
+
+            // batch delete obsolete CSOs
+            await FlushObsoleteCsoOperationsAsync();
 
             // Update activity progress once per page
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
@@ -454,8 +460,8 @@ public class SyncDeltaSyncTaskProcessor
 
         if (connectedSystemObject.MetaverseObject == null)
         {
-            // Not joined, just delete the CSO.
-            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+            // Not joined, queue the CSO for batch deletion
+            _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
             return runProfileExecutionItem;
         }
 
@@ -471,7 +477,7 @@ public class SyncDeltaSyncTaskProcessor
 
             // Note: We still delete the CSO as it's obsolete in the source system,
             // but we don't disconnect from MVO or trigger deletion rules
-            await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+            _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
             return runProfileExecutionItem;
         }
 
@@ -503,8 +509,8 @@ public class SyncDeltaSyncTaskProcessor
         connectedSystemObject.DateJoined = null;
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Broke join between CSO {connectedSystemObject.Id} and MVO {mvoId}.");
 
-        // Delete the CSO first so the database reflects the disconnection
-        await _jim.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject, runProfileExecutionItem);
+        // Queue the CSO for batch deletion (deletion will happen at end of page processing)
+        _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
 
         // Check if this was the last connector by querying the database for remaining CSOs
         // (the in-memory collection may not reflect CSOs from other connected systems)
@@ -856,6 +862,29 @@ public class SyncDeltaSyncTaskProcessor
             _pendingExportsToUpdate.Clear();
         }
 
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Batch deletes all obsolete CSOs collected during the current page.
+    /// This reduces database round trips from n deletes to 1 batch delete operation.
+    /// </summary>
+    private async Task FlushObsoleteCsoOperationsAsync()
+    {
+        if (_obsoleteCsosToDelete.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations");
+        span.SetTag("deleteCount", _obsoleteCsosToDelete.Count);
+
+        // Batch delete obsolete CSOs
+        var csosToDelete = _obsoleteCsosToDelete.Select(x => x.Cso).ToList();
+        var executionItems = _obsoleteCsosToDelete.Select(x => x.ExecutionItem).ToList();
+
+        await _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync(csosToDelete, executionItems);
+        Log.Verbose("FlushObsoleteCsoOperationsAsync: Deleted {Count} obsolete CSOs in batch", _obsoleteCsosToDelete.Count);
+
+        _obsoleteCsosToDelete.Clear();
         span.SetSuccess();
     }
 
