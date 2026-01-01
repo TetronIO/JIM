@@ -213,12 +213,13 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of connected system {connectedSystemId}."));
         }
 
-        // Validate: Cannot unselect a locked attribute (connector-recommended External ID or Secondary External ID)
-        if (request.Selected.HasValue && !request.Selected.Value && attribute.SelectionLocked)
+        // Validate: Cannot unselect an External ID or Secondary External ID attribute
+        if (request.Selected.HasValue && !request.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
         {
-            _logger.LogWarning("Attempted to unselect locked attribute {AttributeId} ({Name})", attributeId, attribute.Name);
+            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+            _logger.LogWarning("Attempted to unselect {IdType} attribute {AttributeId} ({Name})", idType, attributeId, attribute.Name);
             return BadRequest(ApiErrorResponse.BadRequest(
-                $"Cannot unselect attribute '{attribute.Name}' because it is a connector-recommended External ID or Secondary External ID attribute. " +
+                $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. " +
                 "These attributes must remain selected to ensure sync operations function correctly."));
         }
 

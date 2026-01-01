@@ -561,9 +561,9 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Selected">
-                                @if (context.SelectionLocked)
+                                @if (context.IsExternalId || context.IsSecondaryExternalId)
                                 {
-                                    <MudTooltip Text="This attribute is locked because it is the connector-recommended External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly.">
+                                    <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly.">
                                         <MudSwitch Value="@context.Selected" Color="@Color.Primary" Disabled="true" />
                                     </MudTooltip>
                                 }

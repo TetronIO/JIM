@@ -1674,10 +1674,11 @@ public class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: Cannot unselect a locked attribute (connector-recommended External ID or Secondary External ID)
-            if (updates.Selected.HasValue && !updates.Selected.Value && attribute.SelectionLocked)
+            // Validate: Cannot unselect an External ID or Secondary External ID attribute
+            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
             {
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is a connector-recommended External ID or Secondary External ID attribute. These attributes must remain selected."));
+                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
                 continue;
             }
 
@@ -1764,10 +1765,11 @@ public class ConnectedSystemServer
                 continue;
             }
 
-            // Validate: Cannot unselect a locked attribute (connector-recommended External ID or Secondary External ID)
-            if (updates.Selected.HasValue && !updates.Selected.Value && attribute.SelectionLocked)
+            // Validate: Cannot unselect an External ID or Secondary External ID attribute
+            if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
             {
-                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is a connector-recommended External ID or Secondary External ID attribute. These attributes must remain selected."));
+                var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+                errors.Add((attributeId, $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected."));
                 continue;
             }
 
