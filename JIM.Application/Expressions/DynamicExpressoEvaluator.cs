@@ -446,6 +446,7 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         DateTime? dateTime = value switch
         {
             DateTime dt => dt,
+            DateTimeOffset dto => dto.UtcDateTime,  // Handle DateTimeOffset from PostgreSQL
             string s when DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed) => parsed,
             _ => null
         };
