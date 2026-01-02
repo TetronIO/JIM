@@ -929,5 +929,61 @@ public class DynamicExpressoEvaluatorTests
         Assert.That(dateResult, Is.EqualTo(originalDate));
     }
 
+    [Test]
+    public void Evaluate_ToFileTime_ThrowsForUnrecognisedType()
+    {
+        // Passing an integer (not a DateTime, DateTimeOffset, or string) should throw
+        // This ensures we fail fast rather than silently returning null for unexpected types
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", 12345 } },  // int, not a date type
+            new Dictionary<string, object?>());
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context));
+
+        Assert.That(ex?.Message, Does.Contain("ToFileTime cannot convert value of type 'Int32'"));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForEmptyString()
+    {
+        // Empty strings should return null (graceful handling for missing CSV data)
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", "" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ThrowsForUnrecognisedType()
+    {
+        // Passing a DateTime (not a long, int, or string) should throw
+        // This ensures we fail fast rather than silently returning null for unexpected types
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "FileTime", DateTime.UtcNow } },  // DateTime, not a numeric type
+            new Dictionary<string, object?>());
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context));
+
+        Assert.That(ex?.Message, Does.Contain("FromFileTime cannot convert value of type 'DateTime'"));
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForEmptyString()
+    {
+        // Empty strings should return null (graceful handling for missing data)
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "FileTime", "" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
     #endregion
 }

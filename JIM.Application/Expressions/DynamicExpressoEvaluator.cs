@@ -447,8 +447,10 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         {
             DateTime dt => dt,
             DateTimeOffset dto => dto.UtcDateTime,  // Handle DateTimeOffset from PostgreSQL
-            string s when DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed) => parsed,
-            _ => null
+            string s => ParseDateTimeOrNull(s),     // Handle string dates (may return null for invalid strings)
+            _ => throw new ArgumentException(
+                $"ToFileTime cannot convert value of type '{value.GetType().Name}'. " +
+                $"Expected DateTime, DateTimeOffset, or string. Value: '{value}'")
         };
 
         if (dateTime == null)
@@ -460,6 +462,20 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             : dateTime.Value.ToUniversalTime();
 
         return utcDateTime.ToFileTimeUtc();
+    }
+
+    /// <summary>
+    /// Attempts to parse a string as a DateTime, returning null if parsing fails.
+    /// This allows graceful handling of empty strings or unparseable date formats.
+    /// </summary>
+    private static DateTime? ParseDateTimeOrNull(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+            return null;
+
+        return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? parsed
+            : null;
     }
 
     /// <summary>
@@ -475,8 +491,10 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         {
             long l => l,
             int i => i,
-            string s when long.TryParse(s, out var parsed) => parsed,
-            _ => null
+            string s => ParseLongOrNull(s),  // Handle string values (may return null for invalid numbers)
+            _ => throw new ArgumentException(
+                $"FromFileTime cannot convert value of type '{value.GetType().Name}'. " +
+                $"Expected long, int, or string. Value: '{value}'")
         };
 
         if (fileTime == null || fileTime.Value <= 0)
@@ -495,6 +513,18 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             // Invalid FILETIME value
             return null;
         }
+    }
+
+    /// <summary>
+    /// Attempts to parse a string as a long, returning null if parsing fails.
+    /// This allows graceful handling of empty strings or unparseable numbers.
+    /// </summary>
+    private static long? ParseLongOrNull(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+            return null;
+
+        return long.TryParse(s, out var parsed) ? parsed : null;
     }
 
     #endregion
