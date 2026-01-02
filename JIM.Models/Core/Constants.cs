@@ -193,6 +193,11 @@ public static class Constants
 
         // Synchronisation Settings
         public const string PartitionValidationMode = "Sync.PartitionValidationMode";
+        /// <summary>
+        /// When enabled, creates detailed Activity execution items for exports where CSO already has current values.
+        /// Default: disabled for performance.
+        /// </summary>
+        public const string VerboseNoChangeRecording = "Sync.VerboseNoChangeRecording";
 
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";

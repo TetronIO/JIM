@@ -740,6 +740,19 @@ internal class SeedingServer
             IsSecret = false
         });
 
+        // Synchronisation Settings - Verbose no-change recording
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.VerboseNoChangeRecording,
+            DisplayName = "Verbose no-change recording",
+            Description = "When enabled, creates detailed Activity execution items for exports where CSO already has current values. Default: disabled for performance.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "false",
+            IsReadOnly = false,
+            IsSecret = false
+        });
+
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
     }

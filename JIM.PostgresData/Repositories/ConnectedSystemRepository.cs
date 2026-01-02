@@ -1420,6 +1420,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Batch loads CSO attribute values for the specified CSO IDs.
+    /// Used for per-page caching during export evaluation to enable no-net-change detection.
+    /// </summary>
+    public async Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
+    {
+        var ids = csoIds.ToList();
+        if (ids.Count == 0)
+            return [];
+
+        return await Repository.Database.ConnectedSystemObjectAttributeValues
+            .Include(av => av.Attribute)
+            .Where(av => ids.Contains(av.ConnectedSystemObject.Id))
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
     /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
