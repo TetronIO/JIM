@@ -137,6 +137,8 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
         target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
         target.SetFunction("FormatDate", (Func<DateTime?, string, string?>)((dt, format) => dt?.ToString(format, CultureInfo.InvariantCulture)));
+        target.SetFunction("ToFileTime", (Func<object?, long?>)(o => ToFileTime(o)));
+        target.SetFunction("FromFileTime", (Func<object?, DateTime?>)(o => FromFileTime(o)));
 
         // Conversion functions
         target.SetFunction("ToString", (Func<object?, string?>)(o => o?.ToString()));
@@ -414,6 +416,84 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         }
 
         return new string(array);
+    }
+
+    #endregion
+
+    #region DateTime Conversion Functions
+
+    // These functions support Active Directory Large Integer (FILETIME) attributes:
+    // - accountExpires: When the account expires (0 or Int64.MaxValue = never)
+    // - pwdLastSet: When the password was last set (0 = must change at next logon)
+    // - lastLogon: Last interactive logon time (not replicated between DCs)
+    // - lastLogonTimestamp: Last logon time (replicated, but with 9-14 day lag)
+    // - lockoutTime: When the account was locked out (0 = not locked)
+    // - badPasswordTime: Last failed password attempt
+    //
+    // FILETIME format: 100-nanosecond intervals since January 1, 1601 UTC
+    // Range: 0 to 9223372036854775807 (Int64.MaxValue)
+
+    /// <summary>
+    /// Converts a DateTime to Windows FILETIME (100-nanosecond intervals since January 1, 1601 UTC).
+    /// This is the format used by AD attributes like accountExpires, pwdLastSet, lastLogon, etc.
+    /// A value of 0 or 9223372036854775807 (Int64.MaxValue) means "never expires" in AD.
+    /// </summary>
+    private static long? ToFileTime(object? value)
+    {
+        if (value == null)
+            return null;
+
+        DateTime? dateTime = value switch
+        {
+            DateTime dt => dt,
+            string s when DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed) => parsed,
+            _ => null
+        };
+
+        if (dateTime == null)
+            return null;
+
+        // Ensure we're working with UTC
+        var utcDateTime = dateTime.Value.Kind == DateTimeKind.Utc
+            ? dateTime.Value
+            : dateTime.Value.ToUniversalTime();
+
+        return utcDateTime.ToFileTimeUtc();
+    }
+
+    /// <summary>
+    /// Converts a Windows FILETIME (100-nanosecond intervals since January 1, 1601 UTC) to DateTime.
+    /// This is the format used by AD attributes like accountExpires, pwdLastSet, lastLogon, etc.
+    /// </summary>
+    private static DateTime? FromFileTime(object? value)
+    {
+        if (value == null)
+            return null;
+
+        long? fileTime = value switch
+        {
+            long l => l,
+            int i => i,
+            string s when long.TryParse(s, out var parsed) => parsed,
+            _ => null
+        };
+
+        if (fileTime == null || fileTime.Value <= 0)
+            return null;
+
+        // Int64.MaxValue means "never expires" in AD - return null to indicate no expiry
+        if (fileTime.Value == long.MaxValue)
+            return null;
+
+        try
+        {
+            return DateTime.FromFileTimeUtc(fileTime.Value);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            // Invalid FILETIME value
+            return null;
+        }
     }
 
     #endregion

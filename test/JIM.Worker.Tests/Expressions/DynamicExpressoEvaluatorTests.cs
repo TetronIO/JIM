@@ -737,4 +737,157 @@ public class DynamicExpressoEvaluatorTests
     }
 
     #endregion
+
+    #region FileTime Conversion Tests (AD accountExpires, pwdLastSet, etc.)
+
+    [Test]
+    public void Evaluate_ToFileTime_ConvertsDateTimeToFileTime()
+    {
+        // Test with a known date: January 1, 2025 00:00:00 UTC
+        // This should convert to the Windows FILETIME format
+        var testDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var expectedFileTime = testDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", testDate } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ParsesDateTimeFromString()
+    {
+        // Test with a string date in ISO 8601 format
+        var testDate = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var dateString = testDate.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var expectedFileTime = testDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", dateString } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForNullInput()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", null } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForInvalidString()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", "not a date" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ConvertsFileTimeToDateTime()
+    {
+        // Test with a known FILETIME value
+        var expectedDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var fileTime = expectedDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", fileTime } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedDate));
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ParsesFileTimeFromString()
+    {
+        // Test with a FILETIME value as string (common in LDAP responses)
+        var expectedDate = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var fileTimeString = expectedDate.ToFileTimeUtc().ToString();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", fileTimeString } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedDate));
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForNullInput()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", null } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForZero()
+    {
+        // Zero means "never expires" in AD - should return null
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", 0L } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForMaxValue()
+    {
+        // Int64.MaxValue (9223372036854775807) means "never expires" in AD - should return null
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", long.MaxValue } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_RoundTrip_FileTimeConversion()
+    {
+        // Test that ToFileTime and FromFileTime are inverse operations
+        var originalDate = new DateTime(2025, 3, 15, 14, 30, 45, DateTimeKind.Utc);
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Date", originalDate } },
+            new Dictionary<string, object?>());
+
+        // Convert to FILETIME and back
+        var fileTimeResult = _evaluator.Evaluate("ToFileTime(mv[\"Date\"])", context);
+        Assert.That(fileTimeResult, Is.Not.Null);
+
+        var context2 = new ExpressionContext(
+            new Dictionary<string, object?> { { "FileTime", fileTimeResult } },
+            new Dictionary<string, object?>());
+        var dateResult = _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context2);
+
+        Assert.That(dateResult, Is.EqualTo(originalDate));
+    }
+
+    #endregion
 }
