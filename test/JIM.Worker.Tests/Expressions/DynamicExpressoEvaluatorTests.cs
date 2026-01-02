@@ -799,6 +799,46 @@ public class DynamicExpressoEvaluatorTests
     }
 
     [Test]
+    public void Evaluate_ToFileTime_HandlesDateTimeOffset()
+    {
+        // PostgreSQL returns DateTimeOffset for "timestamp with time zone" columns
+        // This test ensures we handle the database-native type correctly
+        var testDate = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var dateTimeOffset = new DateTimeOffset(testDate, TimeSpan.Zero);
+        var expectedFileTime = testDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", dateTimeOffset } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_HandlesDateTimeOffsetWithOffset()
+    {
+        // Test DateTimeOffset with a non-UTC offset (e.g., +05:30 India Standard Time)
+        // The function should convert to UTC before calculating FILETIME
+        var localTime = new DateTime(2025, 6, 15, 18, 0, 0);  // 18:00 local time
+        var offset = TimeSpan.FromHours(5.5);  // +05:30
+        var dateTimeOffset = new DateTimeOffset(localTime, offset);
+
+        // Expected: 18:00 + 05:30 local = 12:30 UTC
+        var expectedUtc = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var expectedFileTime = expectedUtc.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", dateTimeOffset } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
     public void Evaluate_FromFileTime_ConvertsFileTimeToDateTime()
     {
         // Test with a known FILETIME value
