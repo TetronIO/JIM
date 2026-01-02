@@ -55,10 +55,10 @@ for ($i = 1; $i -le $scale.Users; $i++) {
 
     $upn = "$($user.SamAccountName)@testdomain.local"
 
-    # Format accountExpires as ISO 8601 for CSV compatibility
-    # AD's accountExpires uses NT time (100-nanosecond intervals since 1601)
-    # but we'll export as ISO 8601 and let the sync rule expression convert it
-    $accountExpiresValue = if ($null -ne $user.AccountExpires) {
+    # Format employeeEndDate as ISO 8601 for CSV compatibility
+    # This represents the employee's contract/employment end date from HR
+    # JIM will convert this to AD's accountExpires (NT time format) via ToFileTime expression
+    $employeeEndDateValue = if ($null -ne $user.AccountExpires) {
         $user.AccountExpires.ToString("yyyy-MM-ddTHH:mm:ssZ")
     } else {
         ""
@@ -76,7 +76,7 @@ for ($i = 1; $i -le $scale.Users; $i++) {
         status = "Active"
         userPrincipalName = $upn
         employeeType = $user.EmployeeType
-        accountExpires = $accountExpiresValue
+        employeeEndDate = $employeeEndDateValue
     }
 
     if (($i % 1000) -eq 0 -or $i -eq $scale.Users) {

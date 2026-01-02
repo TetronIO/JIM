@@ -503,7 +503,7 @@ try {
             'title',              # Job Title
             'department',         # Department
             'distinguishedName',  # DN - required for LDAP provisioning
-            'accountExpires',     # Account expiry date (DateTime) - tests non-string data type flow
+            'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
             'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
         )
 
@@ -581,7 +581,7 @@ try {
             @{ CsAttr = "department";        MvAttr = "Department" }
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
-            @{ CsAttr = "accountExpires";    MvAttr = "Account Expires" }  # DateTime - tests non-string data type import
+            @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime
         )
 
         $exportMappings = @(
@@ -614,7 +614,7 @@ try {
             }
             @{
                 LdapAttr = "accountExpires"
-                Expression = 'ToFileTime(mv["Account Expires"])'  # DateTime → Large Integer (Int64) - tests LongNumber data type export
+                Expression = 'ToFileTime(mv["Employee End Date"])'  # DateTime → Large Integer (Int64) - HR end date converted to AD format
             }
         )
 
