@@ -1133,7 +1133,7 @@ public class ExportEvaluationServer
     /// <param name="pendingChange">The pending change to export.</param>
     /// <param name="existingValue">The existing CSO attribute value, or null if no value exists.</param>
     /// <returns>True if the values are identical (no-net-change), false otherwise.</returns>
-    internal static bool IsCsoAttributeAlreadyCurrent(
+    public static bool IsCsoAttributeAlreadyCurrent(
         PendingExportAttributeValueChange pendingChange,
         ConnectedSystemObjectAttributeValue? existingValue)
     {
