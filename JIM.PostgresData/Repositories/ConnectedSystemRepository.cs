@@ -417,7 +417,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Project to header DTO with pending export info
         // Use a left join to include pending export data for displayName and secondaryExternalId
         var selectedObjects = from cso in pagedObjects
-            join pe in Repository.Database.PendingExports
+            join pe in Repository.Database.PendingExports.Include(p => p.AttributeValueChanges).ThenInclude(avc => avc.Attribute)
                 on cso.Id equals pe.ConnectedSystemObjectId into pendingExports
             from pe in pendingExports.DefaultIfEmpty()
             select new ConnectedSystemObjectHeader
@@ -440,9 +440,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 SecondaryExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
                 // Pending export info - only show if CSO doesn't already have a confirmed value
                 HasPendingExport = pe != null,
+                PendingExportId = pe != null ? pe.Id : null,
                 PendingDisplayName = pe != null && !cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
                     ? pe.AttributeValueChanges
                         .Where(avc => EF.Functions.ILike(avc.Attribute.Name, "displayname") || EF.Functions.ILike(avc.Attribute.Name, "cn"))
+                        .Select(avc => avc.StringValue)
+                        .FirstOrDefault()
+                    : null,
+                PendingExternalId = pe != null
+                    ? pe.AttributeValueChanges
+                        .Where(avc => avc.AttributeId == cso.ExternalIdAttributeId)
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault()
                     : null,

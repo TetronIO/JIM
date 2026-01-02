@@ -105,7 +105,18 @@
                             Href="@(Utilities.GetConnectedSystemObjectHref(context))"
                             IconColor="Color.Primary">View</MudButton>
             </MudTd>
-            <MudTd DataLabel="External Id">@context.ExternalIdAttributeValue</MudTd>
+            <MudTd DataLabel="External Id">
+                @if (!string.IsNullOrEmpty(context.PendingExternalId))
+                {
+                    <MudTooltip Text="Pending export - not yet confirmed">
+                        <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingExternalId</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    @context.ExternalIdAttributeValue
+                }
+            </MudTd>
             @if (_hasSecondaryExternalId)
             {
                 <MudTd DataLabel="Secondary External Id">
