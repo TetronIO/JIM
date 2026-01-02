@@ -502,7 +502,8 @@ try {
             'userPrincipalName',  # UPN (also mapped from Email)
             'title',              # Job Title
             'department',         # Department
-            'distinguishedName'   # DN - required for LDAP provisioning
+            'distinguishedName',  # DN - required for LDAP provisioning
+            'accountExpires'      # Account expiry date (DateTime) - tests non-string data type flow
         )
 
         $ldapAttrUpdates = @{}
@@ -578,6 +579,8 @@ try {
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
+            @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
+            @{ CsAttr = "accountExpires";    MvAttr = "Account Expires" }  # DateTime - tests non-string data type import
         )
 
         $exportMappings = @(

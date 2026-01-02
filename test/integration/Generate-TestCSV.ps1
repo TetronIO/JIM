@@ -55,6 +55,15 @@ for ($i = 1; $i -le $scale.Users; $i++) {
 
     $upn = "$($user.SamAccountName)@testdomain.local"
 
+    # Format accountExpires as ISO 8601 for CSV compatibility
+    # AD's accountExpires uses NT time (100-nanosecond intervals since 1601)
+    # but we'll export as ISO 8601 and let the sync rule expression convert it
+    $accountExpiresValue = if ($null -ne $user.AccountExpires) {
+        $user.AccountExpires.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    } else {
+        ""
+    }
+
     $users += [PSCustomObject]@{
         employeeId = $user.EmployeeId
         firstName = $user.FirstName
@@ -66,6 +75,8 @@ for ($i = 1; $i -le $scale.Users; $i++) {
         displayName = $user.DisplayName
         status = "Active"
         userPrincipalName = $upn
+        employeeType = $user.EmployeeType
+        accountExpires = $accountExpiresValue
     }
 
     if (($i % 1000) -eq 0 -or $i -eq $scale.Users) {

@@ -287,6 +287,11 @@ function New-TestUser {
         to generate ~1,000,000 unique name combinations. For datasets larger
         than available combinations, a numeric suffix is appended to ensure
         uniqueness.
+
+        Also generates realistic employment data:
+        - EmployeeType: ~20% Contractors, ~80% Employees
+        - AccountExpires: All contractors get expiry dates (1 week to 12 months)
+                         ~15% of employees get expiry dates (resignations, 1 week to 3 months)
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -341,6 +346,35 @@ function New-TestUser {
         "$firstName $lastName"
     }
 
+    # Determine employee type: ~20% contractors, ~80% employees
+    # Use deterministic assignment based on index for reproducibility
+    $isContractor = ($Index % 5) -eq 0
+    $employeeType = if ($isContractor) { "Contractor" } else { "Employee" }
+
+    # Calculate account expiry date
+    # - All contractors: 1 week to 12 months in the future
+    # - ~15% of employees (those with resignations): 1 week to 3 months in the future
+    # - Other employees: no expiry (null)
+    $accountExpires = $null
+    $now = Get-Date
+
+    if ($isContractor) {
+        # Contractors: expiry between 1 week and 12 months
+        # Use index to distribute expiry dates across the range
+        $minDays = 7
+        $maxDays = 365
+        $daysToAdd = $minDays + (($Index * 17) % ($maxDays - $minDays))
+        $accountExpires = $now.AddDays($daysToAdd)
+    }
+    elseif (($Index % 7) -eq 3) {
+        # ~15% of employees have resignations (those where index % 7 == 3)
+        # Expiry between 1 week and 3 months
+        $minDays = 7
+        $maxDays = 90
+        $daysToAdd = $minDays + (($Index * 13) % ($maxDays - $minDays))
+        $accountExpires = $now.AddDays($daysToAdd)
+    }
+
     return @{
         FirstName = $firstName
         LastName = $lastName
@@ -350,6 +384,8 @@ function New-TestUser {
         Title = $title
         EmployeeId = $employeeId
         DisplayName = $displayName
+        EmployeeType = $employeeType
+        AccountExpires = $accountExpires
     }
 }
 
