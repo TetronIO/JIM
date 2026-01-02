@@ -141,6 +141,25 @@ internal class FileConnectorImport
                             importObjectAttribute.IntValues.Add(_reader.CsvReader.GetField<int>(attribute.Name));
                         }
                     }
+                    else if (attribute.Type == AttributeDataType.LongNumber)
+                    {
+                        var fieldValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (isMultiValued && !string.IsNullOrEmpty(fieldValue))
+                        {
+                            var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            foreach (var value in values)
+                            {
+                                if (long.TryParse(value, out var longValue))
+                                    importObjectAttribute.LongValues.Add(longValue);
+                                else
+                                    throw new FormatException($"Cannot parse '{value}' as long number");
+                            }
+                        }
+                        else
+                        {
+                            importObjectAttribute.LongValues.Add(_reader.CsvReader.GetField<long>(attribute.Name));
+                        }
+                    }
                     else if (attribute.Type == AttributeDataType.DateTime)
                     {
                         importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);

@@ -296,6 +296,24 @@ public class SyncImportTaskProcessor
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
+                case AttributeDataType.LongNumber:
+                {
+                    // get the long connected system object external ids for this object type
+                    var connectedSystemObjectExternalIdsOfTypeLong = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id);
+
+                    // get the long import object external ids for this object type
+                    var connectedSystemLongExternalIdValues = externalIdsImported
+                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.LongValues);
+
+                    // create a collection with the connected system objects no longer in the connected system for this object type
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeLong.Except(connectedSystemLongExternalIdValues);
+
+                    // obsolete the connected system objects no longer in the connected system for this object type
+                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                    break;
+                }
                 case AttributeDataType.NotSet:
                 case AttributeDataType.DateTime:
                 case AttributeDataType.Binary:
@@ -577,6 +595,7 @@ public class SyncImportTaskProcessor
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
         if (importObjectAttribute.IntValues.Count > 1 ||
+            importObjectAttribute.LongValues.Count > 1 ||
             importObjectAttribute.StringValues.Count > 1 ||
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
@@ -592,6 +611,10 @@ public class SyncImportTaskProcessor
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Number =>
                 await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]),
+            AttributeDataType.LongNumber when importObjectAttribute.LongValues.Count == 0 =>
+                throw new ExternalIdAttributeValueMissingException($"External Id long number attribute({externalIdAttribute.Name}) on the imported object has no value."),
+            AttributeDataType.LongNumber =>
+                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.LongValues[0]),
             AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Guid =>
@@ -689,6 +712,18 @@ public class SyncImportTaskProcessor
                             Attribute = csAttribute,
                             AttributeId = csAttribute.Id,
                             IntValue = importObjectAttributeIntValue,
+                            ConnectedSystemObject = connectedSystemObject
+                        });
+                    }
+                    break;
+                case AttributeDataType.LongNumber:
+                    foreach (var importObjectAttributeLongValue in importObjectAttribute.LongValues)
+                    {
+                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                        {
+                            Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
+                            LongValue = importObjectAttributeLongValue,
                             ConnectedSystemObject = connectedSystemObject
                         });
                     }
@@ -832,6 +867,17 @@ public class SyncImportTaskProcessor
                         var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv))).ToList();
                         foreach (var newIntValue in newIntValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, IntValue = newIntValue });
+                        break;
+
+                    case AttributeDataType.LongNumber:
+                        // find values on the cso of type long that aren't on the imported object and remove them first
+                        var missingLongAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.LongValue != null && !importedObjectAttribute.LongValues.Any(i => i.Equals(av.LongValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingLongAttributeValues);
+
+                        // find imported values of type long that aren't on the cso and add them
+                        var newLongValues = importedObjectAttribute.LongValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.LongValue != null && av.LongValue.Equals(sv))).ToList();
+                        foreach (var newLongValue in newLongValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, LongValue = newLongValue });
                         break;
 
                     case AttributeDataType.DateTime:
@@ -987,6 +1033,14 @@ public class SyncImportTaskProcessor
                         throw new InvalidCastException(
                             $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
                     break;
+                case AttributeDataType.LongNumber:
+                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longUnresolvedReferenceValue))
+                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue) ??
+                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue);
+                    else
+                        throw new InvalidCastException(
+                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
+                    break;
                 case AttributeDataType.Guid:
                     if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
                         referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ??
@@ -1017,6 +1071,13 @@ public class SyncImportTaskProcessor
                                                           connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
+                    break;
+                case AttributeDataType.LongNumber:
+                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longUnresolvedReferenceValue2))
+                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue2) ??
+                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue2);
+                    else
+                        throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
                     break;
                 case AttributeDataType.Guid:
                     if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))

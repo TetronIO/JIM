@@ -808,6 +808,9 @@ public class ExportEvaluationServer
                                 case int intValue:
                                     change.IntValue = intValue;
                                     break;
+                                case long longValue:
+                                    change.LongValue = longValue;
+                                    break;
                                 case DateTime dtValue:
                                     change.DateTimeValue = dtValue;
                                     break;
@@ -893,6 +896,9 @@ public class ExportEvaluationServer
                         break;
                     case AttributeDataType.Binary:
                         attributeChange.ByteValue = mvoValue.ByteValue;
+                        break;
+                    case AttributeDataType.LongNumber:
+                        attributeChange.LongValue = mvoValue.LongValue;
                         break;
                     case AttributeDataType.Reference:
                         // For reference attributes, store the MVO ID as unresolved reference - will be resolved during export execution

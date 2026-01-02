@@ -206,7 +206,6 @@ internal static class LdapConnectorUtilities
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
         // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
-        // Some AD attributes (like Large Integer syntax) may exceed Int32 range, so use TryParse
         var result = new List<int>();
         foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
         {
@@ -214,8 +213,23 @@ internal static class LdapConnectorUtilities
             {
                 result.Add(intValue);
             }
-            // Values that overflow Int32 are silently skipped - this is a limitation
-            // of JIM's current data model which doesn't have a separate Int64 type
+        }
+        return result.Count > 0 ? result : null;
+    }
+
+    internal static List<long>? GetEntryAttributeLongValues(SearchResultEntry entry, string attributeName)
+    {
+        if (entry == null) return null;
+        if (!entry.Attributes.Contains(attributeName)) return null;
+        if (entry.Attributes[attributeName].Count == 0) return null;
+        // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
+        var result = new List<long>();
+        foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
+        {
+            if (long.TryParse(value, out var longValue))
+            {
+                result.Add(longValue);
+            }
         }
         return result.Count > 0 ? result : null;
     }
@@ -257,7 +271,8 @@ internal static class LdapConnectorUtilities
         return omSyntax switch
         {
             1 or 10 => AttributeDataType.Boolean,
-            2 or 65 => AttributeDataType.Number,
+            2 => AttributeDataType.Number,  // Integer (32-bit)
+            65 => AttributeDataType.LongNumber,  // Large Integer (64-bit) - accountExpires, pwdLastSet, lastLogon, etc.
             3 or 4 => AttributeDataType.Binary, // 3 = Binary, 4 = OctetString (photo, objectSid, logonHours)
             6 or 18 or 19 or 20 or 22 or 27 or 64 => AttributeDataType.Text,
             23 or 24 => AttributeDataType.DateTime,

@@ -200,6 +200,10 @@ public class PendingExportReconciliationService
                 attrChange.IntValue.HasValue &&
                 csoValues.Any(v => v.IntValue == attrChange.IntValue),
 
+            AttributeDataType.LongNumber =>
+                attrChange.LongValue.HasValue &&
+                csoValues.Any(v => v.LongValue == attrChange.LongValue),
+
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
                 csoValues.Any(v => v.DateTimeValue == attrChange.DateTimeValue),
@@ -242,6 +246,7 @@ public class PendingExportReconciliationService
         {
             AttributeDataType.Text => csoAttrValues.Select(v => v.StringValue).Where(v => v != null),
             AttributeDataType.Number => csoAttrValues.Select(v => v.IntValue?.ToString()).Where(v => v != null),
+            AttributeDataType.LongNumber => csoAttrValues.Select(v => v.LongValue?.ToString()).Where(v => v != null),
             AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue?.ToString("O")).Where(v => v != null),
             AttributeDataType.Boolean => csoAttrValues.Select(v => v.BoolValue?.ToString()).Where(v => v != null),
             AttributeDataType.Guid => csoAttrValues.Select(v => v.GuidValue?.ToString()).Where(v => v != null),
@@ -264,6 +269,7 @@ public class PendingExportReconciliationService
         {
             AttributeDataType.Text => attrChange.StringValue ?? "(null)",
             AttributeDataType.Number => attrChange.IntValue?.ToString() ?? "(null)",
+            AttributeDataType.LongNumber => attrChange.LongValue?.ToString() ?? "(null)",
             AttributeDataType.DateTime => attrChange.DateTimeValue?.ToString("O") ?? "(null)",
             AttributeDataType.Boolean => attrChange.BoolValue?.ToString() ?? "(null)",
             AttributeDataType.Guid => attrChange.GuidValue?.ToString() ?? "(null)",

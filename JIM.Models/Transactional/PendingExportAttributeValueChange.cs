@@ -14,6 +14,8 @@ public class PendingExportAttributeValueChange
 
     public int? IntValue { get; set; }
 
+    public long? LongValue { get; set; }
+
     public byte[]? ByteValue { get; set; }
 
     public Guid? GuidValue { get; set; }

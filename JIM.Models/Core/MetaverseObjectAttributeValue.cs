@@ -6,6 +6,7 @@ namespace JIM.Models.Core;
 [Index(nameof(ReferenceValue))]
 [Index(nameof(DateTimeValue))]
 [Index(nameof(IntValue))]
+[Index(nameof(LongValue))]
 [Index(nameof(ReferenceValue))]
 [Index(nameof(UnresolvedReferenceValue))]
 [Index(nameof(GuidValue))]
@@ -18,6 +19,7 @@ public class MetaverseObjectAttributeValue
     public string? StringValue { get; set; }
     public DateTime? DateTimeValue { get; set; }
     public int? IntValue { get; set; }
+    public long? LongValue { get; set; }
     public byte[]? ByteValue { get; set; }
 
     /// <summary>
@@ -63,6 +65,12 @@ public class MetaverseObjectAttributeValue
         if (IntValue != null)
         {
             output += IntValue.ToString();
+            return output;
+        }
+
+        if (LongValue != null)
+        {
+            output += LongValue.ToString();
             return output;
         }
 

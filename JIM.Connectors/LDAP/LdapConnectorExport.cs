@@ -506,11 +506,20 @@ internal class LdapConnectorExport
         if (attrChange.IntValue.HasValue)
             return attrChange.IntValue.Value.ToString();
 
+        if (attrChange.LongValue.HasValue)
+            return attrChange.LongValue.Value.ToString();
+
         if (attrChange.DateTimeValue.HasValue)
             return ConvertDateTimeToLdapFormat(attrChange.DateTimeValue.Value);
 
         if (attrChange.ByteValue != null)
             return attrChange.ByteValue;
+
+        if (attrChange.GuidValue.HasValue)
+            return attrChange.GuidValue.Value.ToByteArray();
+
+        if (attrChange.BoolValue.HasValue)
+            return attrChange.BoolValue.Value.ToString().ToUpperInvariant();
 
         if (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue))
             return attrChange.UnresolvedReferenceValue;

@@ -9,7 +9,8 @@ public enum AttributeDataType
     Binary = 4,
     Reference = 5,
     Guid = 6,
-    Boolean = 7
+    Boolean = 7,
+    LongNumber = 8
 }
 
 public enum AttributePlurality

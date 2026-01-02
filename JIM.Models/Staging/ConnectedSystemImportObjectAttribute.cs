@@ -17,6 +17,8 @@ public class ConnectedSystemImportObjectAttribute
 
     public List<int> IntValues { get; set; } = new();
 
+    public List<long> LongValues { get; set; } = new();
+
     /// <summary>
     /// DateTimes are in practice, single-valued. Who needs multiple DateTime values?
     /// </summary>

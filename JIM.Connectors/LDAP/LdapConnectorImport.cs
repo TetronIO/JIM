@@ -624,6 +624,12 @@ internal class LdapConnectorImport
                             importObjectAttribute.IntValues.AddRange(numberValues);
                         break;
 
+                    case AttributeDataType.LongNumber:
+                        var longNumberValues = LdapConnectorUtilities.GetEntryAttributeLongValues(searchResult, attributeName);
+                        if (longNumberValues is { Count: > 0 })
+                            importObjectAttribute.LongValues.AddRange(longNumberValues);
+                        break;
+
                     case AttributeDataType.Boolean:
                         importObjectAttribute.BoolValue = LdapConnectorUtilities.GetEntryAttributeBooleanValue(searchResult, attributeName);
                         break;

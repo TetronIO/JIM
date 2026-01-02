@@ -687,6 +687,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
     }
 
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue));
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
         var result = await Repository.Database.ConnectedSystemObjects
@@ -856,6 +868,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Select(av => av.IntValue!.Value)).ToListAsync();
     }
     
+    public async Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
+        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
+        // as obsolete because their external ID wouldn't be in the import results.
+        return await Repository.Database.ConnectedSystemObjects.Where(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.Type.Id == connectedSystemObjectTypeId &&
+                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            .SelectMany(q =>
+                q.AttributeValues.Where(av =>
+                        av.Attribute.Type == AttributeDataType.LongNumber &&
+                        av.Attribute.IsExternalId &&
+                        av.LongValue.HasValue)
+                    .Select(av => av.LongValue!.Value)).ToListAsync();
+    }
+
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
