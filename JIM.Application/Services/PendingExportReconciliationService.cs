@@ -208,6 +208,14 @@ public class PendingExportReconciliationService
                 attrChange.ByteValue != null &&
                 csoValues.Any(v => v.ByteValue != null && v.ByteValue.SequenceEqual(attrChange.ByteValue)),
 
+            AttributeDataType.Boolean =>
+                attrChange.BoolValue.HasValue &&
+                csoValues.Any(v => v.BoolValue == attrChange.BoolValue),
+
+            AttributeDataType.Guid =>
+                attrChange.GuidValue.HasValue &&
+                csoValues.Any(v => v.GuidValue == attrChange.GuidValue),
+
             AttributeDataType.Reference =>
                 !string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, StringComparison.Ordinal)),
@@ -235,6 +243,8 @@ public class PendingExportReconciliationService
             AttributeDataType.Text => csoAttrValues.Select(v => v.StringValue).Where(v => v != null),
             AttributeDataType.Number => csoAttrValues.Select(v => v.IntValue?.ToString()).Where(v => v != null),
             AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue?.ToString("O")).Where(v => v != null),
+            AttributeDataType.Boolean => csoAttrValues.Select(v => v.BoolValue?.ToString()).Where(v => v != null),
+            AttributeDataType.Guid => csoAttrValues.Select(v => v.GuidValue?.ToString()).Where(v => v != null),
             AttributeDataType.Reference => csoAttrValues.Select(v => v.UnresolvedReferenceValue).Where(v => v != null),
             _ => Enumerable.Empty<string?>()
         };
@@ -255,6 +265,8 @@ public class PendingExportReconciliationService
             AttributeDataType.Text => attrChange.StringValue ?? "(null)",
             AttributeDataType.Number => attrChange.IntValue?.ToString() ?? "(null)",
             AttributeDataType.DateTime => attrChange.DateTimeValue?.ToString("O") ?? "(null)",
+            AttributeDataType.Boolean => attrChange.BoolValue?.ToString() ?? "(null)",
+            AttributeDataType.Guid => attrChange.GuidValue?.ToString() ?? "(null)",
             AttributeDataType.Reference => attrChange.UnresolvedReferenceValue ?? "(null)",
             AttributeDataType.Binary => attrChange.ByteValue != null ? $"(binary, {attrChange.ByteValue.Length} bytes)" : "(null)",
             _ => "(unknown type)"

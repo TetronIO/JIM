@@ -812,10 +812,10 @@ public class ExportEvaluationServer
                                     change.DateTimeValue = dtValue;
                                     break;
                                 case bool boolValue:
-                                    change.StringValue = boolValue.ToString();
+                                    change.BoolValue = boolValue;
                                     break;
                                 case Guid guidValue:
-                                    change.StringValue = guidValue.ToString();
+                                    change.GuidValue = guidValue;
                                     break;
                                 case byte[] byteValue:
                                     change.ByteValue = byteValue;
@@ -886,12 +886,10 @@ public class ExportEvaluationServer
                         attributeChange.DateTimeValue = mvoValue.DateTimeValue;
                         break;
                     case AttributeDataType.Boolean:
-                        // Convert bool to string for now (model doesn't have BoolValue)
-                        attributeChange.StringValue = mvoValue.BoolValue?.ToString();
+                        attributeChange.BoolValue = mvoValue.BoolValue;
                         break;
                     case AttributeDataType.Guid:
-                        // Convert Guid to string for now (model doesn't have GuidValue)
-                        attributeChange.StringValue = mvoValue.GuidValue?.ToString();
+                        attributeChange.GuidValue = mvoValue.GuidValue;
                         break;
                     case AttributeDataType.Binary:
                         attributeChange.ByteValue = mvoValue.ByteValue;
