@@ -503,7 +503,8 @@ try {
             'title',              # Job Title
             'department',         # Department
             'distinguishedName',  # DN - required for LDAP provisioning
-            'accountExpires'      # Account expiry date (DateTime) - tests non-string data type flow
+            'accountExpires',     # Account expiry date (DateTime) - tests non-string data type flow
+            'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
         )
 
         $ldapAttrUpdates = @{}
@@ -606,6 +607,10 @@ try {
             @{
                 LdapAttr = "distinguishedName"
                 Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Borton Corp,DC=testdomain,DC=local"'
+            }
+            @{
+                LdapAttr = "userAccountControl"
+                Expression = '512'  # Normal account, enabled - tests Number (Int32) data type export
             }
         )
 
