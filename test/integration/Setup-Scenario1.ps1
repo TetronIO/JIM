@@ -612,6 +612,10 @@ try {
                 LdapAttr = "userAccountControl"
                 Expression = '512'  # Normal account, enabled - tests Number (Int32) data type export
             }
+            @{
+                LdapAttr = "accountExpires"
+                Expression = 'ToFileTime(mv["Account Expires"])'  # DateTime → Large Integer (Int64) - tests LongNumber data type export
+            }
         )
 
         # Get all metaverse attributes for lookup
