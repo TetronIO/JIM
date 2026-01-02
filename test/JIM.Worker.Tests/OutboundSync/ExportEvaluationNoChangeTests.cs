@@ -16,6 +16,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 /// <summary>
 /// Tests for no-net-change detection in ExportEvaluationServer.
 /// Verifies that pending exports are skipped when CSO already has the target value.
+/// Supports both single-valued and multi-valued attributes.
 /// </summary>
 public class ExportEvaluationNoChangeTests
 {
@@ -97,45 +98,45 @@ public class ExportEvaluationNoChangeTests
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
     }
 
-    #region String Value Comparison Tests
+    #region Single-Valued Update Tests (String)
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_StringMatch_ReturnsTrueAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateStringMatch_ReturnsTrueAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(stringValue: "John Smith");
-        var pendingChange = CreatePendingChange(stringValue: "John Smith");
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: "John Smith");
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.True, "Should return true when string values match");
+        Assert.That(result, Is.True, "Should return true when string values match for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_StringMismatch_ReturnsFalseAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateStringMismatch_ReturnsFalseAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(stringValue: "John Smith");
-        var pendingChange = CreatePendingChange(stringValue: "Jane Doe");
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: "Jane Doe");
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.False, "Should return false when string values differ");
+        Assert.That(result, Is.False, "Should return false when string values differ for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_StringCaseSensitive_ReturnsFalseAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateStringCaseSensitive_ReturnsFalseAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(stringValue: "John Smith");
-        var pendingChange = CreatePendingChange(stringValue: "JOHN SMITH");
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: "JOHN SMITH");
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
         Assert.That(result, Is.False, "String comparison should be case-sensitive");
@@ -143,304 +144,398 @@ public class ExportEvaluationNoChangeTests
 
     #endregion
 
-    #region Integer Value Comparison Tests
+    #region Single-Valued Update Tests (Other Types)
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_IntMatch_ReturnsTrueAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateIntMatch_ReturnsTrueAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(intValue: 12345);
-        var pendingChange = CreatePendingChange(intValue: 12345);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, intValue: 12345);
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.True, "Should return true when int values match");
+        Assert.That(result, Is.True, "Should return true when int values match for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_IntMismatch_ReturnsFalseAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateIntMismatch_ReturnsFalseAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(intValue: 12345);
-        var pendingChange = CreatePendingChange(intValue: 54321);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, intValue: 54321);
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.False, "Should return false when int values differ");
+        Assert.That(result, Is.False, "Should return false when int values differ for Update");
     }
 
-    #endregion
-
-    #region DateTime Value Comparison Tests
-
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_DateTimeMatch_ReturnsTrueAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateDateTimeMatch_ReturnsTrueAsync()
     {
         // Arrange
         var dateValue = new DateTime(2024, 1, 15, 10, 30, 0, DateTimeKind.Utc);
         var csoAttributeValue = CreateCsoAttributeValue(dateTimeValue: dateValue);
-        var pendingChange = CreatePendingChange(dateTimeValue: dateValue);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, dateTimeValue: dateValue);
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.True, "Should return true when DateTime values match");
+        Assert.That(result, Is.True, "Should return true when DateTime values match for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_DateTimeMismatch_ReturnsFalseAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateDateTimeMismatch_ReturnsFalseAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(dateTimeValue: new DateTime(2024, 1, 15, 10, 30, 0, DateTimeKind.Utc));
-        var pendingChange = CreatePendingChange(dateTimeValue: new DateTime(2024, 1, 16, 10, 30, 0, DateTimeKind.Utc));
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, dateTimeValue: new DateTime(2024, 1, 16, 10, 30, 0, DateTimeKind.Utc));
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.False, "Should return false when DateTime values differ");
+        Assert.That(result, Is.False, "Should return false when DateTime values differ for Update");
     }
 
-    #endregion
-
-    #region Binary Value Comparison Tests
-
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_BinaryMatch_ReturnsTrueAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateBinaryMatch_ReturnsTrueAsync()
     {
         // Arrange
         var binaryValue = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 };
         var csoAttributeValue = CreateCsoAttributeValue(byteValue: binaryValue);
-        var pendingChange = CreatePendingChange(byteValue: new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, byteValue: new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.True, "Should return true when binary values match");
+        Assert.That(result, Is.True, "Should return true when binary values match for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_BinaryMismatch_ReturnsFalseAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateBinaryMismatch_ReturnsFalseAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(byteValue: new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
-        var pendingChange = CreatePendingChange(byteValue: new byte[] { 0x01, 0x02, 0x03, 0x04, 0xFF });
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, byteValue: new byte[] { 0x01, 0x02, 0x03, 0x04, 0xFF });
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.False, "Should return false when binary values differ");
+        Assert.That(result, Is.False, "Should return false when binary values differ for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_BinaryDifferentLength_ReturnsFalseAsync()
-    {
-        // Arrange
-        var csoAttributeValue = CreateCsoAttributeValue(byteValue: new byte[] { 0x01, 0x02, 0x03 });
-        var pendingChange = CreatePendingChange(byteValue: new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
-
-        // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
-
-        // Assert
-        Assert.That(result, Is.False, "Should return false when binary arrays have different lengths");
-    }
-
-    #endregion
-
-    #region Guid Value Comparison Tests
-
-    [Test]
-    public void IsCsoAttributeAlreadyCurrent_GuidMatch_ReturnsTrueAsync()
-    {
-        // Arrange - Guid is stored as string in PendingExportAttributeValueChange
-        var guidValue = Guid.NewGuid();
-        var csoAttributeValue = CreateCsoAttributeValue(stringValue: guidValue.ToString());
-        var pendingChange = CreatePendingChange(stringValue: guidValue.ToString());
-
-        // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
-
-        // Assert
-        Assert.That(result, Is.True, "Should return true when Guid values (as strings) match");
-    }
-
-    [Test]
-    public void IsCsoAttributeAlreadyCurrent_GuidMismatch_ReturnsFalseAsync()
-    {
-        // Arrange
-        var csoAttributeValue = CreateCsoAttributeValue(stringValue: Guid.NewGuid().ToString());
-        var pendingChange = CreatePendingChange(stringValue: Guid.NewGuid().ToString());
-
-        // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
-
-        // Assert
-        Assert.That(result, Is.False, "Should return false when Guid values differ");
-    }
-
-    #endregion
-
-    #region Bool Value Comparison Tests
-
-    [Test]
-    public void IsCsoAttributeAlreadyCurrent_BoolTrueMatch_ReturnsTrueAsync()
-    {
-        // Arrange - Bool is stored as string in PendingExportAttributeValueChange
-        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "True");
-        var pendingChange = CreatePendingChange(stringValue: "True");
-
-        // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
-
-        // Assert
-        Assert.That(result, Is.True, "Should return true when bool values (as strings) match");
-    }
-
-    [Test]
-    public void IsCsoAttributeAlreadyCurrent_BoolFalseMatch_ReturnsTrueAsync()
-    {
-        // Arrange
-        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "False");
-        var pendingChange = CreatePendingChange(stringValue: "False");
-
-        // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
-
-        // Assert
-        Assert.That(result, Is.True, "Should return true when bool False values match");
-    }
-
-    [Test]
-    public void IsCsoAttributeAlreadyCurrent_BoolMismatch_ReturnsFalseAsync()
-    {
-        // Arrange
-        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "True");
-        var pendingChange = CreatePendingChange(stringValue: "False");
-
-        // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
-
-        // Assert
-        Assert.That(result, Is.False, "Should return false when bool values differ");
-    }
-
-    #endregion
-
-    #region Unresolved Reference Value Comparison Tests
-
-    [Test]
-    public void IsCsoAttributeAlreadyCurrent_UnresolvedReferenceMatch_ReturnsTrueAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateUnresolvedReferenceMatch_ReturnsTrueAsync()
     {
         // Arrange
         var referenceValue = "CN=Manager,OU=Users,DC=corp,DC=local";
         var csoAttributeValue = CreateCsoAttributeValue(unresolvedReferenceValue: referenceValue);
-        var pendingChange = CreatePendingChange(unresolvedReferenceValue: referenceValue);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, unresolvedReferenceValue: referenceValue);
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.True, "Should return true when unresolved reference values match");
-    }
-
-    [Test]
-    public void IsCsoAttributeAlreadyCurrent_UnresolvedReferenceMismatch_ReturnsFalseAsync()
-    {
-        // Arrange
-        var csoAttributeValue = CreateCsoAttributeValue(unresolvedReferenceValue: "CN=Manager1,OU=Users,DC=corp,DC=local");
-        var pendingChange = CreatePendingChange(unresolvedReferenceValue: "CN=Manager2,OU=Users,DC=corp,DC=local");
-
-        // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
-
-        // Assert
-        Assert.That(result, Is.False, "Should return false when unresolved reference values differ");
+        Assert.That(result, Is.True, "Should return true when unresolved reference values match for Update");
     }
 
     #endregion
 
-    #region Null Handling Tests
+    #region Single-Valued Update Null Handling Tests
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_BothNull_ReturnsTrueAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdateBothEmpty_ReturnsTrueAsync()
     {
-        // Arrange - CSO attribute doesn't exist (null)
-        var pendingChange = CreatePendingChange(); // Empty pending change (no value set)
+        // Arrange - No existing values, empty pending change
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, null);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
 
         // Assert
-        Assert.That(result, Is.True, "Should return true when both are null/empty");
+        Assert.That(result, Is.True, "Should return true when both are null/empty for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_PendingNullCsoHasValue_ReturnsFalseAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdatePendingEmptyCsoHasValue_ReturnsFalseAsync()
     {
         // Arrange
         var csoAttributeValue = CreateCsoAttributeValue(stringValue: "SomeValue");
-        var pendingChange = CreatePendingChange(); // Empty pending change
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
 
         // Assert
-        Assert.That(result, Is.False, "Should return false when pending is empty but CSO has value");
+        Assert.That(result, Is.False, "Should return false when pending is empty but CSO has value for Update");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_PendingHasValueCsoNull_ReturnsFalseAsync()
+    public void IsCsoAttributeAlreadyCurrent_UpdatePendingHasValueCsoEmpty_ReturnsFalseAsync()
     {
         // Arrange
-        var pendingChange = CreatePendingChange(stringValue: "NewValue");
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, stringValue: "NewValue");
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, null);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
 
         // Assert
-        Assert.That(result, Is.False, "Should return false when CSO is null but pending has value");
+        Assert.That(result, Is.False, "Should return false when CSO is empty but pending has value for Update");
     }
 
     #endregion
 
-    #region Priority Value Type Tests
+    #region Multi-Valued Add Tests
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_StringHasPriority_ReturnsTrueAsync()
+    public void IsCsoAttributeAlreadyCurrent_AddWhenValueExists_ReturnsTrueAsync()
     {
-        // Arrange - String value takes priority in comparison logic
-        // In practice, attributes only have one value type set at a time
-        // But if multiple are set, string is checked first
-        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "Test", intValue: 42);
-        var pendingChange = CreatePendingChange(stringValue: "Test", intValue: 99);
+        // Arrange - CSO already has the value we're trying to add
+        var existingMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=User1,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=User2,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=User3,OU=Users,DC=corp")
+        };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Add, stringValue: "CN=User2,OU=Users,DC=corp");
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingMembers);
 
         // Assert
-        Assert.That(result, Is.True, "String match takes priority when string is set");
+        Assert.That(result, Is.True, "Should return true (skip Add) when value already exists in CSO");
     }
 
     [Test]
-    public void IsCsoAttributeAlreadyCurrent_OnlyIntSet_ComparesIntAsync()
+    public void IsCsoAttributeAlreadyCurrent_AddWhenValueNotExists_ReturnsFalseAsync()
     {
-        // Arrange - When only int is set, it's compared
-        var csoAttributeValue = CreateCsoAttributeValue(intValue: 42);
-        var pendingChange = CreatePendingChange(intValue: 99);
+        // Arrange - CSO doesn't have the value we're trying to add
+        var existingMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=User1,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=User2,OU=Users,DC=corp")
+        };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Add, stringValue: "CN=NewUser,OU=Users,DC=corp");
 
         // Act
-        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, csoAttributeValue);
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingMembers);
 
         // Assert
-        Assert.That(result, Is.False, "Should return false when int values differ");
+        Assert.That(result, Is.False, "Should return false (proceed with Add) when value doesn't exist in CSO");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_AddToEmptyAttribute_ReturnsFalseAsync()
+    {
+        // Arrange - CSO has no values for this attribute
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Add, stringValue: "CN=NewUser,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.False, "Should return false (proceed with Add) when CSO has no values");
+    }
+
+    #endregion
+
+    #region Multi-Valued Remove Tests
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveWhenValueExists_ReturnsFalseAsync()
+    {
+        // Arrange - CSO has the value we're trying to remove
+        var existingMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=User1,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=User2,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=User3,OU=Users,DC=corp")
+        };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, stringValue: "CN=User2,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingMembers);
+
+        // Assert
+        Assert.That(result, Is.False, "Should return false (proceed with Remove) when value exists in CSO");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveWhenValueNotExists_ReturnsTrueAsync()
+    {
+        // Arrange - CSO doesn't have the value we're trying to remove
+        var existingMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=User1,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=User2,OU=Users,DC=corp")
+        };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, stringValue: "CN=UserNotHere,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingMembers);
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true (skip Remove) when value doesn't exist in CSO");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveFromEmptyAttribute_ReturnsTrueAsync()
+    {
+        // Arrange - CSO has no values for this attribute
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, stringValue: "CN=User,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true (skip Remove) when CSO has no values");
+    }
+
+    #endregion
+
+    #region RemoveAll Tests
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveAllWhenValuesExist_ReturnsFalseAsync()
+    {
+        // Arrange - CSO has values that need to be removed
+        var existingMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=User1,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=User2,OU=Users,DC=corp")
+        };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.RemoveAll);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingMembers);
+
+        // Assert
+        Assert.That(result, Is.False, "Should return false (proceed with RemoveAll) when CSO has values");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveAllWhenNoValues_ReturnsTrueAsync()
+    {
+        // Arrange - CSO has no values for this attribute
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.RemoveAll);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true (skip RemoveAll) when CSO has no values");
+    }
+
+    #endregion
+
+    #region Group Membership Scenario Tests
+
+    [Test]
+    public void GroupMembership_AddMemberAlreadyInGroup_NoChangeNeeded()
+    {
+        // Arrange - Simulating a group with existing members
+        var existingGroupMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=Alice,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=Bob,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=Charlie,OU=Users,DC=corp")
+        };
+
+        // Try to add Bob who is already a member
+        var addBobChange = CreatePendingChange(PendingExportAttributeChangeType.Add, stringValue: "CN=Bob,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(addBobChange, existingGroupMembers);
+
+        // Assert
+        Assert.That(result, Is.True, "Adding existing member should be detected as no-net-change");
+    }
+
+    [Test]
+    public void GroupMembership_AddNewMember_ChangeNeeded()
+    {
+        // Arrange - Simulating a group with existing members
+        var existingGroupMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=Alice,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=Bob,OU=Users,DC=corp")
+        };
+
+        // Try to add Dave who is not yet a member
+        var addDaveChange = CreatePendingChange(PendingExportAttributeChangeType.Add, stringValue: "CN=Dave,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(addDaveChange, existingGroupMembers);
+
+        // Assert
+        Assert.That(result, Is.False, "Adding new member should not be a no-net-change");
+    }
+
+    [Test]
+    public void GroupMembership_RemoveMemberInGroup_ChangeNeeded()
+    {
+        // Arrange - Simulating a group with existing members
+        var existingGroupMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=Alice,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=Bob,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=Charlie,OU=Users,DC=corp")
+        };
+
+        // Try to remove Bob who is a member
+        var removeBobChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, stringValue: "CN=Bob,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(removeBobChange, existingGroupMembers);
+
+        // Assert
+        Assert.That(result, Is.False, "Removing existing member should not be a no-net-change");
+    }
+
+    [Test]
+    public void GroupMembership_RemoveMemberNotInGroup_NoChangeNeeded()
+    {
+        // Arrange - Simulating a group with existing members
+        var existingGroupMembers = new[]
+        {
+            CreateCsoAttributeValue(stringValue: "CN=Alice,OU=Users,DC=corp"),
+            CreateCsoAttributeValue(stringValue: "CN=Bob,OU=Users,DC=corp")
+        };
+
+        // Try to remove Eve who is not a member
+        var removeEveChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, stringValue: "CN=Eve,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(removeEveChange, existingGroupMembers);
+
+        // Assert
+        Assert.That(result, Is.True, "Removing non-member should be detected as no-net-change");
+    }
+
+    [Test]
+    public void GroupMembership_LargeGroupWithDuplicateAddAttempt_NoChangeNeeded()
+    {
+        // Arrange - Simulating a large group with many members
+        var existingGroupMembers = Enumerable.Range(1, 1000)
+            .Select(i => CreateCsoAttributeValue(stringValue: $"CN=User{i},OU=Users,DC=corp"))
+            .ToArray();
+
+        // Try to add User500 who is already a member
+        var addUser500Change = CreatePendingChange(PendingExportAttributeChangeType.Add, stringValue: "CN=User500,OU=Users,DC=corp");
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(addUser500Change, existingGroupMembers);
+
+        // Assert
+        Assert.That(result, Is.True, "Adding existing member in large group should be detected as no-net-change");
     }
 
     #endregion
@@ -468,6 +563,7 @@ public class ExportEvaluationNoChangeTests
     }
 
     private static PendingExportAttributeValueChange CreatePendingChange(
+        PendingExportAttributeChangeType changeType = PendingExportAttributeChangeType.Update,
         string? stringValue = null,
         int? intValue = null,
         DateTime? dateTimeValue = null,
@@ -483,7 +579,7 @@ public class ExportEvaluationNoChangeTests
             DateTimeValue = dateTimeValue,
             ByteValue = byteValue,
             UnresolvedReferenceValue = unresolvedReferenceValue,
-            ChangeType = PendingExportAttributeChangeType.Update
+            ChangeType = changeType
         };
     }
 

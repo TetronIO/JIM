@@ -291,14 +291,15 @@ public class ExportEvaluationServer
     /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
     /// <param name="sourceSystem">The connected system that caused this change (for Q3 circular prevention).</param>
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
-    /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.</param>
+    /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.
+    /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.</param>
     /// <returns>ExportEvaluationResult containing pending exports and no-net-change counts.</returns>
     public async Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
         ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
-        Dictionary<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
     {
         var result = new ExportEvaluationResult();
 
@@ -728,7 +729,7 @@ public class ExportEvaluationServer
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
         ExportEvaluationCache cache,
-        Dictionary<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -908,7 +909,8 @@ public class ExportEvaluationServer
     /// <param name="changedAttributes">The MVO attributes that changed.</param>
     /// <param name="changeType">Whether this is a Create or Update operation.</param>
     /// <param name="existingCso">The existing CSO (for Update operations only) to compare values against.</param>
-    /// <param name="csoAttributeCache">Optional cache of CSO attribute values for no-net-change detection.</param>
+    /// <param name="csoAttributeCache">Optional cache of CSO attribute values for no-net-change detection.
+    /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.</param>
     /// <param name="csoAlreadyCurrentCount">Output: count of attributes skipped because CSO already has the value.</param>
     /// <returns>List of attribute value changes to export.</returns>
     private List<PendingExportAttributeValueChange> CreateAttributeValueChanges(
@@ -917,7 +919,7 @@ public class ExportEvaluationServer
         List<MetaverseObjectAttributeValue> changedAttributes,
         PendingExportChangeType changeType,
         ConnectedSystemObject? existingCso,
-        Dictionary<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
         out int csoAlreadyCurrentCount)
     {
         var changes = new List<PendingExportAttributeValueChange>();
@@ -1013,9 +1015,9 @@ public class ExportEvaluationServer
                             if (canDetectNoNetChange)
                             {
                                 var cacheKey = (existingCso!.Id, change.AttributeId);
-                                csoAttributeCache!.TryGetValue(cacheKey, out var existingCsoValue);
+                                var existingCsoValues = csoAttributeCache![cacheKey];
 
-                                if (IsCsoAttributeAlreadyCurrent(change, existingCsoValue))
+                                if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
                                 {
                                     Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
                                         change.AttributeId, existingCso.Id);
@@ -1108,9 +1110,9 @@ public class ExportEvaluationServer
                 if (canDetectNoNetChange)
                 {
                     var cacheKey = (existingCso!.Id, attributeChange.AttributeId);
-                    csoAttributeCache!.TryGetValue(cacheKey, out var existingCsoValue);
+                    var existingCsoValues = csoAttributeCache![cacheKey];
 
-                    if (IsCsoAttributeAlreadyCurrent(attributeChange, existingCsoValue))
+                    if (IsCsoAttributeAlreadyCurrent(attributeChange, existingCsoValues))
                     {
                         Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (direct)",
                             attributeChange.AttributeId, existingCso.Id);
@@ -1127,26 +1129,54 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
-    /// Compares a pending export attribute value change against an existing CSO attribute value
-    /// to determine if they represent the same value (no-net-change).
+    /// Compares a pending export attribute value change against existing CSO attribute values
+    /// to determine if they represent a no-net-change (CSO already has the target state).
+    /// Supports multi-valued attributes where a single attribute can have multiple values.
     /// </summary>
     /// <param name="pendingChange">The pending change to export.</param>
-    /// <param name="existingValue">The existing CSO attribute value, or null if no value exists.</param>
-    /// <returns>True if the values are identical (no-net-change), false otherwise.</returns>
+    /// <param name="existingValues">The existing CSO attribute values for this attribute, may be empty.</param>
+    /// <returns>True if the operation is a no-net-change (should be skipped), false otherwise.</returns>
     public static bool IsCsoAttributeAlreadyCurrent(
         PendingExportAttributeValueChange pendingChange,
-        ConnectedSystemObjectAttributeValue? existingValue)
+        IEnumerable<ConnectedSystemObjectAttributeValue>? existingValues)
     {
-        // If no existing value, this is a new attribute - not a no-net-change
-        if (existingValue == null)
+        // Convert to list once to avoid multiple enumeration
+        var valuesList = existingValues?.ToList() ?? [];
+
+        switch (pendingChange.ChangeType)
         {
-            // Check if the pending change is also null/empty
-            return IsPendingChangeEmpty(pendingChange);
+            case PendingExportAttributeChangeType.Add:
+                // For Add: skip if the value already exists in CSO (no-net-change)
+                // If the value doesn't exist, we need to add it (not a no-net-change)
+                return valuesList.Any(ev => ValuesMatch(pendingChange, ev));
+
+            case PendingExportAttributeChangeType.Remove:
+                // For Remove: skip if the value doesn't exist in CSO (no-net-change)
+                // If the value exists, we need to remove it (not a no-net-change)
+                return !valuesList.Any(ev => ValuesMatch(pendingChange, ev));
+
+            case PendingExportAttributeChangeType.RemoveAll:
+                // For RemoveAll: skip if CSO has no values for this attribute (no-net-change)
+                // If CSO has values, we need to remove them (not a no-net-change)
+                return valuesList.Count == 0;
+
+            case PendingExportAttributeChangeType.Update:
+            default:
+                // For Update (single-valued): use existing single-value comparison logic
+                var existingValue = valuesList.FirstOrDefault();
+                return IsSingleValueMatch(pendingChange, existingValue);
         }
+    }
 
-        // Compare based on which value type is set in the pending change
-        // Only one type should be set at a time
-
+    /// <summary>
+    /// Checks if a pending change value matches an existing CSO attribute value.
+    /// Used for multi-valued attribute comparison (Add/Remove operations).
+    /// </summary>
+    private static bool ValuesMatch(
+        PendingExportAttributeValueChange pendingChange,
+        ConnectedSystemObjectAttributeValue existingValue)
+    {
+        // Compare based on which value type is set
         // String comparison
         if (pendingChange.StringValue != null || existingValue.StringValue != null)
         {
@@ -1175,46 +1205,52 @@ public class ExportEvaluationServer
             return pendingChange.ByteValue.SequenceEqual(existingValue.ByteValue);
         }
 
-        // Guid comparison (stored as string in pending change, as Guid in CSO)
-        if (existingValue.GuidValue.HasValue)
-        {
-            // Pending change stores Guid as StringValue
-            if (Guid.TryParse(pendingChange.StringValue, out var pendingGuid))
-                return pendingGuid == existingValue.GuidValue.Value;
-            return false;
-        }
-
-        // Bool comparison (stored as string in pending change, as bool in CSO)
-        if (existingValue.BoolValue.HasValue)
-        {
-            // Pending change stores Bool as StringValue
-            if (bool.TryParse(pendingChange.StringValue, out var pendingBool))
-                return pendingBool == existingValue.BoolValue.Value;
-            return false;
-        }
-
-        // Reference comparison - compare unresolved reference values
+        // Unresolved reference comparison
         if (pendingChange.UnresolvedReferenceValue != null || existingValue.UnresolvedReferenceValue != null)
         {
             return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, StringComparison.Ordinal);
         }
 
-        // Reference comparison - compare resolved reference IDs
-        if (existingValue.ReferenceValueId.HasValue)
+        // Guid comparison (pending stores as StringValue, CSO has GuidValue)
+        if (existingValue.GuidValue.HasValue)
         {
-            // Pending change stores reference as UnresolvedReferenceValue (MVO ID as string)
-            if (Guid.TryParse(pendingChange.UnresolvedReferenceValue, out var pendingRefId))
-            {
-                // Note: This compares MVO ID to CSO ID which may not be directly comparable
-                // The proper comparison would need to resolve the MVO ID to CSO ID
-                // For now, we'll consider them different to be safe
-                return false;
-            }
+            if (Guid.TryParse(pendingChange.StringValue, out var pendingGuid))
+                return pendingGuid == existingValue.GuidValue.Value;
             return false;
         }
 
-        // Both null/empty - consider them equal
+        // Bool comparison (pending stores as StringValue, CSO has BoolValue)
+        if (existingValue.BoolValue.HasValue)
+        {
+            if (bool.TryParse(pendingChange.StringValue, out var pendingBool))
+                return pendingBool == existingValue.BoolValue.Value;
+            return false;
+        }
+
+        // Both null/empty - consider them matching
         return true;
+    }
+
+    /// <summary>
+    /// Compares a pending export attribute value change against a single existing CSO attribute value
+    /// to determine if they represent the same value (no-net-change).
+    /// Used for single-valued Update operations.
+    /// </summary>
+    /// <param name="pendingChange">The pending change to export.</param>
+    /// <param name="existingValue">The existing CSO attribute value, or null if no value exists.</param>
+    /// <returns>True if the values are identical (no-net-change), false otherwise.</returns>
+    private static bool IsSingleValueMatch(
+        PendingExportAttributeValueChange pendingChange,
+        ConnectedSystemObjectAttributeValue? existingValue)
+    {
+        // If no existing value, this is a new attribute - not a no-net-change
+        if (existingValue == null)
+        {
+            // Check if the pending change is also null/empty
+            return IsPendingChangeEmpty(pendingChange);
+        }
+
+        return ValuesMatch(pendingChange, existingValue);
     }
 
     /// <summary>

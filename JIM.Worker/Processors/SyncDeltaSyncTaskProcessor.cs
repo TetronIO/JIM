@@ -31,7 +31,8 @@ public class SyncDeltaSyncTaskProcessor
     private ExportEvaluationServer.ExportEvaluationCache? _exportEvaluationCache;
 
     // Per-page CSO attribute cache for no-net-change detection (cleared between pages)
-    private Dictionary<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? _pageCsoAttributeCache;
+    // Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values
+    private ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? _pageCsoAttributeCache;
 
     // Aggregate no-net-change counts for the entire sync run
     private int _totalCsoAlreadyCurrentCount;
@@ -1186,6 +1187,7 @@ public class SyncDeltaSyncTaskProcessor
     /// Loads CSO attribute values for the specified CSO IDs into the per-page cache.
     /// This cache is used during export evaluation for no-net-change detection.
     /// Memory is bounded to page size × average attributes per CSO.
+    /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.
     /// </summary>
     /// <param name="csoIds">The IDs of CSOs in the current page.</param>
     private async Task LoadPageCsoAttributeCacheAsync(IEnumerable<Guid> csoIds)
@@ -1195,12 +1197,14 @@ public class SyncDeltaSyncTaskProcessor
         var attributeValues = await _jim.Repository.ConnectedSystems
             .GetCsoAttributeValuesByCsoIdsAsync(csoIds);
 
+        // Use ToLookup to support multi-valued attributes (e.g., group membership)
+        // where a single (CsoId, AttributeId) key can have multiple values
         _pageCsoAttributeCache = attributeValues
-            .ToDictionary(av => (av.ConnectedSystemObject.Id, av.AttributeId), av => av);
+            .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
 
-        span.SetTag("cacheSize", _pageCsoAttributeCache.Count);
+        span.SetTag("cacheSize", attributeValues.Count);
         Log.Verbose("LoadPageCsoAttributeCacheAsync: Loaded {Count} CSO attribute values into per-page cache",
-            _pageCsoAttributeCache.Count);
+            attributeValues.Count);
 
         span.SetSuccess();
     }
@@ -1210,7 +1214,7 @@ public class SyncDeltaSyncTaskProcessor
     /// </summary>
     private void ClearPageCsoAttributeCache()
     {
-        _pageCsoAttributeCache?.Clear();
+        // ILookup is read-only, so we just set to null to release the reference
         _pageCsoAttributeCache = null;
     }
 }
