@@ -379,7 +379,6 @@ internal class LdapConnectorImport
         var attributes = objectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
         attributes.AddRange(objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
         attributes.Add("objectClass");
-        attributes.Add("uSNChanged"); // Include USN for debugging/auditing
         attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
         var queryAttributes = attributes.Distinct().ToArray();
 
@@ -622,6 +621,12 @@ internal class LdapConnectorImport
                         var numberValues = LdapConnectorUtilities.GetEntryAttributeIntValues(searchResult, attributeName);
                         if (numberValues is { Count: > 0 })
                             importObjectAttribute.IntValues.AddRange(numberValues);
+                        break;
+
+                    case AttributeDataType.LongNumber:
+                        var longNumberValues = LdapConnectorUtilities.GetEntryAttributeLongValues(searchResult, attributeName);
+                        if (longNumberValues is { Count: > 0 })
+                            importObjectAttribute.LongValues.AddRange(longNumberValues);
                         break;
 
                     case AttributeDataType.Boolean:

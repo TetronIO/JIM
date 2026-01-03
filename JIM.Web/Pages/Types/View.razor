@@ -33,6 +33,10 @@
                         {
                             @attributeValue.IntValue
                         }
+                        else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
+                        {
+                            @attributeValue.LongValue
+                        }
                         else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
                         {
                             @attributeValue.DateTimeValue

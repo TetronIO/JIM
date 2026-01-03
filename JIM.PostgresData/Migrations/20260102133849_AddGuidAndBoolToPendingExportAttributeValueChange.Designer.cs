@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260102133849_AddGuidAndBoolToPendingExportAttributeValueChange")]
+    partial class AddGuidAndBoolToPendingExportAttributeValueChange
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -282,9 +285,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
-                    b.Property<long?>("LongValue")
-                        .HasColumnType("bigint");
-
                     b.Property<Guid>("MetaverseObjectId")
                         .HasColumnType("uuid");
 
@@ -306,8 +306,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("GuidValue");
 
                     b.HasIndex("IntValue");
-
-                    b.HasIndex("LongValue");
 
                     b.HasIndex("MetaverseObjectId");
 
@@ -1177,9 +1175,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
-                    b.Property<long?>("LongValue")
-                        .HasColumnType("bigint");
-
                     b.Property<int?>("MetaverseAttributeId")
                         .HasColumnType("integer");
 
@@ -1590,9 +1585,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
-                    b.Property<long?>("LongValue")
-                        .HasColumnType("bigint");
-
                     b.Property<Guid?>("ReferenceValueId")
                         .HasColumnType("uuid");
 
@@ -1699,9 +1691,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
-
-                    b.Property<long?>("LongValue")
-                        .HasColumnType("bigint");
 
                     b.Property<Guid?>("ReferenceValueId")
                         .HasColumnType("uuid");
@@ -2234,9 +2223,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("LastErrorMessage")
                         .HasColumnType("text");
 
-                    b.Property<string>("LastErrorStackTrace")
-                        .HasColumnType("text");
-
                     b.Property<int>("MaxRetries")
                         .HasColumnType("integer");
 
@@ -2296,9 +2282,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("LastImportedValue")
                         .HasColumnType("text");
-
-                    b.Property<long?>("LongValue")
-                        .HasColumnType("bigint");
 
                     b.Property<Guid?>("PendingExportId")
                         .HasColumnType("uuid");

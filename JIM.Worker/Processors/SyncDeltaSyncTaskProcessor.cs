@@ -333,6 +333,16 @@ public class SyncDeltaSyncTaskProcessor
         // Create a copy to iterate over, since we may remove items from the original list during processing
         foreach (var pendingExport in pendingExportsForThisCso.ToList())
         {
+            // Skip pending exports that are awaiting confirmation via PendingExportReconciliationService.
+            // The "Exported" status means the export was successfully sent to the connector and is now
+            // waiting for a confirming import to verify the values were persisted. The reconciliation
+            // service (called during import) handles this state - we should not interfere here.
+            if (pendingExport.Status == JIM.Models.Transactional.PendingExportStatus.Exported)
+            {
+                Log.Verbose($"ProcessPendingExport: Skipping pending export {pendingExport.Id} - awaiting confirmation via import (Status=Exported).");
+                continue;
+            }
+
             // track which attribute changes succeeded and which failed
             var successfulChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
             var failedChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();

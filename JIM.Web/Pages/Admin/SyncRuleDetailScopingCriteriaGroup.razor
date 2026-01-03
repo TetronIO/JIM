@@ -151,6 +151,9 @@
                 case AttributeDataType.Number:
                     <MudNumericField @bind-Value="_newSyncRuleScopingCriteria.IntValue" Label="Number Value" Variant="Variant.Outlined" Class="mt-5" />
                     break;
+                case AttributeDataType.LongNumber:
+                    <MudNumericField @bind-Value="_newSyncRuleScopingCriteria.LongValue" Label="Long Number Value" Variant="Variant.Outlined" Class="mt-5" />
+                    break;
                 case AttributeDataType.DateTime:
                     <MudDatePicker @bind-Date="_newSyncRuleScopingCriteria.DateTimeValue" Label="Date Value" Variant="Variant.Outlined" Class="mt-5" />
                     break;

@@ -201,11 +201,19 @@ public class ActivityServer
 
     #region synchronisation related
     /// <summary>
-    /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
+    /// Retrieves a page's worth of sync execution item headers for a specific activity.
+    /// Supports server-side search and sorting.
     /// </summary>
-    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page = 1, int pageSize = 20)
+    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
+        Guid activityId,
+        int page = 1,
+        int pageSize = 20,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false)
     {
-        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(activityId, page, pageSize);
+        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(
+            activityId, page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)

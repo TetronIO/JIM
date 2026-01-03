@@ -851,4 +851,317 @@ public class PendingExportReconciliationTests
     }
 
     #endregion
+
+    #region Boolean Value Tests
+
+    /// <summary>
+    /// Tests that boolean attribute values are correctly compared when they match.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_BooleanValue_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        // Add a boolean attribute to the type
+        var isActiveAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1001,
+            Name = "isActive",
+            Type = AttributeDataType.Boolean,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(isActiveAttr);
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = isActiveAttr.Id,
+            Attribute = isActiveAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            BoolValue = true,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add matching boolean value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = isActiveAttr,
+            AttributeId = isActiveAttr.Id,
+            BoolValue = true
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Boolean value should be confirmed when matches");
+    }
+
+    /// <summary>
+    /// Tests that boolean attribute values are marked for retry when they don't match.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_BooleanValue_RetriesWhenDoesNotMatchAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        var isActiveAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1002,
+            Name = "isActive",
+            Type = AttributeDataType.Boolean,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(isActiveAttr);
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = isActiveAttr.Id,
+            Attribute = isActiveAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            BoolValue = true,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add non-matching boolean value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = isActiveAttr,
+            AttributeId = isActiveAttr.Id,
+            BoolValue = false // Different value
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "Boolean value should not be confirmed when different");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "Boolean value should be marked for retry");
+    }
+
+    /// <summary>
+    /// Tests that false boolean values are correctly compared.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_BooleanFalseValue_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        var isDisabledAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1003,
+            Name = "isDisabled",
+            Type = AttributeDataType.Boolean,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(isDisabledAttr);
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = isDisabledAttr.Id,
+            Attribute = isDisabledAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            BoolValue = false,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add matching boolean value (false)
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = isDisabledAttr,
+            AttributeId = isDisabledAttr.Id,
+            BoolValue = false
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Boolean false value should be confirmed when matches");
+    }
+
+    #endregion
+
+    #region Guid Value Tests
+
+    /// <summary>
+    /// Tests that GUID attribute values are correctly compared when they match.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_GuidValue_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        var objectGuidAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1004,
+            Name = "objectGuid",
+            Type = AttributeDataType.Guid,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(objectGuidAttr);
+
+        var testGuid = Guid.NewGuid();
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = objectGuidAttr.Id,
+            Attribute = objectGuidAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            GuidValue = testGuid,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add matching GUID value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = objectGuidAttr,
+            AttributeId = objectGuidAttr.Id,
+            GuidValue = testGuid
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "GUID value should be confirmed when matches");
+    }
+
+    /// <summary>
+    /// Tests that GUID attribute values are marked for retry when they don't match.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_GuidValue_RetriesWhenDoesNotMatchAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        var objectGuidAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1005,
+            Name = "objectGuid",
+            Type = AttributeDataType.Guid,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(objectGuidAttr);
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = objectGuidAttr.Id,
+            Attribute = objectGuidAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            GuidValue = Guid.NewGuid(), // One GUID
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add different GUID value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = objectGuidAttr,
+            AttributeId = objectGuidAttr.Id,
+            GuidValue = Guid.NewGuid() // Different GUID
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "GUID value should not be confirmed when different");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "GUID value should be marked for retry");
+    }
+
+    /// <summary>
+    /// Tests that empty GUID values are correctly compared.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_EmptyGuidValue_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        var objectGuidAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1006,
+            Name = "objectGuid",
+            Type = AttributeDataType.Guid,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(objectGuidAttr);
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = objectGuidAttr.Id,
+            Attribute = objectGuidAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            GuidValue = Guid.Empty,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add matching empty GUID value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = objectGuidAttr,
+            AttributeId = objectGuidAttr.Id,
+            GuidValue = Guid.Empty
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Empty GUID value should be confirmed when matches");
+    }
+
+    #endregion
 }

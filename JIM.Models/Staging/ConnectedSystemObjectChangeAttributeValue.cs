@@ -24,6 +24,8 @@ public class ConnectedSystemObjectChangeAttributeValue
 
     public int? IntValue { get; set; }
 
+    public long? LongValue { get; set; }
+
     /// <summary>
     /// It would be inefficient, and not especially helpful to track the actual byte value changes, so just track the value lengths instead to show the change.
     /// </summary>
@@ -46,6 +48,9 @@ public class ConnectedSystemObjectChangeAttributeValue
 
         if (IntValue.HasValue)
             return IntValue.Value.ToString();
+
+        if (LongValue.HasValue)
+            return LongValue.Value.ToString();
 
         if (ByteValueLength.HasValue)
             return ByteValueLength.Value.ToString();
@@ -78,6 +83,13 @@ public class ConnectedSystemObjectChangeAttributeValue
     public ConnectedSystemObjectChangeAttributeValue(ConnectedSystemObjectChangeAttribute connectedSystemObjectChangeAttribute, ValueChangeType valueChangeType, int intValue)
     {
         IntValue = intValue;
+        ConnectedSystemObjectChangeAttribute = connectedSystemObjectChangeAttribute;
+        ValueChangeType = valueChangeType;
+    }
+
+    public ConnectedSystemObjectChangeAttributeValue(ConnectedSystemObjectChangeAttribute connectedSystemObjectChangeAttribute, ValueChangeType valueChangeType, long longValue)
+    {
+        LongValue = longValue;
         ConnectedSystemObjectChangeAttribute = connectedSystemObjectChangeAttribute;
         ValueChangeType = valueChangeType;
     }

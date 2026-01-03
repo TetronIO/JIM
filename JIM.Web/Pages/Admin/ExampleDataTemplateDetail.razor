@@ -67,7 +67,7 @@
                             <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Weighted Values:</b>&nbsp;@weightedStringValues</MudChip>
                         }
                     }
-                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Number)
+                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Number || context.MetaverseAttribute?.Type == AttributeDataType.LongNumber)
                     {
                         if (context.MinNumber.HasValue)
                         {

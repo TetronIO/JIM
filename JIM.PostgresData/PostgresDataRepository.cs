@@ -24,8 +24,30 @@ public class PostgresDataRepository : IRepository
 
     public PostgresDataRepository(JimDbContext jimDbContext)
     {
-        // needed to enable DateTime.UtcNow assignments to work. Without it, the database will
-        // throw errors when trying to set dates. This is a .NET/Postgres type mapping issue.
+        // DATETIME HANDLING DESIGN DECISION
+        // =================================
+        // JIM uses .NET DateTime (not DateTimeOffset) throughout the models with a strict UTC convention.
+        // PostgreSQL stores these as "timestamp with time zone" (timestamptz) columns.
+        //
+        // Why DateTime instead of DateTimeOffset?
+        // - Database portability: DateTimeOffset offset preservation varies by database:
+        //   * SQL Server: Preserves offset in datetimeoffset columns
+        //   * PostgreSQL/CockroachDB: Converts to UTC, offset becomes 0 on read
+        //   * MySQL/MariaDB: No native offset support, stores UTC only
+        // - Using DateTime + UTC convention is the most portable approach across all databases.
+        //
+        // Why this legacy switch?
+        // - Npgsql 7.0+ changed default behaviour: DateTime maps to "timestamp without time zone"
+        // - This switch reverts to Npgsql 6.x behaviour where DateTime maps to "timestamp with time zone"
+        // - Without it, EF Core throws errors when assigning DateTime.UtcNow to timestamptz columns
+        //
+        // Runtime quirk to be aware of:
+        // - When Npgsql reads timestamptz values, it returns them as DateTimeOffset at runtime
+        // - Code that processes DateTime values from the database (e.g., expression evaluation)
+        //   must handle both DateTime and DateTimeOffset types
+        // - See DynamicExpressoEvaluator.ToFileTime() for an example of handling both types
+        //
+        // Convention: Always use DateTime.UtcNow, never DateTime.Now
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
         Activity = new ActivityRepository(this);

@@ -1906,7 +1906,12 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, connectedSystemObjectTypeId);
     }
-    
+
+    public async Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(connectedSystemId, connectedSystemObjectTypeId);
@@ -1917,9 +1922,16 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
     }
 
-    public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page = 1, int pageSize = 20)
+    public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
+        int connectedSystemId,
+        int page = 1,
+        int pageSize = 20,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(connectedSystemId, page, pageSize);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending);
     }
     
     /// <summary>
@@ -1991,6 +2003,11 @@ public class ConnectedSystemServer
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+    }
+
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
     }
@@ -2275,6 +2292,9 @@ public class ConnectedSystemServer
                 break;
             case AttributeDataType.Number when connectedSystemObjectAttributeValue.IntValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (int)connectedSystemObjectAttributeValue.IntValue));
+                break;
+            case AttributeDataType.LongNumber when connectedSystemObjectAttributeValue.LongValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (long)connectedSystemObjectAttributeValue.LongValue));
                 break;
             case AttributeDataType.Guid when connectedSystemObjectAttributeValue.GuidValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));

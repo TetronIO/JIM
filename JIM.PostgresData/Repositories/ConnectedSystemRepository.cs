@@ -319,8 +319,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int connectedSystemId,
         int page,
         int pageSize,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever)
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -332,68 +333,135 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // todo: just get the display name and unique identifier attribute values
-        var objects = from o in Repository.Database.ConnectedSystemObjects.
-                Where(cso => cso.ConnectedSystem.Id == connectedSystemId)
-            select o;
+        var query = Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
 
-        if (queryRange != QueryRange.Forever)
+        // Apply search filter - search on display name, external ID, or secondary external ID
+        // Search is case-insensitive for user convenience
+        if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            switch (queryRange)
-            {
-                case QueryRange.LastYear:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(365));
-                    break;
-                case QueryRange.LastMonth:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(30));
-                    break;
-                case QueryRange.LastWeek:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(7));
-                    break;
-            }
+            var searchPattern = $"%{searchQuery}%";
+            query = query.Where(cso =>
+                // Search display name
+                cso.AttributeValues.Any(av =>
+                    EF.Functions.ILike(av.Attribute.Name, "displayname") &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern)) ||
+                // Search external ID (primary)
+                cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.ExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern)) ||
+                // Search secondary external ID
+                (cso.SecondaryExternalIdAttributeId != null &&
+                 cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern))));
         }
 
-        switch (querySortBy)
+        // Apply sorting
+        query = sortBy?.ToLower() switch
         {
-            case QuerySortBy.DateCreated:
-                objects = objects.OrderByDescending(q => q.Created);
-                break;
+            "externalid" => sortDescending
+                ? query.OrderByDescending(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault())
+                : query.OrderBy(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()),
+            "secondaryexternalid" => sortDescending
+                ? query.OrderByDescending(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault())
+                : query.OrderBy(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()),
+            "displayname" => sortDescending
+                ? query.OrderByDescending(cso => cso.AttributeValues
+                    .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault())
+                : query.OrderBy(cso => cso.AttributeValues
+                    .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()),
+            "type" => sortDescending
+                ? query.OrderByDescending(cso => cso.Type.Name)
+                : query.OrderBy(cso => cso.Type.Name),
+            "datejoined" => sortDescending
+                ? query.OrderByDescending(cso => cso.DateJoined)
+                : query.OrderBy(cso => cso.DateJoined),
+            "status" => sortDescending
+                ? query.OrderByDescending(cso => cso.Status)
+                : query.OrderBy(cso => cso.Status),
+            "jointype" => sortDescending
+                ? query.OrderByDescending(cso => cso.JoinType)
+                : query.OrderBy(cso => cso.JoinType),
+            _ => sortDescending
+                ? query.OrderByDescending(cso => cso.Created)
+                : query.OrderBy(cso => cso.Created)
+        };
 
-            // todo: support additional ways of sorting, i.e. by attribute value
-        }
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
 
-        // now just retrieve a page's worth of objects from the results
-        var grossCount = objects.Count();
+        // Apply pagination
         var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var pagedObjects = objects.Skip(offset).Take(itemsToGet);
-        var selectedObjects = pagedObjects.Select(cso => new ConnectedSystemObjectHeader
-        {
-            Id = cso.Id,
-            ConnectedSystemId = cso.ConnectedSystemId,
-            Created = cso.Created,
-            DateJoined = cso.DateJoined,
-            JoinType = cso.JoinType,
-            LastUpdated = cso.LastUpdated,
-            Status = cso.Status,
-            TypeId = cso.Type.Id,
-            TypeName = cso.Type.Name,
-            DisplayName = cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname")) ? cso.AttributeValues.Single(av => EF.Functions.ILike(av.Attribute.Name, "displayname")).StringValue : null,
-            ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
-            ExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.ExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
-            SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId),
-            SecondaryExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault()
-        });
+        var pagedObjects = query.Skip(offset).Take(pageSize);
+
+        // Project to header DTO with pending export info
+        // Use a left join to include pending export data for displayName and secondaryExternalId
+        var selectedObjects = from cso in pagedObjects
+            join pe in Repository.Database.PendingExports
+                on cso.Id equals pe.ConnectedSystemObjectId into pendingExports
+            from pe in pendingExports.DefaultIfEmpty()
+            select new ConnectedSystemObjectHeader
+            {
+                Id = cso.Id,
+                ConnectedSystemId = cso.ConnectedSystemId,
+                Created = cso.Created,
+                DateJoined = cso.DateJoined,
+                JoinType = cso.JoinType,
+                LastUpdated = cso.LastUpdated,
+                Status = cso.Status,
+                TypeId = cso.Type.Id,
+                TypeName = cso.Type.Name,
+                DisplayName = cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    ? cso.AttributeValues.Single(av => EF.Functions.ILike(av.Attribute.Name, "displayname")).StringValue
+                    : null,
+                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
+                ExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.ExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
+                SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId),
+                SecondaryExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
+                // Pending export info - only show if CSO doesn't already have a confirmed value
+                HasPendingExport = pe != null,
+                PendingDisplayName = pe != null && !cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    ? pe.AttributeValueChanges
+                        .Where(avc => EF.Functions.ILike(avc.Attribute.Name, "displayname") || EF.Functions.ILike(avc.Attribute.Name, "cn"))
+                        .Select(avc => avc.StringValue)
+                        .FirstOrDefault()
+                    : null,
+                PendingSecondaryExternalId = pe != null && cso.SecondaryExternalIdAttributeId != null &&
+                    !cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    ? pe.AttributeValueChanges
+                        .Where(avc => avc.Attribute.IsSecondaryExternalId)
+                        .Select(avc => avc.StringValue)
+                        .FirstOrDefault()
+                    : null
+            };
         var results = await selectedObjects.ToListAsync();
 
-        // now with all the ids we know how many total results there are and so can populate paging info
+        // Build paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>
         {
             PageSize = pageSize,
-            TotalResults = grossCount,
+            TotalResults = totalCount,
             CurrentPage = page,
-            QuerySortBy = querySortBy,
-            QueryRange = queryRange,
             Results = results
         };
 
@@ -401,9 +469,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return pagedResultSet;
 
         // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
+        if (page <= pagedResultSet.TotalPages)
             return pagedResultSet;
-            
+
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
@@ -687,6 +755,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
     }
 
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue));
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
         var result = await Repository.Database.ConnectedSystemObjects
@@ -856,6 +936,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Select(av => av.IntValue!.Value)).ToListAsync();
     }
     
+    public async Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
+        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
+        // as obsolete because their external ID wouldn't be in the import results.
+        return await Repository.Database.ConnectedSystemObjects.Where(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.Type.Id == connectedSystemObjectTypeId &&
+                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            .SelectMany(q =>
+                q.AttributeValues.Where(av =>
+                        av.Attribute.Type == AttributeDataType.LongNumber &&
+                        av.Attribute.IsExternalId &&
+                        av.LongValue.HasValue)
+                    .Select(av => av.LongValue!.Value)).ToListAsync();
+    }
+
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created

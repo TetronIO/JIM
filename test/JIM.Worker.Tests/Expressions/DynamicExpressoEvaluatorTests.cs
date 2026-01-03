@@ -737,4 +737,281 @@ public class DynamicExpressoEvaluatorTests
     }
 
     #endregion
+
+    #region FileTime Conversion Tests (AD accountExpires, pwdLastSet, etc.)
+
+    [Test]
+    public void Evaluate_ToFileTime_ConvertsDateTimeToFileTime()
+    {
+        // Test with a known date: January 1, 2025 00:00:00 UTC
+        // This should convert to the Windows FILETIME format
+        var testDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var expectedFileTime = testDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", testDate } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ParsesDateTimeFromString()
+    {
+        // Test with a string date in ISO 8601 format
+        var testDate = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var dateString = testDate.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var expectedFileTime = testDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", dateString } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForNullInput()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", null } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForInvalidString()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", "not a date" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_HandlesDateTimeOffset()
+    {
+        // PostgreSQL returns DateTimeOffset for "timestamp with time zone" columns
+        // This test ensures we handle the database-native type correctly
+        var testDate = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var dateTimeOffset = new DateTimeOffset(testDate, TimeSpan.Zero);
+        var expectedFileTime = testDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", dateTimeOffset } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_HandlesDateTimeOffsetWithOffset()
+    {
+        // Test DateTimeOffset with a non-UTC offset (e.g., +05:30 India Standard Time)
+        // The function should convert to UTC before calculating FILETIME
+        var localTime = new DateTime(2025, 6, 15, 18, 0, 0);  // 18:00 local time
+        var offset = TimeSpan.FromHours(5.5);  // +05:30
+        var dateTimeOffset = new DateTimeOffset(localTime, offset);
+
+        // Expected: 18:00 + 05:30 local = 12:30 UTC
+        var expectedUtc = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var expectedFileTime = expectedUtc.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", dateTimeOffset } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedFileTime));
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ConvertsFileTimeToDateTime()
+    {
+        // Test with a known FILETIME value
+        var expectedDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var fileTime = expectedDate.ToFileTimeUtc();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", fileTime } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedDate));
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ParsesFileTimeFromString()
+    {
+        // Test with a FILETIME value as string (common in LDAP responses)
+        var expectedDate = new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc);
+        var fileTimeString = expectedDate.ToFileTimeUtc().ToString();
+
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", fileTimeString } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.EqualTo(expectedDate));
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForNullInput()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", null } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForZero()
+    {
+        // Zero means "never expires" in AD - should return null
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", 0L } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForMaxValue()
+    {
+        // Int64.MaxValue (9223372036854775807) means "never expires" in AD - should return null
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", long.MaxValue } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_RoundTrip_FileTimeConversion()
+    {
+        // Test that ToFileTime and FromFileTime are inverse operations
+        var originalDate = new DateTime(2025, 3, 15, 14, 30, 45, DateTimeKind.Utc);
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Date", originalDate } },
+            new Dictionary<string, object?>());
+
+        // Convert to FILETIME and back
+        var fileTimeResult = _evaluator.Evaluate("ToFileTime(mv[\"Date\"])", context);
+        Assert.That(fileTimeResult, Is.Not.Null);
+
+        var context2 = new ExpressionContext(
+            new Dictionary<string, object?> { { "FileTime", fileTimeResult } },
+            new Dictionary<string, object?>());
+        var dateResult = _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context2);
+
+        Assert.That(dateResult, Is.EqualTo(originalDate));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ThrowsForUnrecognisedType()
+    {
+        // Passing an integer (not a DateTime, DateTimeOffset, or string) should throw
+        // This ensures we fail fast rather than silently returning null for unexpected types
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", 12345 } },  // int, not a date type
+            new Dictionary<string, object?>());
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context));
+
+        Assert.That(ex?.Message, Does.Contain("ToFileTime cannot convert value of type 'Int32'"));
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForEmptyString()
+    {
+        // Empty strings should return null (graceful handling for missing CSV data)
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", "" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForDateTimeMinValue()
+    {
+        // DateTime.MinValue represents PostgreSQL's -infinity (no date set)
+        // Should return null, not throw an exception
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", DateTime.MinValue } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForDateTimeMaxValue()
+    {
+        // DateTime.MaxValue represents PostgreSQL's +infinity (never expires)
+        // Should return null, not throw an exception
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", DateTime.MaxValue } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ThrowsForUnrecognisedType()
+    {
+        // Passing a DateTime (not a long, int, or string) should throw
+        // This ensures we fail fast rather than silently returning null for unexpected types
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "FileTime", DateTime.UtcNow } },  // DateTime, not a numeric type
+            new Dictionary<string, object?>());
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context));
+
+        Assert.That(ex?.Message, Does.Contain("FromFileTime cannot convert value of type 'DateTime'"));
+    }
+
+    [Test]
+    public void Evaluate_FromFileTime_ReturnsNullForEmptyString()
+    {
+        // Empty strings should return null (graceful handling for missing data)
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "FileTime", "" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("FromFileTime(mv[\"FileTime\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
 }

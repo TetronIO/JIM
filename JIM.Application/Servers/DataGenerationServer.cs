@@ -217,6 +217,9 @@ public class DataGenerationServer
                                 case AttributeDataType.Number:
                                     GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random, trackers);
                                     break;
+                                case AttributeDataType.LongNumber:
+                                    GenerateMetaverseLongNumberValue(metaverseObject, templateAttribute, random, trackers);
+                                    break;
                                 case AttributeDataType.DateTime:
                                     GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
                                     break;
@@ -411,6 +414,25 @@ public class DataGenerationServer
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
             IntValue = value
+        });
+    }
+
+    private void GenerateMetaverseLongNumberValue(
+        MetaverseObject metaverseObject,
+        DataGenerationTemplateAttribute dataGenerationTemplateAttribute,
+        Random random,
+        List<DataGenerationValueTracker> dataGenerationValueTrackers)
+    {
+        // todo: make use of data gen value trackers to get next highest value
+        if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
+            throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
+
+        // Generate a long value - for now, use int generator and cast to long
+        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+        metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+            LongValue = value
         });
     }
 

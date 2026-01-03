@@ -808,14 +808,17 @@ public class ExportEvaluationServer
                                 case int intValue:
                                     change.IntValue = intValue;
                                     break;
+                                case long longValue:
+                                    change.LongValue = longValue;
+                                    break;
                                 case DateTime dtValue:
                                     change.DateTimeValue = dtValue;
                                     break;
                                 case bool boolValue:
-                                    change.StringValue = boolValue.ToString();
+                                    change.BoolValue = boolValue;
                                     break;
                                 case Guid guidValue:
-                                    change.StringValue = guidValue.ToString();
+                                    change.GuidValue = guidValue;
                                     break;
                                 case byte[] byteValue:
                                     change.ByteValue = byteValue;
@@ -886,15 +889,16 @@ public class ExportEvaluationServer
                         attributeChange.DateTimeValue = mvoValue.DateTimeValue;
                         break;
                     case AttributeDataType.Boolean:
-                        // Convert bool to string for now (model doesn't have BoolValue)
-                        attributeChange.StringValue = mvoValue.BoolValue?.ToString();
+                        attributeChange.BoolValue = mvoValue.BoolValue;
                         break;
                     case AttributeDataType.Guid:
-                        // Convert Guid to string for now (model doesn't have GuidValue)
-                        attributeChange.StringValue = mvoValue.GuidValue?.ToString();
+                        attributeChange.GuidValue = mvoValue.GuidValue;
                         break;
                     case AttributeDataType.Binary:
                         attributeChange.ByteValue = mvoValue.ByteValue;
+                        break;
+                    case AttributeDataType.LongNumber:
+                        attributeChange.LongValue = mvoValue.LongValue;
                         break;
                     case AttributeDataType.Reference:
                         // For reference attributes, store the MVO ID as unresolved reference - will be resolved during export execution
