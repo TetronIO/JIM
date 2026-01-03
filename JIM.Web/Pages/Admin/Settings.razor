@@ -20,18 +20,17 @@
     <ToolBarContent>
         <MudText Typo="Typo.h6">Settings</MudText>
         <MudSpacer />
-        <MudCheckBox @bind-Value="_showOverriddenOnly" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
+        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
     </ToolBarContent>
     <ColGroup>
-        <col style="width: 80px;" />
         <col />
         <col style="width: 300px;" />
         <col style="width: 150px;" />
+        <col style="width: 120px;" />
     </ColGroup>
     <HeaderContent>
-        <MudTh>Actions</MudTh>
         <MudTh>
             <MudTableSortLabel SortBy="new Func<ServiceSetting, object>(x => x.DisplayName)">
                 <MudText Typo="Typo.button">Setting</MudText>
@@ -43,33 +42,24 @@
         <MudTh>
             <MudText Typo="Typo.button">Status</MudText>
         </MudTh>
+        <MudTh Style="text-align: right;">
+            <MudText Typo="Typo.button">Actions</MudText>
+        </MudTh>
     </HeaderContent>
     <GroupHeaderTemplate>
         <MudTh Class="mud-table-cell-custom-group" colspan="4">
-            <MudText Typo="Typo.button">@context.GroupName</MudText>
+            <MudText Typo="Typo.button">@GetCategoryDisplayName(context.GroupName)</MudText>
         </MudTh>
     </GroupHeaderTemplate>
     <RowTemplate>
-        <MudTd>
-            @if (!context.IsReadOnly)
-            {
-                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit</MudMenuItem>
-                    @if (context.IsOverridden)
-                    {
-                        <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt" OnClick="_ => HandleRevertAsync(context)">Revert to Default</MudMenuItem>
-                    }
-                </MudMenu>
-            }
-        </MudTd>
-        <MudTd DataLabel="Setting">
+        <MudTd DataLabel="Setting" Class="@GetRowClass(context)">
             <MudText Typo="Typo.body1">@context.DisplayName</MudText>
             @if (!string.IsNullOrEmpty(context.Description))
             {
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Description</MudText>
             }
         </MudTd>
-        <MudTd DataLabel="Value">
+        <MudTd DataLabel="Value" Class="@GetRowClass(context)">
             @if (context.IsSecret)
             {
                 @if (_revealedSecrets.Contains(context.Key))
@@ -88,7 +78,7 @@
                 <span class="jim-text-code">@(context.GetEffectiveValue() ?? "(not set)")</span>
             }
         </MudTd>
-        <MudTd DataLabel="Status">
+        <MudTd DataLabel="Status" Class="@GetRowClass(context)">
             @if (context.IsReadOnly)
             {
                 <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
@@ -101,6 +91,22 @@
             {
                 <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
             }
+        </MudTd>
+        <MudTd DataLabel="Actions" Class="@GetRowClass(context)">
+            <div class="d-flex justify-end gap-2">
+                @if (!context.IsReadOnly)
+                {
+                    <MudTooltip Text="Edit">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(context)" />
+                    </MudTooltip>
+                    @if (context.IsOverridden)
+                    {
+                        <MudTooltip Text="Revert to Default">
+                            <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(context)" />
+                        </MudTooltip>
+                    }
+                }
+            </div>
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
@@ -163,6 +169,23 @@
         if (setting.Key.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
             return true;
         return false;
+    }
+
+    private string GetCategoryDisplayName(string? categoryString)
+    {
+        return categoryString switch
+        {
+            "SSO" => "Single Sign-On (SSO)",
+            "Synchronisation" => "Synchronisation",
+            "Maintenance" => "Maintenance",
+            "History" => "History",
+            _ => categoryString ?? "Unknown"
+        };
+    }
+
+    private string GetRowClass(ServiceSetting setting)
+    {
+        return setting.IsReadOnly ? "jim-readonly-row" : "";
     }
 
     private void RevealSecret(string key)
