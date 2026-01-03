@@ -64,7 +64,11 @@ public class SyncExportTaskProcessor
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing export");
 
         // Get count of pending exports for progress tracking
-        var pendingExportCount = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
+        int pendingExportCount;
+        using (Diagnostics.Sync.StartSpan("GetPendingExportsCount"))
+        {
+            pendingExportCount = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
+        }
         _activity.ObjectsToProcess = pendingExportCount;
         _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityAsync(_activity);
@@ -125,7 +129,10 @@ public class SyncExportTaskProcessor
             exportSpan.SetTag("deferredCount", result.DeferredCount);
 
             // Update activity with final results
-            await ProcessExportResultAsync(result);
+            using (Diagnostics.Sync.StartSpan("ProcessExportResult").SetTag("itemCount", result.ProcessedExportItems.Count))
+            {
+                await ProcessExportResultAsync(result);
+            }
 
             // Auto-select any containers created during export
             if (result.CreatedContainerDns.Count > 0)
@@ -136,12 +143,15 @@ public class SyncExportTaskProcessor
                 await _jim.Activities.UpdateActivityMessageAsync(_activity,
                     $"Auto-selecting {result.CreatedContainerDns.Count} container(s) created during export");
 
-                await _jim.ConnectedSystems.RefreshAndAutoSelectContainersAsync(
-                    _connectedSystem,
-                    result.CreatedContainerDns,
-                    _initiatedByApiKey,
-                    _initiatedByMetaverseObject,
-                    _activity);
+                using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerDns.Count))
+                {
+                    await _jim.ConnectedSystems.RefreshAndAutoSelectContainersAsync(
+                        _connectedSystem,
+                        result.CreatedContainerDns,
+                        _initiatedByApiKey,
+                        _initiatedByMetaverseObject,
+                        _activity);
+                }
 
                 // Update completion message to include container count
                 var updatedMessage = $"{_activity.Message} | {result.CreatedContainerDns.Count} container(s) auto-selected";

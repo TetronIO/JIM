@@ -86,7 +86,10 @@ public class SyncImportTaskProcessor
                     certificateAwareConnector.SetCertificateProvider(certificateProvider);
                 }
 
-                callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
+                using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
+                {
+                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
+                }
 
                 var initialPage = true;
                 var paginationTokens = new List<ConnectedSystemPaginationToken>();
@@ -134,7 +137,10 @@ public class SyncImportTaskProcessor
                     }
 
                     // process the results from this page
-                    await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                    using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
+                    {
+                        await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                    }
 
                     if (initialPage)
                         initialPage = false;
@@ -149,7 +155,10 @@ public class SyncImportTaskProcessor
                     await UpdateConnectedSystemWithInitiatorAsync();
                 }
 
-                callBasedImportConnector.CloseImportConnection();
+                using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
+                {
+                    callBasedImportConnector.CloseImportConnection();
+                }
                 break;
             }
             case IConnectorImportUsingFiles fileBasedImportConnector:
@@ -461,7 +470,11 @@ public class SyncImportTaskProcessor
                 RemoveNullImportObjectAttributes(importObject);
 
                 // see if we already have a matching connected system object for this imported object within JIM
-                var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
+                ConnectedSystemObject? connectedSystemObject;
+                using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
+                {
+                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
+                }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
                 // When a connector specifies Delete, mark the existing CSO as Obsolete
@@ -1128,7 +1141,11 @@ public class SyncImportTaskProcessor
         {
             try
             {
-                var result = await reconciliationService.ReconcileAsync(cso);
+                PendingExportReconciliationResult result;
+                using (Diagnostics.Sync.StartSpan("ReconcileCso"))
+                {
+                    result = await reconciliationService.ReconcileAsync(cso);
+                }
 
                 if (result.HasChanges)
                 {

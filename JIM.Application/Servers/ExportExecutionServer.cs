@@ -1,3 +1,4 @@
+using JIM.Application.Diagnostics;
 using JIM.Application.Services;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -72,7 +73,11 @@ public class ExportExecutionServer
         };
 
         // Get pending exports that are ready to execute
-        var pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
+        List<PendingExport> pendingExports;
+        using (Diagnostics.Diagnostics.Sync.StartSpan("GetExecutableExports"))
+        {
+            pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
+        }
         result.TotalPendingExports = pendingExports.Count;
 
         if (pendingExports.Count == 0)
@@ -273,7 +278,10 @@ public class ExportExecutionServer
             }
 
             // Open connection
-            connector.OpenExportConnection(connectedSystem.SettingValues);
+            using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
+            {
+                connector.OpenExportConnection(connectedSystem.SettingValues);
+            }
             Log.Debug("ExecuteUsingCallsWithBatchingAsync: Opened export connection for {SystemName}", connectedSystem.Name);
 
             try
@@ -311,7 +319,11 @@ public class ExportExecutionServer
                         await MarkBatchAsExecutingAsync(batch);
 
                         // Execute batch via connector - now returns ExportResult list
-                        var exportResults = connector.Export(batch);
+                        List<ExportResult> exportResults;
+                        using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch").SetTag("batchSize", batch.Count))
+                        {
+                            exportResults = connector.Export(batch);
+                        }
 
                         // Process results with ExportResult data
                         await ProcessBatchSuccessAsync(batch, exportResults, result);
@@ -373,7 +385,10 @@ public class ExportExecutionServer
             finally
             {
                 // Always close connection
-                connector.CloseExportConnection();
+                using (Diagnostics.Diagnostics.Connector.StartSpan("CloseExportConnection"))
+                {
+                    connector.CloseExportConnection();
+                }
                 Log.Debug("ExecuteUsingCallsWithBatchingAsync: Closed export connection for {SystemName}", connectedSystem.Name);
             }
         }
