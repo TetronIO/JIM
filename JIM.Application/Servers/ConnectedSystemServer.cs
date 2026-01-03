@@ -1922,9 +1922,16 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
     }
 
-    public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page = 1, int pageSize = 20)
+    public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
+        int connectedSystemId,
+        int page = 1,
+        int pageSize = 20,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(connectedSystemId, page, pageSize);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending);
     }
     
     /// <summary>

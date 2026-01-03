@@ -319,8 +319,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int connectedSystemId,
         int page,
         int pageSize,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever)
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -332,41 +333,88 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // todo: just get the display name and unique identifier attribute values
-        var objects = from o in Repository.Database.ConnectedSystemObjects.
-                Where(cso => cso.ConnectedSystem.Id == connectedSystemId)
-            select o;
+        var query = Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
 
-        if (queryRange != QueryRange.Forever)
+        // Apply search filter - search on display name, external ID, or secondary external ID
+        // Search is case-insensitive for user convenience
+        if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            switch (queryRange)
-            {
-                case QueryRange.LastYear:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(365));
-                    break;
-                case QueryRange.LastMonth:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(30));
-                    break;
-                case QueryRange.LastWeek:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(7));
-                    break;
-            }
+            var searchPattern = $"%{searchQuery}%";
+            query = query.Where(cso =>
+                // Search display name
+                cso.AttributeValues.Any(av =>
+                    EF.Functions.ILike(av.Attribute.Name, "displayname") &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern)) ||
+                // Search external ID (primary)
+                cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.ExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern)) ||
+                // Search secondary external ID
+                (cso.SecondaryExternalIdAttributeId != null &&
+                 cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern))));
         }
 
-        switch (querySortBy)
+        // Apply sorting
+        query = sortBy?.ToLower() switch
         {
-            case QuerySortBy.DateCreated:
-                objects = objects.OrderByDescending(q => q.Created);
-                break;
+            "externalid" => sortDescending
+                ? query.OrderByDescending(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault())
+                : query.OrderBy(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()),
+            "secondaryexternalid" => sortDescending
+                ? query.OrderByDescending(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault())
+                : query.OrderBy(cso => cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()),
+            "displayname" => sortDescending
+                ? query.OrderByDescending(cso => cso.AttributeValues
+                    .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault())
+                : query.OrderBy(cso => cso.AttributeValues
+                    .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()),
+            "type" => sortDescending
+                ? query.OrderByDescending(cso => cso.Type.Name)
+                : query.OrderBy(cso => cso.Type.Name),
+            "datejoined" => sortDescending
+                ? query.OrderByDescending(cso => cso.DateJoined)
+                : query.OrderBy(cso => cso.DateJoined),
+            "status" => sortDescending
+                ? query.OrderByDescending(cso => cso.Status)
+                : query.OrderBy(cso => cso.Status),
+            "jointype" => sortDescending
+                ? query.OrderByDescending(cso => cso.JoinType)
+                : query.OrderBy(cso => cso.JoinType),
+            _ => sortDescending
+                ? query.OrderByDescending(cso => cso.Created)
+                : query.OrderBy(cso => cso.Created)
+        };
 
-            // todo: support additional ways of sorting, i.e. by attribute value
-        }
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
 
-        // now just retrieve a page's worth of objects from the results
-        var grossCount = objects.Count();
+        // Apply pagination
         var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var pagedObjects = objects.Skip(offset).Take(itemsToGet);
+        var pagedObjects = query.Skip(offset).Take(pageSize);
+
+        // Project to header DTO
         var selectedObjects = pagedObjects.Select(cso => new ConnectedSystemObjectHeader
         {
             Id = cso.Id,
@@ -386,14 +434,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         });
         var results = await selectedObjects.ToListAsync();
 
-        // now with all the ids we know how many total results there are and so can populate paging info
+        // Build paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>
         {
             PageSize = pageSize,
-            TotalResults = grossCount,
+            TotalResults = totalCount,
             CurrentPage = page,
-            QuerySortBy = querySortBy,
-            QueryRange = queryRange,
             Results = results
         };
 
@@ -401,9 +447,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return pagedResultSet;
 
         // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
+        if (page <= pagedResultSet.TotalPages)
             return pagedResultSet;
-            
+
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
