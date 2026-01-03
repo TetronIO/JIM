@@ -37,10 +37,17 @@ public class ConnectedSystemObjectHeader
     /// </summary>
     public DateTime? DateJoined { get; set; }
 
+    #region Pending Export Fields
+
     /// <summary>
-    /// The display name from a pending export, if one exists and the CSO doesn't have a confirmed value.
+    /// The pending Display Name value from a PendingExport, if one exists.
     /// </summary>
     public string? PendingDisplayName { get; set; }
+
+    /// <summary>
+    /// The pending External ID value from a PendingExport, if one exists.
+    /// </summary>
+    public string? PendingExternalId { get; set; }
 
     /// <summary>
     /// The secondary external ID (e.g., DN) from a pending export, if one exists and the CSO doesn't have a confirmed value.
@@ -51,5 +58,12 @@ public class ConnectedSystemObjectHeader
     /// Whether there is a pending export for this CSO.
     /// </summary>
     public bool HasPendingExport { get; set; }
+
+    /// <summary>
+    /// The ID of the PendingExport associated with this CSO, if one exists.
+    /// </summary>
+    public Guid? PendingExportId { get; set; }
+
+    #endregion
     #endregion
 }

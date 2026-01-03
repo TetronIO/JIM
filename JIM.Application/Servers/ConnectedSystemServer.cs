@@ -2793,6 +2793,16 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportAsync(id);
     }
+
+    /// <summary>
+    /// Retrieves the Pending Export for a specific Connected System Object.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <returns>The PendingExport for the CSO, or null if none exists.</returns>
+    public async Task<PendingExport?> GetPendingExportForObjectAsync(Guid connectedSystemObjectId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+    }
     #endregion
 
     #region Sync Rules

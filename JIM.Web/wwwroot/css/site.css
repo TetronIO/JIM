@@ -157,6 +157,20 @@ body {
     /* Approx of Colors.Red.Darken4 with low opacity */
 }
 
+/* Info panel styling for pending exports and informational content */
+.jim-paper-info {
+    border: 2px solid #2196f3;
+    /* MudBlazor Info blue */
+    background-color: rgba(21, 101, 192, 0.09);
+    /* Blue with low opacity for light mode */
+}
+
+/* Dark mode adjustments for info panel */
+.mud-theme-dark .jim-paper-info {
+    background-color: rgba(33, 150, 243, 0.15);
+    /* Slightly brighter blue for dark mode visibility */
+}
+
 
 /* Improve contrast for form labels and helper text (WCAG AA compliance) */
 
