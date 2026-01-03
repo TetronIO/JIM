@@ -494,10 +494,11 @@ public class ExportExecutionServer
     /// Marks an export as failed and applies retry logic (Q6 decision).
     /// This is a synchronous version for batch processing - does not save to database.
     /// </summary>
-    private static void MarkExportFailed(PendingExport export, string errorMessage)
+    private static void MarkExportFailed(PendingExport export, string errorMessage, string? stackTrace = null)
     {
         export.ErrorCount++;
         export.LastErrorMessage = errorMessage;
+        export.LastErrorStackTrace = stackTrace;
         export.LastAttemptedAt = DateTime.UtcNow;
         export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
 
@@ -762,6 +763,7 @@ public class ExportExecutionServer
             {
                 export.ErrorCount++;
                 export.LastErrorMessage = ex.Message;
+                export.LastErrorStackTrace = ex.StackTrace;
                 export.LastAttemptedAt = now;
                 export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
                 export.Status = PendingExportStatus.ExportNotImported;
@@ -920,10 +922,11 @@ public class ExportExecutionServer
     /// <summary>
     /// Marks an export as failed and applies retry logic (Q6 decision).
     /// </summary>
-    private async Task MarkExportFailedAsync(PendingExport export, string errorMessage)
+    private async Task MarkExportFailedAsync(PendingExport export, string errorMessage, string? stackTrace = null)
     {
         export.ErrorCount++;
         export.LastErrorMessage = errorMessage;
+        export.LastErrorStackTrace = stackTrace;
         export.LastAttemptedAt = DateTime.UtcNow;
         export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
 
@@ -981,6 +984,7 @@ public class ExportExecutionServer
             export.Status = PendingExportStatus.Pending;
             export.NextRetryAt = null;
             export.LastErrorMessage = null;
+            export.LastErrorStackTrace = null;
             await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
         }
 

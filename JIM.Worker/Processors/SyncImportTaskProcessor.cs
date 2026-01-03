@@ -91,13 +91,24 @@ public class SyncImportTaskProcessor
                 var initialPage = true;
                 var paginationTokens = new List<ConnectedSystemPaginationToken>();
                 var pageNumber = 0;
+
+                // Keep track of the original persisted data at the START of the import.
+                // This is critical for delta imports where subsequent pages must use the SAME
+                // watermark (USN) as the first page to query for changes.
+                // The connector will return a NEW watermark on the first page that we'll save
+                // AFTER all pages are processed.
+                var originalPersistedData = _connectedSystem.PersistedConnectorData;
+                string? newPersistedData = null;
+
                 while (initialPage || paginationTokens.Count > 0)
                 {
                     // perform the import for this page
+                    // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
+                    // watermark queries across all pages of a delta import.
                     ConnectedSystemImportResult result;
                     using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
                     {
-                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, _connectedSystem.PersistedConnectorData, Log.Logger, _cancellationTokenSource.Token);
+                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
                     }
                     pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
@@ -112,16 +123,14 @@ public class SyncImportTaskProcessor
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
 
-                    // Only update persisted connector data if the connector explicitly returns a new non-null value.
-                    // A null value means "no change" (e.g., subsequent pagination pages), not "clear the data".
-                    // This is important for delta imports where the watermark (USN) is set on the first page
-                    // and should be preserved across all pages.
-                    if (result.PersistedConnectorData != null && result.PersistedConnectorData != _connectedSystem.PersistedConnectorData)
+                    // Capture the new persisted connector data from the first page only.
+                    // Subsequent pages return null (indicating "no change"), so we only capture once.
+                    // We'll save this AFTER all pages are processed to avoid affecting watermark
+                    // queries on subsequent pages.
+                    if (result.PersistedConnectorData != null && newPersistedData == null)
                     {
-                        // the connector wants to persist some data between sync runs. update the connected system with the new value
-                        Log.Debug($"ExecuteAsync: updating persisted connector data. old value: '{_connectedSystem.PersistedConnectorData}', new value: '{result.PersistedConnectorData}'");
-                        _connectedSystem.PersistedConnectorData = result.PersistedConnectorData;
-                        await UpdateConnectedSystemWithInitiatorAsync();
+                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{originalPersistedData}', new value: '{result.PersistedConnectorData}'");
+                        newPersistedData = result.PersistedConnectorData;
                     }
 
                     // process the results from this page
@@ -129,6 +138,15 @@ public class SyncImportTaskProcessor
 
                     if (initialPage)
                         initialPage = false;
+                }
+
+                // Now that all pages are processed, update the persisted connector data
+                // with the new watermark captured from the first page.
+                if (newPersistedData != null && newPersistedData != originalPersistedData)
+                {
+                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{originalPersistedData}', new value: '{newPersistedData}'");
+                    _connectedSystem.PersistedConnectorData = newPersistedData;
+                    await UpdateConnectedSystemWithInitiatorAsync();
                 }
 
                 callBasedImportConnector.CloseImportConnection();

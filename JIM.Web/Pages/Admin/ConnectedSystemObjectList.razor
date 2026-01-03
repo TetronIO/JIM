@@ -99,13 +99,37 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="External Id">
-                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(context))">@context.ExternalIdAttributeValue</MudLink>
+                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(context))">
+                    <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Class="mr-1" />View
+                </MudLink>
             </MudTd>
             @if (_hasSecondaryExternalId)
             {
-                <MudTd DataLabel="Secondary External Id">@context.SecondaryExternalIdAttributeValue</MudTd>
+                <MudTd DataLabel="Secondary External Id">
+                    @if (context.SecondaryExternalIdAttributeValue != null)
+                    {
+                        @context.SecondaryExternalIdAttributeValue
+                    }
+                    else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
+                    {
+                        <MudTooltip Text="Pending export - not yet confirmed">
+                            <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
+                        </MudTooltip>
+                    }
+                </MudTd>
             }
-            <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
+            <MudTd DataLabel="Display Name">
+                @if (!string.IsNullOrEmpty(context.DisplayName))
+                {
+                    @context.DisplayName
+                }
+                else if (!string.IsNullOrEmpty(context.PendingDisplayName))
+                {
+                    <MudTooltip Text="Pending export - not yet confirmed">
+                        <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingDisplayName</MudText>
+                    </MudTooltip>
+                }
+            </MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">
                 <MudTooltip Text="@context.Created.ToString("O")">
@@ -125,7 +149,7 @@
                 }
             </MudTd>
             <MudTd DataLabel="Status">
-                <MudChip T="string" Text="@context.Status.ToString()" Variant="Variant.Text" />
+                <MudChip T="string" Text="@context.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" />
             </MudTd>
             <MudTd DataLabel="Join Type">@context.JoinType.ToString().SplitOnCapitalLetters()</MudTd>
         </RowTemplate>
@@ -246,7 +270,9 @@ else
             ? "External Id"
             : $"External Id ({first.ExternalIdAttributeName})";
 
-        _hasSecondaryExternalId = results.Any(r => r.SecondaryExternalIdAttributeValue != null);
+        // Show secondary external ID column if any confirmed OR pending values exist
+        _hasSecondaryExternalId = results.Any(r =>
+            r.SecondaryExternalIdAttributeValue != null || !string.IsNullOrEmpty(r.PendingSecondaryExternalId));
         if (_hasSecondaryExternalId)
         {
             var secondaryAttrName = results

@@ -36,5 +36,20 @@ public class ConnectedSystemObjectHeader
     /// When this Connector Space Object was joined to the Metaverse.
     /// </summary>
     public DateTime? DateJoined { get; set; }
+
+    /// <summary>
+    /// The display name from a pending export, if one exists and the CSO doesn't have a confirmed value.
+    /// </summary>
+    public string? PendingDisplayName { get; set; }
+
+    /// <summary>
+    /// The secondary external ID (e.g., DN) from a pending export, if one exists and the CSO doesn't have a confirmed value.
+    /// </summary>
+    public string? PendingSecondaryExternalId { get; set; }
+
+    /// <summary>
+    /// Whether there is a pending export for this CSO.
+    /// </summary>
+    public bool HasPendingExport { get; set; }
     #endregion
 }

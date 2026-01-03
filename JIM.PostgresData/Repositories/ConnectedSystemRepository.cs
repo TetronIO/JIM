@@ -414,24 +414,46 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var offset = (page - 1) * pageSize;
         var pagedObjects = query.Skip(offset).Take(pageSize);
 
-        // Project to header DTO
-        var selectedObjects = pagedObjects.Select(cso => new ConnectedSystemObjectHeader
-        {
-            Id = cso.Id,
-            ConnectedSystemId = cso.ConnectedSystemId,
-            Created = cso.Created,
-            DateJoined = cso.DateJoined,
-            JoinType = cso.JoinType,
-            LastUpdated = cso.LastUpdated,
-            Status = cso.Status,
-            TypeId = cso.Type.Id,
-            TypeName = cso.Type.Name,
-            DisplayName = cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname")) ? cso.AttributeValues.Single(av => EF.Functions.ILike(av.Attribute.Name, "displayname")).StringValue : null,
-            ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
-            ExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.ExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
-            SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId),
-            SecondaryExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault()
-        });
+        // Project to header DTO with pending export info
+        // Use a left join to include pending export data for displayName and secondaryExternalId
+        var selectedObjects = from cso in pagedObjects
+            join pe in Repository.Database.PendingExports
+                on cso.Id equals pe.ConnectedSystemObjectId into pendingExports
+            from pe in pendingExports.DefaultIfEmpty()
+            select new ConnectedSystemObjectHeader
+            {
+                Id = cso.Id,
+                ConnectedSystemId = cso.ConnectedSystemId,
+                Created = cso.Created,
+                DateJoined = cso.DateJoined,
+                JoinType = cso.JoinType,
+                LastUpdated = cso.LastUpdated,
+                Status = cso.Status,
+                TypeId = cso.Type.Id,
+                TypeName = cso.Type.Name,
+                DisplayName = cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    ? cso.AttributeValues.Single(av => EF.Functions.ILike(av.Attribute.Name, "displayname")).StringValue
+                    : null,
+                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
+                ExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.ExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
+                SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId),
+                SecondaryExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
+                // Pending export info - only show if CSO doesn't already have a confirmed value
+                HasPendingExport = pe != null,
+                PendingDisplayName = pe != null && !cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    ? pe.AttributeValueChanges
+                        .Where(avc => EF.Functions.ILike(avc.Attribute.Name, "displayname") || EF.Functions.ILike(avc.Attribute.Name, "cn"))
+                        .Select(avc => avc.StringValue)
+                        .FirstOrDefault()
+                    : null,
+                PendingSecondaryExternalId = pe != null && cso.SecondaryExternalIdAttributeId != null &&
+                    !cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    ? pe.AttributeValueChanges
+                        .Where(avc => avc.Attribute.IsSecondaryExternalId)
+                        .Select(avc => avc.StringValue)
+                        .FirstOrDefault()
+                    : null
+            };
         var results = await selectedObjects.ToListAsync();
 
         // Build paged result set
