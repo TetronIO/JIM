@@ -153,6 +153,19 @@
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectDeletes.ToString("N0")</MudText>
                 </MudPaper>
 
+                @if (_activityRunProfileExecutionStats.TotalMvoNoAttributeChanges > 0 || _activityRunProfileExecutionStats.TotalCsoAlreadyCurrent > 0)
+                {
+                    <MudPaper Class="pa-5" Outlined="true" Style="@($"color:{Colors.Blue.Default};")">
+                        <MudText Typo="Typo.button">MVO No Changes</MudText>
+                        <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalMvoNoAttributeChanges.ToString("N0")</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="pa-5" Outlined="true" Style="@($"color:{Colors.Blue.Default};")">
+                        <MudText Typo="Typo.button">CSO Already Current</MudText>
+                        <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalCsoAlreadyCurrent.ToString("N0")</MudText>
+                    </MudPaper>
+                }
+
                 <MudPaper Class="pa-5" Outlined="true">
                     <MudText Typo="Typo.button">Object Types</MudText>
                     <MudText Typo="Typo.h3">@_activityRunProfileExecutionStats.TotalObjectTypes.ToString("N0")</MudText>

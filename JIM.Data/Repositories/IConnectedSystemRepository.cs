@@ -134,6 +134,14 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(IEnumerable<int> targetConnectedSystemIds);
 
     /// <summary>
+    /// Batch loads CSO attribute values for the specified CSO IDs.
+    /// Used for per-page caching during export evaluation to enable no-net-change detection.
+    /// </summary>
+    /// <param name="csoIds">The CSO IDs to load attribute values for.</param>
+    /// <returns>A list of CSO attribute values with their Attribute navigation property populated.</returns>
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
+
+    /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
     /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.

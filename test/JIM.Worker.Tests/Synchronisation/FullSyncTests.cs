@@ -39,6 +39,8 @@ public class FullSyncTests
     private Mock<DbSet<MetaverseObject>> MockDbSetMetaverseObjects { get; set; }
     private List<SyncRule> SyncRulesData { get; set; }
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; }
+    private List<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValuesData { get; set; }
+    private Mock<DbSet<ConnectedSystemObjectAttributeValue>> MockDbSetConnectedSystemObjectAttributeValues { get; set; }
     private JimApplication Jim { get; set; }
     #endregion
 
@@ -116,12 +118,17 @@ public class FullSyncTests
         // set up the Sync Rule stub mocks. they will be customised to specific use-cases in individual tests.
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
-        
+
+        // set up the CSO Attribute Values mock (empty by default, no-net-change detection cache)
+        ConnectedSystemObjectAttributeValuesData = new List<ConnectedSystemObjectAttributeValue>();
+        MockDbSetConnectedSystemObjectAttributeValues = ConnectedSystemObjectAttributeValuesData.BuildMockDbSet();
+
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
         MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjectAttributeValues).Returns(MockDbSetConnectedSystemObjectAttributeValues.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(MockDbSetConnectedSystemRunProfiles.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);

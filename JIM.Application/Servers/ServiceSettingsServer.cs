@@ -85,6 +85,15 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the verbose no-change recording setting.
+        /// When enabled, creates detailed Activity execution items for exports where CSO already has current values.
+        /// </summary>
+        public async Task<bool> GetVerboseNoChangeRecordingAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.VerboseNoChangeRecording, false);
+        }
+
+        /// <summary>
         /// Updates a service setting value and creates an Activity for audit purposes.
         /// </summary>
         public async Task UpdateSettingValueAsync(string key, string? newValue, MetaverseObject? initiatedBy)
