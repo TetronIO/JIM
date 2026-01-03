@@ -16,11 +16,14 @@ namespace JIM.Application.Expressions;
 public class DynamicExpressoEvaluator : IExpressionEvaluator
 {
     private readonly Interpreter _interpreter;
-    private readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
 
-    // Cache metrics for diagnostics
-    private long _cacheHits;
-    private long _cacheMisses;
+    // Static cache shared across all instances - expressions are deterministic so cache can be shared
+    // This ensures expression compilation is only done once per expression string across all sync operations
+    private static readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
+
+    // Static cache metrics for diagnostics (shared across instances)
+    private static long _cacheHits;
+    private static long _cacheMisses;
 
     // Threshold for logging slow expressions (in milliseconds)
     private const int SlowExpressionThresholdMs = 10;

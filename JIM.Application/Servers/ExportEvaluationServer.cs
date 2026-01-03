@@ -293,13 +293,16 @@ public class ExportEvaluationServer
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
     /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.
     /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.</param>
+    /// <param name="deferSave">When true, pending exports are not saved to the database. The caller is responsible
+    /// for batch saving the pending exports returned in the result. Default is false for backwards compatibility.</param>
     /// <returns>ExportEvaluationResult containing pending exports and no-net-change counts.</returns>
     public async Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
         ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
-        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
+        bool deferSave = false)
     {
         var result = new ExportEvaluationResult();
 
@@ -349,7 +352,7 @@ public class ExportEvaluationServer
                 .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
             {
                 var (pendingExport, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
-                    mvo, exportRule, changedAttributes, cache, csoAttributeCache);
+                    mvo, exportRule, changedAttributes, cache, csoAttributeCache, deferSave);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -743,12 +746,20 @@ public class ExportEvaluationServer
     /// Creates or updates a pending export with no-net-change detection.
     /// Returns both the pending export (if created) and the count of attributes skipped due to no-net-change.
     /// </summary>
+    /// <param name="mvo">The Metaverse Object that changed.</param>
+    /// <param name="exportRule">The export rule to evaluate.</param>
+    /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
+    /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
+    /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.</param>
+    /// <param name="deferSave">When true, pending exports are not saved to the database and the caller
+    /// is responsible for batch saving. Default is false for backwards compatibility.</param>
     private async Task<(PendingExport? PendingExport, int CsoAlreadyCurrentCount)> CreateOrUpdatePendingExportWithNoNetChangeAsync(
         MetaverseObject mvo,
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
         ExportEvaluationCache cache,
-        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
+        bool deferSave = false)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -824,13 +835,17 @@ public class ExportEvaluationServer
             CreatedAt = DateTime.UtcNow
         };
 
-        using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("SavePendingExport"))
+        // Save immediately unless caller requested deferred saving for batch operations
+        if (!deferSave)
         {
-            await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+            using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("SavePendingExport"))
+            {
+                await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+            }
         }
 
-        Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} with {AttrCount} attribute changes (skipped {SkippedCount} no-net-change)",
-            changeType, pendingExport.Id, mvo.Id, attributeChanges.Count, csoAlreadyCurrentCount);
+        Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} with {AttrCount} attribute changes (skipped {SkippedCount} no-net-change, deferSave={DeferSave})",
+            changeType, pendingExport.Id, mvo.Id, attributeChanges.Count, csoAlreadyCurrentCount, deferSave);
 
         return (pendingExport, csoAlreadyCurrentCount);
     }

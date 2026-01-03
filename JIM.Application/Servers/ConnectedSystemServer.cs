@@ -2743,6 +2743,16 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Creates multiple Pending Export objects in a single batch operation.
+    /// Used to efficiently create pending exports during sync export evaluation.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to create.</param>
+    public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        await Application.Repository.ConnectedSystems.CreatePendingExportsAsync(pendingExports);
+    }
+
+    /// <summary>
     /// Deletes multiple Pending Export objects in a single batch operation.
     /// Used to efficiently remove confirmed pending exports during sync.
     /// </summary>

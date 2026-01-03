@@ -37,6 +37,7 @@ public class SyncFullSyncTaskProcessor
     private readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes)> _pendingExportEvaluations = [];
 
     // Batch collections for deferred pending export operations (avoid per-CSO database calls)
+    private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToCreate = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
@@ -738,6 +739,7 @@ public class SyncFullSyncTaskProcessor
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
     /// Uses pre-cached export rules and CSO lookups for O(1) access instead of O(N×M) database queries.
     /// Includes no-net-change detection to skip creating pending exports when CSO already has current values.
+    /// Pending exports are deferred for batch saving to reduce database round trips.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
@@ -751,8 +753,7 @@ public class SyncFullSyncTaskProcessor
 
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
         // Uses no-net-change detection to skip pending exports when CSO already has current values
-        // Pending exports are saved immediately within EvaluateExportRulesAsync to avoid
-        // memory pressure from holding 5000+ pending export objects in memory
+        // Pending exports are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
             var result = await _jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
@@ -760,10 +761,17 @@ public class SyncFullSyncTaskProcessor
                 changedAttributes,
                 _connectedSystem,
                 _exportEvaluationCache,
-                _pageCsoAttributeCache);
+                _pageCsoAttributeCache,
+                deferSave: true);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
+
+            // Collect pending exports for batch saving at end of page
+            if (result.PendingExports.Count > 0)
+            {
+                _pendingExportsToCreate.AddRange(result.PendingExports);
+            }
         }
 
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
@@ -848,19 +856,26 @@ public class SyncFullSyncTaskProcessor
     }
 
     /// <summary>
-    /// Batch persists all pending export deletes and updates collected during the current page.
-    /// This reduces database round trips from n writes to 2 writes (one each for deletes, updates).
-    /// Note: Pending export creates are saved immediately during EvaluateExportRulesAsync to avoid
-    /// memory pressure from holding large numbers of pending export objects.
+    /// Batch persists all pending export creates, deletes, and updates collected during the current page.
+    /// This reduces database round trips from n writes to 3 writes (one each for creates, deletes, updates).
     /// </summary>
     private async Task FlushPendingExportOperationsAsync()
     {
-        if (_pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
+        if (_pendingExportsToCreate.Count == 0 && _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("FlushPendingExportOperations");
+        span.SetTag("createCount", _pendingExportsToCreate.Count);
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
+
+        // Batch create new pending exports (evaluated during export evaluation phase)
+        if (_pendingExportsToCreate.Count > 0)
+        {
+            await _jim.ConnectedSystems.CreatePendingExportsAsync(_pendingExportsToCreate);
+            Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} pending exports in batch", _pendingExportsToCreate.Count);
+            _pendingExportsToCreate.Clear();
+        }
 
         // Batch delete confirmed pending exports
         if (_pendingExportsToDelete.Count > 0)

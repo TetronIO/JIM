@@ -43,6 +43,7 @@ public class SyncDeltaSyncTaskProcessor
     private readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes)> _pendingExportEvaluations = [];
 
     // Batch collections for deferred pending export operations (avoid per-CSO database calls)
+    private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToCreate = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
@@ -768,8 +769,8 @@ public class SyncDeltaSyncTaskProcessor
     /// Evaluates export rules for an MVO that has changed during inbound sync.
     /// Creates PendingExports for any connected systems that need to be updated.
     /// Also evaluates if MVO has fallen out of scope for any export rules (deprovisioning).
-    /// Pending exports are saved immediately to avoid memory pressure from holding large numbers of objects.
     /// Includes no-net-change detection to skip creating pending exports when CSO already has current values.
+    /// Pending exports are deferred for batch saving to reduce database round trips.
     /// </summary>
     private async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
     {
@@ -781,8 +782,7 @@ public class SyncDeltaSyncTaskProcessor
 
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
         // Uses no-net-change detection to skip pending exports when CSO already has current values
-        // Pending exports are saved immediately within EvaluateExportRulesAsync to avoid
-        // memory pressure from holding 5000+ pending export objects in memory
+        // Pending exports are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
             var result = await _jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
@@ -790,10 +790,17 @@ public class SyncDeltaSyncTaskProcessor
                 changedAttributes,
                 _connectedSystem,
                 _exportEvaluationCache,
-                _pageCsoAttributeCache);
+                _pageCsoAttributeCache,
+                deferSave: true);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
+
+            // Collect pending exports for batch saving at end of page
+            if (result.PendingExports.Count > 0)
+            {
+                _pendingExportsToCreate.AddRange(result.PendingExports);
+            }
         }
 
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data

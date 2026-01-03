@@ -1216,6 +1216,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var pendingExportsList = pendingExports.ToList();
+        if (pendingExportsList.Count == 0)
+            return;
+
+        await Repository.Database.PendingExports.AddRangeAsync(pendingExportsList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
     /// </summary>
