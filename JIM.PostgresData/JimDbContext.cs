@@ -283,5 +283,16 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
             .HasIndex("ConnectedSystemObjectId", "AttributeId")
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
+
+        // Delta sync performance: composite index for timestamp-based queries
+        // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
+        // which is used in GetConnectedSystemObjectsModifiedSinceAsync
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.LastUpdated })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_LastUpdated");
+
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.Created })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_Created");
     }
 }

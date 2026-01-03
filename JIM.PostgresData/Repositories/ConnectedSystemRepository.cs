@@ -657,6 +657,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
         // This ensures delta sync processes both new and updated objects.
         // Order by Id for consistent pagination - without ordering, Skip/Take can return inconsistent results.
+        // NOTE: AsNoTracking cannot be used here because downstream code relies on navigation property
+        // fixup (e.g., CSO.Type.ExternalIdAttribute) which requires change tracking.
         var query = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.AttributeValues)
             .Include(cso => cso.MetaverseObject)

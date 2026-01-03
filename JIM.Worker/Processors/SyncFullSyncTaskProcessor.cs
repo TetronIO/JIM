@@ -833,7 +833,12 @@ public class SyncFullSyncTaskProcessor
 
         foreach (var (mvo, changedAttributes) in _pendingExportEvaluations)
         {
-            await EvaluateOutboundExportsAsync(mvo, changedAttributes);
+            using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
+                .SetTag("mvoId", mvo.Id)
+                .SetTag("changedAttributeCount", changedAttributes.Count))
+            {
+                await EvaluateOutboundExportsAsync(mvo, changedAttributes);
+            }
         }
 
         Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs", _pendingExportEvaluations.Count);

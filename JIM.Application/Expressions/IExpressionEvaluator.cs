@@ -27,4 +27,10 @@ public interface IExpressionEvaluator
     /// <param name="context">The test context with sample attribute values.</param>
     /// <returns>Test result including the evaluated value or error.</returns>
     ExpressionTestResult Test(string expression, ExpressionContext context);
+
+    /// <summary>
+    /// Gets the current expression cache metrics for diagnostics.
+    /// </summary>
+    /// <returns>A tuple containing (CacheHits, CacheMisses).</returns>
+    (long CacheHits, long CacheMisses) GetCacheMetrics();
 }
