@@ -379,7 +379,6 @@ internal class LdapConnectorImport
         var attributes = objectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
         attributes.AddRange(objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
         attributes.Add("objectClass");
-        attributes.Add("uSNChanged"); // Include USN for debugging/auditing
         attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
         var queryAttributes = attributes.Distinct().ToArray();
 

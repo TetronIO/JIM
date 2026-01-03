@@ -53,6 +53,7 @@
                           Style="min-width: 350px;" />
         </ToolBarContent>
         <HeaderContent>
+            <MudTh Style="width: 50px;"></MudTh>
             <MudTh>
                 <MudTableSortLabel SortLabel="externalid" T="ConnectedSystemObjectHeader">
                     <MudText Typo="Typo.button">@_externalIdColumnHeader</MudText>
@@ -98,11 +99,13 @@
             </MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="External Id">
-                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(context))">
-                    <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Class="mr-1" />View
-                </MudLink>
+            <MudTd>
+                <MudButton Variant="Variant.Filled"
+                            StartIcon="@Icons.Material.Filled.Visibility"
+                            Href="@(Utilities.GetConnectedSystemObjectHref(context))"
+                            IconColor="Color.Primary">View</MudButton>
             </MudTd>
+            <MudTd DataLabel="External Id">@context.ExternalIdAttributeValue</MudTd>
             @if (_hasSecondaryExternalId)
             {
                 <MudTd DataLabel="Secondary External Id">
