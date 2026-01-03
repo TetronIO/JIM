@@ -958,6 +958,34 @@ public class DynamicExpressoEvaluatorTests
     }
 
     [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForDateTimeMinValue()
+    {
+        // DateTime.MinValue represents PostgreSQL's -infinity (no date set)
+        // Should return null, not throw an exception
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", DateTime.MinValue } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_ToFileTime_ReturnsNullForDateTimeMaxValue()
+    {
+        // DateTime.MaxValue represents PostgreSQL's +infinity (never expires)
+        // Should return null, not throw an exception
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "AccountExpires", DateTime.MaxValue } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("ToFileTime(mv[\"AccountExpires\"])", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
     public void Evaluate_FromFileTime_ThrowsForUnrecognisedType()
     {
         // Passing a DateTime (not a long, int, or string) should throw

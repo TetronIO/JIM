@@ -456,10 +456,20 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         if (dateTime == null)
             return null;
 
+        // Handle PostgreSQL's -infinity (DateTime.MinValue) and +infinity (DateTime.MaxValue)
+        // These represent "no date" or "never" and should return null
+        if (dateTime.Value == DateTime.MinValue || dateTime.Value == DateTime.MaxValue)
+            return null;
+
         // Ensure we're working with UTC
         var utcDateTime = dateTime.Value.Kind == DateTimeKind.Utc
             ? dateTime.Value
             : dateTime.Value.ToUniversalTime();
+
+        // FILETIME can only represent dates from 1601-01-01 onwards
+        // Return null for dates before this (shouldn't happen with valid data, but be safe)
+        if (utcDateTime.Year < 1601)
+            return null;
 
         return utcDateTime.ToFileTimeUtc();
     }
