@@ -549,35 +549,26 @@ public class SyncImportTaskProcessor
         var nullConnectedSystemImportObjectAttributes = new List<ConnectedSystemImportObjectAttribute>();
         foreach (var attribute in connectedSystemImportObject.Attributes)
         {
-            var noGuids = false;
-            var noIntegers = false;
-            var noStrings = false;
-            var noBytes = false;
-            var noReferences = false;
-
             // first remove any null attribute values. this might mean we'll be left with no values at all
             attribute.GuidValues.RemoveAll(q => q.Equals(null));
             attribute.IntValues.RemoveAll(q => q.Equals(null));
+            attribute.LongValues.RemoveAll(q => q.Equals(null));
             attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
             attribute.ByteValues.RemoveAll(q => q.Equals(null));
             attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
 
             // now work out if we're left with any values at all
-            if (attribute.GuidValues.Count == 0)
-                noGuids = true;
-            if (attribute.IntValues.Count == 0)
-                noIntegers = true;
-            if (attribute.StringValues.Count == 0)
-                noStrings = true;
+            var noGuids = attribute.GuidValues.Count == 0;
+            var noIntegers = attribute.IntValues.Count == 0;
+            var noLongs = attribute.LongValues.Count == 0;
+            var noStrings = attribute.StringValues.Count == 0;
             var noBool = !attribute.BoolValue.HasValue;
             var noDateTime = !attribute.DateTimeValue.HasValue;
-            if (attribute.ByteValues.Count == 0)
-                noBytes = true;
-            if (attribute.ReferenceValues.Count == 0)
-                noReferences = true;
+            var noBytes = attribute.ByteValues.Count == 0;
+            var noReferences = attribute.ReferenceValues.Count == 0;
 
             // if all types of values are empty, we'll add this attribute to a list for removal
-            if (noGuids && noIntegers && noStrings && noBool && noDateTime && noBytes && noReferences)
+            if (noGuids && noIntegers && noLongs && noStrings && noBool && noDateTime && noBytes && noReferences)
                 nullConnectedSystemImportObjectAttributes.Add(attribute);
         }
 
@@ -819,43 +810,14 @@ public class SyncImportTaskProcessor
                 switch (csoAttribute.Type)
                 {
                     case AttributeDataType.Text:
-                        // Debug logging for text attribute comparison
-                        var existingValues = connectedSystemObject.AttributeValues
-                            .Where(av => av.Attribute?.Name == csoAttributeName)
-                            .Select(av => av.StringValue)
-                            .ToList();
-                        var importedValues = importedObjectAttribute.StringValues.ToList();
-
-                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase))
-                        {
-                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Comparing department attribute for CSO {CsoId}. Existing: [{ExistingValues}], Imported: [{ImportedValues}]",
-                                connectedSystemObject.Id,
-                                string.Join(", ", existingValues.Select(v => v ?? "(null)")),
-                                string.Join(", ", importedValues));
-                        }
-
                         // find values on the cso of type string that aren't on the imported object and remove them first
                         var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))).ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingStringAttributeValues);
-
-                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && missingStringAttributeValues.Count > 0)
-                        {
-                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to remove: [{Values}]",
-                                missingStringAttributeValues.Count,
-                                string.Join(", ", missingStringAttributeValues.Select(av => av.StringValue)));
-                        }
 
                         // find imported values of type string that aren't on the cso and add them
                         var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv))).ToList();
                         foreach (var newStringValue in newStringValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
-
-                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && newStringValues.Count > 0)
-                        {
-                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to add: [{Values}]",
-                                newStringValues.Count,
-                                string.Join(", ", newStringValues));
-                        }
                         break;
 
                     case AttributeDataType.Number:
@@ -1133,6 +1095,7 @@ public class SyncImportTaskProcessor
     /// <summary>
     /// Reconciles Pending Exports against imported CSO values.
     /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
+    /// Creates ActivityRunProfileExecutionItems with warnings for unconfirmed or failed exports.
     /// </summary>
     /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
     private async Task ReconcilePendingExportsAsync(IReadOnlyCollection<ConnectedSystemObject> updatedCsos)
@@ -1157,6 +1120,40 @@ public class SyncImportTaskProcessor
 
                     if (result.PendingExportDeleted)
                         exportsDeleted++;
+
+                    // Create execution items for failed exports (permanent failures)
+                    if (result.FailedChanges.Count > 0)
+                    {
+                        var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                        var executionItem = new ActivityRunProfileExecutionItem
+                        {
+                            Activity = _activity,
+                            ConnectedSystemObject = cso,
+                            ConnectedSystemObjectId = cso.Id,
+                            ObjectChangeType = ObjectChangeType.Update,
+                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
+                            ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
+                            DataSnapshot = $"Failed attributes: {failedAttrNames}"
+                        };
+                        _activityRunProfileExecutionItems.Add(executionItem);
+                    }
+
+                    // Create execution items for retry exports (temporary failures that will be retried)
+                    if (result.RetryChanges.Count > 0)
+                    {
+                        var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                        var executionItem = new ActivityRunProfileExecutionItem
+                        {
+                            Activity = _activity,
+                            ConnectedSystemObject = cso,
+                            ConnectedSystemObjectId = cso.Id,
+                            ObjectChangeType = ObjectChangeType.Update,
+                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
+                            ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
+                            DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
+                        };
+                        _activityRunProfileExecutionItems.Add(executionItem);
+                    }
                 }
             }
             catch (Exception ex)
