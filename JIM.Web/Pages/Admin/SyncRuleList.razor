@@ -45,6 +45,7 @@
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem!)"><MudText Typo="Typo.button">Provision?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse!)"><MudText Typo="Typo.button">Project?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
@@ -90,6 +91,11 @@
             {
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
             }
+        </MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>

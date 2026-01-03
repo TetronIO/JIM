@@ -30,7 +30,11 @@
         <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
         <MudTd DataLabel="Has Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Created">@context.Created</MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
     </RowTemplate>
 </MudTable>
 

@@ -31,7 +31,11 @@
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("admin/example-data/templates/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Created">@context.Created</MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
     </RowTemplate>
 </MudTable>
 
