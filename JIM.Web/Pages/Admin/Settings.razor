@@ -48,7 +48,7 @@
     </HeaderContent>
     <GroupHeaderTemplate>
         <MudTh Class="mud-table-cell-custom-group" colspan="4">
-            <MudText Typo="Typo.button">@GetCategoryDisplayName(context.GroupName)</MudText>
+            <MudText Typo="Typo.button">@GetCategoryDisplayName(context.Key)</MudText>
         </MudTh>
     </GroupHeaderTemplate>
     <RowTemplate>
@@ -171,8 +171,9 @@
         return false;
     }
 
-    private string GetCategoryDisplayName(string? categoryString)
+    private string GetCategoryDisplayName(object? categoryValue)
     {
+        var categoryString = categoryValue?.ToString();
         return categoryString switch
         {
             "SSO" => "Single Sign-On (SSO)",
