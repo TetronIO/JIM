@@ -146,6 +146,7 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadSettingsAsync();
+        InitializeExpandedGroups();
     }
 
     private async Task LoadSettingsAsync()
@@ -154,6 +155,15 @@
         _settings = await Jim.ServiceSettings.GetAllSettingsAsync();
         UpdateFilteredSettings();
         _loading = false;
+    }
+
+    private void InitializeExpandedGroups()
+    {
+        // Expand all categories by default
+        foreach (var setting in _settings)
+        {
+            _expandedGroups.Add(setting.Category.ToString());
+        }
     }
 
     private void UpdateFilteredSettings()
