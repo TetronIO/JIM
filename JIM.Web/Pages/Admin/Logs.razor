@@ -4,7 +4,8 @@
 @using JIM.Web.Models.Api
 @inject LogReaderService LogReader
 @inject ISnackbar Snackbar
-@implements IDisposable
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
 <PageTitle>Logs</PageTitle>
 <MudText Typo="Typo.h4">Logs</MudText>
@@ -201,6 +202,15 @@
         await LoadLogsAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Hide the page footer to maximise viewing area for logs
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+        }
+    }
+
     protected override void OnParametersSet()
     {
         UpdateAutoRefreshTimer();
@@ -295,8 +305,17 @@
         return value[..maxLength] + "...";
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _refreshTimer?.Dispose();
+        // Remove the footer-hiding class when leaving the page
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-hide-footer')");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Ignore - circuit is disconnected during navigation
+        }
     }
 }

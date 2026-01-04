@@ -241,3 +241,8 @@ body {
     opacity: 0.65;
     color: var(--mud-palette-text-disabled);
 }
+
+/* Hide page footer on pages that need maximum vertical space */
+.jim-hide-footer .jim-page-footer {
+    display: none;
+}

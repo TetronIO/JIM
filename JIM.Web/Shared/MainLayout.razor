@@ -72,15 +72,17 @@
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
                 @Body
 
-                <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
-                    &copy; @DateTime.UtcNow.Year Tetron Ltd. All rights reserved.
-                </MudText>
+                <div class="jim-page-footer">
+                    <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
+                        &copy; @DateTime.UtcNow.Year Tetron Ltd. All rights reserved.
+                    </MudText>
 
-                <MudText Align="Align.Center">
-                    <MudLink Href="https://github.com/TetronIO/JIM">
-                        <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;"/>
-                    </MudLink>
-                </MudText>
+                    <MudText Align="Align.Center">
+                        <MudLink Href="https://github.com/TetronIO/JIM">
+                            <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;"/>
+                        </MudLink>
+                    </MudText>
+                </div>
 
             </MudContainer>
         </MudMainContent>
