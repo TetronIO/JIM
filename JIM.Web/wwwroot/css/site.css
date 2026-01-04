@@ -241,3 +241,88 @@ body {
     opacity: 0.65;
     color: var(--mud-palette-text-disabled);
 }
+
+/* Hide page footer on pages that need maximum vertical space */
+.jim-hide-footer .jim-page-footer {
+    display: none;
+}
+
+/* Log detail slide-out panel */
+.jim-log-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 700px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--mud-palette-surface);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-in-out;
+    z-index: 1300;
+    overflow: hidden;
+}
+
+.jim-log-panel-open {
+    transform: translateX(0);
+}
+
+/* JSON syntax highlighting - define CSS custom properties for light/dark mode */
+:root {
+    --jim-json-key: #0451a5;
+    --jim-json-string: #a31515;
+    --jim-json-number: #098658;
+    --jim-json-boolean: #0000ff;
+    --jim-json-null: #0000ff;
+}
+
+/* Dark mode JSON colours - JIM logo-inspired vibrant colours */
+body.jim-dark-mode {
+    --jim-json-key: #c792ea;
+    /* Purple/violet from logo */
+    --jim-json-string: #a5d6a7;
+    /* Soft green for readability */
+    --jim-json-number: #f9a825;
+    /* Orange/yellow from logo */
+    --jim-json-boolean: #4dd0e1;
+    /* Teal/cyan from logo */
+    --jim-json-null: #ff8a80;
+    /* Soft coral/pink from logo */
+}
+
+.jim-json-syntax {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    margin: 0;
+    padding: 12px;
+    background: var(--mud-palette-background);
+    border-radius: 4px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.jim-json-key {
+    color: var(--jim-json-key);
+}
+
+.jim-json-string {
+    color: var(--jim-json-string);
+}
+
+.jim-json-number {
+    color: var(--jim-json-number);
+}
+
+.jim-json-boolean {
+    color: var(--jim-json-boolean);
+}
+
+.jim-json-null {
+    color: var(--jim-json-null);
+}
+
+.jim-json-punctuation {
+    color: var(--mud-palette-text-primary);
+}

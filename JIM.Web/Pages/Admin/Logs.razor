@@ -2,9 +2,11 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application.Services
 @using JIM.Web.Models.Api
+@using System.Text.Json
 @inject LogReaderService LogReader
 @inject ISnackbar Snackbar
-@implements IDisposable
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
 <PageTitle>Logs</PageTitle>
 <MudText Typo="Typo.h4">Logs</MudText>
@@ -72,8 +74,9 @@
     </div>
 </MudPaper>
 
-<MudTable Items="@_logEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5"
-    FixedHeader="true" Height="calc(100vh - 450px)" Outlined="true" Elevation="0" Loading="@_loading">
+<MudTable Items="@_pagedLogEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5"
+    FixedHeader="true" Height="calc(100vh - 500px)" Outlined="true" Elevation="0" Loading="@_loading"
+    OnRowClick="@OnRowClick" T="LogEntry" RowStyle="cursor: pointer;">
     <HeaderContent>
         <MudTh Style="width: 100px;">
             <MudText Typo="Typo.button">Time</MudText>
@@ -104,40 +107,19 @@
             <span class="jim-text-code">@context.Service</span>
         </MudTd>
         <MudTd DataLabel="Message" Style="@GetRowStyle(context)">
-            <div class="d-flex flex-column">
-                <span style="word-break: break-word;">@context.Message</span>
+            <div class="d-flex align-center gap-2">
+                <span style="word-break: break-word; flex: 1;">@TruncateMessage(context.Message, 150)</span>
                 @if (!string.IsNullOrEmpty(context.Exception))
                 {
-                    <MudExpansionPanel Dense="true" Class="mt-2" Style="border: 1px solid var(--mud-palette-lines-default);">
-                        <TitleContent>
-                            <MudText Typo="Typo.body2" Color="Color.Error">
-                                <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
-                                Exception Details
-                            </MudText>
-                        </TitleContent>
-                        <ChildContent>
-                            <pre class="mud-typography-body2" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; margin: 0;">@context.Exception</pre>
-                        </ChildContent>
-                    </MudExpansionPanel>
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Color="Color.Error"
+                        Title="Has exception" />
                 }
                 @if (context.Properties != null && context.Properties.Count > 0)
                 {
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                        @foreach (var prop in context.Properties.Take(5))
-                        {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                Class="ma-0" Style="font-size: 0.7rem;">
-                                @prop.Key: @TruncateValue(prop.Value?.ToString() ?? "null", 30)
-                            </MudChip>
-                        }
-                        @if (context.Properties.Count > 5)
-                        {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                Class="ma-0" Style="font-size: 0.7rem;">
-                                +@(context.Properties.Count - 5) more
-                            </MudChip>
-                        }
-                    </div>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                        Class="ma-0" Style="font-size: 0.7rem;">
+                        @context.Properties.Count props
+                    </MudChip>
                 }
             </div>
         </MudTd>
@@ -150,6 +132,123 @@
     </LoadingContent>
 </MudTable>
 
+<div class="d-flex justify-center align-center gap-4 mb-5">
+    <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Disabled="@(_currentPage == 0 || _loading)"
+        OnClick="@(() => GoToPage(0))" />
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="@(_currentPage == 0 || _loading)"
+        OnClick="@(() => GoToPage(_currentPage - 1))" />
+    <MudText Typo="Typo.body2">
+        Page @(_currentPage + 1) of @TotalPages
+    </MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="@(_currentPage >= TotalPages - 1 || _loading)"
+        OnClick="@(() => GoToPage(_currentPage + 1))" />
+    <MudIconButton Icon="@Icons.Material.Filled.LastPage" Disabled="@(_currentPage >= TotalPages - 1 || _loading)"
+        OnClick="@(() => GoToPage(TotalPages - 1))" />
+    <MudSelect T="int" Value="_pageSize" ValueChanged="OnPageSizeChanged" Label="Per page" Variant="Variant.Outlined"
+        Dense="true" Style="width: 100px;" Margin="Margin.Dense">
+        <MudSelectItem T="int" Value="25">25</MudSelectItem>
+        <MudSelectItem T="int" Value="50">50</MudSelectItem>
+        <MudSelectItem T="int" Value="100">100</MudSelectItem>
+    </MudSelect>
+</div>
+
+@* Log Entry Detail Panel with Overlay *@
+<MudOverlay @bind-Visible="_drawerOpen" DarkBackground="true" AutoClose="true" />
+<div class="jim-log-panel @(_drawerOpen ? "jim-log-panel-open" : "")">
+    @if (_selectedEntry != null)
+    {
+        <div class="d-flex flex-column gap-4 pa-4" style="height: 100%; overflow-y: auto;">
+            @* Header with close button *@
+            <div class="d-flex justify-space-between align-center">
+                <MudText Typo="Typo.h6">Log Entry Details</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@(() => _drawerOpen = false)" />
+            </div>
+
+            @* Timestamp and Level *@
+            <div class="d-flex gap-4 align-center flex-wrap">
+                <MudChip T="string" Size="Size.Medium" Variant="Variant.Filled" Color="@GetLevelColor(_selectedEntry.Level)">
+                    @_selectedEntry.Level
+                </MudChip>
+                <MudText Typo="Typo.body1" Class="jim-text-code">
+                    @_selectedEntry.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")
+                </MudText>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                    @_selectedEntry.Service
+                </MudChip>
+            </div>
+
+            @* Message *@
+            <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Message</MudText>
+                <MudText Typo="Typo.body1" Style="word-break: break-word; white-space: pre-wrap;">@_selectedEntry.Message</MudText>
+            </MudPaper>
+
+            @* Properties *@
+            @if (_selectedEntry.Properties != null && _selectedEntry.Properties.Count > 0)
+            {
+                <MudExpansionPanels Elevation="0">
+                    <MudExpansionPanel Text="@($"Properties ({_selectedEntry.Properties.Count})")" Expanded="true">
+                        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="overflow-x: auto;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Key</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var prop in _selectedEntry.Properties)
+                                {
+                                    <tr>
+                                        <td class="jim-text-code">@prop.Key</td>
+                                        <td style="word-break: break-word;">@FormatPropertyValue(prop.Value)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+
+            @* Exception *@
+            @if (!string.IsNullOrEmpty(_selectedEntry.Exception))
+            {
+                <MudExpansionPanels Elevation="0">
+                    <MudExpansionPanel Expanded="true">
+                        <TitleContent>
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                                <MudText Color="Color.Error">Exception</MudText>
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <div class="d-flex justify-end mb-2">
+                                <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                    Variant="Variant.Text" OnClick="@CopyExceptionAsync">
+                                    Copy
+                                </MudButton>
+                            </div>
+                            <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@_selectedEntry.Exception</pre>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+
+            @* Raw JSON *@
+            <MudExpansionPanels Elevation="0">
+                <MudExpansionPanel Text="Raw JSON">
+                    <div class="d-flex justify-end mb-2">
+                        <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                            Variant="Variant.Text" OnClick="@CopyRawJsonAsync">
+                            Copy
+                        </MudButton>
+                    </div>
+                    <div class="jim-json-syntax">@((MarkupString)GetHighlightedJson(_selectedEntry))</div>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </div>
+    }
+</div>
+
 @code {
     private List<LogEntry>? _logEntries;
     private string? _selectedService;
@@ -159,6 +258,23 @@
     private bool _loading = true;
     private bool _autoRefresh;
     private System.Threading.Timer? _refreshTimer;
+    private int _currentPage;
+    private int _pageSize = 50;
+    private bool _drawerOpen;
+    private LogEntry? _selectedEntry;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    private IEnumerable<LogEntry> _pagedLogEntries =>
+        _logEntries?.Skip(_currentPage * _pageSize).Take(_pageSize) ?? [];
+
+    private int TotalPages => _logEntries == null || _logEntries.Count == 0
+        ? 1
+        : (int)Math.Ceiling((double)_logEntries.Count / _pageSize);
 
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
@@ -170,6 +286,15 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadLogsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Hide the page footer to maximise viewing area for logs
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+        }
     }
 
     protected override void OnParametersSet()
@@ -198,6 +323,7 @@
     private async Task LoadLogsAsync()
     {
         _loading = true;
+        _currentPage = 0;
         StateHasChanged();
 
         try
@@ -219,6 +345,17 @@
         {
             _loading = false;
         }
+    }
+
+    private void GoToPage(int page)
+    {
+        _currentPage = Math.Max(0, Math.Min(page, TotalPages - 1));
+    }
+
+    private void OnPageSizeChanged(int newSize)
+    {
+        _pageSize = newSize;
+        _currentPage = 0;
     }
 
     private static Color GetLevelColor(string level)
@@ -254,8 +391,205 @@
         return value[..maxLength] + "...";
     }
 
-    public void Dispose()
+    private static string TruncateMessage(string message, int maxLength)
+    {
+        if (string.IsNullOrEmpty(message))
+            return message;
+
+        // Replace newlines with spaces for table display
+        var singleLine = message.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
+        return TruncateValue(singleLine, maxLength);
+    }
+
+    private void OnRowClick(TableRowClickEventArgs<LogEntry> args)
+    {
+        _selectedEntry = args.Item;
+        _drawerOpen = true;
+    }
+
+    private static string FormatPropertyValue(object? value)
+    {
+        if (value == null)
+            return "null";
+
+        // If it's a complex object (already parsed as JsonElement), format it nicely
+        if (value is JsonElement jsonElement)
+        {
+            return jsonElement.ValueKind switch
+            {
+                JsonValueKind.String => jsonElement.GetString() ?? "null",
+                JsonValueKind.Number => jsonElement.ToString(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                JsonValueKind.Null => "null",
+                _ => jsonElement.ToString()
+            };
+        }
+
+        return value.ToString() ?? "null";
+    }
+
+    private static string GetRawJson(LogEntry entry)
+    {
+        var jsonObject = new Dictionary<string, object?>
+        {
+            ["@t"] = entry.Timestamp.ToString("O"),
+            ["@l"] = entry.Level,
+            ["@m"] = entry.Message
+        };
+
+        if (!string.IsNullOrEmpty(entry.Exception))
+            jsonObject["@x"] = entry.Exception;
+
+        if (entry.Properties != null)
+        {
+            foreach (var prop in entry.Properties)
+            {
+                jsonObject[prop.Key] = prop.Value;
+            }
+        }
+
+        return JsonSerializer.Serialize(jsonObject, JsonOptions);
+    }
+
+    private static string GetHighlightedJson(LogEntry entry)
+    {
+        var json = GetRawJson(entry);
+        return HighlightJson(json);
+    }
+
+    private static string HighlightJson(string json)
+    {
+        var result = new System.Text.StringBuilder();
+        var inString = false;
+        var isKey = false;
+        var stringStart = -1;
+
+        for (var i = 0; i < json.Length; i++)
+        {
+            var c = json[i];
+
+            if (c == '"' && (i == 0 || json[i - 1] != '\\'))
+            {
+                if (!inString)
+                {
+                    // Starting a string
+                    inString = true;
+                    stringStart = i;
+                    // Check if this is a key (followed eventually by a colon)
+                    isKey = IsJsonKey(json, i);
+                }
+                else
+                {
+                    // Ending a string
+                    var value = System.Net.WebUtility.HtmlEncode(json[stringStart..(i + 1)]);
+                    if (isKey)
+                        result.Append($"<span class=\"jim-json-key\">{value}</span>");
+                    else
+                        result.Append($"<span class=\"jim-json-string\">{value}</span>");
+                    inString = false;
+                    stringStart = -1;
+                }
+                continue;
+            }
+
+            if (inString)
+                continue;
+
+            // Handle punctuation
+            if (c == '{' || c == '}' || c == '[' || c == ']' || c == ':' || c == ',')
+            {
+                result.Append($"<span class=\"jim-json-punctuation\">{c}</span>");
+                continue;
+            }
+
+            // Handle numbers
+            if (char.IsDigit(c) || (c == '-' && i + 1 < json.Length && char.IsDigit(json[i + 1])))
+            {
+                var numStart = i;
+                while (i < json.Length && (char.IsDigit(json[i]) || json[i] == '.' || json[i] == '-' || json[i] == 'e' || json[i] == 'E' || json[i] == '+'))
+                    i++;
+                result.Append($"<span class=\"jim-json-number\">{json[numStart..i]}</span>");
+                i--; // Back up one since the loop will increment
+                continue;
+            }
+
+            // Handle true/false/null
+            if (i + 4 <= json.Length && json[i..(i + 4)] == "true")
+            {
+                result.Append("<span class=\"jim-json-boolean\">true</span>");
+                i += 3;
+                continue;
+            }
+            if (i + 5 <= json.Length && json[i..(i + 5)] == "false")
+            {
+                result.Append("<span class=\"jim-json-boolean\">false</span>");
+                i += 4;
+                continue;
+            }
+            if (i + 4 <= json.Length && json[i..(i + 4)] == "null")
+            {
+                result.Append("<span class=\"jim-json-null\">null</span>");
+                i += 3;
+                continue;
+            }
+
+            // Whitespace or other characters
+            result.Append(c);
+        }
+
+        return result.ToString();
+    }
+
+    private static bool IsJsonKey(string json, int quoteIndex)
+    {
+        // Find the closing quote
+        for (var i = quoteIndex + 1; i < json.Length; i++)
+        {
+            if (json[i] == '"' && json[i - 1] != '\\')
+            {
+                // Found closing quote, now look for colon
+                for (var j = i + 1; j < json.Length; j++)
+                {
+                    if (json[j] == ':') return true;
+                    if (!char.IsWhiteSpace(json[j])) return false;
+                }
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private async Task CopyRawJsonAsync()
+    {
+        if (_selectedEntry == null)
+            return;
+
+        var json = GetRawJson(_selectedEntry);
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", json);
+        Snackbar.Add("Copied to clipboard", Severity.Success);
+    }
+
+    private async Task CopyExceptionAsync()
+    {
+        if (_selectedEntry?.Exception == null)
+            return;
+
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _selectedEntry.Exception);
+        Snackbar.Add("Copied to clipboard", Severity.Success);
+    }
+
+    public async ValueTask DisposeAsync()
     {
         _refreshTimer?.Dispose();
+        // Remove the footer-hiding class when leaving the page
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-hide-footer')");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Ignore - circuit is disconnected during navigation
+        }
     }
 }
