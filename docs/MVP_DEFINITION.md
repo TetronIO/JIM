@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.11
+> **Version**: 1.12
 > **Last Updated**: 2026-01-04
-> **Status**: In Progress (~91% Complete)
+> **Status**: In Progress (~92% Complete)
 
 ---
 
@@ -15,20 +15,17 @@
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `██████░░░░` | 5 | 10 | 50% |
 | Admin UI | `█████████░` | 16 | 17 | 94% |
-| Security | `████████░░` | 4 | 5 | 80% |
+| Security | `██████████` | 5 | 5 | 100% |
 | Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
 | Tooling | `██████░░░░` | 3 | 5 | 60% |
 | Release | `██████████` | 9 | 9 | 100% |
-| **Overall** | `█████████░` | **93** | **102** | **91%** |
+| **Overall** | `█████████░` | **94** | **102** | **92%** |
 
 ### Priority Order for Remaining Work
 
 **Critical Path (Required for MVP):**
-1. **Scheduler Service** (#168) - Automate run profile execution (4 items remaining)
-
-**Important (Highly Desirable for MVP):**
-2. **Connector credential encryption** (#171) - Encrypt passwords at rest
+1. **Scheduler Service** (#168) - Automate run profile execution (5 items remaining)
 
 **Nice to Have (Can follow MVP):**
 - Dashboard admin home page (#169)
@@ -41,6 +38,7 @@
 - End-to-End Integration Testing Framework (#173)
 
 ### Recently Completed ✓
+- ~~Credential Encryption (#171)~~ - AES-256-GCM encryption for connector passwords at rest
 - ~~Background MVO deletion job (#120)~~ - Housekeeping deletes orphaned MVOs after grace period expires
 - ~~MVO Deletion Rules (#203)~~ - Pending deletions UI, API endpoints, background housekeeping job
 - ~~PowerShell Module (#176)~~ - 35 cmdlets with full CRUD operations and name-based parameters
@@ -191,7 +189,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Basic role model
 
 #### 6.3 Data Protection
-- [ ] Connector credential encryption at rest (#171)
+- [x] Connector credential encryption at rest (#171)
 
 ### 7. Operational Readiness
 
