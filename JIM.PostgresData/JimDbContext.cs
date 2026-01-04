@@ -294,5 +294,43 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasIndex(cso => new { cso.ConnectedSystemId, cso.Created })
             .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_Created");
+
+        // Additional performance indexes for worker task queue processing
+        // Optimises GetNextWorkerTaskAsync and GetNextWorkerTasksToProcessAsync queries
+        modelBuilder.Entity<WorkerTask>()
+            .HasIndex(wt => new { wt.Status, wt.Timestamp })
+            .HasDatabaseName("IX_WorkerTasks_Status_Timestamp");
+
+        // Performance index for activity audit trail queries
+        // Optimises timestamp-based activity lookups
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.Created)
+            .HasDatabaseName("IX_Activities_Created")
+            .IsDescending(true);
+
+        // Performance index for metaverse object deletion automation
+        // Optimises GetMetaverseObjectsEligibleForDeletionAsync queries
+        // Uses string-based column name to reference the shadow foreign key property "TypeId"
+        modelBuilder.Entity<MetaverseObject>()
+            .HasIndex(new[] { nameof(MetaverseObject.Origin), "TypeId", nameof(MetaverseObject.LastConnectorDisconnectedDate) })
+            .HasDatabaseName("IX_MetaverseObjects_Origin_Type_LastDisconnected");
+
+        // Performance index for sync rule lookups by connected system
+        // Optimises system-specific sync rule queries
+        modelBuilder.Entity<SyncRule>()
+            .HasIndex(sr => sr.ConnectedSystemId)
+            .HasDatabaseName("IX_SyncRules_ConnectedSystemId");
+
+        // Performance index for metaverse object type lookups
+        // Optimises name-based type lookups with deletion rule filtering
+        modelBuilder.Entity<MetaverseObjectType>()
+            .HasIndex(mot => new { mot.Name, mot.DeletionRule })
+            .HasDatabaseName("IX_MetaverseObjectTypes_Name_DeletionRule");
+
+        // Additional index for deferred reference source lookups
+        // Optimises queries filtering by source connected system object
+        modelBuilder.Entity<DeferredReference>()
+            .HasIndex(dr => dr.SourceCsoId)
+            .HasDatabaseName("IX_DeferredReferences_SourceCsoId");
     }
 }
