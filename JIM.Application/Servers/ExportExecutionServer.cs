@@ -1,3 +1,4 @@
+using JIM.Application.Diagnostics;
 using JIM.Application.Services;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -72,7 +73,11 @@ public class ExportExecutionServer
         };
 
         // Get pending exports that are ready to execute
-        var pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
+        List<PendingExport> pendingExports;
+        using (Diagnostics.Diagnostics.Sync.StartSpan("GetExecutableExports"))
+        {
+            pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
+        }
         result.TotalPendingExports = pendingExports.Count;
 
         if (pendingExports.Count == 0)
@@ -272,8 +277,21 @@ public class ExportExecutionServer
                 certificateAwareConnector.SetCertificateProvider(certificateProvider);
             }
 
+            // Inject credential protection for connectors that support it (for password decryption)
+            if (connector is IConnectorCredentialAware credentialAwareConnector)
+            {
+                // Use pre-configured credential protection if available (from DI in JIM.Web),
+                // otherwise create a new instance (for JIM.Worker which doesn't use DI)
+                var credentialProtection = Application.CredentialProtection ??
+                    new CredentialProtectionService(DataProtectionHelper.CreateProvider());
+                credentialAwareConnector.SetCredentialProtection(credentialProtection);
+            }
+
             // Open connection
-            connector.OpenExportConnection(connectedSystem.SettingValues);
+            using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
+            {
+                connector.OpenExportConnection(connectedSystem.SettingValues);
+            }
             Log.Debug("ExecuteUsingCallsWithBatchingAsync: Opened export connection for {SystemName}", connectedSystem.Name);
 
             try
@@ -311,7 +329,11 @@ public class ExportExecutionServer
                         await MarkBatchAsExecutingAsync(batch);
 
                         // Execute batch via connector - now returns ExportResult list
-                        var exportResults = connector.Export(batch);
+                        List<ExportResult> exportResults;
+                        using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch").SetTag("batchSize", batch.Count))
+                        {
+                            exportResults = connector.Export(batch);
+                        }
 
                         // Process results with ExportResult data
                         await ProcessBatchSuccessAsync(batch, exportResults, result);
@@ -373,7 +395,10 @@ public class ExportExecutionServer
             finally
             {
                 // Always close connection
-                connector.CloseExportConnection();
+                using (Diagnostics.Diagnostics.Connector.StartSpan("CloseExportConnection"))
+                {
+                    connector.CloseExportConnection();
+                }
                 Log.Debug("ExecuteUsingCallsWithBatchingAsync: Closed export connection for {SystemName}", connectedSystem.Name);
             }
         }
@@ -494,10 +519,11 @@ public class ExportExecutionServer
     /// Marks an export as failed and applies retry logic (Q6 decision).
     /// This is a synchronous version for batch processing - does not save to database.
     /// </summary>
-    private static void MarkExportFailed(PendingExport export, string errorMessage)
+    private static void MarkExportFailed(PendingExport export, string errorMessage, string? stackTrace = null)
     {
         export.ErrorCount++;
         export.LastErrorMessage = errorMessage;
+        export.LastErrorStackTrace = stackTrace;
         export.LastAttemptedAt = DateTime.UtcNow;
         export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
 
@@ -762,6 +788,7 @@ public class ExportExecutionServer
             {
                 export.ErrorCount++;
                 export.LastErrorMessage = ex.Message;
+                export.LastErrorStackTrace = ex.StackTrace;
                 export.LastAttemptedAt = now;
                 export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
                 export.Status = PendingExportStatus.ExportNotImported;
@@ -920,10 +947,11 @@ public class ExportExecutionServer
     /// <summary>
     /// Marks an export as failed and applies retry logic (Q6 decision).
     /// </summary>
-    private async Task MarkExportFailedAsync(PendingExport export, string errorMessage)
+    private async Task MarkExportFailedAsync(PendingExport export, string errorMessage, string? stackTrace = null)
     {
         export.ErrorCount++;
         export.LastErrorMessage = errorMessage;
+        export.LastErrorStackTrace = stackTrace;
         export.LastAttemptedAt = DateTime.UtcNow;
         export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
 
@@ -981,6 +1009,7 @@ public class ExportExecutionServer
             export.Status = PendingExportStatus.Pending;
             export.NextRetryAt = null;
             export.LastErrorMessage = null;
+            export.LastErrorStackTrace = null;
             await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
         }
 

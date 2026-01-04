@@ -26,6 +26,8 @@ public class ConnectedSystemObjectAttributeValue
 
     public int? IntValue { get; set; }
 
+    public long? LongValue { get; set; }
+
     public byte[]? ByteValue { get; set; }
 
     public Guid? GuidValue { get; set; }
@@ -62,6 +64,9 @@ public class ConnectedSystemObjectAttributeValue
 
         if (IntValue != null)
             return IntValue.ToString();
+
+        if (LongValue != null)
+            return LongValue.ToString();
 
         if (ByteValue != null)
             return ByteValue.Length.ToString();

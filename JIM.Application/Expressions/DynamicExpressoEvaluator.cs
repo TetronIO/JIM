@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using DynamicExpresso;
 using DynamicExpresso.Exceptions;
+using Serilog;
 
 namespace JIM.Application.Expressions;
 
@@ -14,7 +16,17 @@ namespace JIM.Application.Expressions;
 public class DynamicExpressoEvaluator : IExpressionEvaluator
 {
     private readonly Interpreter _interpreter;
-    private readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
+
+    // Static cache shared across all instances - expressions are deterministic so cache can be shared
+    // This ensures expression compilation is only done once per expression string across all sync operations
+    private static readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
+
+    // Static cache metrics for diagnostics (shared across instances)
+    private static long _cacheHits;
+    private static long _cacheMisses;
+
+    // Threshold for logging slow expressions (in milliseconds)
+    private const int SlowExpressionThresholdMs = 10;
 
     // Word list for passphrase generation (common, easy-to-type words)
     private static readonly string[] PassphraseWords =
@@ -40,12 +52,32 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(context);
 
-        var lambda = GetOrCompileExpression(expression);
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var lambda = GetOrCompileExpression(expression);
 
-        return lambda.Invoke(
-            new Parameter("mv", context.Mv),
-            new Parameter("cs", context.Cs));
+            return lambda.Invoke(
+                new Parameter("mv", context.Mv),
+                new Parameter("cs", context.Cs));
+        }
+        finally
+        {
+            sw.Stop();
+            if (sw.ElapsedMilliseconds > SlowExpressionThresholdMs)
+            {
+                Log.Warning("Slow expression evaluation: '{Expression}' took {ElapsedMs}ms",
+                    expression.Length > 50 ? expression[..50] + "..." : expression,
+                    sw.ElapsedMilliseconds);
+            }
+        }
     }
+
+    /// <summary>
+    /// Gets the current expression cache metrics.
+    /// </summary>
+    /// <returns>A tuple containing (CacheHits, CacheMisses).</returns>
+    public (long CacheHits, long CacheMisses) GetCacheMetrics() => (_cacheHits, _cacheMisses);
 
     /// <inheritdoc/>
     public ExpressionValidationResult Validate(string expression)
@@ -98,6 +130,18 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
     private Lambda GetOrCompileExpression(string expression)
     {
+        // Check for cache hit first
+        if (_compiledExpressions.TryGetValue(expression, out var cached))
+        {
+            Interlocked.Increment(ref _cacheHits);
+            return cached;
+        }
+
+        // Cache miss - compile and add
+        Interlocked.Increment(ref _cacheMisses);
+        Log.Debug("Expression cache miss - compiling: '{Expression}'",
+            expression.Length > 50 ? expression[..50] + "..." : expression);
+
         return _compiledExpressions.GetOrAdd(expression, expr =>
         {
             return _interpreter.Parse(expr,
@@ -137,6 +181,8 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
         target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
         target.SetFunction("FormatDate", (Func<DateTime?, string, string?>)((dt, format) => dt?.ToString(format, CultureInfo.InvariantCulture)));
+        target.SetFunction("ToFileTime", (Func<object?, long?>)(o => ToFileTime(o)));
+        target.SetFunction("FromFileTime", (Func<object?, DateTime?>)(o => FromFileTime(o)));
 
         // Conversion functions
         target.SetFunction("ToString", (Func<object?, string?>)(o => o?.ToString()));
@@ -414,6 +460,125 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         }
 
         return new string(array);
+    }
+
+    #endregion
+
+    #region DateTime Conversion Functions
+
+    // These functions support Active Directory Large Integer (FILETIME) attributes:
+    // - accountExpires: When the account expires (0 or Int64.MaxValue = never)
+    // - pwdLastSet: When the password was last set (0 = must change at next logon)
+    // - lastLogon: Last interactive logon time (not replicated between DCs)
+    // - lastLogonTimestamp: Last logon time (replicated, but with 9-14 day lag)
+    // - lockoutTime: When the account was locked out (0 = not locked)
+    // - badPasswordTime: Last failed password attempt
+    //
+    // FILETIME format: 100-nanosecond intervals since January 1, 1601 UTC
+    // Range: 0 to 9223372036854775807 (Int64.MaxValue)
+
+    /// <summary>
+    /// Converts a DateTime to Windows FILETIME (100-nanosecond intervals since January 1, 1601 UTC).
+    /// This is the format used by AD attributes like accountExpires, pwdLastSet, lastLogon, etc.
+    /// A value of 0 or 9223372036854775807 (Int64.MaxValue) means "never expires" in AD.
+    /// </summary>
+    private static long? ToFileTime(object? value)
+    {
+        if (value == null)
+            return null;
+
+        DateTime? dateTime = value switch
+        {
+            DateTime dt => dt,
+            DateTimeOffset dto => dto.UtcDateTime,  // Handle DateTimeOffset from PostgreSQL
+            string s => ParseDateTimeOrNull(s),     // Handle string dates (may return null for invalid strings)
+            _ => throw new ArgumentException(
+                $"ToFileTime cannot convert value of type '{value.GetType().Name}'. " +
+                $"Expected DateTime, DateTimeOffset, or string. Value: '{value}'")
+        };
+
+        if (dateTime == null)
+            return null;
+
+        // Handle PostgreSQL's -infinity (DateTime.MinValue) and +infinity (DateTime.MaxValue)
+        // These represent "no date" or "never" and should return null
+        if (dateTime.Value == DateTime.MinValue || dateTime.Value == DateTime.MaxValue)
+            return null;
+
+        // Ensure we're working with UTC
+        var utcDateTime = dateTime.Value.Kind == DateTimeKind.Utc
+            ? dateTime.Value
+            : dateTime.Value.ToUniversalTime();
+
+        // FILETIME can only represent dates from 1601-01-01 onwards
+        // Return null for dates before this (shouldn't happen with valid data, but be safe)
+        if (utcDateTime.Year < 1601)
+            return null;
+
+        return utcDateTime.ToFileTimeUtc();
+    }
+
+    /// <summary>
+    /// Attempts to parse a string as a DateTime, returning null if parsing fails.
+    /// This allows graceful handling of empty strings or unparseable date formats.
+    /// </summary>
+    private static DateTime? ParseDateTimeOrNull(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+            return null;
+
+        return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    /// <summary>
+    /// Converts a Windows FILETIME (100-nanosecond intervals since January 1, 1601 UTC) to DateTime.
+    /// This is the format used by AD attributes like accountExpires, pwdLastSet, lastLogon, etc.
+    /// </summary>
+    private static DateTime? FromFileTime(object? value)
+    {
+        if (value == null)
+            return null;
+
+        long? fileTime = value switch
+        {
+            long l => l,
+            int i => i,
+            string s => ParseLongOrNull(s),  // Handle string values (may return null for invalid numbers)
+            _ => throw new ArgumentException(
+                $"FromFileTime cannot convert value of type '{value.GetType().Name}'. " +
+                $"Expected long, int, or string. Value: '{value}'")
+        };
+
+        if (fileTime == null || fileTime.Value <= 0)
+            return null;
+
+        // Int64.MaxValue means "never expires" in AD - return null to indicate no expiry
+        if (fileTime.Value == long.MaxValue)
+            return null;
+
+        try
+        {
+            return DateTime.FromFileTimeUtc(fileTime.Value);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            // Invalid FILETIME value
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to parse a string as a long, returning null if parsing fails.
+    /// This allows graceful handling of empty strings or unparseable numbers.
+    /// </summary>
+    private static long? ParseLongOrNull(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+            return null;
+
+        return long.TryParse(s, out var parsed) ? parsed : null;
     }
 
     #endregion

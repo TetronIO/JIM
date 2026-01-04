@@ -17,6 +17,7 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
@@ -68,6 +69,13 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExport">The Pending Export to create.</param>
     public Task CreatePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Creates multiple Pending Export objects in a single batch operation.
+    /// More efficient than creating one at a time when processing pages of objects.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to create.</param>
+    public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
@@ -131,6 +139,14 @@ public interface IConnectedSystemRepository
     /// <param name="targetConnectedSystemIds">The Connected System IDs to load CSOs for.</param>
     /// <returns>A dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup.</returns>
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(IEnumerable<int> targetConnectedSystemIds);
+
+    /// <summary>
+    /// Batch loads CSO attribute values for the specified CSO IDs.
+    /// Used for per-page caching during export evaluation to enable no-net-change detection.
+    /// </summary>
+    /// <param name="csoIds">The CSO IDs to load attribute values for.</param>
+    /// <returns>A list of CSO attribute values with their Attribute navigation property populated.</returns>
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
 
     /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
@@ -239,7 +255,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
-    public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(int connectedSystemId, int page, int pageSize, QuerySortBy querySortBy = QuerySortBy.DateCreated, QueryRange queryRange = QueryRange.Forever);
+    public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
+        int connectedSystemId,
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, bool returnAttributes = false);
     
     /// <summary>
@@ -306,9 +328,16 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
     public Task<int> GetConnectedSystemObjectUnJoinedCountAsync(int connectedSystemId);
 
+    /// <summary>
+    /// Returns the count of CSOs in a connected system that are joined to a specific MVO.
+    /// Used during sync to check if an MVO already has a join in this connected system (1:1 constraint).
+    /// </summary>
+    public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);
+    public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId);
     public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId);
 
 

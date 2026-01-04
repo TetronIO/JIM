@@ -184,8 +184,17 @@ internal class FileConnectorExport
         if (attrChange.IntValue.HasValue)
             return attrChange.IntValue.Value.ToString();
 
+        if (attrChange.LongValue.HasValue)
+            return attrChange.LongValue.Value.ToString();
+
         if (attrChange.DateTimeValue.HasValue)
             return attrChange.DateTimeValue.Value.ToString("O"); // ISO 8601 format
+
+        if (attrChange.GuidValue.HasValue)
+            return attrChange.GuidValue.Value.ToString();
+
+        if (attrChange.BoolValue.HasValue)
+            return attrChange.BoolValue.Value.ToString().ToLower();
 
         if (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue))
             return attrChange.UnresolvedReferenceValue;
@@ -204,6 +213,9 @@ internal class FileConnectorExport
 
         if (attrValue.IntValue.HasValue)
             return attrValue.IntValue.Value.ToString();
+
+        if (attrValue.LongValue.HasValue)
+            return attrValue.LongValue.Value.ToString();
 
         if (attrValue.DateTimeValue.HasValue)
             return attrValue.DateTimeValue.Value.ToString("O");

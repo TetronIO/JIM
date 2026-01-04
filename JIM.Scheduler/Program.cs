@@ -15,6 +15,7 @@
 
 using JIM.Models.Core;
 using Serilog;
+using Serilog.Formatting.Compact;
 using System.Threading.Tasks;
 InitialiseLogging();
 Log.Information("Starting JIM.Scheduler");
@@ -71,7 +72,8 @@ static void InitialiseLogging()
 
     loggerConfiguration.Enrich.FromLogContext();
     loggerConfiguration.WriteTo.File(
-        Path.Combine(loggingPath, "jim.scheduler..log"),
+        formatter: new CompactJsonFormatter(),
+        path: Path.Combine(loggingPath, "jim.scheduler..log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
         fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max

@@ -55,6 +55,15 @@ for ($i = 1; $i -le $scale.Users; $i++) {
 
     $upn = "$($user.SamAccountName)@testdomain.local"
 
+    # Format employeeEndDate as ISO 8601 for CSV compatibility
+    # This represents the employee's contract/employment end date from HR
+    # JIM will convert this to AD's accountExpires (NT time format) via ToFileTime expression
+    $employeeEndDateValue = if ($null -ne $user.AccountExpires) {
+        $user.AccountExpires.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    } else {
+        ""
+    }
+
     $users += [PSCustomObject]@{
         employeeId = $user.EmployeeId
         firstName = $user.FirstName
@@ -66,6 +75,8 @@ for ($i = 1; $i -le $scale.Users; $i++) {
         displayName = $user.DisplayName
         status = "Active"
         userPrincipalName = $upn
+        employeeType = $user.EmployeeType
+        employeeEndDate = $employeeEndDateValue
     }
 
     if (($i % 1000) -eq 0 -or $i -eq $scale.Users) {

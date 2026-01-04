@@ -45,17 +45,18 @@
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem!)"><MudText Typo="Typo.button">Provision?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse!)"><MudText Typo="Typo.button">Project?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Direction">
             @if (context.Direction == SyncRuleDirection.Import)
             {
-                <MudChip T="string" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft">Inbound</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Inbound</MudChip>
             }
             else
             {
-                <MudChip T="string" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight">Outbound</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Outbound</MudChip>
             }
         </MudTd>
         <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
@@ -84,12 +85,17 @@
         <MudTd DataLabel="Status">
             @if (context.Enabled)
             {
-                <MudChip T="string" Color="Color.Success">Enabled</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
             }
             else
             {
-                <MudChip T="string" Color="Color.Default">Disabled</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
             }
+        </MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>

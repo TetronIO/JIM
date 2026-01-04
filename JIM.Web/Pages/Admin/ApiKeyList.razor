@@ -37,7 +37,6 @@
             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh>Actions</MudTh>
         <MudTh>
             <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.Name)">
                 <MudText Typo="Typo.button">Name</MudText>
@@ -66,18 +65,11 @@
                 <MudText Typo="Typo.button">Status</MudText>
             </MudTableSortLabel>
         </MudTh>
+        <MudTh Style="text-align: right;">
+            <MudText Typo="Typo.button">Actions</MudText>
+        </MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Visibility" Href="@($"/admin/apikeys/{context.Id}")">View
-                </MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit
-                </MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete
-                </MudMenuItem>
-            </MudMenu>
-        </MudTd>
         <MudTd DataLabel="Name">
             <div class="d-flex align-center gap-2">
                 <MudLink Href="@($"/admin/apikeys/{context.Id}")">@context.Name</MudLink>
@@ -110,8 +102,8 @@
         <MudTd DataLabel="Last Used">
             @if (context.LastUsedAt.HasValue)
             {
-                <MudTooltip Text="@($"From IP: {context.LastUsedFromIp ?? "Unknown"}")">
-                    @context.LastUsedAt.Value.ToFriendlyDate()
+                <MudTooltip Text="@($"{context.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()} from IP: {context.LastUsedFromIp ?? "Unknown"}")" Arrow="true" Placement="Placement.Bottom">
+                    @context.LastUsedAt.Value.ToLocalTime().ToRelativeTime()
                 </MudTooltip>
             }
             else
@@ -125,21 +117,21 @@
                 @if (context.ExpiresAt.Value < DateTime.UtcNow)
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Top">
+                        Arrow="true" Placement="Placement.Bottom">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Error">Expired</MudChip>
                     </MudTooltip>
                 }
                 else if (context.ExpiresAt.Value < DateTime.UtcNow.AddDays(7))
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Top">
+                        Arrow="true" Placement="Placement.Bottom">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((context.ExpiresAt.Value - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Minute))</MudChip>
                     </MudTooltip>
                 }
                 else
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Top">
+                        Arrow="true" Placement="Placement.Bottom">
                         @context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()
                     </MudTooltip>
                 }
@@ -158,6 +150,16 @@
             {
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
             }
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <div class="d-flex justify-end gap-2">
+                <MudTooltip Text="Edit">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(context)" />
+                </MudTooltip>
+                <MudTooltip Text="Delete">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context)" />
+                </MudTooltip>
+            </div>
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>

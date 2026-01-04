@@ -167,6 +167,7 @@ public static class Helpers
             ObjectChangeType.Create => Color.Primary,
             ObjectChangeType.Update => Color.Default,
             ObjectChangeType.Delete => Color.Error,
+            ObjectChangeType.NoChange => Color.Info,
             _ => Color.Default,
         };
     }

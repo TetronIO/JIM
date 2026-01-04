@@ -25,6 +25,8 @@ public class SyncRuleScopingCriteria
 
     public int? IntValue { get; set; }
 
+    public long? LongValue { get; set; }
+
     public DateTime? DateTimeValue { get; set; }
 
     public bool? BoolValue { get; set; }
@@ -72,6 +74,7 @@ public class SyncRuleScopingCriteria
         {
             AttributeDataType.Text => "Text: " + StringValue,
             AttributeDataType.Number => "Number: " + IntValue,
+            AttributeDataType.LongNumber => "LongNumber: " + LongValue,
             AttributeDataType.Boolean => "Boolean: " + (BoolValue is null ? "Null" : BoolValue.Value.ToString()),
             AttributeDataType.DateTime => "Date: " + DateTimeValue,
             AttributeDataType.Guid => "Guid: " + GuidValue,

@@ -39,6 +39,26 @@ public abstract class WorkflowTestBase
         DbContext = new JimDbContext(options);
         Repository = new PostgresDataRepository(DbContext);
         Jim = new JimApplication(Repository);
+
+        // Seed required service settings for sync processors
+        SeedServiceSettingsAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Seeds the database with required service settings for sync processors.
+    /// </summary>
+    private async Task SeedServiceSettingsAsync()
+    {
+        DbContext.ServiceSettingItems.Add(new ServiceSetting
+        {
+            Key = "Sync.PageSize",
+            DisplayName = "Sync Page Size",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "1000",
+            Value = null
+        });
+        await DbContext.SaveChangesAsync();
     }
 
     [TearDown]

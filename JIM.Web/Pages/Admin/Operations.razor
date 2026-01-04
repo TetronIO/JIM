@@ -91,7 +91,11 @@
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
             }
         </MudTd>
-        <MudTd DataLabel="Created">@context.Timestamp</MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Timestamp.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
         <MudTd DataLabel="Initiated By">
             @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
             {

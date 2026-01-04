@@ -32,10 +32,11 @@ public class LdapConnectorUtilitiesTests
     }
 
     [Test]
-    public void GetLdapAttributeDataType_OmSyntax65_ReturnsNumber()
+    public void GetLdapAttributeDataType_OmSyntax65_ReturnsLongNumber()
     {
+        // omSyntax 65 = Large Integer (accountExpires, pwdLastSet, etc.)
         var result = LdapConnectorUtilities.GetLdapAttributeDataType(65);
-        Assert.That(result, Is.EqualTo(AttributeDataType.Number));
+        Assert.That(result, Is.EqualTo(AttributeDataType.LongNumber));
     }
 
     [Test]

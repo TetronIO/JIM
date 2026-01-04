@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.10
-> **Last Updated**: 2025-12-18
-> **Status**: In Progress (~94% Complete)
+> **Version**: 1.12
+> **Last Updated**: 2026-01-04
+> **Status**: In Progress (~92% Complete)
 
 ---
 
@@ -11,33 +11,35 @@
 | Category | Progress | Complete | Total | % |
 |----------|----------|----------|-------|---|
 | Connectors | `██████████` | 10 | 10 | 100% |
-| Inbound Sync | `██████████` | 15 | 15 | 100% |
+| Inbound Sync | `██████████` | 18 | 18 | 100% |
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
-| Scheduling | `████░░░░░░` | 4 | 9 | 44% |
-| Admin UI | `█████████░` | 14 | 15 | 93% |
+| Scheduling | `██████░░░░` | 5 | 10 | 50% |
+| Admin UI | `█████████░` | 16 | 17 | 94% |
 | Security | `██████████` | 5 | 5 | 100% |
 | Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
-| PowerShell | `██████████` | 3 | 3 | 100% |
-| **Overall** | `█████████░` | **80** | **85** | **94%** |
+| Tooling | `██████░░░░` | 3 | 5 | 60% |
+| Release | `██████████` | 9 | 9 | 100% |
+| **Overall** | `█████████░` | **94** | **102** | **92%** |
 
 ### Priority Order for Remaining Work
 
 **Critical Path (Required for MVP):**
-1. **Scheduler Service** (#168) - Automate run profile execution (4 items remaining)
-
-**Important (Highly Desirable for MVP):**
-2. **Connector credential encryption** - Encrypt passwords at rest (#171)
+1. **Scheduler Service** (#168) - Automate run profile execution (5 items remaining)
 
 **Nice to Have (Can follow MVP):**
 - Dashboard admin home page (#169)
+- Progress indication on Operations page (#246)
+- Unique value generation (#242)
+- Sync processor refactoring (#252)
 - Full RBAC (#21) and Synchronisation Readers role (#9)
 - Change history (#14)
 - Sync preview
-- Delta sync support
 - End-to-End Integration Testing Framework (#173)
 
 ### Recently Completed ✓
+- ~~Credential Encryption (#171)~~ - AES-256-GCM encryption for connector passwords at rest
+- ~~Background MVO deletion job (#120)~~ - Housekeeping deletes orphaned MVOs after grace period expires
 - ~~MVO Deletion Rules (#203)~~ - Pending deletions UI, API endpoints, background housekeeping job
 - ~~PowerShell Module (#176)~~ - 35 cmdlets with full CRUD operations and name-based parameters
 - ~~API Coverage (#183)~~ - Activity, Run Profiles, Connected Systems, Sync Rules, MVO query, Data Generation
@@ -139,7 +141,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 ### 4. Scheduling & Automation
 
-#### 4.1 Scheduler Service
+#### 4.1 Scheduler Service (#168)
 - [ ] Scheduled task data model
 - [ ] Scheduler service implementation
 - [ ] Cron-style or interval-based scheduling
@@ -151,6 +153,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Task queuing and state management
 - [x] Cancellation support
 - [x] Activity tracking and logging
+- [x] Background job for scheduled MVO deletions (#120)
 
 ### 5. Administration UI
 
@@ -186,7 +189,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Basic role model
 
 #### 6.3 Data Protection
-- [ ] Connector credential encryption at rest (#171)
+- [x] Connector credential encryption at rest (#171)
 
 ### 7. Operational Readiness
 

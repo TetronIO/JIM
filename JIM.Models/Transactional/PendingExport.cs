@@ -76,6 +76,11 @@ public class PendingExport
     /// </summary>
     public string? LastErrorMessage { get; set; }
 
+    /// <summary>
+    /// The stack trace from the last failed attempt, if available.
+    /// </summary>
+    public string? LastErrorStackTrace { get; set; }
+
     #endregion
 
     #region MVO Tracking (Q1 Decision)

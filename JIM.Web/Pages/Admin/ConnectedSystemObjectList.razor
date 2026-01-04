@@ -1,4 +1,4 @@
-﻿@page "/admin/connected-systems/{Id:int}/objects"
+@page "/admin/connected-systems/{Id:int}/objects"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
 @using JIM.Models.Staging;
@@ -14,11 +14,11 @@
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @_connectedSystemHeader?.Name</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation, 
+    A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation,
     or where changes from the system are staged before being committed to the Metaverse within JIM.
 </MudText>
 
-@if (_connectedSystemObjectHeaders != null)
+@if (_connectedSystemHeader != null)
 {
     <MudGrid Class="mt-5">
         <MudItem xs="6">
@@ -26,57 +26,135 @@
                 <MudMenuItem IconColor="Color.Primary" Icon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteAllObjectsClickAsync">Delete all objects</MudMenuItem>
             </MudMenu>
         </MudItem>
-        <MudItem xs="6" Class="d-flex justify-end">
-            <ConnectedSystemObjectHeaderPaginator Results="@_connectedSystemObjectHeaders" />
-        </MudItem>
-    </MudGrid>    
+    </MudGrid>
 
-    <MudTable Items="@_connectedSystemObjectHeaders.Results"
+    <MudTable @ref="_table"
+              T="ConnectedSystemObjectHeader"
+              ServerData="ServerReload"
               Hover="true"
+              Dense="true"
               Breakpoint="Breakpoint.Sm"
               Class="mt-5 mb-5"
-              SortLabel="Sort By"
-              Filter="new Func<ConnectedSystemObjectHeader,bool>(FilterFunc1)"
               Outlined="true"
-              Elevation="0">
+              Elevation="0"
+              OnRowClick="HandleRowClick"
+              RowClass="cursor-pointer"
+              Loading="@_loading"
+              LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudSpacer />
-            <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            <MudTextField T="string"
+                          ValueChanged="@(s => OnSearch(s))"
+                          Placeholder="Search external ID, secondary ID, or display name"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium"
+                          Class="mt-0"
+                          Style="min-width: 350px;" />
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.ExternalIdAttributeValue?.ToString() ?? string.Empty)">@GetExternalIdColumnHeader()</MudTableSortLabel></MudTh>
-            @* TODO: change this so a check is done on whether the connector supports secondary external ids or not so we don't have to do two linq queries *@
-            @if (_connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
+            <MudTh Style="width: 50px;"></MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="externalid" T="ConnectedSystemObjectHeader">
+                    <MudText Typo="Typo.button">@_externalIdColumnHeader</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            @if (_hasSecondaryExternalId)
             {
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.SecondaryExternalIdAttributeValue?.ToString() ?? string.Empty)">@GetSecondaryExternalIdColumnHeader()</MudTableSortLabel></MudTh>
+                <MudTh>
+                    <MudTableSortLabel SortLabel="secondaryexternalid" T="ConnectedSystemObjectHeader">
+                        <MudText Typo="Typo.button">@_secondaryExternalIdColumnHeader</MudText>
+                    </MudTableSortLabel>
+                </MudTh>
             }
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DisplayName!)">Display Name</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.TypeName)">Type</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Created)">Created</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.DateJoined!)">Date Joined</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectHeader, object>(x => x.JoinType)">Join Type</MudTableSortLabel></MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="displayname" T="ConnectedSystemObjectHeader">
+                    <MudText Typo="Typo.button">Display Name</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="type" T="ConnectedSystemObjectHeader">
+                    <MudText Typo="Typo.button">Type</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="created" T="ConnectedSystemObjectHeader" InitialDirection="SortDirection.Descending">
+                    <MudText Typo="Typo.button">Created</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="datejoined" T="ConnectedSystemObjectHeader">
+                    <MudText Typo="Typo.button">Date Joined</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="status" T="ConnectedSystemObjectHeader">
+                    <MudText Typo="Typo.button">Status</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="jointype" T="ConnectedSystemObjectHeader">
+                    <MudText Typo="Typo.button">Join Type</MudText>
+                </MudTableSortLabel>
+            </MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="External Id">
-                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(context))">@context.ExternalIdAttributeValue</MudLink>
+            <MudTd>
+                <MudButton Variant="Variant.Filled"
+                            StartIcon="@Icons.Material.Filled.Visibility"
+                            Href="@(Utilities.GetConnectedSystemObjectHref(context))"
+                            IconColor="Color.Primary">View</MudButton>
             </MudTd>
-            @if (_connectedSystemObjectHeaders.Results.Any(q => q.SecondaryExternalIdAttributeValue != null))
+            <MudTd DataLabel="External Id">
+                @if (!string.IsNullOrEmpty(context.PendingExternalId))
+                {
+                    <MudTooltip Text="Pending export - not yet confirmed">
+                        <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingExternalId</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    @context.ExternalIdAttributeValue
+                }
+            </MudTd>
+            @if (_hasSecondaryExternalId)
             {
-                <MudTd DataLabel="Secondary External Id">@context.SecondaryExternalIdAttributeValue</MudTd>
+                <MudTd DataLabel="Secondary External Id">
+                    @if (context.SecondaryExternalIdAttributeValue != null)
+                    {
+                        @context.SecondaryExternalIdAttributeValue
+                    }
+                    else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
+                    {
+                        <MudTooltip Text="Pending export - not yet confirmed">
+                            <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
+                        </MudTooltip>
+                    }
+                </MudTd>
             }
-            <MudTd DataLabel="Display Name">@context.DisplayName</MudTd>
+            <MudTd DataLabel="Display Name">
+                @if (!string.IsNullOrEmpty(context.DisplayName))
+                {
+                    @context.DisplayName
+                }
+                else if (!string.IsNullOrEmpty(context.PendingDisplayName))
+                {
+                    <MudTooltip Text="Pending export - not yet confirmed">
+                        <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingDisplayName</MudText>
+                    </MudTooltip>
+                }
+            </MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">
                 <MudTooltip Text="@context.Created.ToString("O")">
-                    <MudText Typo="Typo.body2">@GetRelativeDate(context.Created)</MudText>
+                    <MudText Typo="Typo.body2">@context.Created.ToLocalTime().ToRelativeTime()</MudText>
                 </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Date Joined">
                 @if (context.DateJoined != null)
                 {
                     <MudTooltip Text="@context.DateJoined.Value.ToString("O")">
-                        <MudText Typo="Typo.body2">@GetRelativeDate(context.DateJoined.Value)</MudText>
+                        <MudText Typo="Typo.body2">@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }
                 else
@@ -85,19 +163,29 @@
                 }
             </MudTd>
             <MudTd DataLabel="Status">
-                <MudChip T="string" Text="@context.Status.ToString()" Variant="Variant.Text" />
+                <MudChip T="string" Text="@context.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" />
             </MudTd>
             <MudTd DataLabel="Join Type">@context.JoinType.ToString().SplitOnCapitalLetters()</MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            There are no objects for this connected system. Have you performed a full import?
+            @if (string.IsNullOrWhiteSpace(_searchString))
+            {
+                <MudText>There are no objects for this connected system. Have you performed a full import?</MudText>
+            }
+            else
+            {
+                <MudText>No objects found matching "@_searchString".</MudText>
+            }
         </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
     </MudTable>
 
     <MudMessageBox @ref="DeleteAllObjectsMessageBox" Title="Warning" CancelText="Cancel">
         <MessageContent>
-            Deleting the connected system objects does not cause objects to be deleted in the external system. 
-            It just removes the objects from JIM. A full-import on this connect system and full-synchrnisation on all connected system is needed to rebuild the correct state.
+            Deleting the connected system objects does not cause objects to be deleted in the external system.
+            It just removes the objects from JIM. A full-import on this connect system and full-synchronisation on all connected system is needed to rebuild the correct state.
             <br/><br/>
             The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
         </MessageContent>
@@ -106,31 +194,33 @@
         </YesButton>
     </MudMessageBox>
 }
+else
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-5" />
+}
 
 @code {
     [Parameter]
     public int Id { get; set; }
 
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "p")]
-    public int? Page { get; set; }
-
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
+    private MudTable<ConnectedSystemObjectHeader>? _table;
     private MudMessageBox? DeleteAllObjectsMessageBox { get; set; }
     private ConnectedSystemHeader? _connectedSystemHeader;
-    private PagedResultSet<ConnectedSystemObjectHeader>? _connectedSystemObjectHeaders;
     private string _searchString = "";
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private bool _loading;
+    private bool _hasSecondaryExternalId;
+    private string _externalIdColumnHeader = "External Id";
+    private string _secondaryExternalIdColumnHeader = "Secondary External Id";
 
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnInitializedAsync()
     {
-        // why does this view get executed when the web app launches when debugging?
         _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
         if (_connectedSystemHeader == null)
         {
-            // connected system not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
@@ -142,75 +232,83 @@
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Objects", href: null, disabled: true)
         };
-
-        if (Page is null or < 1)
-            Page = 1;
-
-        _connectedSystemObjectHeaders = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(Id, (int)Page);
     }
 
-    private bool FilterFunc1(ConnectedSystemObjectHeader element) => FilterFunc(element, _searchString);
-
-    private static bool FilterFunc(ConnectedSystemObjectHeader element, string searchString)
+    private async Task<TableData<ConnectedSystemObjectHeader>> ServerReload(TableState state, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(searchString))
-            return true;
+        _loading = true;
+        StateHasChanged();
 
-        if (!string.IsNullOrEmpty(element.DisplayName) && element.DisplayName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        try
+        {
+            // Convert MudBlazor's 0-indexed page to our 1-indexed page
+            var page = state.Page + 1;
+            var sortDescending = state.SortDirection == SortDirection.Descending;
 
-        return false;
+            var result = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+                Id,
+                page,
+                state.PageSize,
+                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                state.SortLabel,
+                sortDescending);
+
+            // Update column headers based on first result
+            UpdateColumnHeaders(result.Results);
+
+            return new TableData<ConnectedSystemObjectHeader>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
     }
 
-    private static string GetRelativeDate(DateTime dateTime)
+    private void UpdateColumnHeaders(List<ConnectedSystemObjectHeader> results)
     {
-        var now = DateTime.UtcNow;
-        var timeSpan = now - dateTime;
+        if (results.Count == 0)
+        {
+            _externalIdColumnHeader = "External Id";
+            _secondaryExternalIdColumnHeader = "Secondary External Id";
+            _hasSecondaryExternalId = false;
+            return;
+        }
 
-        if (timeSpan.TotalSeconds < 60)
-            return "just now";
-
-        if (timeSpan.TotalMinutes < 60)
-            return $"{(int)timeSpan.TotalMinutes}m ago";
-
-        if (timeSpan.TotalHours < 24)
-            return $"{(int)timeSpan.TotalHours}h ago";
-
-        if (timeSpan.TotalDays < 7)
-            return $"{(int)timeSpan.TotalDays}d ago";
-
-        if (timeSpan.TotalDays < 30)
-            return $"{(int)(timeSpan.TotalDays / 7)}w ago";
-
-        if (timeSpan.TotalDays < 365)
-            return $"{(int)(timeSpan.TotalDays / 30)}mo ago";
-
-        return $"{(int)(timeSpan.TotalDays / 365)}y ago";
-    }
-
-    private string GetExternalIdColumnHeader()
-    {
-        if (_connectedSystemObjectHeaders?.Results == null || !_connectedSystemObjectHeaders.Results.Any())
-            return "External Id";
-
-        var attributeName = _connectedSystemObjectHeaders.Results.First().ExternalIdAttributeName;
-
-        return string.IsNullOrEmpty(attributeName)
+        var first = results.First();
+        _externalIdColumnHeader = string.IsNullOrEmpty(first.ExternalIdAttributeName)
             ? "External Id"
-            : $"External Id ({attributeName})";
+            : $"External Id ({first.ExternalIdAttributeName})";
+
+        // Show secondary external ID column if any confirmed OR pending values exist
+        _hasSecondaryExternalId = results.Any(r =>
+            r.SecondaryExternalIdAttributeValue != null || !string.IsNullOrEmpty(r.PendingSecondaryExternalId));
+        if (_hasSecondaryExternalId)
+        {
+            var secondaryAttrName = results
+                .FirstOrDefault(r => r.SecondaryExternalIdAttributeValue != null)?.SecondaryExternalIdAttributeName;
+            _secondaryExternalIdColumnHeader = string.IsNullOrEmpty(secondaryAttrName)
+                ? "Secondary External Id"
+                : $"Secondary External Id ({secondaryAttrName})";
+        }
     }
 
-    private string GetSecondaryExternalIdColumnHeader()
+    private void OnSearch(string text)
     {
-        if (_connectedSystemObjectHeaders?.Results == null || !_connectedSystemObjectHeaders.Results.Any())
-            return "Secondary External Id";
+        _searchString = text;
+        _table?.ReloadServerData();
+    }
 
-        var attributeName = _connectedSystemObjectHeaders.Results
-            .FirstOrDefault(r => r.SecondaryExternalIdAttributeValue != null)?.SecondaryExternalIdAttributeName;
+    private void HandleRowClick(TableRowClickEventArgs<ConnectedSystemObjectHeader> args)
+    {
+        if (_loading || args.Item == null)
+            return;
 
-        return string.IsNullOrEmpty(attributeName)
-            ? "Secondary External Id"
-            : $"Secondary External Id ({attributeName})";
+        NavManager.NavigateTo(Utilities.GetConnectedSystemObjectHref(args.Item));
     }
 
     private async Task HandleDeleteAllObjectsClickAsync()

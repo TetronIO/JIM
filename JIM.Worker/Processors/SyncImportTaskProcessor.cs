@@ -86,18 +86,40 @@ public class SyncImportTaskProcessor
                     certificateAwareConnector.SetCertificateProvider(certificateProvider);
                 }
 
-                callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
+                // Inject credential protection for connectors that support it (for password decryption)
+                if (callBasedImportConnector is IConnectorCredentialAware credentialAwareConnector)
+                {
+                    var credentialProtection = new CredentialProtectionService(
+                        DataProtectionHelper.CreateProvider());
+                    credentialAwareConnector.SetCredentialProtection(credentialProtection);
+                }
+
+                using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
+                {
+                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
+                }
 
                 var initialPage = true;
                 var paginationTokens = new List<ConnectedSystemPaginationToken>();
                 var pageNumber = 0;
+
+                // Keep track of the original persisted data at the START of the import.
+                // This is critical for delta imports where subsequent pages must use the SAME
+                // watermark (USN) as the first page to query for changes.
+                // The connector will return a NEW watermark on the first page that we'll save
+                // AFTER all pages are processed.
+                var originalPersistedData = _connectedSystem.PersistedConnectorData;
+                string? newPersistedData = null;
+
                 while (initialPage || paginationTokens.Count > 0)
                 {
                     // perform the import for this page
+                    // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
+                    // watermark queries across all pages of a delta import.
                     ConnectedSystemImportResult result;
                     using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
                     {
-                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, _connectedSystem.PersistedConnectorData, Log.Logger, _cancellationTokenSource.Token);
+                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
                     }
                     pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
@@ -112,26 +134,39 @@ public class SyncImportTaskProcessor
                     // make sure we pass the pagination tokens back in on the next page (if there is one)
                     paginationTokens = result.PaginationTokens;
 
-                    // Only update persisted connector data if the connector explicitly returns a new non-null value.
-                    // A null value means "no change" (e.g., subsequent pagination pages), not "clear the data".
-                    // This is important for delta imports where the watermark (USN) is set on the first page
-                    // and should be preserved across all pages.
-                    if (result.PersistedConnectorData != null && result.PersistedConnectorData != _connectedSystem.PersistedConnectorData)
+                    // Capture the new persisted connector data from the first page only.
+                    // Subsequent pages return null (indicating "no change"), so we only capture once.
+                    // We'll save this AFTER all pages are processed to avoid affecting watermark
+                    // queries on subsequent pages.
+                    if (result.PersistedConnectorData != null && newPersistedData == null)
                     {
-                        // the connector wants to persist some data between sync runs. update the connected system with the new value
-                        Log.Debug($"ExecuteAsync: updating persisted connector data. old value: '{_connectedSystem.PersistedConnectorData}', new value: '{result.PersistedConnectorData}'");
-                        _connectedSystem.PersistedConnectorData = result.PersistedConnectorData;
-                        await UpdateConnectedSystemWithInitiatorAsync();
+                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{originalPersistedData}', new value: '{result.PersistedConnectorData}'");
+                        newPersistedData = result.PersistedConnectorData;
                     }
 
                     // process the results from this page
-                    await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                    using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
+                    {
+                        await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                    }
 
                     if (initialPage)
                         initialPage = false;
                 }
 
-                callBasedImportConnector.CloseImportConnection();
+                // Now that all pages are processed, update the persisted connector data
+                // with the new watermark captured from the first page.
+                if (newPersistedData != null && newPersistedData != originalPersistedData)
+                {
+                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{originalPersistedData}', new value: '{newPersistedData}'");
+                    _connectedSystem.PersistedConnectorData = newPersistedData;
+                    await UpdateConnectedSystemWithInitiatorAsync();
+                }
+
+                using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
+                {
+                    callBasedImportConnector.CloseImportConnection();
+                }
                 break;
             }
             case IConnectorImportUsingFiles fileBasedImportConnector:
@@ -296,6 +331,24 @@ public class SyncImportTaskProcessor
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
+                case AttributeDataType.LongNumber:
+                {
+                    // get the long connected system object external ids for this object type
+                    var connectedSystemObjectExternalIdsOfTypeLong = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id);
+
+                    // get the long import object external ids for this object type
+                    var connectedSystemLongExternalIdValues = externalIdsImported
+                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.LongValues);
+
+                    // create a collection with the connected system objects no longer in the connected system for this object type
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeLong.Except(connectedSystemLongExternalIdValues);
+
+                    // obsolete the connected system objects no longer in the connected system for this object type
+                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                    break;
+                }
                 case AttributeDataType.NotSet:
                 case AttributeDataType.DateTime:
                 case AttributeDataType.Binary:
@@ -425,7 +478,11 @@ public class SyncImportTaskProcessor
                 RemoveNullImportObjectAttributes(importObject);
 
                 // see if we already have a matching connected system object for this imported object within JIM
-                var connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
+                ConnectedSystemObject? connectedSystemObject;
+                using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
+                {
+                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
+                }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
                 // When a connector specifies Delete, mark the existing CSO as Obsolete
@@ -531,35 +588,26 @@ public class SyncImportTaskProcessor
         var nullConnectedSystemImportObjectAttributes = new List<ConnectedSystemImportObjectAttribute>();
         foreach (var attribute in connectedSystemImportObject.Attributes)
         {
-            var noGuids = false;
-            var noIntegers = false;
-            var noStrings = false;
-            var noBytes = false;
-            var noReferences = false;
-
             // first remove any null attribute values. this might mean we'll be left with no values at all
             attribute.GuidValues.RemoveAll(q => q.Equals(null));
             attribute.IntValues.RemoveAll(q => q.Equals(null));
+            attribute.LongValues.RemoveAll(q => q.Equals(null));
             attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
             attribute.ByteValues.RemoveAll(q => q.Equals(null));
             attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
 
             // now work out if we're left with any values at all
-            if (attribute.GuidValues.Count == 0)
-                noGuids = true;
-            if (attribute.IntValues.Count == 0)
-                noIntegers = true;
-            if (attribute.StringValues.Count == 0)
-                noStrings = true;
+            var noGuids = attribute.GuidValues.Count == 0;
+            var noIntegers = attribute.IntValues.Count == 0;
+            var noLongs = attribute.LongValues.Count == 0;
+            var noStrings = attribute.StringValues.Count == 0;
             var noBool = !attribute.BoolValue.HasValue;
             var noDateTime = !attribute.DateTimeValue.HasValue;
-            if (attribute.ByteValues.Count == 0)
-                noBytes = true;
-            if (attribute.ReferenceValues.Count == 0)
-                noReferences = true;
+            var noBytes = attribute.ByteValues.Count == 0;
+            var noReferences = attribute.ReferenceValues.Count == 0;
 
             // if all types of values are empty, we'll add this attribute to a list for removal
-            if (noGuids && noIntegers && noStrings && noBool && noDateTime && noBytes && noReferences)
+            if (noGuids && noIntegers && noLongs && noStrings && noBool && noDateTime && noBytes && noReferences)
                 nullConnectedSystemImportObjectAttributes.Add(attribute);
         }
 
@@ -577,6 +625,7 @@ public class SyncImportTaskProcessor
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
         if (importObjectAttribute.IntValues.Count > 1 ||
+            importObjectAttribute.LongValues.Count > 1 ||
             importObjectAttribute.StringValues.Count > 1 ||
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
@@ -592,6 +641,10 @@ public class SyncImportTaskProcessor
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Number =>
                 await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]),
+            AttributeDataType.LongNumber when importObjectAttribute.LongValues.Count == 0 =>
+                throw new ExternalIdAttributeValueMissingException($"External Id long number attribute({externalIdAttribute.Name}) on the imported object has no value."),
+            AttributeDataType.LongNumber =>
+                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.LongValues[0]),
             AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Guid =>
@@ -693,6 +746,18 @@ public class SyncImportTaskProcessor
                         });
                     }
                     break;
+                case AttributeDataType.LongNumber:
+                    foreach (var importObjectAttributeLongValue in importObjectAttribute.LongValues)
+                    {
+                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                        {
+                            Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
+                            LongValue = importObjectAttributeLongValue,
+                            ConnectedSystemObject = connectedSystemObject
+                        });
+                    }
+                    break;
                 case AttributeDataType.Binary:
                     foreach (var importObjectAttributeByteValue in importObjectAttribute.ByteValues)
                     {
@@ -784,43 +849,14 @@ public class SyncImportTaskProcessor
                 switch (csoAttribute.Type)
                 {
                     case AttributeDataType.Text:
-                        // Debug logging for text attribute comparison
-                        var existingValues = connectedSystemObject.AttributeValues
-                            .Where(av => av.Attribute?.Name == csoAttributeName)
-                            .Select(av => av.StringValue)
-                            .ToList();
-                        var importedValues = importedObjectAttribute.StringValues.ToList();
-
-                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase))
-                        {
-                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Comparing department attribute for CSO {CsoId}. Existing: [{ExistingValues}], Imported: [{ImportedValues}]",
-                                connectedSystemObject.Id,
-                                string.Join(", ", existingValues.Select(v => v ?? "(null)")),
-                                string.Join(", ", importedValues));
-                        }
-
                         // find values on the cso of type string that aren't on the imported object and remove them first
                         var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))).ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingStringAttributeValues);
-
-                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && missingStringAttributeValues.Count > 0)
-                        {
-                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to remove: [{Values}]",
-                                missingStringAttributeValues.Count,
-                                string.Join(", ", missingStringAttributeValues.Select(av => av.StringValue)));
-                        }
 
                         // find imported values of type string that aren't on the cso and add them
                         var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.StringValue != null && av.StringValue.Equals(sv))).ToList();
                         foreach (var newStringValue in newStringValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
-
-                        if (csoAttributeName.Equals("department", StringComparison.OrdinalIgnoreCase) && newStringValues.Count > 0)
-                        {
-                            Log.Debug("UpdateConnectedSystemObjectFromImportObject: Found {Count} department values to add: [{Values}]",
-                                newStringValues.Count,
-                                string.Join(", ", newStringValues));
-                        }
                         break;
 
                     case AttributeDataType.Number:
@@ -832,6 +868,17 @@ public class SyncImportTaskProcessor
                         var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.IntValue != null && av.IntValue.Equals(sv))).ToList();
                         foreach (var newIntValue in newIntValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, IntValue = newIntValue });
+                        break;
+
+                    case AttributeDataType.LongNumber:
+                        // find values on the cso of type long that aren't on the imported object and remove them first
+                        var missingLongAttributeValues = connectedSystemObject.AttributeValues.Where(av => av.Attribute?.Name == csoAttributeName && av.LongValue != null && !importedObjectAttribute.LongValues.Any(i => i.Equals(av.LongValue))).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingLongAttributeValues);
+
+                        // find imported values of type long that aren't on the cso and add them
+                        var newLongValues = importedObjectAttribute.LongValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => av.Attribute?.Name == csoAttributeName && av.LongValue != null && av.LongValue.Equals(sv))).ToList();
+                        foreach (var newLongValue in newLongValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, LongValue = newLongValue });
                         break;
 
                     case AttributeDataType.DateTime:
@@ -987,6 +1034,14 @@ public class SyncImportTaskProcessor
                         throw new InvalidCastException(
                             $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
                     break;
+                case AttributeDataType.LongNumber:
+                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longUnresolvedReferenceValue))
+                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue) ??
+                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue);
+                    else
+                        throw new InvalidCastException(
+                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
+                    break;
                 case AttributeDataType.Guid:
                     if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
                         referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ??
@@ -1017,6 +1072,13 @@ public class SyncImportTaskProcessor
                                                           connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
+                    break;
+                case AttributeDataType.LongNumber:
+                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longUnresolvedReferenceValue2))
+                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue2) ??
+                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue2);
+                    else
+                        throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
                     break;
                 case AttributeDataType.Guid:
                     if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
@@ -1072,6 +1134,7 @@ public class SyncImportTaskProcessor
     /// <summary>
     /// Reconciles Pending Exports against imported CSO values.
     /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
+    /// Creates ActivityRunProfileExecutionItems with warnings for unconfirmed or failed exports.
     /// </summary>
     /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
     private async Task ReconcilePendingExportsAsync(IReadOnlyCollection<ConnectedSystemObject> updatedCsos)
@@ -1086,7 +1149,11 @@ public class SyncImportTaskProcessor
         {
             try
             {
-                var result = await reconciliationService.ReconcileAsync(cso);
+                PendingExportReconciliationResult result;
+                using (Diagnostics.Sync.StartSpan("ReconcileCso"))
+                {
+                    result = await reconciliationService.ReconcileAsync(cso);
+                }
 
                 if (result.HasChanges)
                 {
@@ -1096,6 +1163,40 @@ public class SyncImportTaskProcessor
 
                     if (result.PendingExportDeleted)
                         exportsDeleted++;
+
+                    // Create execution items for failed exports (permanent failures)
+                    if (result.FailedChanges.Count > 0)
+                    {
+                        var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                        var executionItem = new ActivityRunProfileExecutionItem
+                        {
+                            Activity = _activity,
+                            ConnectedSystemObject = cso,
+                            ConnectedSystemObjectId = cso.Id,
+                            ObjectChangeType = ObjectChangeType.Update,
+                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
+                            ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
+                            DataSnapshot = $"Failed attributes: {failedAttrNames}"
+                        };
+                        _activityRunProfileExecutionItems.Add(executionItem);
+                    }
+
+                    // Create execution items for retry exports (temporary failures that will be retried)
+                    if (result.RetryChanges.Count > 0)
+                    {
+                        var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                        var executionItem = new ActivityRunProfileExecutionItem
+                        {
+                            Activity = _activity,
+                            ConnectedSystemObject = cso,
+                            ConnectedSystemObjectId = cso.Id,
+                            ObjectChangeType = ObjectChangeType.Update,
+                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
+                            ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
+                            DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
+                        };
+                        _activityRunProfileExecutionItems.Add(executionItem);
+                    }
                 }
             }
             catch (Exception ex)

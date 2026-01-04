@@ -128,6 +128,12 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     #region State Accessors
 
     /// <summary>
+    /// Gets the persisted connector data values passed to each ImportAsync call.
+    /// Useful for verifying that the correct watermark is passed during paginated imports.
+    /// </summary>
+    public List<string?> ImportPersistedDataHistory { get; } = new();
+
+    /// <summary>
     /// Gets all pending exports that were processed during Export calls.
     /// Useful for verifying what was sent to the "target system".
     /// </summary>
@@ -151,6 +157,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         _confirmingImportFactory = null;
         TestExceptionToThrow = null;
         ExportExceptionToThrow = null;
+        ImportPersistedDataHistory.Clear();
     }
 
     /// <summary>
@@ -203,6 +210,9 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         ILogger logger,
         CancellationToken cancellationToken)
     {
+        // Record the persisted data passed on each call for test verification
+        ImportPersistedDataHistory.Add(persistedConnectorData);
+
         if (TestExceptionToThrow != null)
             throw TestExceptionToThrow;
 

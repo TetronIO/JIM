@@ -23,6 +23,11 @@ public class ActivityRunProfileExecutionItem
     public ObjectChangeType ObjectChangeType { get; set; }
 
     /// <summary>
+    /// If ObjectChangeType is NoChange, indicates why the no-net-change was detected.
+    /// </summary>
+    public NoChangeReason? NoChangeReason { get; set; }
+
+    /// <summary>
     /// If this was an import operation, what CSO does this sync operation item relate to?
     /// Note: If the change was a delete, then there will be no CSO to reference.
     /// </summary>

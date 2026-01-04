@@ -9,7 +9,8 @@ public enum AttributeDataType
     Binary = 4,
     Reference = 5,
     Guid = 6,
-    Boolean = 7
+    Boolean = 7,
+    LongNumber = 8
 }
 
 public enum AttributePlurality
@@ -145,7 +146,12 @@ public enum ServiceSettingCategory
     /// <summary>
     /// History and audit retention settings.
     /// </summary>
-    History = 3
+    History = 3,
+
+    /// <summary>
+    /// Security and encryption settings.
+    /// </summary>
+    Security = 4
 }
 
 /// <summary>
@@ -176,7 +182,13 @@ public enum ServiceSettingValueType
     /// <summary>
     /// Enumeration value - requires EnumTypeName to be set.
     /// </summary>
-    Enum = 4
+    Enum = 4,
+
+    /// <summary>
+    /// Encrypted string value for secrets (passwords, API keys, etc.).
+    /// Values are encrypted at rest using ASP.NET Core Data Protection.
+    /// </summary>
+    StringEncrypted = 5
 }
 
 /// <summary>

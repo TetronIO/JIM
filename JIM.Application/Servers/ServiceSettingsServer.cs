@@ -60,6 +60,7 @@ namespace JIM.Application.Servers
 
         /// <summary>
         /// Gets the typed value of a setting, converting from string storage.
+        /// Encrypted string values are automatically decrypted.
         /// </summary>
         public async Task<T?> GetSettingValueAsync<T>(string key, T? defaultValue = default)
         {
@@ -71,7 +72,15 @@ namespace JIM.Application.Servers
             if (string.IsNullOrEmpty(effectiveValue))
                 return defaultValue;
 
-            return ConvertSettingValue<T>(effectiveValue, setting.ValueType);
+            // Decrypt encrypted string values before returning
+            if (setting.ValueType == ServiceSettingValueType.StringEncrypted && Application.CredentialProtection != null)
+            {
+                effectiveValue = Application.CredentialProtection.Unprotect(effectiveValue);
+                if (string.IsNullOrEmpty(effectiveValue))
+                    return defaultValue;
+            }
+
+            return ConvertSettingValue<T>(effectiveValue!, setting.ValueType);
         }
 
         /// <summary>
@@ -85,7 +94,26 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the verbose no-change recording setting.
+        /// When enabled, creates detailed Activity execution items for exports where CSO already has current values.
+        /// </summary>
+        public async Task<bool> GetVerboseNoChangeRecordingAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.VerboseNoChangeRecording, false);
+        }
+
+        /// <summary>
+        /// Gets the sync page size setting.
+        /// Controls the number of CSOs processed per database page during sync operations.
+        /// </summary>
+        public async Task<int> GetSyncPageSizeAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.SyncPageSize, 500);
+        }
+
+        /// <summary>
         /// Updates a service setting value and creates an Activity for audit purposes.
+        /// Encrypted string values are automatically encrypted before storage.
         /// </summary>
         public async Task UpdateSettingValueAsync(string key, string? newValue, MetaverseObject? initiatedBy)
         {
@@ -97,6 +125,15 @@ namespace JIM.Application.Servers
                 throw new InvalidOperationException($"Setting '{setting.DisplayName}' is read-only and cannot be modified.");
 
             var oldValue = setting.Value;
+
+            // Encrypt encrypted string values before storing
+            if (setting.ValueType == ServiceSettingValueType.StringEncrypted &&
+                !string.IsNullOrEmpty(newValue) &&
+                Application.CredentialProtection != null)
+            {
+                newValue = Application.CredentialProtection.Protect(newValue);
+            }
+
             setting.Value = newValue;
             setting.LastModified = DateTime.UtcNow;
             setting.LastModifiedBy = initiatedBy?.ToString() ?? "System";

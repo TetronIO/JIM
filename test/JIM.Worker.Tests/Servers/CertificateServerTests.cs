@@ -477,10 +477,10 @@ public class CertificateServerTests
 
     #endregion
 
-    #region GetEnabledX509CertificatesAsync tests
+    #region GetTrustedCertificatesAsync tests
 
     [Test]
-    public async Task GetEnabledX509CertificatesAsync_ReturnsX509CertificatesAsync()
+    public async Task GetTrustedCertificatesAsync_ReturnsX509CertificatesAsync()
     {
         // Arrange
         var certificates = new List<TrustedCertificate>
@@ -497,7 +497,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.GetEnabledAsync()).ReturnsAsync(certificates);
 
         // Act
-        var result = await _jim.Certificates.GetEnabledX509CertificatesAsync();
+        var result = await _jim.Certificates.GetTrustedCertificatesAsync();
 
         // Assert
         Assert.That(result, Has.Count.EqualTo(1));
@@ -505,7 +505,7 @@ public class CertificateServerTests
     }
 
     [Test]
-    public async Task GetEnabledX509CertificatesAsync_SkipsInvalidCertificatesAsync()
+    public async Task GetTrustedCertificatesAsync_SkipsInvalidCertificatesAsync()
     {
         // Arrange
         var certificates = new List<TrustedCertificate>
@@ -530,7 +530,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.GetEnabledAsync()).ReturnsAsync(certificates);
 
         // Act
-        var result = await _jim.Certificates.GetEnabledX509CertificatesAsync();
+        var result = await _jim.Certificates.GetTrustedCertificatesAsync();
 
         // Assert - should only have the valid one
         Assert.That(result, Has.Count.EqualTo(1));
@@ -684,7 +684,7 @@ public class CertificateServerTests
     }
 
     [Test]
-    public async Task GetEnabledX509CertificatesAsync_WithCorruptedUploadedData_SkipsCertificateAsync()
+    public async Task GetTrustedCertificatesAsync_WithCorruptedUploadedData_SkipsCertificateAsync()
     {
         // Arrange
         var certificates = new List<TrustedCertificate>
@@ -709,7 +709,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.GetEnabledAsync()).ReturnsAsync(certificates);
 
         // Act
-        var result = await _jim.Certificates.GetEnabledX509CertificatesAsync();
+        var result = await _jim.Certificates.GetTrustedCertificatesAsync();
 
         // Assert - corrupted cert should be skipped
         Assert.That(result, Has.Count.EqualTo(1));
@@ -717,7 +717,7 @@ public class CertificateServerTests
     }
 
     [Test]
-    public async Task GetEnabledX509CertificatesAsync_WithMissingFilePath_SkipsCertificateAsync()
+    public async Task GetTrustedCertificatesAsync_WithMissingFilePath_SkipsCertificateAsync()
     {
         // Arrange
         var certificates = new List<TrustedCertificate>
@@ -742,14 +742,14 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.GetEnabledAsync()).ReturnsAsync(certificates);
 
         // Act
-        var result = await _jim.Certificates.GetEnabledX509CertificatesAsync();
+        var result = await _jim.Certificates.GetTrustedCertificatesAsync();
 
         // Assert - missing file cert should be skipped
         Assert.That(result, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public async Task GetEnabledX509CertificatesAsync_WithAllInvalidCertificates_ReturnsEmptyListAsync()
+    public async Task GetTrustedCertificatesAsync_WithAllInvalidCertificates_ReturnsEmptyListAsync()
     {
         // Arrange
         var certificates = new List<TrustedCertificate>
@@ -774,7 +774,7 @@ public class CertificateServerTests
         _mockCertRepo.Setup(r => r.GetEnabledAsync()).ReturnsAsync(certificates);
 
         // Act
-        var result = await _jim.Certificates.GetEnabledX509CertificatesAsync();
+        var result = await _jim.Certificates.GetTrustedCertificatesAsync();
 
         // Assert
         Assert.That(result, Is.Empty);

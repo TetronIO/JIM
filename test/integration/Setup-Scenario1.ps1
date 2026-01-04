@@ -502,7 +502,9 @@ try {
             'userPrincipalName',  # UPN (also mapped from Email)
             'title',              # Job Title
             'department',         # Department
-            'distinguishedName'   # DN - required for LDAP provisioning
+            'distinguishedName',  # DN - required for LDAP provisioning
+            'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
+            'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
         )
 
         $ldapAttrUpdates = @{}
@@ -578,6 +580,8 @@ try {
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
+            @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
+            @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime
         )
 
         $exportMappings = @(
@@ -603,6 +607,14 @@ try {
             @{
                 LdapAttr = "distinguishedName"
                 Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Borton Corp,DC=testdomain,DC=local"'
+            }
+            @{
+                LdapAttr = "userAccountControl"
+                Expression = '512'  # Normal account, enabled - tests Number (Int32) data type export
+            }
+            @{
+                LdapAttr = "accountExpires"
+                Expression = 'ToFileTime(mv["Employee End Date"])'  # DateTime → Large Integer (Int64) - HR end date converted to AD format
             }
         )
 

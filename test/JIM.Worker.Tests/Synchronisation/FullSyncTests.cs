@@ -39,6 +39,10 @@ public class FullSyncTests
     private Mock<DbSet<MetaverseObject>> MockDbSetMetaverseObjects { get; set; }
     private List<SyncRule> SyncRulesData { get; set; }
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; }
+    private List<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValuesData { get; set; }
+    private Mock<DbSet<ConnectedSystemObjectAttributeValue>> MockDbSetConnectedSystemObjectAttributeValues { get; set; }
+    private List<ServiceSetting> ServiceSettingItemsData { get; set; }
+    private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettingItems { get; set; }
     private JimApplication Jim { get; set; }
     #endregion
 
@@ -116,12 +120,32 @@ public class FullSyncTests
         // set up the Sync Rule stub mocks. they will be customised to specific use-cases in individual tests.
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
-        
+
+        // set up the CSO Attribute Values mock (empty by default, no-net-change detection cache)
+        ConnectedSystemObjectAttributeValuesData = new List<ConnectedSystemObjectAttributeValue>();
+        MockDbSetConnectedSystemObjectAttributeValues = ConnectedSystemObjectAttributeValuesData.BuildMockDbSet();
+
+        // set up the Service Setting Items mock with default SyncPageSize
+        ServiceSettingItemsData = new List<ServiceSetting>
+        {
+            new()
+            {
+                Key = "Sync.PageSize",
+                DisplayName = "Sync Page Size",
+                Category = ServiceSettingCategory.Synchronisation,
+                ValueType = ServiceSettingValueType.Integer,
+                DefaultValue = "1000",
+                Value = null
+            }
+        };
+        MockDbSetServiceSettingItems = ServiceSettingItemsData.BuildMockDbSet();
+
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
         MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjectAttributeValues).Returns(MockDbSetConnectedSystemObjectAttributeValues.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(MockDbSetConnectedSystemRunProfiles.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
@@ -129,6 +153,7 @@ public class FullSyncTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettingItems.Object);
 
         // instantiate Jim using the mocked db context
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
@@ -858,10 +883,13 @@ public class FullSyncTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
 
-        // setup mock to handle CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => {
-                ConnectedSystemObjectsData.Remove(entity);
+        // setup mock to handle batch CSO deletion (full sync now uses batched deletes for consistency with delta sync)
+        MockDbSetConnectedSystemObjects.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                foreach (var entity in entities.ToList())
+                {
+                    ConnectedSystemObjectsData.Remove(entity);
+                }
             });
 
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());

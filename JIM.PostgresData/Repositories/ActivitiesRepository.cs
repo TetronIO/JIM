@@ -146,7 +146,13 @@ public class ActivityRepository : IActivityRepository
     }
 
     #region synchronisation related
-    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(Guid activityId, int page, int pageSize)
+    public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
+        Guid activityId,
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -158,23 +164,94 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        var objects = from o in Repository.Database.ActivityRunProfileExecutionItems
-                .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-                .Include(a => a.ConnectedSystemObject)
-                    .ThenInclude(cso => cso!.Type)
-                .Include(a => a.ConnectedSystemObject)
-                    .ThenInclude(cso => cso!.AttributeValues)
-                        .ThenInclude(av => av.Attribute)
-                .Where(a => a.Activity.Id == activityId)
-            select o;
+        var query = Repository.Database.ActivityRunProfileExecutionItems
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
+            .Include(a => a.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Include(a => a.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Where(a => a.Activity.Id == activityId);
 
-        // now just retrieve a page's worth of images from the results
-        var grossCount = objects.Count();
+        // Apply search filter - search on display name, external ID, or object type
+        // Search is case-insensitive for user convenience
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchPattern = $"%{searchQuery}%";
+            query = query.Where(item =>
+                // Search display name
+                (item.ConnectedSystemObject != null &&
+                 item.ConnectedSystemObject.AttributeValues.Any(av =>
+                    EF.Functions.ILike(av.Attribute.Name, "displayname") &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern))) ||
+                // Search external ID
+                (item.ConnectedSystemObject != null &&
+                 item.ConnectedSystemObject.AttributeValues.Any(av =>
+                    av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, searchPattern))) ||
+                // Search object type name
+                (item.ConnectedSystemObject != null &&
+                 item.ConnectedSystemObject.Type != null &&
+                 EF.Functions.ILike(item.ConnectedSystemObject.Type.Name, searchPattern)));
+        }
+
+        // Apply sorting
+        query = sortBy?.ToLower() switch
+        {
+            "externalid" => sortDescending
+                ? query.OrderByDescending(item => item.ConnectedSystemObject != null
+                    ? item.ConnectedSystemObject.AttributeValues
+                        .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null)
+                : query.OrderBy(item => item.ConnectedSystemObject != null
+                    ? item.ConnectedSystemObject.AttributeValues
+                        .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null),
+            "displayname" or "name" => sortDescending
+                ? query.OrderByDescending(item => item.ConnectedSystemObject != null
+                    ? item.ConnectedSystemObject.AttributeValues
+                        .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null)
+                : query.OrderBy(item => item.ConnectedSystemObject != null
+                    ? item.ConnectedSystemObject.AttributeValues
+                        .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault()
+                    : null),
+            "type" or "objecttype" => sortDescending
+                ? query.OrderByDescending(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
+                    ? item.ConnectedSystemObject.Type.Name
+                    : null)
+                : query.OrderBy(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
+                    ? item.ConnectedSystemObject.Type.Name
+                    : null),
+            "changetype" => sortDescending
+                ? query.OrderByDescending(item => item.ObjectChangeType)
+                : query.OrderBy(item => item.ObjectChangeType),
+            "errortype" => sortDescending
+                ? query.OrderByDescending(item => item.ErrorType)
+                : query.OrderBy(item => item.ErrorType),
+            _ => sortDescending
+                ? query.OrderByDescending(item => item.Id)
+                : query.OrderBy(item => item.Id)
+        };
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Apply pagination and materialise
         var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        // Materialize the entities first, then project to DTO in memory
-        var entities = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
+        var entities = await query.Skip(offset).Take(pageSize).ToListAsync();
 
+        // Project to DTO in memory
         var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
         {
             Id = i.Id,
@@ -185,11 +262,11 @@ public class ActivityRepository : IActivityRepository
             ObjectChangeType = i.ObjectChangeType
         }).ToList();
 
-        // now with all the ids we know how many total results there are and so can populate paging info
+        // Build paged result set
         var pagedResultSet = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
         {
             PageSize = pageSize,
-            TotalResults = grossCount,
+            TotalResults = totalCount,
             CurrentPage = page,
             Results = results
         };
@@ -198,13 +275,12 @@ public class ActivityRepository : IActivityRepository
             return pagedResultSet;
 
         // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
+        if (page <= pagedResultSet.TotalPages)
             return pagedResultSet;
-            
+
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
-
     }
         
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
@@ -213,11 +289,19 @@ public class ActivityRepository : IActivityRepository
         {
             ActivityId = activityId,
             TotalObjectChangeCount = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId),
-            TotalObjectErrors = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),                
+            TotalObjectErrors = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
             TotalObjectCreates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Create),
             TotalObjectDeletes = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Delete),
             TotalObjectUpdates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Update),
             TotalObjectTypes = await Repository.Database.ActivityRunProfileExecutionItems.Where(q => q.Activity.Id == activityId && q.ConnectedSystemObject != null).Select(q => q.ConnectedSystemObject!.Type).Distinct().CountAsync(),
+            TotalMvoNoAttributeChanges = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q =>
+                q.Activity.Id == activityId &&
+                q.ObjectChangeType == ObjectChangeType.NoChange &&
+                q.NoChangeReason == NoChangeReason.MvoNoAttributeChanges),
+            TotalCsoAlreadyCurrent = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q =>
+                q.Activity.Id == activityId &&
+                q.ObjectChangeType == ObjectChangeType.NoChange &&
+                q.NoChangeReason == NoChangeReason.CsoAlreadyCurrent),
         };
     }
 

@@ -13,6 +13,7 @@ services:
       - JIM_LOG_REQUESTS=true
     volumes:
       - jim-logs-volume:/var/log/jim
+      - jim-keys-volume:/data/keys
     cap_add:
       - DAC_READ_SEARCH
       - SYS_ADMIN
@@ -46,6 +47,7 @@ services:
       - JIM_LOG_LEVEL=Verbose
     volumes:
       - jim-logs-volume:/var/log/jim
+      - jim-keys-volume:/data/keys
     build:
       context: .
       dockerfile: JIM.Worker/Dockerfile
@@ -133,3 +135,5 @@ volumes:
     name: jim-db-volume
   jim-logs-volume:
     name: jim-logs-volume
+  jim-keys-volume:
+    name: jim-keys-volume

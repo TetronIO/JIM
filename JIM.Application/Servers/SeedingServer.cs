@@ -606,8 +606,7 @@ internal class SeedingServer
             ValueType = ServiceSettingValueType.String,
             DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority),
             Value = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority),
-            IsReadOnly = true,
-            IsSecret = false
+            IsReadOnly = true
         });
 
         await SeedSettingAsync(new ServiceSetting
@@ -619,21 +618,25 @@ internal class SeedingServer
             ValueType = ServiceSettingValueType.String,
             DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId),
             Value = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId),
-            IsReadOnly = true,
-            IsSecret = false
+            IsReadOnly = true
         });
 
+        // SSO Secret - encrypt the value before storing
+        var ssoSecretValue = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret);
+        if (!string.IsNullOrEmpty(ssoSecretValue) && Application.CredentialProtection != null)
+        {
+            ssoSecretValue = Application.CredentialProtection.Protect(ssoSecretValue);
+        }
         await SeedSettingAsync(new ServiceSetting
         {
             Key = Constants.SettingKeys.SsoSecret,
             DisplayName = "SSO secret",
             Description = "The OIDC client secret for JIM.",
             Category = ServiceSettingCategory.SSO,
-            ValueType = ServiceSettingValueType.String,
+            ValueType = ServiceSettingValueType.StringEncrypted,
             DefaultValue = null, // Never store secrets as defaults
-            Value = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret),
-            IsReadOnly = true,
-            IsSecret = true
+            Value = ssoSecretValue,
+            IsReadOnly = true
         });
 
         await SeedSettingAsync(new ServiceSetting
@@ -645,8 +648,7 @@ internal class SeedingServer
             ValueType = ServiceSettingValueType.String,
             DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope),
             Value = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope),
-            IsReadOnly = true,
-            IsSecret = false
+            IsReadOnly = true
         });
 
         await SeedSettingAsync(new ServiceSetting
@@ -658,8 +660,7 @@ internal class SeedingServer
             ValueType = ServiceSettingValueType.String,
             DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType),
             Value = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType),
-            IsReadOnly = true,
-            IsSecret = false
+            IsReadOnly = true
         });
 
         await SeedSettingAsync(new ServiceSetting
@@ -671,8 +672,7 @@ internal class SeedingServer
             ValueType = ServiceSettingValueType.String,
             DefaultValue = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute),
             Value = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute),
-            IsReadOnly = true,
-            IsSecret = false
+            IsReadOnly = true
         });
 
         await SeedSettingAsync(new ServiceSetting
@@ -683,8 +683,7 @@ internal class SeedingServer
             Category = ServiceSettingCategory.SSO,
             ValueType = ServiceSettingValueType.String,
             DefaultValue = "sub",
-            IsReadOnly = true,
-            IsSecret = false
+            IsReadOnly = true
         });
 
         // SSO Settings (configurable)
@@ -696,8 +695,7 @@ internal class SeedingServer
             Category = ServiceSettingCategory.SSO,
             ValueType = ServiceSettingValueType.Boolean,
             DefaultValue = "true",
-            IsReadOnly = false,
-            IsSecret = false
+            IsReadOnly = false
         });
 
         // Synchronisation Settings
@@ -710,8 +708,7 @@ internal class SeedingServer
             ValueType = ServiceSettingValueType.Enum,
             DefaultValue = PartitionValidationMode.Error.ToString(),
             EnumTypeName = typeof(PartitionValidationMode).FullName,
-            IsReadOnly = false,
-            IsSecret = false
+            IsReadOnly = false
         });
 
         // History Settings
@@ -723,8 +720,7 @@ internal class SeedingServer
             Category = ServiceSettingCategory.History,
             ValueType = ServiceSettingValueType.TimeSpan,
             DefaultValue = "30.00:00:00", // 30 days
-            IsReadOnly = false,
-            IsSecret = false
+            IsReadOnly = false
         });
 
         // Maintenance Settings
@@ -736,8 +732,55 @@ internal class SeedingServer
             Category = ServiceSettingCategory.Maintenance,
             ValueType = ServiceSettingValueType.Boolean,
             DefaultValue = "false",
-            IsReadOnly = false,
-            IsSecret = false
+            IsReadOnly = false
+        });
+
+        // Synchronisation Settings - Verbose no-change recording
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.VerboseNoChangeRecording,
+            DisplayName = "Verbose no-change recording",
+            Description = "When enabled, creates detailed Activity execution items for exports where CSO already has current values. Default: disabled for performance.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "false",
+            IsReadOnly = false
+        });
+
+        // Synchronisation Settings - Page size
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SyncPageSize,
+            DisplayName = "Sync page size",
+            Description = "The number of Connected System Objects to process per database page during sync operations. Larger values improve throughput by reducing database round trips. UI progress updates occur every 100 objects regardless of page size. Recommended range: 200-1000.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "500",
+            IsReadOnly = false
+        });
+
+        // Security Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.CredentialEncryptionEnabled,
+            DisplayName = "Credential encryption",
+            Description = "When enabled, connector passwords are encrypted at rest using ASP.NET Core Data Protection with AES-256-GCM.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.EncryptionKeyPath,
+            DisplayName = "Encryption key storage path",
+            Description = "The file system path where encryption keys are stored. Set via JIM_ENCRYPTION_KEY_PATH environment variable. If not set, defaults to /data/keys (Docker) or the application data directory.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = null,
+            Value = Environment.GetEnvironmentVariable(Constants.Config.EncryptionKeyPath),
+            IsReadOnly = true
         });
 
         stopwatch.Stop();

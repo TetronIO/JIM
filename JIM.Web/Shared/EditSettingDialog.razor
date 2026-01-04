@@ -34,9 +34,17 @@
                             HelperText="Example: 30.00:00:00 for 30 days" />
                         break;
 
-                    default:
+                    case ServiceSettingValueType.StringEncrypted:
                         <MudTextField @bind-Value="_value" Label="Value" Variant="Variant.Outlined"
-                            InputType="@(Setting.IsSecret ? InputType.Password : InputType.Text)" />
+                            InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                            Adornment="Adornment.End"
+                            AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                            AdornmentAriaLabel="Toggle password visibility"
+                            OnAdornmentClick="@(() => _showPassword = !_showPassword)" />
+                        break;
+
+                    default:
+                        <MudTextField @bind-Value="_value" Label="Value" Variant="Variant.Outlined" />
                         break;
                 }
 
@@ -62,6 +70,7 @@
 
     private string? _value;
     private int? _intValue;
+    private bool _showPassword;
 
     protected override void OnInitialized()
     {

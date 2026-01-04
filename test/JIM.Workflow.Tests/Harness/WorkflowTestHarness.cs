@@ -486,6 +486,26 @@ public class ObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.Number);
     }
 
+    public ObjectTypeBuilder WithBoolAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Boolean);
+    }
+
+    public ObjectTypeBuilder WithDateTimeAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.DateTime);
+    }
+
+    public ObjectTypeBuilder WithBinaryAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Binary);
+    }
+
+    public ObjectTypeBuilder WithGuidAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Guid);
+    }
+
     public ConnectedSystemObjectType Build()
     {
         return new ConnectedSystemObjectType
@@ -535,6 +555,21 @@ public class MetaverseObjectTypeBuilder
     public MetaverseObjectTypeBuilder WithGuidAttribute(string name)
     {
         return WithAttribute(name, AttributeDataType.Guid);
+    }
+
+    public MetaverseObjectTypeBuilder WithBoolAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Boolean);
+    }
+
+    public MetaverseObjectTypeBuilder WithDateTimeAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.DateTime);
+    }
+
+    public MetaverseObjectTypeBuilder WithBinaryAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Binary);
     }
 
     public List<MetaverseAttribute> GetAttributes() => _attributes;

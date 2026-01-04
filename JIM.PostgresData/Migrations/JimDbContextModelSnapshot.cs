@@ -137,6 +137,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemRunProfileId");
 
+                    b.HasIndex("Created")
+                        .IsDescending()
+                        .HasDatabaseName("IX_Activities_Created");
+
                     b.HasIndex("InitiatedByApiKeyId");
 
                     b.HasIndex("MetaverseObjectId");
@@ -172,6 +176,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid?>("MetaverseObjectChangeId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("NoChangeReason")
+                        .HasColumnType("integer");
 
                     b.Property<int>("ObjectChangeType")
                         .HasColumnType("integer");
@@ -252,6 +259,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("TypeId");
 
+                    b.HasIndex("Origin", "TypeId", "LastConnectorDisconnectedDate")
+                        .HasDatabaseName("IX_MetaverseObjects_Origin_Type_LastDisconnected");
+
                     b.ToTable("MetaverseObjects");
                 });
 
@@ -282,6 +292,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid>("MetaverseObjectId")
                         .HasColumnType("uuid");
 
@@ -303,6 +316,8 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("GuidValue");
 
                     b.HasIndex("IntValue");
+
+                    b.HasIndex("LongValue");
 
                     b.HasIndex("MetaverseObjectId");
 
@@ -447,6 +462,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("Name");
 
+                    b.HasIndex("Name", "DeletionRule")
+                        .HasDatabaseName("IX_MetaverseObjectTypes_Name_DeletionRule");
+
                     b.ToTable("MetaverseObjectTypes");
                 });
 
@@ -477,9 +495,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("character varying(500)");
 
                     b.Property<bool>("IsReadOnly")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsSecret")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastModified")
@@ -1172,6 +1187,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
+
                     b.Property<int?>("MetaverseAttributeId")
                         .HasColumnType("integer");
 
@@ -1549,6 +1567,12 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("TypeId");
 
+                    b.HasIndex("ConnectedSystemId", "Created")
+                        .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_Created");
+
+                    b.HasIndex("ConnectedSystemId", "LastUpdated")
+                        .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_LastUpdated");
+
                     b.HasIndex("ConnectedSystemId", "TypeId")
                         .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId");
 
@@ -1581,6 +1605,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
+
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid?>("ReferenceValueId")
                         .HasColumnType("uuid");
@@ -1688,6 +1715,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
+
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid?>("ReferenceValueId")
                         .HasColumnType("uuid");
@@ -2144,6 +2174,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("InitiatedByMetaverseObjectId");
 
+                    b.HasIndex("Status", "Timestamp")
+                        .HasDatabaseName("IX_WorkerTasks_Status_Timestamp");
+
                     b.ToTable("WorkerTasks");
 
                     b.HasDiscriminator().HasValue("WorkerTask");
@@ -2220,6 +2253,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("LastErrorMessage")
                         .HasColumnType("text");
 
+                    b.Property<string>("LastErrorStackTrace")
+                        .HasColumnType("text");
+
                     b.Property<int>("MaxRetries")
                         .HasColumnType("integer");
 
@@ -2253,6 +2289,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("BoolValue")
+                        .HasColumnType("boolean");
+
                     b.Property<byte[]>("ByteValue")
                         .HasColumnType("bytea");
 
@@ -2265,6 +2304,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ExportAttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("GuidValue")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
 
@@ -2273,6 +2315,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("LastImportedValue")
                         .HasColumnType("text");
+
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid?>("PendingExportId")
                         .HasColumnType("uuid");

@@ -135,46 +135,49 @@
         @if (_pendingExport.ErrorCount > 0 || !string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
         {
             <MudItem xs="12">
-                <MudCard Outlined="true" Elevation="0">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6" Color="Color.Error">Error Information</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        <MudSimpleTable Hover="true" Dense="true">
-                            <tbody>
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-0" Style="align-items: flex-start;">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="line-height: 1.5rem;">Error Information</MudText>
+                    <MudSimpleTable Hover="true" Dense="true" Style="background: transparent;">
+                        <tbody>
+                            <tr>
+                                <td style="width: 200px;"><strong>Error Count</strong></td>
+                                <td>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                                        @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
+                                    </MudChip>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Last Attempted</strong></td>
+                                <td>@(_pendingExport.LastAttemptedAt?.ToFriendlyDate() ?? "-")</td>
+                            </tr>
+                            @* Next Retry is hidden until event-based sync is implemented
+                            <tr>
+                                <td><strong>Next Retry</strong></td>
+                                <td>@(_pendingExport.NextRetryAt?.ToFriendlyDate() ?? "-")</td>
+                            </tr>
+                            *@
+                            @if (!string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
+                            {
                                 <tr>
-                                    <td style="width: 200px;"><strong>Error Count</strong></td>
+                                    <td><strong>Error Message</strong></td>
                                     <td>
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
-                                            @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
-                                        </MudChip>
+                                        <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">@_pendingExport.LastErrorMessage</pre>
                                     </td>
                                 </tr>
+                            }
+                            @if (!string.IsNullOrEmpty(_pendingExport.LastErrorStackTrace))
+                            {
                                 <tr>
-                                    <td><strong>Last Attempted</strong></td>
-                                    <td>@(_pendingExport.LastAttemptedAt?.ToFriendlyDate() ?? "-")</td>
+                                    <td><strong>Stack Trace</strong></td>
+                                    <td>
+                                        <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-size: 0.85em;">@_pendingExport.LastErrorStackTrace</pre>
+                                    </td>
                                 </tr>
-                                <tr>
-                                    <td><strong>Next Retry</strong></td>
-                                    <td>@(_pendingExport.NextRetryAt?.ToFriendlyDate() ?? "-")</td>
-                                </tr>
-                                @if (!string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
-                                {
-                                    <tr>
-                                        <td><strong>Last Error</strong></td>
-                                        <td>
-                                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">
-                                                <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">@_pendingExport.LastErrorMessage</pre>
-                                            </MudAlert>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
-                    </MudCardContent>
-                </MudCard>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudAlert>
             </MudItem>
         }
 

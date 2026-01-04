@@ -28,6 +28,9 @@ public static class Constants
 
         // API
         public static string InfrastructureApiKey => "JIM_INFRASTRUCTURE_API_KEY";
+
+        // Encryption
+        public static string EncryptionKeyPath => "JIM_ENCRYPTION_KEY_PATH";
     }
 
     public static class BuiltInObjectTypes
@@ -193,11 +196,27 @@ public static class Constants
 
         // Synchronisation Settings
         public const string PartitionValidationMode = "Sync.PartitionValidationMode";
+        /// <summary>
+        /// When enabled, creates detailed Activity execution items for exports where CSO already has current values.
+        /// Default: disabled for performance.
+        /// </summary>
+        public const string VerboseNoChangeRecording = "Sync.VerboseNoChangeRecording";
+        /// <summary>
+        /// The number of Connected System Objects to process per database page during sync operations.
+        /// Larger values improve throughput by reducing database round trips.
+        /// UI progress updates occur every 100 objects regardless of page size.
+        /// Default: 500, recommended range: 200-1000.
+        /// </summary>
+        public const string SyncPageSize = "Sync.PageSize";
 
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 
         // Maintenance Settings
         public const string MaintenanceMode = "Maintenance.IsEnabled";
+
+        // Security Settings
+        public const string CredentialEncryptionEnabled = "Security.CredentialEncryptionEnabled";
+        public const string EncryptionKeyPath = "Security.EncryptionKeyPath";
     }
 }

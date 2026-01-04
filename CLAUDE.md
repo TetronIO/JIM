@@ -137,6 +137,15 @@ Blazor pages, API controllers, and other compiled code require container rebuild
   - Date/Time: Always use UTC for storage and internal operations; display in user's local time zone where appropriate
   - Exceptions: Technical terms, proper nouns, third-party library names, URLs
 
+**DateTime Handling (IMPORTANT):**
+- Always use `DateTime` type (not `DateTimeOffset`) in models
+- Always use `DateTime.UtcNow` for current time - NEVER use `DateTime.Now`
+- PostgreSQL stores DateTime as `timestamp with time zone` (internally UTC)
+- **Runtime quirk**: Npgsql returns `DateTimeOffset` when reading from database, even though model properties are `DateTime`
+- Code that processes DateTime values from the database must handle BOTH `DateTime` and `DateTimeOffset` types
+- See `DynamicExpressoEvaluator.ToFileTime()` for an example of handling both types
+- This design choice maintains database portability (MySQL, SQL Server, etc. handle DateTimeOffset differently)
+
 **File Organisation:**
 - One class per file - each class should have its own `.cs` file named after the class
 - Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
@@ -351,6 +360,9 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 - Copy `.env.example` to `.env`
 - Set database credentials
 - Configure SSO/OIDC settings (required)
+
+**Optional Environment Variables:**
+- `JIM_ENCRYPTION_KEY_PATH` - Custom path for encryption key storage (default: `/data/keys` for Docker, or app data directory)
 
 **GitHub Codespaces:**
 - PostgreSQL memory settings automatically optimized

@@ -21,4 +21,16 @@ public class ActivityRunProfileExecutionStats
     public int TotalObjectErrors { get; set; }
 
     public int TotalObjectTypes { get; set; }
+
+    /// <summary>
+    /// Count of objects where no MVO attributes relevant to export rules changed.
+    /// Only populated when verbose no-change recording is enabled.
+    /// </summary>
+    public int TotalMvoNoAttributeChanges { get; set; }
+
+    /// <summary>
+    /// Count of objects where the CSO already had the target value(s).
+    /// Only populated when verbose no-change recording is enabled.
+    /// </summary>
+    public int TotalCsoAlreadyCurrent { get; set; }
 }

@@ -125,6 +125,7 @@ $departments = @("IT", "HR", "Sales", "Finance", "Operations", "Marketing", "Leg
 $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")
 
 $createdUsers = @()
+$usersWithExpiry = 0
 
 for ($i = 1; $i -le $scale.Users; $i++) {
     $user = New-TestUser -Index $i -Domain ($domain.ToLower() + ".local")
@@ -149,6 +150,13 @@ for ($i = 1; $i -le $scale.Users; $i++) {
         $targetDN = "OU=TestUsers,$domainDN"
         docker exec $container samba-tool user move $userDN $targetDN 2>&1 | Out-Null
 
+        # Set account expiry if specified (contractors and some employees with resignations)
+        if ($null -ne $user.AccountExpires) {
+            $expiryDate = $user.AccountExpires.ToString("yyyy-MM-dd")
+            docker exec $container samba-tool user setexpiry $user.SamAccountName --expiry-time="$expiryDate" 2>&1 | Out-Null
+            $usersWithExpiry++
+        }
+
         if (($i % 100) -eq 0 -or $i -eq $scale.Users) {
             Write-Host "    Created $i / $($scale.Users) users..." -ForegroundColor Gray
         }
@@ -162,7 +170,7 @@ for ($i = 1; $i -le $scale.Users; $i++) {
     }
 }
 
-Write-Host "  ✓ Found or created $($createdUsers.Count) users" -ForegroundColor Green
+Write-Host "  ✓ Found or created $($createdUsers.Count) users ($usersWithExpiry with account expiry)" -ForegroundColor Green
 
 # Create groups
 Write-TestStep "Step 3" "Creating $($scale.Groups) groups"
@@ -246,7 +254,7 @@ Write-Host "  ✓ Added $totalMemberships group memberships" -ForegroundColor Gr
 Write-TestSection "Population Summary"
 Write-Host "Instance:       $Instance" -ForegroundColor Cyan
 Write-Host "Template:       $Template" -ForegroundColor Cyan
-Write-Host "Users:          $($createdUsers.Count)" -ForegroundColor Cyan
+Write-Host "Users:          $($createdUsers.Count) ($usersWithExpiry with expiry)" -ForegroundColor Cyan
 Write-Host "Groups:         $($createdGroups.Count)" -ForegroundColor Cyan
 Write-Host "Memberships:    $totalMemberships" -ForegroundColor Cyan
 Write-Host ""
