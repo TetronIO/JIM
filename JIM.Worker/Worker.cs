@@ -11,6 +11,7 @@ using JIM.Models.Tasking;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
 using Serilog;
+using Serilog.Formatting.Compact;
 namespace JIM.Worker;
 
 // **************************************************************************************
@@ -561,7 +562,8 @@ public class Worker : BackgroundService
 
         loggerConfiguration.Enrich.FromLogContext();
         loggerConfiguration.WriteTo.File(
-            Path.Combine(loggingPath, "jim.worker..log"),
+            formatter: new CompactJsonFormatter(),
+            path: Path.Combine(loggingPath, "jim.worker..log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
             fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max

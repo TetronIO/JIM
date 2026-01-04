@@ -2,6 +2,7 @@ using System.Text.Json;
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Application.Expressions;
+using JIM.Application.Services;
 using JIM.Data;
 using JIM.Models.Core;
 using JIM.PostgresData;
@@ -18,6 +19,7 @@ using MudBlazor;
 using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
+using Serilog.Formatting.Compact;
 using System.Security.Claims;
 
 // Required environment variables:
@@ -79,6 +81,7 @@ try
         return new PostgresDataRepository(context);
     });
     builder.Services.AddTransient<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
+    builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
 
     // setup OpenID Connect (OIDC) authentication for Blazor UI
@@ -390,7 +393,8 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
     loggerConfiguration.MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning);
     loggerConfiguration.Enrich.FromLogContext();
     loggerConfiguration.WriteTo.File(
-        Path.Combine(loggingPath, "jim.web..log"),
+        formatter: new CompactJsonFormatter(),
+        path: Path.Combine(loggingPath, "jim.web..log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
         fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max
