@@ -87,7 +87,7 @@
                 }
                 @if (!string.IsNullOrEmpty(context.ProgressMessage))
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@context.ProgressMessage</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">@context.ProgressMessage</MudText>
                 }
             }
             else if (context.Status == WorkerTaskStatus.Queued)
