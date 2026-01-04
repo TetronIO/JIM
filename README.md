@@ -88,7 +88,7 @@ For development setup using GitHub Codespaces or local installation, see the [De
 For SSO configuration with your Identity Provider, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
 
 ## State of Development
-JIM is approximately 94% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
+JIM is approximately 91% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
 
 **Connectors (Complete):**
 - **LDAP/Active Directory** - Full import and export, schema discovery, LDAPS support with certificate validation, auto-detection of default naming context
@@ -153,7 +153,8 @@ JIM is approximately 94% complete towards MVP status with core identity synchron
 - Workflow tests for multi-step sync scenarios (import → sync → export → confirming import)
 
 **In Progress:**
-- Scheduler service for automated run profile execution (critical path for MVP)
+- Scheduler service for automated run profile execution (#168 - critical path for MVP)
+- Connector credential encryption at rest (#171)
 - Full RBAC model with additional roles
 
 > **Note:** Integration testing is currently underway. As a pre-MVP release, bugs may exist. Please report any issues on [GitHub](https://github.com/TetronIO/JIM/issues).

@@ -883,10 +883,13 @@ public class FullSyncTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
 
-        // setup mock to handle CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => {
-                ConnectedSystemObjectsData.Remove(entity);
+        // setup mock to handle batch CSO deletion (full sync now uses batched deletes for consistency with delta sync)
+        MockDbSetConnectedSystemObjects.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                foreach (var entity in entities.ToList())
+                {
+                    ConnectedSystemObjectsData.Remove(entity);
+                }
             });
 
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
