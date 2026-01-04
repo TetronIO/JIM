@@ -246,3 +246,72 @@ body {
 .jim-hide-footer .jim-page-footer {
     display: none;
 }
+
+/* Log detail drawer - ensure full height */
+.jim-log-drawer {
+    height: 100vh !important;
+    top: 0 !important;
+}
+
+.jim-log-drawer .mud-drawer-content {
+    overflow-y: auto;
+}
+
+/* JSON syntax highlighting */
+.jim-json-syntax {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    margin: 0;
+    padding: 12px;
+    background: var(--mud-palette-background);
+    border-radius: 4px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.jim-json-key {
+    color: #0451a5;
+}
+
+.jim-json-string {
+    color: #a31515;
+}
+
+.jim-json-number {
+    color: #098658;
+}
+
+.jim-json-boolean {
+    color: #0000ff;
+}
+
+.jim-json-null {
+    color: #0000ff;
+}
+
+.jim-json-punctuation {
+    color: var(--mud-palette-text-primary);
+}
+
+/* Dark mode JSON syntax highlighting */
+.mud-theme-dark .jim-json-key {
+    color: #9cdcfe;
+}
+
+.mud-theme-dark .jim-json-string {
+    color: #ce9178;
+}
+
+.mud-theme-dark .jim-json-number {
+    color: #b5cea8;
+}
+
+.mud-theme-dark .jim-json-boolean {
+    color: #569cd6;
+}
+
+.mud-theme-dark .jim-json-null {
+    color: #569cd6;
+}

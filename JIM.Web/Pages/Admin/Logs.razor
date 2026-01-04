@@ -154,7 +154,7 @@
 
 @* Log Entry Detail Drawer *@
 <MudDrawer @bind-Open="_drawerOpen" Anchor="Anchor.End" Elevation="1" Variant="DrawerVariant.Temporary"
-    Width="500px" Class="pa-4">
+    Width="500px" Class="pa-4 jim-log-drawer">
     @if (_selectedEntry != null)
     {
         <div class="d-flex flex-column gap-4">
@@ -236,7 +236,7 @@
                             Copy
                         </MudButton>
                     </div>
-                    <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@GetRawJson(_selectedEntry)</pre>
+                    <div class="jim-json-syntax">@((MarkupString)GetHighlightedJson(_selectedEntry))</div>
                 </MudExpansionPanel>
             </MudExpansionPanels>
         </div>
@@ -444,6 +444,114 @@
         }
 
         return JsonSerializer.Serialize(jsonObject, JsonOptions);
+    }
+
+    private static string GetHighlightedJson(LogEntry entry)
+    {
+        var json = GetRawJson(entry);
+        return HighlightJson(json);
+    }
+
+    private static string HighlightJson(string json)
+    {
+        var result = new System.Text.StringBuilder();
+        var inString = false;
+        var isKey = false;
+        var stringStart = -1;
+
+        for (var i = 0; i < json.Length; i++)
+        {
+            var c = json[i];
+
+            if (c == '"' && (i == 0 || json[i - 1] != '\\'))
+            {
+                if (!inString)
+                {
+                    // Starting a string
+                    inString = true;
+                    stringStart = i;
+                    // Check if this is a key (followed eventually by a colon)
+                    isKey = IsJsonKey(json, i);
+                }
+                else
+                {
+                    // Ending a string
+                    var value = System.Net.WebUtility.HtmlEncode(json[stringStart..(i + 1)]);
+                    if (isKey)
+                        result.Append($"<span class=\"jim-json-key\">{value}</span>");
+                    else
+                        result.Append($"<span class=\"jim-json-string\">{value}</span>");
+                    inString = false;
+                    stringStart = -1;
+                }
+                continue;
+            }
+
+            if (inString)
+                continue;
+
+            // Handle punctuation
+            if (c == '{' || c == '}' || c == '[' || c == ']' || c == ':' || c == ',')
+            {
+                result.Append($"<span class=\"jim-json-punctuation\">{c}</span>");
+                continue;
+            }
+
+            // Handle numbers
+            if (char.IsDigit(c) || (c == '-' && i + 1 < json.Length && char.IsDigit(json[i + 1])))
+            {
+                var numStart = i;
+                while (i < json.Length && (char.IsDigit(json[i]) || json[i] == '.' || json[i] == '-' || json[i] == 'e' || json[i] == 'E' || json[i] == '+'))
+                    i++;
+                result.Append($"<span class=\"jim-json-number\">{json[numStart..i]}</span>");
+                i--; // Back up one since the loop will increment
+                continue;
+            }
+
+            // Handle true/false/null
+            if (i + 4 <= json.Length && json[i..(i + 4)] == "true")
+            {
+                result.Append("<span class=\"jim-json-boolean\">true</span>");
+                i += 3;
+                continue;
+            }
+            if (i + 5 <= json.Length && json[i..(i + 5)] == "false")
+            {
+                result.Append("<span class=\"jim-json-boolean\">false</span>");
+                i += 4;
+                continue;
+            }
+            if (i + 4 <= json.Length && json[i..(i + 4)] == "null")
+            {
+                result.Append("<span class=\"jim-json-null\">null</span>");
+                i += 3;
+                continue;
+            }
+
+            // Whitespace or other characters
+            result.Append(c);
+        }
+
+        return result.ToString();
+    }
+
+    private static bool IsJsonKey(string json, int quoteIndex)
+    {
+        // Find the closing quote
+        for (var i = quoteIndex + 1; i < json.Length; i++)
+        {
+            if (json[i] == '"' && json[i - 1] != '\\')
+            {
+                // Found closing quote, now look for colon
+                for (var j = i + 1; j < json.Length; j++)
+                {
+                    if (json[j] == ':') return true;
+                    if (!char.IsWhiteSpace(json[j])) return false;
+                }
+                return false;
+            }
+        }
+        return false;
     }
 
     private async Task CopyRawJsonAsync()
