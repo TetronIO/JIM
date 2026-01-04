@@ -67,7 +67,11 @@
         <MudTd DataLabel="Type">@context.Type</MudTd>
         <MudTd DataLabel="Name">@context.Name</MudTd>
         <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Created">@context.Timestamp</MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Timestamp.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
         <MudTd DataLabel="Initiated By">
             @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
             {

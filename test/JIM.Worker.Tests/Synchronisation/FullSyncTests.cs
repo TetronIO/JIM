@@ -41,6 +41,8 @@ public class FullSyncTests
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; }
     private List<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValuesData { get; set; }
     private Mock<DbSet<ConnectedSystemObjectAttributeValue>> MockDbSetConnectedSystemObjectAttributeValues { get; set; }
+    private List<ServiceSetting> ServiceSettingItemsData { get; set; }
+    private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettingItems { get; set; }
     private JimApplication Jim { get; set; }
     #endregion
 
@@ -123,6 +125,21 @@ public class FullSyncTests
         ConnectedSystemObjectAttributeValuesData = new List<ConnectedSystemObjectAttributeValue>();
         MockDbSetConnectedSystemObjectAttributeValues = ConnectedSystemObjectAttributeValuesData.BuildMockDbSet();
 
+        // set up the Service Setting Items mock with default SyncPageSize
+        ServiceSettingItemsData = new List<ServiceSetting>
+        {
+            new()
+            {
+                Key = "Sync.PageSize",
+                DisplayName = "Sync Page Size",
+                Category = ServiceSettingCategory.Synchronisation,
+                ValueType = ServiceSettingValueType.Integer,
+                DefaultValue = "1000",
+                Value = null
+            }
+        };
+        MockDbSetServiceSettingItems = ServiceSettingItemsData.BuildMockDbSet();
+
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
         MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
@@ -136,6 +153,7 @@ public class FullSyncTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettingItems.Object);
 
         // instantiate Jim using the mocked db context
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));

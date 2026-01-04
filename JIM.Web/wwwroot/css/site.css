@@ -235,3 +235,9 @@ body {
     right: 12px;
     margin: 0 !important;
 }
+
+/* Read-only table rows styling - visual distinction for disabled settings */
+.jim-readonly-row {
+    opacity: 0.65;
+    color: var(--mud-palette-text-disabled);
+}

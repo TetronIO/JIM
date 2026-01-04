@@ -94,6 +94,15 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the sync page size setting.
+        /// Controls the number of CSOs processed per database page during sync operations.
+        /// </summary>
+        public async Task<int> GetSyncPageSizeAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.SyncPageSize, 500);
+        }
+
+        /// <summary>
         /// Updates a service setting value and creates an Activity for audit purposes.
         /// </summary>
         public async Task UpdateSettingValueAsync(string key, string? newValue, MetaverseObject? initiatedBy)

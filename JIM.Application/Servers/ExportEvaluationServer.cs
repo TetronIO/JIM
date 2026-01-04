@@ -293,13 +293,16 @@ public class ExportEvaluationServer
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
     /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.
     /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.</param>
+    /// <param name="deferSave">When true, pending exports are not saved to the database. The caller is responsible
+    /// for batch saving the pending exports returned in the result. Default is false for backwards compatibility.</param>
     /// <returns>ExportEvaluationResult containing pending exports and no-net-change counts.</returns>
     public async Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
         ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
-        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
+        bool deferSave = false)
     {
         var result = new ExportEvaluationResult();
 
@@ -316,6 +319,13 @@ public class ExportEvaluationServer
             return result;
         }
 
+        var skippedDueToSource = 0;
+        var skippedDueToScope = 0;
+
+        using var loopSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("EvaluateExportRuleLoop");
+        loopSpan.SetTag("ruleCount", exportRules.Count);
+        loopSpan.SetTag("mvoId", mvo.Id);
+
         foreach (var exportRule in exportRules)
         {
             // Q3: Skip if this is the source system (circular sync prevention)
@@ -323,6 +333,7 @@ public class ExportEvaluationServer
             {
                 Log.Debug("EvaluateExportRulesWithNoNetChangeDetectionAsync: Skipping export to {System} - it is the source of these changes (Q3 circular prevention)",
                     exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString());
+                skippedDueToSource++;
                 continue;
             }
 
@@ -331,20 +342,31 @@ public class ExportEvaluationServer
             {
                 Log.Debug("EvaluateExportRulesWithNoNetChangeDetectionAsync: MVO {MvoId} is not in scope for export rule {RuleName}",
                     mvo.Id, exportRule.Name);
+                skippedDueToScope++;
                 continue;
             }
 
             // Find or create the pending export using cached CSO lookup, with no-net-change detection
-            var (pendingExport, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
-                mvo, exportRule, changedAttributes, cache, csoAttributeCache);
-
-            result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
-
-            if (pendingExport != null)
+            using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateOrUpdatePendingExport")
+                .SetTag("ruleName", exportRule.Name ?? "unnamed")
+                .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
             {
-                result.PendingExports.Add(pendingExport);
+                var (pendingExport, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
+                    mvo, exportRule, changedAttributes, cache, csoAttributeCache, deferSave);
+
+                result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
+
+                if (pendingExport != null)
+                {
+                    result.PendingExports.Add(pendingExport);
+                }
             }
         }
+
+        loopSpan.SetTag("skippedDueToSource", skippedDueToSource);
+        loopSpan.SetTag("skippedDueToScope", skippedDueToScope);
+        loopSpan.SetTag("pendingExportsCreated", result.PendingExports.Count);
+        loopSpan.SetSuccess();
 
         return result;
     }
@@ -724,12 +746,20 @@ public class ExportEvaluationServer
     /// Creates or updates a pending export with no-net-change detection.
     /// Returns both the pending export (if created) and the count of attributes skipped due to no-net-change.
     /// </summary>
+    /// <param name="mvo">The Metaverse Object that changed.</param>
+    /// <param name="exportRule">The export rule to evaluate.</param>
+    /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
+    /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
+    /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.</param>
+    /// <param name="deferSave">When true, pending exports are not saved to the database and the caller
+    /// is responsible for batch saving. Default is false for backwards compatibility.</param>
     private async Task<(PendingExport? PendingExport, int CsoAlreadyCurrentCount)> CreateOrUpdatePendingExportWithNoNetChangeAsync(
         MetaverseObject mvo,
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
         ExportEvaluationCache cache,
-        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache)
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
+        bool deferSave = false)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -749,7 +779,10 @@ public class ExportEvaluationServer
             }
 
             // Create CSO with PendingProvisioning status to establish the relationship before export
-            csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule);
+            using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateProvisioningCso"))
+            {
+                csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule);
+            }
             changeType = PendingExportChangeType.Create;
 
             // Update the cache with the newly created CSO so subsequent lookups find it
@@ -761,8 +794,20 @@ public class ExportEvaluationServer
         }
 
         // Create attribute value changes with no-net-change detection
-        var attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
-            existingCso: existingCso, csoAttributeCache: csoAttributeCache, out var csoAlreadyCurrentCount);
+        List<PendingExportAttributeValueChange> attributeChanges;
+        int csoAlreadyCurrentCount;
+        using (var attrSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateAttributeValueChanges"))
+        {
+            attrSpan.SetTag("mappingCount", exportRule.AttributeFlowRules.Count);
+            attrSpan.SetTag("changeType", changeType.ToString());
+
+            attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
+                existingCso: existingCso, csoAttributeCache: csoAttributeCache, out csoAlreadyCurrentCount);
+
+            attrSpan.SetTag("changeCount", attributeChanges.Count);
+            attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
+            attrSpan.SetSuccess();
+        }
 
         if (attributeChanges.Count == 0 && changeType == PendingExportChangeType.Update)
         {
@@ -790,10 +835,17 @@ public class ExportEvaluationServer
             CreatedAt = DateTime.UtcNow
         };
 
-        await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+        // Save immediately unless caller requested deferred saving for batch operations
+        if (!deferSave)
+        {
+            using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("SavePendingExport"))
+            {
+                await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+            }
+        }
 
-        Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} with {AttrCount} attribute changes (skipped {SkippedCount} no-net-change)",
-            changeType, pendingExport.Id, mvo.Id, attributeChanges.Count, csoAlreadyCurrentCount);
+        Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} with {AttrCount} attribute changes (skipped {SkippedCount} no-net-change, deferSave={DeferSave})",
+            changeType, pendingExport.Id, mvo.Id, attributeChanges.Count, csoAlreadyCurrentCount, deferSave);
 
         return (pendingExport, csoAlreadyCurrentCount);
     }
@@ -929,6 +981,10 @@ public class ExportEvaluationServer
         // For no-net-change detection, we need both the CSO and the attribute cache
         var canDetectNoNetChange = !isCreateOperation && existingCso != null && csoAttributeCache != null;
 
+        // Build the MVO attribute dictionary once for all expression evaluations
+        // This avoids repeatedly iterating through MVO attributes for each expression
+        Dictionary<string, object?>? mvAttributeDictionary = null;
+
         foreach (var mapping in exportRule.AttributeFlowRules)
         {
             // For export rules, the target is the CSO attribute
@@ -950,14 +1006,14 @@ public class ExportEvaluationServer
 
                     try
                     {
-                        // Build expression context with MVO attributes
-                        var mvAttributes = BuildAttributeDictionary(mvo);
+                        // Build expression context with MVO attributes (lazy initialization - only build once)
+                        mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
 
                         Log.Debug("CreateAttributeValueChanges: Evaluating expression for MVO {MvoId}. " +
                             "Expression: '{Expression}', Available attributes: [{Attributes}]",
-                            mvo.Id, source.Expression, string.Join(", ", mvAttributes.Keys));
+                            mvo.Id, source.Expression, string.Join(", ", mvAttributeDictionary.Keys));
 
-                        var context = new ExpressionContext(mvAttributes, null);
+                        var context = new ExpressionContext(mvAttributeDictionary, null);
 
                         // Evaluate the expression
                         var result = ExpressionEvaluator.Evaluate(source.Expression, context);
@@ -966,7 +1022,7 @@ public class ExportEvaluationServer
                         {
                             Log.Warning("CreateAttributeValueChanges: Expression '{Expression}' for MVO {MvoId} returned null. " +
                                 "Available attributes: [{Attributes}]",
-                                source.Expression, mvo.Id, string.Join(", ", mvAttributes.Keys));
+                                source.Expression, mvo.Id, string.Join(", ", mvAttributeDictionary.Keys));
                         }
 
                         if (result != null)

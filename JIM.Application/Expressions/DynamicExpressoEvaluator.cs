@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using DynamicExpresso;
 using DynamicExpresso.Exceptions;
+using Serilog;
 
 namespace JIM.Application.Expressions;
 
@@ -14,7 +16,17 @@ namespace JIM.Application.Expressions;
 public class DynamicExpressoEvaluator : IExpressionEvaluator
 {
     private readonly Interpreter _interpreter;
-    private readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
+
+    // Static cache shared across all instances - expressions are deterministic so cache can be shared
+    // This ensures expression compilation is only done once per expression string across all sync operations
+    private static readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
+
+    // Static cache metrics for diagnostics (shared across instances)
+    private static long _cacheHits;
+    private static long _cacheMisses;
+
+    // Threshold for logging slow expressions (in milliseconds)
+    private const int SlowExpressionThresholdMs = 10;
 
     // Word list for passphrase generation (common, easy-to-type words)
     private static readonly string[] PassphraseWords =
@@ -40,12 +52,32 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(context);
 
-        var lambda = GetOrCompileExpression(expression);
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var lambda = GetOrCompileExpression(expression);
 
-        return lambda.Invoke(
-            new Parameter("mv", context.Mv),
-            new Parameter("cs", context.Cs));
+            return lambda.Invoke(
+                new Parameter("mv", context.Mv),
+                new Parameter("cs", context.Cs));
+        }
+        finally
+        {
+            sw.Stop();
+            if (sw.ElapsedMilliseconds > SlowExpressionThresholdMs)
+            {
+                Log.Warning("Slow expression evaluation: '{Expression}' took {ElapsedMs}ms",
+                    expression.Length > 50 ? expression[..50] + "..." : expression,
+                    sw.ElapsedMilliseconds);
+            }
+        }
     }
+
+    /// <summary>
+    /// Gets the current expression cache metrics.
+    /// </summary>
+    /// <returns>A tuple containing (CacheHits, CacheMisses).</returns>
+    public (long CacheHits, long CacheMisses) GetCacheMetrics() => (_cacheHits, _cacheMisses);
 
     /// <inheritdoc/>
     public ExpressionValidationResult Validate(string expression)
@@ -98,6 +130,18 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
     private Lambda GetOrCompileExpression(string expression)
     {
+        // Check for cache hit first
+        if (_compiledExpressions.TryGetValue(expression, out var cached))
+        {
+            Interlocked.Increment(ref _cacheHits);
+            return cached;
+        }
+
+        // Cache miss - compile and add
+        Interlocked.Increment(ref _cacheMisses);
+        Log.Debug("Expression cache miss - compiling: '{Expression}'",
+            expression.Length > 50 ? expression[..50] + "..." : expression);
+
         return _compiledExpressions.GetOrAdd(expression, expr =>
         {
             return _interpreter.Parse(expr,

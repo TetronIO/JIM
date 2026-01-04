@@ -16,22 +16,21 @@
 
 <MudTable Items="@_filteredSettings" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
     Filter="new Func<ServiceSetting, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading"
-    GroupBy="@_groupDefinition" Dense="true">
+    GroupBy="@_groupDefinition">
     <ToolBarContent>
         <MudText Typo="Typo.h6">Settings</MudText>
         <MudSpacer />
-        <MudCheckBox @bind-Value="_showOverriddenOnly" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
+        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
     </ToolBarContent>
     <ColGroup>
-        <col style="width: 80px;" />
         <col />
         <col style="width: 300px;" />
         <col style="width: 150px;" />
+        <col style="width: 120px;" />
     </ColGroup>
     <HeaderContent>
-        <MudTh>Actions</MudTh>
         <MudTh>
             <MudTableSortLabel SortBy="new Func<ServiceSetting, object>(x => x.DisplayName)">
                 <MudText Typo="Typo.button">Setting</MudText>
@@ -43,65 +42,77 @@
         <MudTh>
             <MudText Typo="Typo.button">Status</MudText>
         </MudTh>
+        <MudTh Style="text-align: right;">
+            <MudText Typo="Typo.button">Actions</MudText>
+        </MudTh>
     </HeaderContent>
     <GroupHeaderTemplate>
         <MudTh Class="mud-table-cell-custom-group" colspan="4">
-            <MudText Typo="Typo.button">@context.GroupName</MudText>
+            <MudIconButton Icon="@(IsGroupExpanded(context.Key) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                Size="Size.Small" OnClick="@((e) => ToggleGroupExpanded(context.Key))" Class="ms-n2" />
+            <MudText Typo="Typo.button">@GetCategoryDisplayName(context.Key)</MudText>
         </MudTh>
     </GroupHeaderTemplate>
-    <RowTemplate>
-        <MudTd>
-            @if (!context.IsReadOnly)
-            {
-                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit</MudMenuItem>
-                    @if (context.IsOverridden)
-                    {
-                        <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt" OnClick="_ => HandleRevertAsync(context)">Revert to Default</MudMenuItem>
-                    }
-                </MudMenu>
-            }
-        </MudTd>
-        <MudTd DataLabel="Setting">
-            <MudText Typo="Typo.body1">@context.DisplayName</MudText>
-            @if (!string.IsNullOrEmpty(context.Description))
-            {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Description</MudText>
-            }
-        </MudTd>
-        <MudTd DataLabel="Value">
-            @if (context.IsSecret)
-            {
-                @if (_revealedSecrets.Contains(context.Key))
+    <RowTemplate Context="settingContext">
+        @if (IsGroupExpanded(settingContext.Category.ToString()))
+        {
+            <MudTd DataLabel="Setting" Class="@GetRowClass(settingContext)">
+                <MudText Typo="Typo.body1">@settingContext.DisplayName</MudText>
+                @if (!string.IsNullOrEmpty(settingContext.Description))
                 {
-                    <span class="jim-text-code">@(context.GetEffectiveValue() ?? "(not set)")</span>
-                    <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" OnClick="() => HideSecret(context.Key)" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@settingContext.Description</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Value" Class="@GetRowClass(settingContext)">
+                @if (settingContext.IsSecret)
+                {
+                    @if (_revealedSecrets.Contains(settingContext.Key))
+                    {
+                        <span class="jim-text-code">@(settingContext.GetEffectiveValue() ?? "(not set)")</span>
+                        <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" OnClick="() => HideSecret(settingContext.Key)" />
+                    }
+                    else
+                    {
+                        <span class="jim-text-code">********</span>
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="() => RevealSecret(settingContext.Key)" />
+                    }
                 }
                 else
                 {
-                    <span class="jim-text-code">********</span>
-                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="() => RevealSecret(context.Key)" />
+                    <span class="jim-text-code">@(settingContext.GetEffectiveValue() ?? "(not set)")</span>
                 }
-            }
-            else
-            {
-                <span class="jim-text-code">@(context.GetEffectiveValue() ?? "(not set)")</span>
-            }
-        </MudTd>
-        <MudTd DataLabel="Status">
-            @if (context.IsReadOnly)
-            {
-                <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
-            }
-            else if (context.IsOverridden)
-            {
-                <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
-            }
-            else
-            {
-                <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
-            }
-        </MudTd>
+            </MudTd>
+            <MudTd DataLabel="Status" Class="@GetRowClass(settingContext)">
+                @if (settingContext.IsReadOnly)
+                {
+                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
+                }
+                else if (settingContext.IsOverridden)
+                {
+                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions" Class="@GetRowClass(settingContext)">
+                <div class="d-flex justify-end gap-2">
+                    @if (!settingContext.IsReadOnly)
+                    {
+                        <MudTooltip Text="Edit">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(settingContext)" />
+                        </MudTooltip>
+                        @if (settingContext.IsOverridden)
+                        {
+                            <MudTooltip Text="Revert to Default">
+                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(settingContext)" />
+                            </MudTooltip>
+                        }
+                    }
+                </div>
+            </MudTd>
+        }
     </RowTemplate>
     <NoRecordsContent>
         <MudText>No settings found.</MudText>
@@ -115,6 +126,7 @@
     private bool _showOverriddenOnly;
     private bool _loading = true;
     private HashSet<string> _revealedSecrets = new();
+    private HashSet<object> _expandedGroups = new();
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
@@ -134,6 +146,7 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadSettingsAsync();
+        InitializeExpandedGroups();
     }
 
     private async Task LoadSettingsAsync()
@@ -144,10 +157,19 @@
         _loading = false;
     }
 
+    private void InitializeExpandedGroups()
+    {
+        // Expand all categories by default
+        foreach (var setting in _settings)
+        {
+            _expandedGroups.Add(setting.Category.ToString());
+        }
+    }
+
     private void UpdateFilteredSettings()
     {
         _filteredSettings = _settings
-            .Where(s => !_showOverriddenOnly || s.IsOverridden)
+            .Where(s => !_showOverriddenOnly || (s.IsOverridden && !s.IsReadOnly))
             .Where(s => FilterFunc(s))
             .ToList();
     }
@@ -163,6 +185,40 @@
         if (setting.Key.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
             return true;
         return false;
+    }
+
+    private string GetCategoryDisplayName(object? categoryValue)
+    {
+        var categoryString = categoryValue?.ToString();
+        return categoryString switch
+        {
+            "SSO" => "Single Sign-On (SSO)",
+            "Synchronisation" => "Synchronisation",
+            "Maintenance" => "Maintenance",
+            "History" => "History",
+            _ => categoryString ?? "Unknown"
+        };
+    }
+
+    private string GetRowClass(ServiceSetting setting)
+    {
+        return setting.IsReadOnly ? "jim-readonly-row" : "";
+    }
+
+    private bool IsGroupExpanded(object? groupKey)
+    {
+        return _expandedGroups.Contains(groupKey!);
+    }
+
+    private void ToggleGroupExpanded(object? groupKey)
+    {
+        if (groupKey == null)
+            return;
+
+        if (_expandedGroups.Contains(groupKey))
+            _expandedGroups.Remove(groupKey);
+        else
+            _expandedGroups.Add(groupKey);
     }
 
     private void RevealSecret(string key)

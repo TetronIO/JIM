@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260103211334_AddDeltaSyncPerformanceIndices")]
+    partial class AddDeltaSyncPerformanceIndices
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -137,10 +140,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemRunProfileId");
 
-                    b.HasIndex("Created")
-                        .IsDescending()
-                        .HasDatabaseName("IX_Activities_Created");
-
                     b.HasIndex("InitiatedByApiKeyId");
 
                     b.HasIndex("MetaverseObjectId");
@@ -258,9 +257,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TypeId");
-
-                    b.HasIndex("Origin", "TypeId", "LastConnectorDisconnectedDate")
-                        .HasDatabaseName("IX_MetaverseObjects_Origin_Type_LastDisconnected");
 
                     b.ToTable("MetaverseObjects");
                 });
@@ -461,9 +457,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Name");
-
-                    b.HasIndex("Name", "DeletionRule")
-                        .HasDatabaseName("IX_MetaverseObjectTypes_Name_DeletionRule");
 
                     b.ToTable("MetaverseObjectTypes");
                 });
@@ -1038,8 +1031,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ConnectedSystemId")
-                        .HasDatabaseName("IX_SyncRules_ConnectedSystemId");
+                    b.HasIndex("ConnectedSystemId");
 
                     b.HasIndex("ConnectedSystemObjectTypeId");
 
@@ -2178,9 +2170,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("InitiatedByMetaverseObjectId");
 
-                    b.HasIndex("Status", "Timestamp")
-                        .HasDatabaseName("IX_WorkerTasks_Status_Timestamp");
-
                     b.ToTable("WorkerTasks");
 
                     b.HasDiscriminator().HasValue("WorkerTask");
@@ -2218,8 +2207,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SourceCsoId")
-                        .HasDatabaseName("IX_DeferredReferences_SourceCsoId");
+                    b.HasIndex("SourceCsoId");
 
                     b.HasIndex("TargetSystemId");
 

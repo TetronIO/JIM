@@ -283,5 +283,45 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
             .HasIndex("ConnectedSystemObjectId", "AttributeId")
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
+
+        // Delta sync performance: composite index for timestamp-based queries
+        // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
+        // which is used in GetConnectedSystemObjectsModifiedSinceAsync
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.LastUpdated })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_LastUpdated");
+
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.Created })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_Created");
+
+        // Additional performance indexes for worker task queue processing
+        // Optimises GetNextWorkerTaskAsync and GetNextWorkerTasksToProcessAsync queries
+        modelBuilder.Entity<WorkerTask>()
+            .HasIndex(wt => new { wt.Status, wt.Timestamp })
+            .HasDatabaseName("IX_WorkerTasks_Status_Timestamp");
+
+        // Performance index for activity audit trail queries
+        // Optimises timestamp-based activity lookups
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.Created)
+            .HasDatabaseName("IX_Activities_Created")
+            .IsDescending(true);
+
+        // Performance index for metaverse object deletion automation
+        // Optimises GetMetaverseObjectsEligibleForDeletionAsync queries
+        // Uses string-based column name to reference the shadow foreign key property "TypeId"
+        modelBuilder.Entity<MetaverseObject>()
+            .HasIndex(new[] { nameof(MetaverseObject.Origin), "TypeId", nameof(MetaverseObject.LastConnectorDisconnectedDate) })
+            .HasDatabaseName("IX_MetaverseObjects_Origin_Type_LastDisconnected");
+
+        // Performance index for metaverse object type lookups
+        // Optimises name-based type lookups with deletion rule filtering
+        modelBuilder.Entity<MetaverseObjectType>()
+            .HasIndex(mot => new { mot.Name, mot.DeletionRule })
+            .HasDatabaseName("IX_MetaverseObjectTypes_Name_DeletionRule");
+
+        // Note: Indexes on foreign key columns (ConnectedSystemId, SourceCsoId) are automatically created by Npgsql,
+        // so we don't need explicit HasIndex() definitions for those.
     }
 }

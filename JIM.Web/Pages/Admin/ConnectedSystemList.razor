@@ -38,6 +38,7 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorsCount)"><MudText Typo="Typo.button">Connected Objects (%)</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.PendingExportObjectsCount)"><MudText Typo="Typo.button">Pending Exports (%)</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)"><MudText Typo="Typo.button">Connector</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudText Typo="Typo.button">Action</MudText></MudTh>
     </HeaderContent>
     <RowTemplate>
@@ -47,6 +48,11 @@
         <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
         <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
             <MudTd DataLabel="Action">
                 <MudButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
                            Variant="Variant.Filled"

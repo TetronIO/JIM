@@ -37,6 +37,7 @@ public class SyncFullSyncTaskProcessor
     private readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes)> _pendingExportEvaluations = [];
 
     // Batch collections for deferred pending export operations (avoid per-CSO database calls)
+    private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToCreate = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     private readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
@@ -113,9 +114,9 @@ public class SyncFullSyncTaskProcessor
             _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
         }
 
-        // process CSOs in batches. this enables us to respond to cancellation requests in a reasonable timeframe.
-        // it also enables us to update the Activity with progress info as we go, allowing the UI to be updated and keep users informed.
-        const int pageSize = 200;
+        // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
+        // Page size is configurable via service settings for performance tuning.
+        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
@@ -135,6 +136,7 @@ public class SyncFullSyncTaskProcessor
             // Load CSO attribute values for this page (for no-net-change detection during export evaluation)
             await LoadPageCsoAttributeCacheAsync(csoPagedResult.Results.Select(cso => cso.Id));
 
+            int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
             {
                 foreach (var connectedSystemObject in csoPagedResult.Results)
@@ -149,10 +151,33 @@ public class SyncFullSyncTaskProcessor
                     await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
 
                     _activity.ObjectsProcessed++;
+                    processedInPage++;
                 }
             }
 
-            // batch persist all MVOs collected during this page
+            // Batch persist all MVOs collected during this page.
+            //
+            // IMPORTANT DESIGN NOTE (Jan 2026):
+            // We previously attempted to decouple progress updates from batch size by calling
+            // UpdateActivityAsync mid-loop (every N objects). This DOES NOT WORK because:
+            //
+            // 1. When we set cso.MetaverseObject = mvo, EF's "relationship fixup" automatically
+            //    adds the CSO to mvo.ConnectedSystemObjects (bidirectional nav property sync).
+            //
+            // 2. During SaveChangesAsync (triggered by activity updates), EF calls DetectChanges()
+            //    which traverses all navigation properties to discover changes.
+            //
+            // 3. If CSOs were loaded with AsNoTracking() to improve query performance, EF will
+            //    try to attach them when it discovers them via the MVO navigation, causing
+            //    "another instance with same key is already tracked" errors.
+            //
+            // 4. Attempts to work around this (clearing collections, removing CSOs from collections,
+            //    deferring FK updates) all failed because EF's relationship fixup is automatic
+            //    and cannot be prevented without breaking the navigation property assignments.
+            //
+            // The solution is to use AsSplitQuery() instead of AsNoTracking() so all entities
+            // are properly tracked, and only persist at page boundaries to batch database writes.
+            // Progress updates at finer granularity would require a separate DbContext instance.
             await PersistPendingMetaverseObjectsAsync();
 
             // batch evaluate exports for all MVOs that changed during this page
@@ -164,7 +189,7 @@ public class SyncFullSyncTaskProcessor
             // Clear per-page CSO attribute cache to free memory
             ClearPageCsoAttributeCache();
 
-            // update activity progress once per page instead of per object to reduce database round trips
+            // Final progress update for this page (in case count wasn't evenly divisible by interval)
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
                 await _jim.Activities.UpdateActivityAsync(_activity);
@@ -738,6 +763,7 @@ public class SyncFullSyncTaskProcessor
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
     /// Uses pre-cached export rules and CSO lookups for O(1) access instead of O(N×M) database queries.
     /// Includes no-net-change detection to skip creating pending exports when CSO already has current values.
+    /// Pending exports are deferred for batch saving to reduce database round trips.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
@@ -751,8 +777,7 @@ public class SyncFullSyncTaskProcessor
 
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
         // Uses no-net-change detection to skip pending exports when CSO already has current values
-        // Pending exports are saved immediately within EvaluateExportRulesAsync to avoid
-        // memory pressure from holding 5000+ pending export objects in memory
+        // Pending exports are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
             var result = await _jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
@@ -760,10 +785,17 @@ public class SyncFullSyncTaskProcessor
                 changedAttributes,
                 _connectedSystem,
                 _exportEvaluationCache,
-                _pageCsoAttributeCache);
+                _pageCsoAttributeCache,
+                deferSave: true);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
+
+            // Collect pending exports for batch saving at end of page
+            if (result.PendingExports.Count > 0)
+            {
+                _pendingExportsToCreate.AddRange(result.PendingExports);
+            }
         }
 
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
@@ -794,16 +826,6 @@ public class SyncFullSyncTaskProcessor
         if (_pendingMvoCreates.Count > 0)
         {
             await _jim.Metaverse.CreateMetaverseObjectsAsync(_pendingMvoCreates);
-
-            // After batch save, EF has assigned IDs - update the CSO foreign keys
-            foreach (var mvo in _pendingMvoCreates)
-            {
-                foreach (var cso in mvo.ConnectedSystemObjects)
-                {
-                    cso.MetaverseObjectId = mvo.Id;
-                }
-            }
-
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
             _pendingMvoCreates.Clear();
         }
@@ -833,7 +855,12 @@ public class SyncFullSyncTaskProcessor
 
         foreach (var (mvo, changedAttributes) in _pendingExportEvaluations)
         {
-            await EvaluateOutboundExportsAsync(mvo, changedAttributes);
+            using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
+                .SetTag("mvoId", mvo.Id)
+                .SetTag("changedAttributeCount", changedAttributes.Count))
+            {
+                await EvaluateOutboundExportsAsync(mvo, changedAttributes);
+            }
         }
 
         Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs", _pendingExportEvaluations.Count);
@@ -843,19 +870,26 @@ public class SyncFullSyncTaskProcessor
     }
 
     /// <summary>
-    /// Batch persists all pending export deletes and updates collected during the current page.
-    /// This reduces database round trips from n writes to 2 writes (one each for deletes, updates).
-    /// Note: Pending export creates are saved immediately during EvaluateExportRulesAsync to avoid
-    /// memory pressure from holding large numbers of pending export objects.
+    /// Batch persists all pending export creates, deletes, and updates collected during the current page.
+    /// This reduces database round trips from n writes to 3 writes (one each for creates, deletes, updates).
     /// </summary>
     private async Task FlushPendingExportOperationsAsync()
     {
-        if (_pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
+        if (_pendingExportsToCreate.Count == 0 && _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("FlushPendingExportOperations");
+        span.SetTag("createCount", _pendingExportsToCreate.Count);
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
+
+        // Batch create new pending exports (evaluated during export evaluation phase)
+        if (_pendingExportsToCreate.Count > 0)
+        {
+            await _jim.ConnectedSystems.CreatePendingExportsAsync(_pendingExportsToCreate);
+            Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} pending exports in batch", _pendingExportsToCreate.Count);
+            _pendingExportsToCreate.Clear();
+        }
 
         // Batch delete confirmed pending exports
         if (_pendingExportsToDelete.Count > 0)
@@ -913,17 +947,19 @@ public class SyncFullSyncTaskProcessor
                 continue;
 
             // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
-            var existingCsoJoins = mvo.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
+            // Use a count query to check for existing joins without loading the CSO entities.
+            var existingCsoJoinCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(
+                _connectedSystem.Id, mvo.Id);
 
-            if (existingCsoJoins.Count > 1)
+            if (existingCsoJoinCount > 1)
                 throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
 
-            if (existingCsoJoins.Count == 1)
+            if (existingCsoJoinCount == 1)
             {
                 throw new SyncJoinException(
                     ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
-                    $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
-                    $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check your " +
+                    $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO. " +
+                    $"Check the attributes on this object are not duplicated, and/or check your " +
                     $"Object Matching Rules for uniqueness.");
             }
 
@@ -972,9 +1008,9 @@ public class SyncFullSyncTaskProcessor
         // ProcessMetaverseObjectChangesAsync knows to call CreateMetaverseObjectAsync.
         // The Id will be assigned by EF when the MVO is saved to the database.
         var mvo = new MetaverseObject();
-        mvo.ConnectedSystemObjects.Add(connectedSystemObject);
         mvo.Type = projectionSyncRule.MetaverseObjectType;
         connectedSystemObject.MetaverseObject = mvo;
+        mvo.ConnectedSystemObjects.Add(connectedSystemObject);
         // Don't set MetaverseObjectId yet - it will be set after the MVO is persisted
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         connectedSystemObject.DateJoined = DateTime.UtcNow;

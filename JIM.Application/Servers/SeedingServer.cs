@@ -753,6 +753,19 @@ internal class SeedingServer
             IsSecret = false
         });
 
+        // Synchronisation Settings - Page size
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SyncPageSize,
+            DisplayName = "Sync page size",
+            Description = "The number of Connected System Objects to process per database page during sync operations. Larger values improve throughput by reducing database round trips. UI progress updates occur every 100 objects regardless of page size. Recommended range: 200-1000.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "500",
+            IsReadOnly = false,
+            IsSecret = false
+        });
+
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
     }

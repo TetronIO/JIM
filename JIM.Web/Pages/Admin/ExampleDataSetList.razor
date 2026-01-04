@@ -41,7 +41,11 @@
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="Culture">@context.Culture</MudTd>
         <MudTd DataLabel="Values">@context.ValueCount.ToString("N0")</MudTd>
-        <MudTd DataLabel="Created">@context.Created</MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no example data sets
