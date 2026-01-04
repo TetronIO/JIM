@@ -277,6 +277,17 @@ public class ExportExecutionServer
                 certificateAwareConnector.SetCertificateProvider(certificateProvider);
             }
 
+            // Inject credential protection for connectors that support it (for password decryption)
+            if (connector is IConnectorCredentialAware credentialAwareConnector)
+            {
+                // Use pre-configured credential protection if available (from DI in JIM.Web),
+                // otherwise create a new instance (for JIM.Worker which doesn't use DI)
+                var credentialProtection = Application.CredentialProtection ??
+                    new CredentialProtectionService(
+                        Microsoft.AspNetCore.DataProtection.DataProtectionProvider.Create("JIM"));
+                credentialAwareConnector.SetCredentialProtection(credentialProtection);
+            }
+
             // Open connection
             using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
             {
