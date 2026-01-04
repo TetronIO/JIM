@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application.Services
 @using JIM.Web.Models.Api
+@using System.Text.Json
 @inject LogReaderService LogReader
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
@@ -74,7 +75,8 @@
 </MudPaper>
 
 <MudTable Items="@_pagedLogEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5"
-    FixedHeader="true" Height="calc(100vh - 500px)" Outlined="true" Elevation="0" Loading="@_loading">
+    FixedHeader="true" Height="calc(100vh - 500px)" Outlined="true" Elevation="0" Loading="@_loading"
+    OnRowClick="@OnRowClick" T="LogEntry" RowStyle="cursor: pointer;">
     <HeaderContent>
         <MudTh Style="width: 100px;">
             <MudText Typo="Typo.button">Time</MudText>
@@ -105,40 +107,19 @@
             <span class="jim-text-code">@context.Service</span>
         </MudTd>
         <MudTd DataLabel="Message" Style="@GetRowStyle(context)">
-            <div class="d-flex flex-column">
-                <span style="word-break: break-word;">@context.Message</span>
+            <div class="d-flex align-center gap-2">
+                <span style="word-break: break-word; flex: 1;">@TruncateMessage(context.Message, 150)</span>
                 @if (!string.IsNullOrEmpty(context.Exception))
                 {
-                    <MudExpansionPanel Dense="true" Class="mt-2" Style="border: 1px solid var(--mud-palette-lines-default);">
-                        <TitleContent>
-                            <MudText Typo="Typo.body2" Color="Color.Error">
-                                <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
-                                Exception Details
-                            </MudText>
-                        </TitleContent>
-                        <ChildContent>
-                            <pre class="mud-typography-body2" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; margin: 0;">@context.Exception</pre>
-                        </ChildContent>
-                    </MudExpansionPanel>
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Color="Color.Error"
+                        Title="Has exception" />
                 }
                 @if (context.Properties != null && context.Properties.Count > 0)
                 {
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                        @foreach (var prop in context.Properties.Take(5))
-                        {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                Class="ma-0" Style="font-size: 0.7rem;">
-                                @prop.Key: @TruncateValue(prop.Value?.ToString() ?? "null", 30)
-                            </MudChip>
-                        }
-                        @if (context.Properties.Count > 5)
-                        {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                Class="ma-0" Style="font-size: 0.7rem;">
-                                +@(context.Properties.Count - 5) more
-                            </MudChip>
-                        }
-                    </div>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                        Class="ma-0" Style="font-size: 0.7rem;">
+                        @context.Properties.Count props
+                    </MudChip>
                 }
             </div>
         </MudTd>
@@ -171,6 +152,97 @@
     </MudSelect>
 </div>
 
+@* Log Entry Detail Drawer *@
+<MudDrawer @bind-Open="_drawerOpen" Anchor="Anchor.End" Elevation="1" Variant="DrawerVariant.Temporary"
+    Width="500px" Class="pa-4">
+    @if (_selectedEntry != null)
+    {
+        <div class="d-flex flex-column gap-4">
+            @* Header with close button *@
+            <div class="d-flex justify-space-between align-center">
+                <MudText Typo="Typo.h6">Log Entry Details</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@(() => _drawerOpen = false)" />
+            </div>
+
+            @* Timestamp and Level *@
+            <div class="d-flex gap-4 align-center">
+                <MudChip T="string" Size="Size.Medium" Variant="Variant.Filled" Color="@GetLevelColor(_selectedEntry.Level)">
+                    @_selectedEntry.Level
+                </MudChip>
+                <MudText Typo="Typo.body1" Class="jim-text-code">
+                    @_selectedEntry.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")
+                </MudText>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                    @_selectedEntry.Service
+                </MudChip>
+            </div>
+
+            @* Message *@
+            <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Message</MudText>
+                <MudText Typo="Typo.body1" Style="word-break: break-word; white-space: pre-wrap;">@_selectedEntry.Message</MudText>
+            </MudPaper>
+
+            @* Properties *@
+            @if (_selectedEntry.Properties != null && _selectedEntry.Properties.Count > 0)
+            {
+                <MudExpansionPanels Elevation="0">
+                    <MudExpansionPanel Text="@($"Properties ({_selectedEntry.Properties.Count})")" Expanded="true">
+                        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="overflow-x: auto;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Key</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var prop in _selectedEntry.Properties)
+                                {
+                                    <tr>
+                                        <td class="jim-text-code">@prop.Key</td>
+                                        <td style="word-break: break-word;">@FormatPropertyValue(prop.Value)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+
+            @* Exception *@
+            @if (!string.IsNullOrEmpty(_selectedEntry.Exception))
+            {
+                <MudExpansionPanels Elevation="0">
+                    <MudExpansionPanel Expanded="true">
+                        <TitleContent>
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                                <MudText Color="Color.Error">Exception</MudText>
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@_selectedEntry.Exception</pre>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+
+            @* Raw JSON *@
+            <MudExpansionPanels Elevation="0">
+                <MudExpansionPanel Text="Raw JSON">
+                    <div class="d-flex justify-end mb-2">
+                        <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                            Variant="Variant.Text" OnClick="@CopyRawJsonAsync">
+                            Copy
+                        </MudButton>
+                    </div>
+                    <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@GetRawJson(_selectedEntry)</pre>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </div>
+    }
+</MudDrawer>
+
 @code {
     private List<LogEntry>? _logEntries;
     private string? _selectedService;
@@ -182,6 +254,14 @@
     private System.Threading.Timer? _refreshTimer;
     private int _currentPage;
     private int _pageSize = 50;
+    private bool _drawerOpen;
+    private LogEntry? _selectedEntry;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     private IEnumerable<LogEntry> _pagedLogEntries =>
         _logEntries?.Skip(_currentPage * _pageSize).Take(_pageSize) ?? [];
@@ -303,6 +383,77 @@
         if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
             return value;
         return value[..maxLength] + "...";
+    }
+
+    private static string TruncateMessage(string message, int maxLength)
+    {
+        if (string.IsNullOrEmpty(message))
+            return message;
+
+        // Replace newlines with spaces for table display
+        var singleLine = message.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
+        return TruncateValue(singleLine, maxLength);
+    }
+
+    private void OnRowClick(TableRowClickEventArgs<LogEntry> args)
+    {
+        _selectedEntry = args.Item;
+        _drawerOpen = true;
+    }
+
+    private static string FormatPropertyValue(object? value)
+    {
+        if (value == null)
+            return "null";
+
+        // If it's a complex object (already parsed as JsonElement), format it nicely
+        if (value is JsonElement jsonElement)
+        {
+            return jsonElement.ValueKind switch
+            {
+                JsonValueKind.String => jsonElement.GetString() ?? "null",
+                JsonValueKind.Number => jsonElement.ToString(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                JsonValueKind.Null => "null",
+                _ => jsonElement.ToString()
+            };
+        }
+
+        return value.ToString() ?? "null";
+    }
+
+    private static string GetRawJson(LogEntry entry)
+    {
+        var jsonObject = new Dictionary<string, object?>
+        {
+            ["@t"] = entry.Timestamp.ToString("O"),
+            ["@l"] = entry.Level,
+            ["@m"] = entry.Message
+        };
+
+        if (!string.IsNullOrEmpty(entry.Exception))
+            jsonObject["@x"] = entry.Exception;
+
+        if (entry.Properties != null)
+        {
+            foreach (var prop in entry.Properties)
+            {
+                jsonObject[prop.Key] = prop.Value;
+            }
+        }
+
+        return JsonSerializer.Serialize(jsonObject, JsonOptions);
+    }
+
+    private async Task CopyRawJsonAsync()
+    {
+        if (_selectedEntry == null)
+            return;
+
+        var json = GetRawJson(_selectedEntry);
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", json);
+        Snackbar.Add("Copied to clipboard", Severity.Success);
     }
 
     public async ValueTask DisposeAsync()
