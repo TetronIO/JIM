@@ -1,6 +1,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Interfaces;
 using Serilog;
 using System.Security.Cryptography.X509Certificates;
 
@@ -9,7 +10,7 @@ namespace JIM.Application.Servers;
 /// <summary>
 /// Provides services for managing trusted certificates in the JIM certificate store.
 /// </summary>
-public class CertificateServer
+public class CertificateServer : ICertificateProvider
 {
     private JimApplication Application { get; }
 
@@ -291,9 +292,10 @@ public class CertificateServer
     }
 
     /// <summary>
-    /// Gets all enabled certificates as X509Certificate2 objects for use in certificate validation.
+    /// Gets all enabled trusted certificates as X509Certificate2 objects.
+    /// Implements ICertificateProvider for use by connectors.
     /// </summary>
-    public async Task<List<X509Certificate2>> GetEnabledX509CertificatesAsync()
+    public async Task<List<X509Certificate2>> GetTrustedCertificatesAsync()
     {
         var certificates = await GetEnabledAsync();
         var x509Certs = new List<X509Certificate2>();

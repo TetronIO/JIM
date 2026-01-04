@@ -766,6 +766,32 @@ internal class SeedingServer
             IsSecret = false
         });
 
+        // Security Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.CredentialEncryptionEnabled,
+            DisplayName = "Credential encryption",
+            Description = "When enabled, connector passwords are encrypted at rest using ASP.NET Core Data Protection with AES-256-GCM.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false,
+            IsSecret = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.EncryptionKeyPath,
+            DisplayName = "Encryption key storage path",
+            Description = "The file system path where encryption keys are stored. Set via JIM_ENCRYPTION_KEY_PATH environment variable. If not set, defaults to /data/keys (Docker) or the application data directory.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = null,
+            Value = Environment.GetEnvironmentVariable(Constants.Config.EncryptionKeyPath),
+            IsReadOnly = true,
+            IsSecret = false
+        });
+
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
     }

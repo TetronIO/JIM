@@ -86,6 +86,14 @@ public class SyncImportTaskProcessor
                     certificateAwareConnector.SetCertificateProvider(certificateProvider);
                 }
 
+                // Inject credential protection for connectors that support it (for password decryption)
+                if (callBasedImportConnector is IConnectorCredentialAware credentialAwareConnector)
+                {
+                    var credentialProtection = new CredentialProtectionService(
+                        DataProtectionHelper.CreateProvider());
+                    credentialAwareConnector.SetCredentialProtection(credentialProtection);
+                }
+
                 using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
                 {
                     callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);

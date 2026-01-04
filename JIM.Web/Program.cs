@@ -8,6 +8,9 @@ using JIM.Models.Core;
 using JIM.PostgresData;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
+using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -42,6 +45,7 @@ using System.Security.Claims;
 // -------------------------------
 // JIM_LOG_REQUESTS
 // JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
+// JIM_ENCRYPTION_KEY_PATH - Custom path for encryption key storage (default: /data/keys or app data directory)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
@@ -80,9 +84,30 @@ try
         var context = factory.CreateDbContext();
         return new PostgresDataRepository(context);
     });
-    builder.Services.AddTransient<JimApplication>(sp => new JimApplication(sp.GetRequiredService<IRepository>()));
+    builder.Services.AddTransient<JimApplication>(sp =>
+    {
+        var jim = new JimApplication(sp.GetRequiredService<IRepository>());
+        // Inject credential protection service for connector password encryption/decryption
+        jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
+        return jim;
+    });
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
+
+    // Configure ASP.NET Core Data Protection for credential encryption
+    // Using AES-256-GCM (FIPS-approved authenticated encryption) for future-proofing
+    var dataProtectionKeysPath = GetDataProtectionKeysPath();
+    builder.Services.AddDataProtection()
+        .SetApplicationName("JIM")
+        .UseCryptographicAlgorithms(new AuthenticatedEncryptorConfiguration
+        {
+            EncryptionAlgorithm = EncryptionAlgorithm.AES_256_GCM,
+            ValidationAlgorithm = ValidationAlgorithm.HMACSHA256
+        })
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+        .SetDefaultKeyLifetime(TimeSpan.FromDays(3650)); // 10 years for credential stability
+
+    builder.Services.AddSingleton<ICredentialProtectionService, CredentialProtectionService>();
 
     // setup OpenID Connect (OIDC) authentication for Blazor UI
     var authority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority);
@@ -770,6 +795,69 @@ static string[] GetValidIssuers(string? authority)
 
     // For other IDPs, the issuer typically matches the authority
     return [authority];
+}
+
+/// <summary>
+/// Gets the path for storing Data Protection encryption keys.
+/// Priority: 1) JIM_ENCRYPTION_KEY_PATH env var, 2) /data/keys (Docker), 3) app data directory
+/// </summary>
+static string GetDataProtectionKeysPath()
+{
+    // 1. Check for explicit environment variable
+    var envPath = Environment.GetEnvironmentVariable(Constants.Config.EncryptionKeyPath);
+    if (!string.IsNullOrEmpty(envPath))
+    {
+        Log.Information("Using encryption key path from environment: {Path}", envPath);
+        EnsureDirectoryExists(envPath);
+        return envPath;
+    }
+
+    // 2. Check for Docker volume mount (common in containerised deployments)
+    const string dockerPath = "/data/keys";
+    if (Directory.Exists("/data"))
+    {
+        Log.Information("Using Docker volume for encryption keys: {Path}", dockerPath);
+        EnsureDirectoryExists(dockerPath);
+        return dockerPath;
+    }
+
+    // 3. Fallback to application data directory (platform-specific)
+    // Linux: ~/.local/share/JIM/keys
+    // Windows: %LOCALAPPDATA%\JIM\keys
+    var appDataPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "JIM",
+        "keys");
+    Log.Information("Using application data directory for encryption keys: {Path}", appDataPath);
+    EnsureDirectoryExists(appDataPath);
+    return appDataPath;
+}
+
+/// <summary>
+/// Ensures a directory exists, creating it with restricted permissions if necessary.
+/// </summary>
+static void EnsureDirectoryExists(string path)
+{
+    if (Directory.Exists(path))
+        return;
+
+    try
+    {
+        var directoryInfo = Directory.CreateDirectory(path);
+
+        // On Unix-like systems, set restrictive permissions (700 = owner only)
+        if (!OperatingSystem.IsWindows())
+        {
+            directoryInfo.UnixFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        }
+
+        Log.Information("Created encryption key directory: {Path}", path);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Failed to create encryption key directory: {Path}", path);
+        throw;
+    }
 }
 
 /// <summary>
