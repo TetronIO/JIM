@@ -257,7 +257,29 @@ body {
     overflow-y: auto;
 }
 
-/* JSON syntax highlighting */
+/* JSON syntax highlighting - define CSS custom properties for light/dark mode */
+:root {
+    --jim-json-key: #0451a5;
+    --jim-json-string: #a31515;
+    --jim-json-number: #098658;
+    --jim-json-boolean: #0000ff;
+    --jim-json-null: #0000ff;
+}
+
+/* Dark mode JSON colours - JIM logo-inspired vibrant colours */
+body.jim-dark-mode {
+    --jim-json-key: #c792ea;
+    /* Purple/violet from logo */
+    --jim-json-string: #a5d6a7;
+    /* Soft green for readability */
+    --jim-json-number: #f9a825;
+    /* Orange/yellow from logo */
+    --jim-json-boolean: #4dd0e1;
+    /* Teal/cyan from logo */
+    --jim-json-null: #ff8a80;
+    /* Soft coral/pink from logo */
+}
+
 .jim-json-syntax {
     font-family: "Lucida Console", "Courier New", monospace;
     font-size: 0.75rem;
@@ -272,51 +294,25 @@ body {
 }
 
 .jim-json-key {
-    color: #0451a5;
+    color: var(--jim-json-key);
 }
 
 .jim-json-string {
-    color: #a31515;
+    color: var(--jim-json-string);
 }
 
 .jim-json-number {
-    color: #098658;
+    color: var(--jim-json-number);
 }
 
 .jim-json-boolean {
-    color: #0000ff;
+    color: var(--jim-json-boolean);
 }
 
 .jim-json-null {
-    color: #0000ff;
+    color: var(--jim-json-null);
 }
 
 .jim-json-punctuation {
     color: var(--mud-palette-text-primary);
-}
-
-/* Dark mode JSON syntax highlighting - JIM logo-inspired vibrant colours */
-.mud-theme-dark .jim-json-key {
-    color: #c792ea;
-    /* Purple/violet from logo */
-}
-
-.mud-theme-dark .jim-json-string {
-    color: #a5d6a7;
-    /* Soft green for readability */
-}
-
-.mud-theme-dark .jim-json-number {
-    color: #f9a825;
-    /* Orange/yellow from logo */
-}
-
-.mud-theme-dark .jim-json-boolean {
-    color: #4dd0e1;
-    /* Teal/cyan from logo */
-}
-
-.mud-theme-dark .jim-json-null {
-    color: #ff8a80;
-    /* Soft coral/pink from logo */
 }
