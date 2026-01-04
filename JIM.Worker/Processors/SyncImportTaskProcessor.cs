@@ -90,7 +90,7 @@ public class SyncImportTaskProcessor
                 if (callBasedImportConnector is IConnectorCredentialAware credentialAwareConnector)
                 {
                     var credentialProtection = new CredentialProtectionService(
-                        Microsoft.AspNetCore.DataProtection.DataProtectionProvider.Create("JIM"));
+                        DataProtectionHelper.CreateProvider());
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 

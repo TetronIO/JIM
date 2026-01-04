@@ -283,8 +283,7 @@ public class ExportExecutionServer
                 // Use pre-configured credential protection if available (from DI in JIM.Web),
                 // otherwise create a new instance (for JIM.Worker which doesn't use DI)
                 var credentialProtection = Application.CredentialProtection ??
-                    new CredentialProtectionService(
-                        Microsoft.AspNetCore.DataProtection.DataProtectionProvider.Create("JIM"));
+                    new CredentialProtectionService(DataProtectionHelper.CreateProvider());
                 credentialAwareConnector.SetCredentialProtection(credentialProtection);
             }
 
