@@ -28,6 +28,9 @@ public static class Constants
 
         // API
         public static string InfrastructureApiKey => "JIM_INFRASTRUCTURE_API_KEY";
+
+        // Encryption
+        public static string EncryptionKeyPath => "JIM_ENCRYPTION_KEY_PATH";
     }
 
     public static class BuiltInObjectTypes
@@ -211,5 +214,9 @@ public static class Constants
 
         // Maintenance Settings
         public const string MaintenanceMode = "Maintenance.IsEnabled";
+
+        // Security Settings
+        public const string CredentialEncryptionEnabled = "Security.CredentialEncryptionEnabled";
+        public const string EncryptionKeyPath = "Security.EncryptionKeyPath";
     }
 }

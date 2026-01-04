@@ -361,6 +361,9 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 - Set database credentials
 - Configure SSO/OIDC settings (required)
 
+**Optional Environment Variables:**
+- `JIM_ENCRYPTION_KEY_PATH` - Custom path for encryption key storage (default: `/data/keys` for Docker, or app data directory)
+
 **GitHub Codespaces:**
 - PostgreSQL memory settings automatically optimized
 - Use `jim-db` or `jim-stack` aliases (already configured)

@@ -8,11 +8,12 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorContainerCreation, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IDisposable
 {
     private LdapConnection? _connection;
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
+    private ICredentialProtection? _credentialProtection;
     private List<X509Certificate2>? _trustedCertificates;
     private LdapConnectorExport? _currentExport;
 
@@ -190,7 +191,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
 
         var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
-        var credential = new NetworkCredential(username.StringValue, password.StringEncryptedValue);
+
+        // Decrypt the password if credential protection is available
+        // If not available or password is plain text, it will be returned as-is
+        var decryptedPassword = _credentialProtection?.Unprotect(password.StringEncryptedValue) ?? password.StringEncryptedValue;
+        var credential = new NetworkCredential(username.StringValue, decryptedPassword);
 
         // allow the user to specify what type of authentication to perform against the supplied credential.
         var authTypeSettingValueString = authTypeSettingValue.StringValue;
@@ -364,6 +369,16 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public void SetCertificateProvider(ICertificateProvider? certificateProvider)
     {
         _certificateProvider = certificateProvider;
+    }
+    #endregion
+
+    #region IConnectorCredentialAware members
+    /// <summary>
+    /// Sets the credential protection service for decrypting stored passwords.
+    /// </summary>
+    public void SetCredentialProtection(ICredentialProtection? credentialProtection)
+    {
+        _credentialProtection = credentialProtection;
     }
     #endregion
 

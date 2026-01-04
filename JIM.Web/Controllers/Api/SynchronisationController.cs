@@ -3,6 +3,7 @@ using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Expressions;
+using JIM.Application.Services;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
@@ -31,11 +32,13 @@ namespace JIM.Web.Controllers.Api;
 public class SynchronisationController(
     ILogger<SynchronisationController> logger,
     JimApplication application,
-    IExpressionEvaluator expressionEvaluator) : ControllerBase
+    IExpressionEvaluator expressionEvaluator,
+    ICredentialProtectionService credentialProtection) : ControllerBase
 {
     private readonly ILogger<SynchronisationController> _logger = logger;
     private readonly JimApplication _application = application;
     private readonly IExpressionEvaluator _expressionEvaluator = expressionEvaluator;
+    private readonly ICredentialProtectionService _credentialProtection = credentialProtection;
 
     #region Connected Systems
 
@@ -658,9 +661,9 @@ public class SynchronisationController(
                 {
                     if (update.StringValue != null)
                     {
-                        // For encrypted settings (like Password), store in StringEncryptedValue
+                        // For encrypted settings (like Password), encrypt and store in StringEncryptedValue
                         if (settingValue.Setting?.Type == ConnectedSystemSettingType.StringEncrypted)
-                            settingValue.StringEncryptedValue = update.StringValue;
+                            settingValue.StringEncryptedValue = _credentialProtection.Protect(update.StringValue);
                         else
                             settingValue.StringValue = update.StringValue;
                     }

@@ -146,7 +146,12 @@ public enum ServiceSettingCategory
     /// <summary>
     /// History and audit retention settings.
     /// </summary>
-    History = 3
+    History = 3,
+
+    /// <summary>
+    /// Security and encryption settings.
+    /// </summary>
+    Security = 4
 }
 
 /// <summary>

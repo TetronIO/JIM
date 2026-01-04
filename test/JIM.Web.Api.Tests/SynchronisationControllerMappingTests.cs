@@ -7,6 +7,7 @@ using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Expressions;
+using JIM.Application.Services;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -32,6 +33,7 @@ public class SynchronisationControllerMappingTests
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
     private Mock<ILogger<SynchronisationController>> _mockLogger = null!;
+    private Mock<ICredentialProtectionService> _mockCredentialProtection = null!;
     private IExpressionEvaluator _expressionEvaluator = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
@@ -50,9 +52,10 @@ public class SynchronisationControllerMappingTests
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
+        _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
         _application = new JimApplication(_mockRepository.Object);
-        _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator);
+        _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator, _mockCredentialProtection.Object);
 
         // Create a test API key
         var apiKeyId = Guid.NewGuid();

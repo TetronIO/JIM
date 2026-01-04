@@ -765,7 +765,7 @@ public class ConnectedSystemServer
         // especially when we need to support uploaded connectors, not just built-in ones
 
         if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            return new LdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
+            return CreateConfiguredLdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
 
         if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
             return new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
@@ -785,6 +785,23 @@ public class ConnectedSystemServer
 
         if (connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0)
             throw new ArgumentException("The supplied ConnectedSystem doesn't have any valid SettingValues.", nameof(connectedSystem));
+    }
+
+    /// <summary>
+    /// Creates and configures an LDAP connector with credential protection and certificate provider.
+    /// </summary>
+    private LdapConnector CreateConfiguredLdapConnector()
+    {
+        var connector = new LdapConnector();
+
+        // Set up credential protection for decrypting passwords
+        if (Application.CredentialProtection != null)
+            connector.SetCredentialProtection(Application.CredentialProtection);
+
+        // Set up certificate provider for SSL/TLS validation
+        connector.SetCertificateProvider(Application.Certificates);
+
+        return connector;
     }
     #endregion
 
@@ -817,7 +834,7 @@ public class ConnectedSystemServer
 
         ConnectorSchema schema;
         if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+            schema = await CreateConfiguredLdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
         else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
             schema = await new FileConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
         else
@@ -984,7 +1001,7 @@ public class ConnectedSystemServer
 
         ConnectorSchema schema;
         if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            schema = await new LdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+            schema = await CreateConfiguredLdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
         else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
             schema = await new FileConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
         else
@@ -1143,7 +1160,7 @@ public class ConnectedSystemServer
         List<ConnectorPartition> partitions;
         if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
         {
-            partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+            partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
                 // todo: report to the user we attempted to retrieve partitions, but got none back
@@ -1199,7 +1216,7 @@ public class ConnectedSystemServer
         List<ConnectorPartition> partitions;
         if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
         {
-            partitions = await new LdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+            partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
                 // todo: report to the user we attempted to retrieve partitions, but got none back
@@ -1368,7 +1385,7 @@ public class ConnectedSystemServer
 
         try
         {
-            using var connector = new LdapConnector();
+            using var connector = CreateConfiguredLdapConnector();
             connector.OpenImportConnection(connectedSystem.SettingValues, Log.Logger);
 
             try

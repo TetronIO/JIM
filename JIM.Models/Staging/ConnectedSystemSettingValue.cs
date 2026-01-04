@@ -14,7 +14,9 @@ public class ConnectedSystemSettingValue
     public string? StringValue { get; set; }
         
     /// <summary>
-    /// TODO: Encrypt this!
+    /// Encrypted value for sensitive settings such as passwords.
+    /// Values are encrypted at rest using ASP.NET Core Data Protection with AES-256-GCM.
+    /// Encrypted values use the prefix $JIM$v1$ for version identification.
     /// </summary>
     public string? StringEncryptedValue { get; set; }
 

@@ -1,12 +1,20 @@
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Data;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using Serilog;
 namespace JIM.Application;
 
 public class JimApplication : IDisposable
 {
     public IRepository Repository { get; }
+
+    /// <summary>
+    /// The credential protection service for encrypting/decrypting connector passwords.
+    /// Set by the hosting application (JIM.Web) after construction.
+    /// </summary>
+    public ICredentialProtectionService? CredentialProtection { get; set; }
     private SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
     public CertificateServer Certificates { get; }

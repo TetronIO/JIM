@@ -21,6 +21,6 @@ public class CertificateProviderService : ICertificateProvider
     /// </summary>
     public async Task<List<X509Certificate2>> GetTrustedCertificatesAsync()
     {
-        return await _application.Certificates.GetEnabledX509CertificatesAsync();
+        return await _application.Certificates.GetTrustedCertificatesAsync();
     }
 }
