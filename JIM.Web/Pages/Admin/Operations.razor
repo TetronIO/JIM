@@ -79,7 +79,7 @@
                 {
                     var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
                     <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" Size="Size.Small" />
-                    <MudText Typo="Typo.caption">@context.ObjectsProcessed / @context.ObjectsToProcess@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
+                    <MudText Typo="Typo.caption" Class="mt-1">@context.ObjectsProcessed / @context.ObjectsToProcess@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
                 }
                 else
                 {
