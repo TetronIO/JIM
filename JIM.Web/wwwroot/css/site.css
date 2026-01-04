@@ -247,11 +247,6 @@ body {
     display: none;
 }
 
-/* Log detail drawer - scrollable content */
-.jim-log-drawer .mud-drawer-content {
-    overflow-y: auto;
-}
-
 /* JSON syntax highlighting - define CSS custom properties for light/dark mode */
 :root {
     --jim-json-key: #0451a5;
