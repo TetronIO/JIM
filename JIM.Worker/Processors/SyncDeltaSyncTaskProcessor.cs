@@ -139,8 +139,9 @@ public class SyncDeltaSyncTaskProcessor
             _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
         }
 
-        // Process only the modified CSOs in batches
-        const int pageSize = 200;
+        // Process only the modified CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
+        // Page size is configurable via service settings for performance tuning.
+        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
 
@@ -166,6 +167,7 @@ public class SyncDeltaSyncTaskProcessor
             // Load CSO attribute values for this page (for no-net-change detection during export evaluation)
             await LoadPageCsoAttributeCacheAsync(csoPagedResult.Results.Select(cso => cso.Id));
 
+            int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
             {
                 foreach (var connectedSystemObject in csoPagedResult.Results)
@@ -179,10 +181,13 @@ public class SyncDeltaSyncTaskProcessor
 
                     await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
                     _activity.ObjectsProcessed++;
+                    processedInPage++;
                 }
             }
 
-            // Batch persist all MVOs collected during this page
+            // Batch persist all MVOs collected during this page.
+            // See SyncFullSyncTaskProcessor for design notes on why progress updates
+            // cannot be decoupled from batch persistence boundaries.
             await PersistPendingMetaverseObjectsAsync();
 
             // Batch evaluate exports for all MVOs that changed during this page
@@ -197,7 +202,7 @@ public class SyncDeltaSyncTaskProcessor
             // Clear per-page CSO attribute cache to free memory
             ClearPageCsoAttributeCache();
 
-            // Update activity progress once per page
+            // Final progress update at end of page (in case last batch was < progressUpdateInterval)
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
                 await _jim.Activities.UpdateActivityAsync(_activity);
@@ -825,15 +830,6 @@ public class SyncDeltaSyncTaskProcessor
         if (_pendingMvoCreates.Count > 0)
         {
             await _jim.Metaverse.CreateMetaverseObjectsAsync(_pendingMvoCreates);
-
-            foreach (var mvo in _pendingMvoCreates)
-            {
-                foreach (var cso in mvo.ConnectedSystemObjects)
-                {
-                    cso.MetaverseObjectId = mvo.Id;
-                }
-            }
-
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
             _pendingMvoCreates.Clear();
         }
@@ -973,17 +969,19 @@ public class SyncDeltaSyncTaskProcessor
                 continue;
 
             // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
-            var existingCsoJoins = mvo.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == _connectedSystem.Id).ToList();
+            // Use a count query to check for existing joins without loading the CSO entities.
+            var existingCsoJoinCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(
+                _connectedSystem.Id, mvo.Id);
 
-            if (existingCsoJoins.Count > 1)
+            if (existingCsoJoinCount > 1)
                 throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
 
-            if (existingCsoJoins.Count == 1)
+            if (existingCsoJoinCount == 1)
             {
                 throw new SyncJoinException(
                     ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
-                    $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO " +
-                    $"{existingCsoJoins[0]}. Check the attributes on this object are not duplicated, and/or check your " +
+                    $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO. " +
+                    $"Check the attributes on this object are not duplicated, and/or check your " +
                     $"Object Matching Rules for uniqueness.");
             }
 
@@ -1032,9 +1030,9 @@ public class SyncDeltaSyncTaskProcessor
         // ProcessMetaverseObjectChangesAsync knows to call CreateMetaverseObjectAsync.
         // The Id will be assigned by EF when the MVO is saved to the database.
         var mvo = new MetaverseObject();
-        mvo.ConnectedSystemObjects.Add(connectedSystemObject);
         mvo.Type = projectionSyncRule.MetaverseObjectType;
         connectedSystemObject.MetaverseObject = mvo;
+        mvo.ConnectedSystemObjects.Add(connectedSystemObject);
         // Don't set MetaverseObjectId yet - it will be set after the MVO is persisted
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         connectedSystemObject.DateJoined = DateTime.UtcNow;

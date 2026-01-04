@@ -2056,7 +2056,16 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectUnJoinedCountAsync(connectedSystemId);
     }
-    
+
+    /// <summary>
+    /// Returns the count of CSOs in a connected system that are joined to a specific MVO.
+    /// Used during sync to check if an MVO already has a join in this connected system (1:1 constraint).
+    /// </summary>
+    public async Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
+    }
+
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System.
     /// </summary>

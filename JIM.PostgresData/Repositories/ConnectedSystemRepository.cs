@@ -518,10 +518,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // mappings (like DN generation) can access attribute values by name during export evaluation.
         IQueryable<ConnectedSystemObject> query;
 
+        // Include Type for sync processors that access CSO.Type.RemoveContributedAttributesOnObsoletion.
         if (returnAttributes)
         {
             // Include Attribute navigation property for both CSO and MVO AttributeValues
             query = Repository.Database.ConnectedSystemObjects
+                .AsSplitQuery()
+                .Include(cso => cso.Type)
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
                 .Include(cso => cso.MetaverseObject)
@@ -530,9 +533,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
         else
         {
-            // Only include MVO Attribute navigation property (required for expression-based export mappings)
+            // Include Attribute navigation for CSO AttributeValues (needed for DisplayNameOrId)
+            // and MVO Attribute (required for expression-based export mappings)
             query = Repository.Database.ConnectedSystemObjects
+                .AsSplitQuery()
+                .Include(cso => cso.Type)
                 .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute);
@@ -659,9 +666,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
         // This ensures delta sync processes both new and updated objects.
         // Order by Id for consistent pagination - without ordering, Skip/Take can return inconsistent results.
-        // NOTE: AsNoTracking cannot be used here because downstream code relies on navigation property
-        // fixup (e.g., CSO.Type.ExternalIdAttribute) which requires change tracking.
+        //
+        // Include Type for sync processors that access CSO.Type.RemoveContributedAttributesOnObsoletion.
         var query = Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
             .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
@@ -859,9 +868,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
     public async Task<int> GetConnectedSystemObjectUnJoinedCountAsync(int connectedSystemId)
     {
-        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
+        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
             cso.ConnectedSystemId == connectedSystemId &&
             cso.MetaverseObject == null);
+    }
+
+    /// <summary>
+    /// Returns the count of CSOs in a connected system that are joined to a specific MVO.
+    /// Used during sync to check if an MVO already has a join in this connected system (1:1 constraint).
+    /// </summary>
+    public async Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
+    {
+        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
+            cso.ConnectedSystemId == connectedSystemId &&
+            cso.MetaverseObjectId == metaverseObjectId);
     }
 
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)

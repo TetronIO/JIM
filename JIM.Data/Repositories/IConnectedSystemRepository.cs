@@ -328,6 +328,12 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the unjoined object count for.</param>
     public Task<int> GetConnectedSystemObjectUnJoinedCountAsync(int connectedSystemId);
 
+    /// <summary>
+    /// Returns the count of CSOs in a connected system that are joined to a specific MVO.
+    /// Used during sync to check if an MVO already has a join in this connected system (1:1 constraint).
+    /// </summary>
+    public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);

@@ -30,16 +30,6 @@ namespace JIM.PostgresData.Migrations
                 table: "Activities",
                 column: "Created",
                 descending: new bool[0]);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_SyncRules_ConnectedSystemId",
-                table: "SyncRules",
-                column: "ConnectedSystemId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DeferredReferences_SourceCsoId",
-                table: "DeferredReferences",
-                column: "SourceCsoId");
         }
 
         /// <inheritdoc />
@@ -60,14 +50,6 @@ namespace JIM.PostgresData.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_Activities_Created",
                 table: "Activities");
-
-            migrationBuilder.DropIndex(
-                name: "IX_SyncRules_ConnectedSystemId",
-                table: "SyncRules");
-
-            migrationBuilder.DropIndex(
-                name: "IX_DeferredReferences_SourceCsoId",
-                table: "DeferredReferences");
         }
     }
 }

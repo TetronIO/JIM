@@ -315,22 +315,13 @@ public class JimDbContext : DbContext
             .HasIndex(new[] { nameof(MetaverseObject.Origin), "TypeId", nameof(MetaverseObject.LastConnectorDisconnectedDate) })
             .HasDatabaseName("IX_MetaverseObjects_Origin_Type_LastDisconnected");
 
-        // Performance index for sync rule lookups by connected system
-        // Optimises system-specific sync rule queries
-        modelBuilder.Entity<SyncRule>()
-            .HasIndex(sr => sr.ConnectedSystemId)
-            .HasDatabaseName("IX_SyncRules_ConnectedSystemId");
-
         // Performance index for metaverse object type lookups
         // Optimises name-based type lookups with deletion rule filtering
         modelBuilder.Entity<MetaverseObjectType>()
             .HasIndex(mot => new { mot.Name, mot.DeletionRule })
             .HasDatabaseName("IX_MetaverseObjectTypes_Name_DeletionRule");
 
-        // Additional index for deferred reference source lookups
-        // Optimises queries filtering by source connected system object
-        modelBuilder.Entity<DeferredReference>()
-            .HasIndex(dr => dr.SourceCsoId)
-            .HasDatabaseName("IX_DeferredReferences_SourceCsoId");
+        // Note: Indexes on foreign key columns (ConnectedSystemId, SourceCsoId) are automatically created by Npgsql,
+        // so we don't need explicit HasIndex() definitions for those.
     }
 }
