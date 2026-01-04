@@ -27,7 +27,7 @@
         <MudForm>
             <MudGrid Class="mt-3">
                 <MudItem xs="12" sm="5">
-                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="Please select a Connected System">
+                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
                         @foreach (var connectedSystem in _connectedSystemHeaders)
                         {
                             <MudSelectItem Value="@connectedSystem" />
@@ -35,7 +35,7 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" sm="5">
-                    <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="A run profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
+                    <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="A run profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
                         @if (_connectedSystemRunProfiles != null)
                         {
                             @foreach (var runProfile in _connectedSystemRunProfiles)
