@@ -154,7 +154,7 @@
 
 @* Log Entry Detail Drawer *@
 <MudDrawer @bind-Open="_drawerOpen" Anchor="Anchor.End" Elevation="1" Variant="DrawerVariant.Temporary"
-    Width="700px" Class="pa-4 jim-log-drawer">
+    Width="700px" Class="pa-4 jim-log-drawer" Overlay="true" ClipMode="DrawerClipMode.Always">
     @if (_selectedEntry != null)
     {
         <div class="d-flex flex-column gap-4">

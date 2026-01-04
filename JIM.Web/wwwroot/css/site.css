@@ -247,12 +247,7 @@ body {
     display: none;
 }
 
-/* Log detail drawer - ensure full height */
-.jim-log-drawer {
-    height: 100vh !important;
-    top: 0 !important;
-}
-
+/* Log detail drawer - scrollable content */
 .jim-log-drawer .mud-drawer-content {
     overflow-y: auto;
 }
