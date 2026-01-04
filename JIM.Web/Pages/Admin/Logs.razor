@@ -152,12 +152,12 @@
     </MudSelect>
 </div>
 
-@* Log Entry Detail Drawer *@
-<MudDrawer @bind-Open="_drawerOpen" Anchor="Anchor.End" Elevation="2" Variant="DrawerVariant.Temporary"
-    Width="700px" Class="pa-4" Overlay="true" Fixed="true">
+@* Log Entry Detail Panel with Overlay *@
+<MudOverlay @bind-Visible="_drawerOpen" DarkBackground="true" AutoClose="true" />
+<div class="jim-log-panel @(_drawerOpen ? "jim-log-panel-open" : "")">
     @if (_selectedEntry != null)
     {
-        <div class="d-flex flex-column gap-4">
+        <div class="d-flex flex-column gap-4 pa-4" style="height: 100%; overflow-y: auto;">
             @* Header with close button *@
             <div class="d-flex justify-space-between align-center">
                 <MudText Typo="Typo.h6">Log Entry Details</MudText>
@@ -165,7 +165,7 @@
             </div>
 
             @* Timestamp and Level *@
-            <div class="d-flex gap-4 align-center">
+            <div class="d-flex gap-4 align-center flex-wrap">
                 <MudChip T="string" Size="Size.Medium" Variant="Variant.Filled" Color="@GetLevelColor(_selectedEntry.Level)">
                     @_selectedEntry.Level
                 </MudChip>
@@ -241,7 +241,7 @@
             </MudExpansionPanels>
         </div>
     }
-</MudDrawer>
+</div>
 
 @code {
     private List<LogEntry>? _logEntries;

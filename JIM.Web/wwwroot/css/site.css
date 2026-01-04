@@ -247,6 +247,26 @@ body {
     display: none;
 }
 
+/* Log detail slide-out panel */
+.jim-log-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 700px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--mud-palette-surface);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-in-out;
+    z-index: 1300;
+    overflow: hidden;
+}
+
+.jim-log-panel-open {
+    transform: translateX(0);
+}
+
 /* JSON syntax highlighting - define CSS custom properties for light/dark mode */
 :root {
     --jim-json-key: #0451a5;
