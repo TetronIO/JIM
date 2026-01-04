@@ -27,4 +27,19 @@ public class WorkerTaskHeader
     /// The name of the security principal at the time of task creation.
     /// </summary>
     public string? InitiatedByName { get; set; }
+
+    /// <summary>
+    /// The total number of objects to process (from the associated Activity).
+    /// </summary>
+    public int? ObjectsToProcess { get; set; }
+
+    /// <summary>
+    /// The number of objects processed so far (from the associated Activity).
+    /// </summary>
+    public int? ObjectsProcessed { get; set; }
+
+    /// <summary>
+    /// The current progress message (from the associated Activity).
+    /// </summary>
+    public string? ProgressMessage { get; set; }
 }
