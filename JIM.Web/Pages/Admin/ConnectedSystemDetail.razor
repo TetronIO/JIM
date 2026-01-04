@@ -94,13 +94,18 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                 {
+                                    var settingId = settingValue.Setting.Id;
                                     <MudTextField T="string"
                                                   Label="@settingValue.Setting.Name"
                                                   @bind-Value="settingValue.StringEncryptedValue"
                                                   Required="@settingValue.Setting.Required"
                                                   RequiredError="@($"A {settingValue.Setting.Name} is required")"
                                                   HelperText="@settingValue.Setting.Description"
-                                                  InputType="InputType.Password"
+                                                  InputType="@(_passwordVisibility.GetValueOrDefault(settingId) ? InputType.Text : InputType.Password)"
+                                                  Adornment="Adornment.End"
+                                                  AdornmentIcon="@(_passwordVisibility.GetValueOrDefault(settingId) ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                                  AdornmentAriaLabel="Toggle password visibility"
+                                                  OnAdornmentClick="@(() => _passwordVisibility[settingId] = !_passwordVisibility.GetValueOrDefault(settingId))"
                                                   Variant="Variant.Outlined"
                                                   Class="mb-5" />
                                 }
@@ -1273,6 +1278,9 @@
     private bool _modeSwitchDialogVisible;
     private bool _switchingToAdvancedMode;
     private bool _modeSwitchInProgress;
+
+    // Password visibility toggle (keyed by setting ID)
+    private readonly Dictionary<int, bool> _passwordVisibility = new();
 
     protected override async Task OnInitializedAsync()
     {
