@@ -9,6 +9,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @implements IDisposable
 
 <PageTitle>Operations</PageTitle>
@@ -57,22 +58,17 @@
     }
 </MudPaper>
 
-<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
     <HeaderContent>
-        <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
         <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
+        <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" OnClick="(_) => HandleCancelTaskAsync(context)">Cancel</MudMenuItem>
-            </MudMenu>
-        </MudTd>
         <MudTd DataLabel="Type">@context.Type</MudTd>
         <MudTd DataLabel="Name">@context.Name</MudTd>
         <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
@@ -91,7 +87,7 @@
                 }
                 @if (!string.IsNullOrEmpty(context.ProgressMessage))
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@context.ProgressMessage</MudText>
                 }
             }
             else if (context.Status == WorkerTaskStatus.Queued)
@@ -119,6 +115,11 @@
             {
                 <span>@context.InitiatedByName</span>
             }
+        </MudTd>
+        <MudTd DataLabel="Actions" Style="text-align: right;">
+            <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" OnClick="() => HandleCancelTaskAsync(context)" />
+                </MudTooltip>
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
@@ -244,6 +245,15 @@
     private async Task HandleCancelTaskAsync(WorkerTaskHeader workerTaskHeader)
     {
         if (workerTaskHeader == null)
+            return;
+
+        var result = await DialogService.ShowMessageBox(
+            "Cancel Task",
+            $"Are you sure you want to cancel the task '{workerTaskHeader.Name}'?",
+            yesText: "Cancel Task",
+            cancelText: "Keep Running");
+
+        if (result != true)
             return;
 
         await Jim.Tasking.CancelWorkerTaskAsync(workerTaskHeader.Id);
