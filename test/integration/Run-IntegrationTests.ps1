@@ -162,7 +162,7 @@ $imageExists = docker images -q $sambaImageTag 2>$null
 
 if (-not $imageExists) {
     Write-Warning "Pre-built Samba AD image not found locally: $sambaImageTag"
-    Write-Step "Building Samba AD image (this takes ~3-5 minutes, but only needs to be done once)..."
+    Write-Step "Building Samba AD image (this takes ~30 seconds, but only needs to be done once)..."
 
     $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
     if (-not (Test-Path $buildScript)) {

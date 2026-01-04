@@ -154,7 +154,7 @@ Write-Host "Building Pre-initialised Samba AD Images" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "This process provisions Samba AD domains and commits them as Docker images." -ForegroundColor Gray
-Write-Host "Each image takes ~3-5 minutes to build but only needs to be built once." -ForegroundColor Gray
+Write-Host "Each image takes ~30 seconds to build but only needs to be built once." -ForegroundColor Gray
 Write-Host ""
 
 foreach ($imageName in $imagesToBuild) {
@@ -200,7 +200,7 @@ foreach ($imageName in $imagesToBuild) {
     }
 
     # Wait for the container to become ready (provisioning complete + Samba running)
-    Write-Host "Step 3: Waiting for domain provisioning (this takes ~3-5 minutes)..." -ForegroundColor Cyan
+    Write-Host "Step 3: Waiting for domain provisioning..." -ForegroundColor Cyan
     $ready = Wait-SambaReady -ContainerName $containerName -TimeoutSeconds $TimeoutSeconds
 
     if (-not $ready) {

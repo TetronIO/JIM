@@ -25,7 +25,7 @@ cd /workspaces/JIM
 ```
 
 This single script handles everything:
-1. ✅ Builds custom Samba AD image if not present (first run only, ~3-5 min)
+1. ✅ Builds custom Samba AD image if not present (first run only, ~30 seconds)
 2. ✅ Resets the environment (stops containers, removes volumes)
 3. ✅ Rebuilds and starts JIM stack + Samba AD
 4. ✅ Waits for all services to be ready
@@ -1612,7 +1612,7 @@ Integration test scripts should provide visual progress feedback including:
 - Samba binaries location: `/usr/local/samba/bin/`
 
 **Automatic Image Building:**
-The `Run-IntegrationTests.ps1` script automatically builds the custom Samba AD image if it doesn't exist locally. This happens on first run and takes ~3-5 minutes. Subsequent runs use the cached image for fast startup (~30 seconds).
+The `Run-IntegrationTests.ps1` script automatically builds the custom Samba AD image if it doesn't exist locally. This happens on first run and takes ~30 seconds. Subsequent runs use the cached image for fast startup (~10 seconds).
 
 **To manually rebuild pre-built images (required after base image updates):**
 ```powershell
