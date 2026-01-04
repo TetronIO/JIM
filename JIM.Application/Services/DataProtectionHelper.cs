@@ -61,10 +61,15 @@ public static class DataProtectionHelper
         // 3. Fallback to application data directory (platform-specific)
         // Linux: ~/.local/share/JIM/keys
         // Windows: %LOCALAPPDATA%\JIM\keys
+        // Container: JIM/keys (relative to app directory if LocalApplicationData is empty)
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var appDataPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            localAppData,
             "JIM",
             "keys");
+
+        // If LocalApplicationData is empty (common in containers), this will be a relative path
+        // which resolves to the application's working directory
         Log.Verbose("DataProtectionHelper: Using application data directory for encryption keys: {Path}", appDataPath);
         EnsureDirectoryExists(appDataPath);
         return appDataPath;
