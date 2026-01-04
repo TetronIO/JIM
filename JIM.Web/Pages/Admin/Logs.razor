@@ -72,8 +72,8 @@
     </div>
 </MudPaper>
 
-<MudTable Items="@_logEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5"
-    FixedHeader="true" Height="calc(100vh - 450px)" Outlined="true" Elevation="0" Loading="@_loading">
+<MudTable Items="@_pagedLogEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5"
+    FixedHeader="true" Height="calc(100vh - 500px)" Outlined="true" Elevation="0" Loading="@_loading">
     <HeaderContent>
         <MudTh Style="width: 100px;">
             <MudText Typo="Typo.button">Time</MudText>
@@ -150,6 +150,26 @@
     </LoadingContent>
 </MudTable>
 
+<div class="d-flex justify-center align-center gap-4 mb-5">
+    <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Disabled="@(_currentPage == 0 || _loading)"
+        OnClick="@(() => GoToPage(0))" />
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="@(_currentPage == 0 || _loading)"
+        OnClick="@(() => GoToPage(_currentPage - 1))" />
+    <MudText Typo="Typo.body2">
+        Page @(_currentPage + 1) of @TotalPages
+    </MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="@(_currentPage >= TotalPages - 1 || _loading)"
+        OnClick="@(() => GoToPage(_currentPage + 1))" />
+    <MudIconButton Icon="@Icons.Material.Filled.LastPage" Disabled="@(_currentPage >= TotalPages - 1 || _loading)"
+        OnClick="@(() => GoToPage(TotalPages - 1))" />
+    <MudSelect T="int" Value="_pageSize" ValueChanged="OnPageSizeChanged" Label="Per page" Variant="Variant.Outlined"
+        Dense="true" Style="width: 100px;" Margin="Margin.Dense">
+        <MudSelectItem T="int" Value="25">25</MudSelectItem>
+        <MudSelectItem T="int" Value="50">50</MudSelectItem>
+        <MudSelectItem T="int" Value="100">100</MudSelectItem>
+    </MudSelect>
+</div>
+
 @code {
     private List<LogEntry>? _logEntries;
     private string? _selectedService;
@@ -159,6 +179,15 @@
     private bool _loading = true;
     private bool _autoRefresh;
     private System.Threading.Timer? _refreshTimer;
+    private int _currentPage;
+    private int _pageSize = 50;
+
+    private IEnumerable<LogEntry> _pagedLogEntries =>
+        _logEntries?.Skip(_currentPage * _pageSize).Take(_pageSize) ?? [];
+
+    private int TotalPages => _logEntries == null || _logEntries.Count == 0
+        ? 1
+        : (int)Math.Ceiling((double)_logEntries.Count / _pageSize);
 
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
@@ -198,6 +227,7 @@
     private async Task LoadLogsAsync()
     {
         _loading = true;
+        _currentPage = 0;
         StateHasChanged();
 
         try
@@ -219,6 +249,17 @@
         {
             _loading = false;
         }
+    }
+
+    private void GoToPage(int page)
+    {
+        _currentPage = Math.Max(0, Math.Min(page, TotalPages - 1));
+    }
+
+    private void OnPageSizeChanged(int newSize)
+    {
+        _pageSize = newSize;
+        _currentPage = 0;
     }
 
     private static Color GetLevelColor(string level)
