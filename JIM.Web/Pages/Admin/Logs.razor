@@ -221,6 +221,12 @@
                             </div>
                         </TitleContent>
                         <ChildContent>
+                            <div class="d-flex justify-end mb-2">
+                                <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                    Variant="Variant.Text" OnClick="@CopyExceptionAsync">
+                                    Copy
+                                </MudButton>
+                            </div>
                             <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@_selectedEntry.Exception</pre>
                         </ChildContent>
                     </MudExpansionPanel>
@@ -561,6 +567,15 @@
 
         var json = GetRawJson(_selectedEntry);
         await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", json);
+        Snackbar.Add("Copied to clipboard", Severity.Success);
+    }
+
+    private async Task CopyExceptionAsync()
+    {
+        if (_selectedEntry?.Exception == null)
+            return;
+
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _selectedEntry.Exception);
         Snackbar.Add("Copied to clipboard", Severity.Success);
     }
 
