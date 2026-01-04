@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Services;
 using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
@@ -62,10 +63,15 @@ public class Worker : BackgroundService
 
         Log.Information("Starting JIM.Worker...");
 
+        // Create credential protection service for encrypting/decrypting secrets
+        // This uses the shared key storage to ensure consistency with JIM.Web
+        var credentialProtection = new CredentialProtectionService(DataProtectionHelper.CreateProvider());
+
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
         using var mainLoopJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+        mainLoopJim.CredentialProtection = credentialProtection;
         await mainLoopJim.InitialiseDatabaseAsync();
 
         // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
@@ -129,6 +135,7 @@ public class Worker : BackgroundService
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
                             using var taskJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+                            taskJim.CredentialProtection = credentialProtection;
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
                             var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ??

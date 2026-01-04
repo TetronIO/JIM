@@ -1,11 +1,13 @@
 @page "/admin/settings"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
+@using JIM.Application.Services
 @using JIM.Models.Core
 @using JIM.Web
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject ICredentialProtectionService CredentialProtection
 
 <PageTitle>Service Settings</PageTitle>
 <MudText Typo="Typo.h4">Service Settings</MudText>
@@ -64,11 +66,11 @@
                 }
             </MudTd>
             <MudTd DataLabel="Value" Class="@GetRowClass(settingContext)">
-                @if (settingContext.IsSecret)
+                @if (settingContext.ValueType == ServiceSettingValueType.StringEncrypted)
                 {
                     @if (_revealedSecrets.Contains(settingContext.Key))
                     {
-                        <span class="jim-text-code">@(settingContext.GetEffectiveValue() ?? "(not set)")</span>
+                        <span class="jim-text-code">@(GetDecryptedValue(settingContext) ?? "(not set)")</span>
                         <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" OnClick="() => HideSecret(settingContext.Key)" />
                     }
                     else
@@ -230,6 +232,15 @@
     private void HideSecret(string key)
     {
         _revealedSecrets.Remove(key);
+    }
+
+    private string? GetDecryptedValue(ServiceSetting setting)
+    {
+        var effectiveValue = setting.GetEffectiveValue();
+        if (string.IsNullOrEmpty(effectiveValue))
+            return null;
+
+        return CredentialProtection.Unprotect(effectiveValue);
     }
 
     private async Task ShowEditDialog(ServiceSetting setting)

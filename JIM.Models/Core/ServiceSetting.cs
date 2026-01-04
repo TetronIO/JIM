@@ -59,11 +59,6 @@ public class ServiceSetting
     public bool IsReadOnly { get; set; }
 
     /// <summary>
-    /// If true, the value should be masked in the UI (show/hide toggle).
-    /// </summary>
-    public bool IsSecret { get; set; }
-
-    /// <summary>
     /// For enum-type settings, the fully qualified enum type name.
     /// </summary>
     [MaxLength(500)]
