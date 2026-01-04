@@ -1,0 +1,261 @@
+@page "/admin/logs"
+@attribute [Authorize(Roles = "Administrator")]
+@using JIM.Application.Services
+@using JIM.Web.Models.Api
+@inject LogReaderService LogReader
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<PageTitle>Logs</PageTitle>
+<MudText Typo="Typo.h4">Logs</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    View and search logs from all JIM services. Logs are stored for 31 days.
+</MudText>
+
+<MudPaper Elevation="0" Class="mt-5 pa-4" Outlined="true">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="_selectedService" Label="Service" Variant="Variant.Outlined"
+                Dense="true" Clearable="true" Placeholder="All Services">
+                <MudSelectItem T="string" Value="@("web")">Web</MudSelectItem>
+                <MudSelectItem T="string" Value="@("worker")">Worker</MudSelectItem>
+                <MudSelectItem T="string" Value="@("scheduler")">Scheduler</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker @bind-Date="_selectedDate" Label="Date" Variant="Variant.Outlined"
+                MaxDate="DateTime.Today" Clearable="true" Placeholder="Today" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="_selectedLevel" Label="Minimum Level" Variant="Variant.Outlined"
+                Dense="true" Clearable="true" Placeholder="All Levels">
+                <MudSelectItem T="string" Value="@("Verbose")">Verbose</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Debug")">Debug</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Information")">Information</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Warning")">Warning</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Error")">Error</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Fatal")">Fatal</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField T="string" @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined"
+                Clearable="true" Placeholder="Filter by message..."
+                Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+    </MudGrid>
+    <div class="d-flex align-center gap-3 mt-4">
+        <MudButton OnClick="LoadLogsAsync" StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Filled"
+            Color="Color.Primary" DropShadow="false" Disabled="@_loading">
+            @if (_loading)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Loading</MudText>
+            }
+            else
+            {
+                <MudText>Refresh</MudText>
+            }
+        </MudButton>
+        <MudSwitch T="bool" @bind-Value="_autoRefresh" Color="Color.Primary" Label="Auto-refresh (5s)" />
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            @if (_logEntries != null)
+            {
+                @($"{_logEntries.Count} entries")
+                @if (_logEntries.Count >= 500)
+                {
+                    @(" (limit reached)")
+                }
+            }
+        </MudText>
+    </div>
+</MudPaper>
+
+<MudTable Items="@_logEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5" Dense="true"
+    FixedHeader="true" Height="calc(100vh - 450px)" Outlined="true" Elevation="0" Loading="@_loading">
+    <HeaderContent>
+        <MudTh Style="width: 100px;">
+            <MudText Typo="Typo.button">Time</MudText>
+        </MudTh>
+        <MudTh Style="width: 70px;">
+            <MudText Typo="Typo.button">Level</MudText>
+        </MudTh>
+        <MudTh Style="width: 80px;">
+            <MudText Typo="Typo.button">Service</MudText>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Message</MudText>
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Time" Style="@GetRowStyle(context)">
+            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true">
+                <span class="jim-text-code">@context.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Level" Style="@GetRowStyle(context)">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@GetLevelColor(context.Level)"
+                Class="ma-0" Style="min-width: 50px; justify-content: center;">
+                @context.LevelShort
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Service" Style="@GetRowStyle(context)">
+            <span class="jim-text-code">@context.Service</span>
+        </MudTd>
+        <MudTd DataLabel="Message" Style="@GetRowStyle(context)">
+            <div class="d-flex flex-column">
+                <span style="word-break: break-word;">@context.Message</span>
+                @if (!string.IsNullOrEmpty(context.Exception))
+                {
+                    <MudExpansionPanel Dense="true" Class="mt-2" Style="border: 1px solid var(--mud-palette-lines-default);">
+                        <TitleContent>
+                            <MudText Typo="Typo.body2" Color="Color.Error">
+                                <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
+                                Exception Details
+                            </MudText>
+                        </TitleContent>
+                        <ChildContent>
+                            <pre class="mud-typography-body2" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; margin: 0;">@context.Exception</pre>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+                @if (context.Properties != null && context.Properties.Count > 0)
+                {
+                    <div class="d-flex flex-wrap gap-1 mt-1">
+                        @foreach (var prop in context.Properties.Take(5))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                Class="ma-0" Style="font-size: 0.7rem;">
+                                @prop.Key: @TruncateValue(prop.Value?.ToString() ?? "null", 30)
+                            </MudChip>
+                        }
+                        @if (context.Properties.Count > 5)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                Class="ma-0" Style="font-size: 0.7rem;">
+                                +@(context.Properties.Count - 5) more
+                            </MudChip>
+                        }
+                    </div>
+                }
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No log entries found for the selected criteria.</MudText>
+    </NoRecordsContent>
+    <LoadingContent>
+        <MudText>Loading logs...</MudText>
+    </LoadingContent>
+</MudTable>
+
+@code {
+    private List<LogEntry>? _logEntries;
+    private string? _selectedService;
+    private DateTime? _selectedDate;
+    private string? _selectedLevel;
+    private string? _searchText;
+    private bool _loading = true;
+    private bool _autoRefresh;
+    private System.Threading.Timer? _refreshTimer;
+
+    private readonly List<BreadcrumbItem> _breadcrumbs =
+    [
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Admin", href: "/admin/operations"),
+        new("Logs", href: null, disabled: true)
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLogsAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateAutoRefreshTimer();
+    }
+
+    private void UpdateAutoRefreshTimer()
+    {
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+
+        if (_autoRefresh)
+        {
+            _refreshTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadLogsAsync();
+                    StateHasChanged();
+                });
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+    }
+
+    private async Task LoadLogsAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _logEntries = await LogReader.GetLogEntriesAsync(
+                service: _selectedService,
+                date: _selectedDate,
+                minLevel: _selectedLevel,
+                search: _searchText,
+                limit: 500,
+                offset: 0);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load logs: {ex.Message}", Severity.Error);
+            _logEntries = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static Color GetLevelColor(string level)
+    {
+        return level switch
+        {
+            "Verbose" => Color.Default,
+            "Debug" => Color.Default,
+            "Information" => Color.Info,
+            "Warning" => Color.Warning,
+            "Error" => Color.Error,
+            "Fatal" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private static string GetRowStyle(LogEntry entry)
+    {
+        // Use only a coloured left border as indicator - keeps text readable in both light/dark modes
+        return entry.Level switch
+        {
+            "Error" or "Fatal" => "border-left: 4px solid var(--mud-palette-error);",
+            "Warning" => "border-left: 4px solid var(--mud-palette-warning);",
+            "Information" => "border-left: 4px solid var(--mud-palette-info);",
+            _ => "border-left: 4px solid transparent;"
+        };
+    }
+
+    private static string TruncateValue(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            return value;
+        return value[..maxLength] + "...";
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}
