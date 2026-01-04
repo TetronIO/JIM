@@ -295,23 +295,28 @@ body {
     color: var(--mud-palette-text-primary);
 }
 
-/* Dark mode JSON syntax highlighting */
+/* Dark mode JSON syntax highlighting - JIM logo-inspired vibrant colours */
 .mud-theme-dark .jim-json-key {
-    color: #9cdcfe;
+    color: #c792ea;
+    /* Purple/violet from logo */
 }
 
 .mud-theme-dark .jim-json-string {
-    color: #ce9178;
+    color: #a5d6a7;
+    /* Soft green for readability */
 }
 
 .mud-theme-dark .jim-json-number {
-    color: #b5cea8;
+    color: #f9a825;
+    /* Orange/yellow from logo */
 }
 
 .mud-theme-dark .jim-json-boolean {
-    color: #569cd6;
+    color: #4dd0e1;
+    /* Teal/cyan from logo */
 }
 
 .mud-theme-dark .jim-json-null {
-    color: #569cd6;
+    color: #ff8a80;
+    /* Soft coral/pink from logo */
 }
