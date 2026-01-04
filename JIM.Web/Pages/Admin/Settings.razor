@@ -169,7 +169,7 @@
     private void UpdateFilteredSettings()
     {
         _filteredSettings = _settings
-            .Where(s => !_showOverriddenOnly || s.IsOverridden)
+            .Where(s => !_showOverriddenOnly || (s.IsOverridden && !s.IsReadOnly))
             .Where(s => FilterFunc(s))
             .ToList();
     }
