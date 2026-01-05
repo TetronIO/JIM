@@ -26,6 +26,7 @@ public class PendingExportReconciliationService
     /// <summary>
     /// Reconciles a Connected System Object's imported attribute values against any pending exports.
     /// This should be called after CSO attribute values are updated during import.
+    /// Note: This method performs database operations per CSO. For bulk operations, use ReconcileWithPreloadedExportAsync instead.
     /// </summary>
     /// <param name="connectedSystemObject">The CSO that was just imported/updated.</param>
     /// <returns>A result indicating what reconciliation actions were taken.</returns>
@@ -42,15 +43,53 @@ public class PendingExportReconciliationService
             return result;
         }
 
+        // Perform reconciliation (in-memory only)
+        ReconcileCsoAgainstPendingExport(connectedSystemObject, pendingExport, result);
+
+        // Persist changes immediately (non-batched mode)
+        if (result.PendingExportDeleted)
+        {
+            await _jim.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+            Log.Information("ReconcileAsync: All attribute changes confirmed. Deleted pending export {ExportId}", pendingExport.Id);
+        }
+        else if (result.HasChanges)
+        {
+            await _jim.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+            Log.Debug("ReconcileAsync: Updated pending export {ExportId} with {Confirmed} confirmed, {Retry} for retry, {Failed} failed",
+                pendingExport.Id, result.ConfirmedChanges.Count, result.RetryChanges.Count, result.FailedChanges.Count);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Reconciles a Connected System Object against a pre-loaded pending export.
+    /// This method does NOT perform any database operations - caller is responsible for batching persistence.
+    /// Use this method when processing multiple CSOs to batch database operations for better performance.
+    /// </summary>
+    /// <param name="connectedSystemObject">The CSO that was just imported/updated.</param>
+    /// <param name="pendingExport">The pre-loaded pending export for this CSO (or null if none).</param>
+    /// <param name="result">The result object to populate with reconciliation outcomes.</param>
+    public void ReconcileCsoAgainstPendingExport(
+        ConnectedSystemObject connectedSystemObject,
+        PendingExport? pendingExport,
+        PendingExportReconciliationResult result)
+    {
+        if (pendingExport == null)
+        {
+            Log.Debug("ReconcileCsoAgainstPendingExport: No pending export for CSO {CsoId}", connectedSystemObject.Id);
+            return;
+        }
+
         // Only process exports that have been executed and are awaiting confirmation
         if (pendingExport.Status != PendingExportStatus.Exported)
         {
-            Log.Debug("ReconcileAsync: PendingExport {ExportId} status is {Status}, not Exported. Skipping reconciliation.",
+            Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status}, not Exported. Skipping.",
                 pendingExport.Id, pendingExport.Status);
-            return result;
+            return;
         }
 
-        Log.Debug("ReconcileAsync: Found pending export {ExportId} with {Count} attribute changes for CSO {CsoId}",
+        Log.Debug("ReconcileCsoAgainstPendingExport: Found pending export {ExportId} with {Count} attribute changes for CSO {CsoId}",
             pendingExport.Id, pendingExport.AttributeValueChanges.Count, connectedSystemObject.Id);
 
         // Process each attribute change that is awaiting confirmation
@@ -63,7 +102,7 @@ public class PendingExportReconciliationService
             var confirmed = IsAttributeChangeConfirmed(connectedSystemObject, attrChange);
 
             // Verbose logging for detailed troubleshooting - shows all comparison details
-            Log.Verbose("ReconcileAsync: Comparing attribute {AttrName} (ChangeType: {ChangeType}) for CSO {CsoId}. " +
+            Log.Verbose("ReconcileCsoAgainstPendingExport: Comparing attribute {AttrName} (ChangeType: {ChangeType}) for CSO {CsoId}. " +
                 "Expected: '{ExpectedValue}', Found: '{ActualValue}', Confirmed: {Confirmed}",
                 attrChange.Attribute?.Name ?? "unknown",
                 attrChange.ChangeType,
@@ -75,7 +114,7 @@ public class PendingExportReconciliationService
             if (confirmed)
             {
                 result.ConfirmedChanges.Add(attrChange);
-                Log.Debug("ReconcileAsync: Attribute change {AttrChangeId} (Attr: {AttrName}) confirmed",
+                Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) confirmed",
                     attrChange.Id, attrChange.Attribute?.Name ?? "unknown");
             }
             else
@@ -93,7 +132,7 @@ public class PendingExportReconciliationService
                 if (attrChange.Status == PendingExportAttributeChangeStatus.Failed)
                 {
                     result.FailedChanges.Add(attrChange);
-                    Log.Warning("ReconcileAsync: Attribute change {AttrChangeId} (Attr: {AttrName}) failed after {Attempts} attempts. " +
+                    Log.Warning("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) failed after {Attempts} attempts. " +
                         "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
                         attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
                         expectedValue, attrChange.LastImportedValue);
@@ -101,7 +140,7 @@ public class PendingExportReconciliationService
                 else
                 {
                     result.RetryChanges.Add(attrChange);
-                    Log.Information("ReconcileAsync: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
+                    Log.Information("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
                         "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
                         attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
                         expectedValue, attrChange.LastImportedValue);
@@ -119,8 +158,7 @@ public class PendingExportReconciliationService
         // This ensures remaining attribute changes are processed as updates, not creates
         TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
 
-        // If all attribute changes are confirmed/removed, delete the pending export
-        // (Only delete if there are no pending, not confirmed, or failed changes left)
+        // Determine if the pending export should be deleted or updated
         var hasRemainingChanges = pendingExport.AttributeValueChanges.Any(ac =>
             ac.Status == PendingExportAttributeChangeStatus.Pending ||
             ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
@@ -129,20 +167,15 @@ public class PendingExportReconciliationService
 
         if (!hasRemainingChanges)
         {
-            await _jim.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
             result.PendingExportDeleted = true;
-            Log.Information("ReconcileAsync: All attribute changes confirmed. Deleted pending export {ExportId}", pendingExport.Id);
+            result.PendingExportToDelete = pendingExport;
         }
         else
         {
-            // Check if we should update the pending export status based on attribute change statuses
+            // Update the pending export status based on attribute change statuses
             UpdatePendingExportStatus(pendingExport);
-            await _jim.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
-            Log.Debug("ReconcileAsync: Updated pending export {ExportId} with {Confirmed} confirmed, {Retry} for retry, {Failed} failed",
-                pendingExport.Id, result.ConfirmedChanges.Count, result.RetryChanges.Count, result.FailedChanges.Count);
+            result.PendingExportToUpdate = pendingExport;
         }
-
-        return result;
     }
 
     /// <summary>
@@ -376,6 +409,18 @@ public class PendingExportReconciliationResult
     /// Whether the PendingExport was deleted (all changes confirmed).
     /// </summary>
     public bool PendingExportDeleted { get; set; }
+
+    /// <summary>
+    /// The pending export to delete (for batched operations).
+    /// Only set when PendingExportDeleted is true.
+    /// </summary>
+    public PendingExport? PendingExportToDelete { get; set; }
+
+    /// <summary>
+    /// The pending export to update (for batched operations).
+    /// Only set when there are changes but the export should not be deleted.
+    /// </summary>
+    public PendingExport? PendingExportToUpdate { get; set; }
 
     /// <summary>
     /// True if any reconciliation was performed.

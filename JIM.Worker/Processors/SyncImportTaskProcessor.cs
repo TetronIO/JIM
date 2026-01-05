@@ -1160,77 +1160,145 @@ public class SyncImportTaskProcessor
     /// Reconciles Pending Exports against imported CSO values.
     /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
     /// Creates ActivityRunProfileExecutionItems with warnings for unconfirmed or failed exports.
+    /// Uses batched database operations for better performance, processing CSOs in pages using the sync page size setting.
     /// </summary>
     /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
     private async Task ReconcilePendingExportsAsync(IReadOnlyCollection<ConnectedSystemObject> updatedCsos)
     {
+        if (updatedCsos.Count == 0)
+            return;
+
         var reconciliationService = new PendingExportReconciliationService(_jim);
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalFailed = 0;
         var exportsDeleted = 0;
+
+        // Use sync page size for consistent batching across all sync operations
+        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var csoList = updatedCsos.ToList();
+        var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
+
+        Log.Debug("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs in {PageCount} pages of {PageSize}",
+            csoList.Count, totalPages, pageSize);
+
         var processedCount = 0;
 
-        foreach (var cso in updatedCsos)
+        for (var page = 0; page < totalPages; page++)
         {
-            processedCount++;
-            _activity.ObjectsProcessed = processedCount;
-            try
+            var pageCsos = csoList.Skip(page * pageSize).Take(pageSize).ToList();
+
+            // Batch collections for deferred database operations (per page)
+            var pendingExportsToDelete = new List<JIM.Models.Transactional.PendingExport>();
+            var pendingExportsToUpdate = new List<JIM.Models.Transactional.PendingExport>();
+
+            // Bulk fetch pending exports for this page's CSOs in a single query
+            Dictionary<Guid, JIM.Models.Transactional.PendingExport> pendingExportsByCsoId;
+            using (Diagnostics.Sync.StartSpan("LoadPendingExports").SetTag("csoCount", pageCsos.Count))
             {
-                PendingExportReconciliationResult result;
-                using (Diagnostics.Sync.StartSpan("ReconcileCso"))
+                pendingExportsByCsoId = await _jim.Repository.ConnectedSystems
+                    .GetPendingExportsByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
+            }
+
+            Log.Verbose("ReconcilePendingExportsAsync: Page {Page}/{TotalPages}: Loaded {PendingExportCount} pending exports for {CsoCount} CSOs",
+                page + 1, totalPages, pendingExportsByCsoId.Count, pageCsos.Count);
+
+            // Process each CSO in this page against its pre-loaded pending export
+            using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
+            {
+                foreach (var cso in pageCsos)
                 {
-                    result = await reconciliationService.ReconcileAsync(cso);
-                }
+                    processedCount++;
+                    _activity.ObjectsProcessed = processedCount;
 
-                if (result.HasChanges)
-                {
-                    totalConfirmed += result.ConfirmedChanges.Count;
-                    totalRetry += result.RetryChanges.Count;
-                    totalFailed += result.FailedChanges.Count;
-
-                    if (result.PendingExportDeleted)
-                        exportsDeleted++;
-
-                    // Create execution items for failed exports (permanent failures)
-                    if (result.FailedChanges.Count > 0)
+                    try
                     {
-                        var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
-                        var executionItem = new ActivityRunProfileExecutionItem
+                        // Get the pre-loaded pending export for this CSO (if any)
+                        pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
+
+                        // Perform in-memory reconciliation (no database operations)
+                        var result = new PendingExportReconciliationResult();
+                        reconciliationService.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+
+                        if (result.HasChanges)
                         {
-                            Activity = _activity,
-                            ConnectedSystemObject = cso,
-                            ConnectedSystemObjectId = cso.Id,
-                            ObjectChangeType = ObjectChangeType.Update,
-                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
-                            ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
-                            DataSnapshot = $"Failed attributes: {failedAttrNames}"
-                        };
-                        _activityRunProfileExecutionItems.Add(executionItem);
+                            totalConfirmed += result.ConfirmedChanges.Count;
+                            totalRetry += result.RetryChanges.Count;
+                            totalFailed += result.FailedChanges.Count;
+
+                            // Collect pending exports for batch operations
+                            if (result.PendingExportToDelete != null)
+                            {
+                                pendingExportsToDelete.Add(result.PendingExportToDelete);
+                                exportsDeleted++;
+                            }
+                            else if (result.PendingExportToUpdate != null)
+                            {
+                                pendingExportsToUpdate.Add(result.PendingExportToUpdate);
+                            }
+
+                            // Create execution items for failed exports (permanent failures)
+                            if (result.FailedChanges.Count > 0)
+                            {
+                                var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var executionItem = new ActivityRunProfileExecutionItem
+                                {
+                                    Activity = _activity,
+                                    ConnectedSystemObject = cso,
+                                    ConnectedSystemObjectId = cso.Id,
+                                    ObjectChangeType = ObjectChangeType.Update,
+                                    ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
+                                    ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
+                                    DataSnapshot = $"Failed attributes: {failedAttrNames}"
+                                };
+                                _activityRunProfileExecutionItems.Add(executionItem);
+                            }
+
+                            // Create execution items for retry exports (temporary failures that will be retried)
+                            if (result.RetryChanges.Count > 0)
+                            {
+                                var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var executionItem = new ActivityRunProfileExecutionItem
+                                {
+                                    Activity = _activity,
+                                    ConnectedSystemObject = cso,
+                                    ConnectedSystemObjectId = cso.Id,
+                                    ObjectChangeType = ObjectChangeType.Update,
+                                    ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
+                                    ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
+                                    DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
+                                };
+                                _activityRunProfileExecutionItems.Add(executionItem);
+                            }
+                        }
                     }
-
-                    // Create execution items for retry exports (temporary failures that will be retried)
-                    if (result.RetryChanges.Count > 0)
+                    catch (Exception ex)
                     {
-                        var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
-                        var executionItem = new ActivityRunProfileExecutionItem
-                        {
-                            Activity = _activity,
-                            ConnectedSystemObject = cso,
-                            ConnectedSystemObjectId = cso.Id,
-                            ObjectChangeType = ObjectChangeType.Update,
-                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                            ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
-                            DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
-                        };
-                        _activityRunProfileExecutionItems.Add(executionItem);
+                        Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
                     }
                 }
             }
-            catch (Exception ex)
+
+            // Batch persist pending export changes for this page
+            using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
+                .SetTag("deleteCount", pendingExportsToDelete.Count)
+                .SetTag("updateCount", pendingExportsToUpdate.Count))
             {
-                Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
+                if (pendingExportsToDelete.Count > 0)
+                {
+                    await _jim.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExportsToDelete);
+                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
+                }
+
+                if (pendingExportsToUpdate.Count > 0)
+                {
+                    await _jim.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExportsToUpdate);
+                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch updated {Count} pending exports", page + 1, pendingExportsToUpdate.Count);
+                }
             }
+
+            // Update activity progress after each page
+            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0)

@@ -1063,6 +1063,25 @@ public static class TestUtilities
     }
 
     /// <summary>
+    /// Returns the service settings required for sync processors.
+    /// </summary>
+    public static List<ServiceSetting> GetServiceSettingsData()
+    {
+        return new List<ServiceSetting>
+        {
+            new()
+            {
+                Key = "Sync.PageSize",
+                DisplayName = "Sync Page Size",
+                Category = ServiceSettingCategory.Synchronisation,
+                ValueType = ServiceSettingValueType.Integer,
+                DefaultValue = "1000",
+                Value = null
+            }
+        };
+    }
+
+    /// <summary>
     /// Creates a test WorkerTask with the specified activity and initiator for use with SyncImportTaskProcessor.
     /// </summary>
     public static SynchronisationWorkerTask CreateTestWorkerTask(Activity activity, MetaverseObject? initiatedBy)
