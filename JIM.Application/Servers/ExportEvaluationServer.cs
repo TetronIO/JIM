@@ -36,6 +36,12 @@ public class ExportEvaluationServer
         public List<PendingExport> PendingExports { get; set; } = [];
 
         /// <summary>
+        /// List of CSOs created for provisioning (when deferSave is true).
+        /// These need to be batch-persisted by the caller before the pending exports.
+        /// </summary>
+        public List<ConnectedSystemObject> ProvisioningCsosToCreate { get; set; } = [];
+
+        /// <summary>
         /// Count of attributes skipped because the CSO already has the current value.
         /// This represents true no-net-changes where the MVO had updates but the CSO matches.
         /// </summary>
@@ -351,7 +357,7 @@ public class ExportEvaluationServer
                 .SetTag("ruleName", exportRule.Name ?? "unnamed")
                 .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
             {
-                var (pendingExport, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
+                var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
                     mvo, exportRule, changedAttributes, cache, csoAttributeCache, deferSave);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
@@ -359,6 +365,12 @@ public class ExportEvaluationServer
                 if (pendingExport != null)
                 {
                     result.PendingExports.Add(pendingExport);
+                }
+
+                // Collect provisioning CSOs for batch creation when deferSave is true
+                if (provisioningCso != null)
+                {
+                    result.ProvisioningCsosToCreate.Add(provisioningCso);
                 }
             }
         }
@@ -751,9 +763,10 @@ public class ExportEvaluationServer
     /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
     /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.</param>
-    /// <param name="deferSave">When true, pending exports are not saved to the database and the caller
-    /// is responsible for batch saving. Default is false for backwards compatibility.</param>
-    private async Task<(PendingExport? PendingExport, int CsoAlreadyCurrentCount)> CreateOrUpdatePendingExportWithNoNetChangeAsync(
+    /// <param name="deferSave">When true, pending exports and provisioning CSOs are not saved to the database
+    /// and the caller is responsible for batch saving. Default is false for backwards compatibility.</param>
+    /// <returns>Tuple containing the pending export (if created), CSO created for provisioning (if any), and no-net-change count.</returns>
+    private async Task<(PendingExport? PendingExport, ConnectedSystemObject? ProvisioningCso, int CsoAlreadyCurrentCount)> CreateOrUpdatePendingExportWithNoNetChangeAsync(
         MetaverseObject mvo,
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
@@ -767,6 +780,7 @@ public class ExportEvaluationServer
 
         PendingExportChangeType changeType;
         ConnectedSystemObject? csoForExport = existingCso;
+        ConnectedSystemObject? provisioningCso = null;
 
         if (existingCso == null)
         {
@@ -775,13 +789,15 @@ public class ExportEvaluationServer
             {
                 Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: No CSO exists and ProvisionToConnectedSystem is not enabled for rule {RuleName}",
                     exportRule.Name);
-                return (null, 0);
+                return (null, null, 0);
             }
 
             // Create CSO with PendingProvisioning status to establish the relationship before export
+            // When deferSave is true, CSO is created in-memory and the caller batch-saves it
             using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateProvisioningCso"))
             {
-                csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule);
+                csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule, deferSave);
+                provisioningCso = csoForExport; // Track for batch saving
             }
             changeType = PendingExportChangeType.Create;
 
@@ -813,13 +829,14 @@ public class ExportEvaluationServer
         {
             Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: No attribute changes for MVO {MvoId} to system {SystemId} (skipped {SkippedCount} no-net-change attributes)",
                 mvo.Id, exportRule.ConnectedSystemId, csoAlreadyCurrentCount);
-            return (null, csoAlreadyCurrentCount);
+            return (null, null, csoAlreadyCurrentCount);
         }
 
-        // For provisioning (Create) scenarios, add the secondary external ID value to the CSO
+        // For provisioning (Create) scenarios, add the secondary external ID value to the CSO in-memory
+        // When deferSave is true, the CSO (with its attribute values) is batch-saved later
         if (changeType == PendingExportChangeType.Create && csoForExport != null)
         {
-            await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule);
+            await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule, deferSave);
         }
 
         var csoId = csoForExport?.Id;
@@ -847,7 +864,7 @@ public class ExportEvaluationServer
         Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} with {AttrCount} attribute changes (skipped {SkippedCount} no-net-change, deferSave={DeferSave})",
             changeType, pendingExport.Id, mvo.Id, attributeChanges.Count, csoAlreadyCurrentCount, deferSave);
 
-        return (pendingExport, csoAlreadyCurrentCount);
+        return (pendingExport, provisioningCso, csoAlreadyCurrentCount);
     }
 
     /// <summary>
@@ -855,7 +872,14 @@ public class ExportEvaluationServer
     /// This establishes the CSO↔MVO relationship before the object exists in the target system,
     /// ensuring that the subsequent import will correctly join rather than create a duplicate.
     /// </summary>
-    private async Task<ConnectedSystemObject> CreatePendingProvisioningCsoAsync(MetaverseObject mvo, SyncRule exportRule)
+    /// <param name="mvo">The Metaverse Object being provisioned.</param>
+    /// <param name="exportRule">The export rule triggering the provisioning.</param>
+    /// <param name="deferSave">When true, the CSO is not saved to the database. The caller is responsible
+    /// for batch saving the CSO. Default is false for backwards compatibility.</param>
+    private async Task<ConnectedSystemObject> CreatePendingProvisioningCsoAsync(
+        MetaverseObject mvo,
+        SyncRule exportRule,
+        bool deferSave = false)
     {
         if (exportRule.ConnectedSystemObjectType == null)
             throw new InvalidOperationException($"Export rule {exportRule.Name} has no ConnectedSystemObjectType configured.");
@@ -888,10 +912,14 @@ public class ExportEvaluationServer
         // 2. The navigation collection is not needed for our purposes - we use the FK
         // The relationship is established via MetaverseObjectId = mvo.Id
 
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
+        // Save immediately unless caller requested deferred saving for batch operations
+        if (!deferSave)
+        {
+            await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
+        }
 
-        Log.Information("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId}",
-            cso.Id, mvo.Id, exportRule.ConnectedSystemId);
+        Log.Information("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId} (deferSave={DeferSave})",
+            cso.Id, mvo.Id, exportRule.ConnectedSystemId, deferSave);
 
         return cso;
     }
@@ -902,10 +930,16 @@ public class ExportEvaluationServer
     /// This is essential for the confirming import to match PendingProvisioning CSOs that don't yet
     /// have a primary external ID (which is typically system-assigned, like objectGUID in AD).
     /// </summary>
+    /// <param name="cso">The CSO to add the secondary external ID to.</param>
+    /// <param name="attributeChanges">The attribute changes containing the secondary ID value.</param>
+    /// <param name="exportRule">The export rule (unused but kept for signature consistency).</param>
+    /// <param name="deferSave">When true, the CSO update is not persisted. The caller is responsible
+    /// for batch saving the CSO. Default is false for backwards compatibility.</param>
     private async Task AddSecondaryExternalIdToCsoAsync(
         ConnectedSystemObject cso,
         List<PendingExportAttributeValueChange> attributeChanges,
-        SyncRule exportRule)
+        SyncRule exportRule,
+        bool deferSave = false)
     {
         if (cso.SecondaryExternalIdAttributeId == null)
         {
@@ -937,14 +971,18 @@ public class ExportEvaluationServer
             ByteValue = secondaryIdChange.ByteValue
         };
 
-        // Add to CSO and persist
+        // Add to CSO in-memory
         cso.AttributeValues ??= new List<ConnectedSystemObjectAttributeValue>();
         cso.AttributeValues.Add(attributeValue);
 
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+        // Persist immediately unless caller requested deferred saving for batch operations
+        if (!deferSave)
+        {
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+        }
 
-        Log.Information("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching",
-            secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown", cso.Id);
+        Log.Information("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
+            secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown", cso.Id, deferSave);
     }
 
     /// <summary>
