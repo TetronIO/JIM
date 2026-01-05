@@ -1020,7 +1020,8 @@ public class ExportEvaluationServer
 
                         if (result == null)
                         {
-                            Log.Warning("CreateAttributeValueChanges: Expression '{Expression}' for MVO {MvoId} returned null. " +
+                            // Null is expected when the referenced attribute doesn't exist on this MVO
+                            Log.Debug("CreateAttributeValueChanges: Expression '{Expression}' for MVO {MvoId} returned null. " +
                                 "Available attributes: [{Attributes}]",
                                 source.Expression, mvo.Id, string.Join(", ", mvAttributeDictionary.Keys));
                         }

@@ -14,7 +14,7 @@ services:
     image: postgres:18
     restart: always
     volumes:
-      - jim-db-volume:/var/lib/postgresql/data
+      - jim-db-volume:/var/lib/postgresql
     environment:
       - POSTGRES_USER=jim
       - POSTGRES_PASSWORD=password

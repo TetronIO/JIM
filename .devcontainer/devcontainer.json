@@ -140,7 +140,6 @@
 
   // Lifecycle scripts
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "docker compose -f db.yml ps",
 
   // Mount Docker socket for Docker-in-Docker
   "mounts": [
