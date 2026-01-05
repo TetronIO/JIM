@@ -486,6 +486,103 @@ public class ConnectedSystemExtensionsTests
 
     #endregion
 
+    #region ConnectedSystemContainer Parent-Child Relationship Tests
+
+    [Test]
+    public void AddChildContainer_SetsParentContainerReference()
+    {
+        // Arrange
+        var parent = new ConnectedSystemContainer { Name = "Parent", Selected = true };
+        var child = new ConnectedSystemContainer { Name = "Child", Selected = false };
+
+        // Act
+        parent.AddChildContainer(child);
+
+        // Assert
+        Assert.That(child.ParentContainer, Is.SameAs(parent));
+        Assert.That(parent.ChildContainers, Contains.Item(child));
+    }
+
+    [Test]
+    public void ParentContainer_CanTraverseUpHierarchy()
+    {
+        // Arrange - Build a 3-level hierarchy
+        var grandparent = new ConnectedSystemContainer { Name = "Grandparent", Selected = true };
+        var parent = new ConnectedSystemContainer { Name = "Parent", Selected = false };
+        var child = new ConnectedSystemContainer { Name = "Child", Selected = false };
+
+        grandparent.AddChildContainer(parent);
+        parent.AddChildContainer(child);
+
+        // Act & Assert - Traverse from child to grandparent
+        Assert.That(child.ParentContainer, Is.SameAs(parent));
+        Assert.That(child.ParentContainer?.ParentContainer, Is.SameAs(grandparent));
+        Assert.That(child.ParentContainer?.ParentContainer?.ParentContainer, Is.Null);
+    }
+
+    [Test]
+    public void AreAnyChildContainersSelected_WhenChildSelected_ReturnsTrue()
+    {
+        // Arrange
+        var parent = new ConnectedSystemContainer { Name = "Parent", Selected = false };
+        var child = new ConnectedSystemContainer { Name = "Child", Selected = true };
+        parent.AddChildContainer(child);
+
+        // Act
+        var result = parent.AreAnyChildContainersSelected();
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void AreAnyChildContainersSelected_WhenNoChildrenSelected_ReturnsFalse()
+    {
+        // Arrange
+        var parent = new ConnectedSystemContainer { Name = "Parent", Selected = true };
+        var child = new ConnectedSystemContainer { Name = "Child", Selected = false };
+        parent.AddChildContainer(child);
+
+        // Act
+        var result = parent.AreAnyChildContainersSelected();
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void AreAnyChildContainersSelected_WhenGrandchildSelected_ReturnsTrue()
+    {
+        // Arrange - Parent is selected, child is not, grandchild is selected
+        var parent = new ConnectedSystemContainer { Name = "Parent", Selected = true };
+        var child = new ConnectedSystemContainer { Name = "Child", Selected = false };
+        var grandchild = new ConnectedSystemContainer { Name = "Grandchild", Selected = true };
+
+        parent.AddChildContainer(child);
+        child.AddChildContainer(grandchild);
+
+        // Act
+        var result = parent.AreAnyChildContainersSelected();
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void AreAnyChildContainersSelected_WhenNoChildren_ReturnsFalse()
+    {
+        // Arrange
+        var container = new ConnectedSystemContainer { Name = "Container", Selected = true };
+
+        // Act
+        var result = container.AreAnyChildContainersSelected();
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static ConnectedSystem CreateConnectedSystemWithMode(string mode)
